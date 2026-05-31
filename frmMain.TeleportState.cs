@@ -25,6 +25,7 @@ namespace GoblinFarmer
 
             portLastTeleportKey = PortLocationKey(buttonLocation);
             AppLogger.Info($"ConfirmedLocation={PortDisplayLocation(confirmedLocation)}; DisplayLocation={PortDisplayLocation(buttonLocation)}");
+            PortIncrementTeleportsCompleted();
             PortSetNextTeleportTarget(next);
         }
 

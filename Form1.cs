@@ -25,6 +25,7 @@ namespace GoblinFarmer
 
         private void frmMain_Load(object sender, EventArgs e)
         {
+            PortInitializeSessionStats();
             tmrStatus.Start();
 
             SetDiabloStatus("Unknown");
@@ -73,6 +74,7 @@ namespace GoblinFarmer
             bool diabloRunning = diabloWindow != IntPtr.Zero;
 
             SetDiabloStatus(diabloRunning ? "Running" : "Not Running");
+            PortUpdateSessionStats();
         }
 
         // Method to find the Diablo window handle =========================================

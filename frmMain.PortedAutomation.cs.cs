@@ -185,6 +185,7 @@ namespace GoblinFarmer
             PortStopCombat("app closing");
             PortReleaseInputs();
             ClipCursor(IntPtr.Zero);
+            PortLogSessionSummary();
             base.OnFormClosing(e);
         }
 
@@ -241,6 +242,7 @@ namespace GoblinFarmer
 
             try
             {
+                bool isMakeNewGameFlow = work.Method.Name == nameof(PortMakeNewGameFlow);
                 bool ok = await Task.Run(() => work(portAutomationCts.Token));
                 if (portAutomationCts.IsCancellationRequested)
                 {
@@ -255,6 +257,10 @@ namespace GoblinFarmer
                 {
                     PortSetAppStatus(ok ? "Idle" : "Flow Failed");
                     AddWorkflowStep(ok ? "Flow completed" : "Flow failed");
+                    if (!ok && isMakeNewGameFlow)
+                    {
+                        PortCaptureDebugScreenshot("MakeNewGameFailed");
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -265,6 +271,8 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 AppLogger.Error("Unhandled exception in automation run.", ex);
+                PortIncrementFailures();
+                PortCaptureDebugScreenshot("WorkflowFailed");
                 PortSetAppStatus("Flow Failed");
                 AddWorkflowStep("Flow failed");
                 MessageBox.Show(ex.Message);
@@ -926,6 +934,8 @@ namespace GoblinFarmer
         {
             AddWorkflowStep($"FAILED: {step}");
             AppLogger.Error($"Workflow step failed: {step}");
+            PortIncrementFailures();
+            PortCaptureDebugScreenshot("WorkflowFailed");
             return false;
         }
 

@@ -49,3 +49,15 @@ frmMain.TeleportState.cs
 frmMain.Town.cs
 frmMain.PortedAutomation.cs
 ```
+
+## Release Workflow
+
+Run the release script from the repository root:
+
+```powershell
+.\Scripts\release.ps1 -Version "v1.2" -Message "Add session stats and debug screenshots"
+```
+
+The script stages changes, commits with `<Version> <Message>`, pushes the branch, creates the git tag, and pushes the tag to `origin`. If GitHub CLI is installed, it also creates a GitHub release with `gh release create`.
+
+`README.md` is manual and is not overwritten by the release script. Update `CHANGELOG.md` before releasing; it is used as the release notes file when GitHub CLI is available.

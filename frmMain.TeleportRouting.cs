@@ -155,6 +155,8 @@ namespace GoblinFarmer
         private void PortNotifyTeleportBlocked(string blockedLocation, string targetLocation, string source)
         {
             portAutomationBlockedByTeleportFailsafe = true;
+            PortIncrementBlockedTeleports();
+            PortCaptureDebugScreenshot("TeleportBlocked");
             string displayBlockedLocation = PortFriendlyBlockedLocation(blockedLocation);
             AppLogger.Info($"Teleport blocked location: {blockedLocation}; display={displayBlockedLocation}; target={targetLocation}; source={source}");
             PortSetAppStatus("Teleport Blocked");

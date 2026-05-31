@@ -1,4 +1,4 @@
-﻿namespace GoblinFarmer
+namespace GoblinFarmer
 {
     partial class frmMain
     {
@@ -67,12 +67,19 @@
             chkLoot = new CheckBox();
             chkKadala = new CheckBox();
             chkCombat = new CheckBox();
+            grpSessionStats = new GroupBox();
+            lblSessionRuntime = new Label();
+            lblSessionFailures = new Label();
+            lblSessionBlocked = new Label();
+            lblSessionTeleports = new Label();
+            lblSessionGames = new Label();
             lblEscape = new Label();
             grpFlows.SuspendLayout();
             grpRoutes.SuspendLayout();
             grpStatus.SuspendLayout();
             grpCharacter.SuspendLayout();
             grpHotkeys.SuspendLayout();
+            grpSessionStats.SuspendLayout();
             SuspendLayout();
             // 
             // btnMakeNewGame
@@ -455,6 +462,65 @@
             chkCombat.Text = "Enable Combat Hotkey (tilde/backtick)";
             chkCombat.UseVisualStyleBackColor = true;
             // 
+            // grpSessionStats
+            // 
+            grpSessionStats.Controls.Add(lblSessionRuntime);
+            grpSessionStats.Controls.Add(lblSessionFailures);
+            grpSessionStats.Controls.Add(lblSessionBlocked);
+            grpSessionStats.Controls.Add(lblSessionTeleports);
+            grpSessionStats.Controls.Add(lblSessionGames);
+            grpSessionStats.Location = new Point(175, 250);
+            grpSessionStats.Name = "grpSessionStats";
+            grpSessionStats.Size = new Size(148, 114);
+            grpSessionStats.TabIndex = 12;
+            grpSessionStats.TabStop = false;
+            grpSessionStats.Text = "Session Stats";
+            // 
+            // lblSessionRuntime
+            // 
+            lblSessionRuntime.AutoSize = true;
+            lblSessionRuntime.Location = new Point(12, 88);
+            lblSessionRuntime.Name = "lblSessionRuntime";
+            lblSessionRuntime.Size = new Size(98, 15);
+            lblSessionRuntime.TabIndex = 4;
+            lblSessionRuntime.Text = "Runtime: 00:00:00";
+            // 
+            // lblSessionFailures
+            // 
+            lblSessionFailures.AutoSize = true;
+            lblSessionFailures.Location = new Point(12, 70);
+            lblSessionFailures.Name = "lblSessionFailures";
+            lblSessionFailures.Size = new Size(60, 15);
+            lblSessionFailures.TabIndex = 3;
+            lblSessionFailures.Text = "Failures: 0";
+            // 
+            // lblSessionBlocked
+            // 
+            lblSessionBlocked.AutoSize = true;
+            lblSessionBlocked.Location = new Point(12, 52);
+            lblSessionBlocked.Name = "lblSessionBlocked";
+            lblSessionBlocked.Size = new Size(60, 15);
+            lblSessionBlocked.TabIndex = 2;
+            lblSessionBlocked.Text = "Blocked: 0";
+            // 
+            // lblSessionTeleports
+            // 
+            lblSessionTeleports.AutoSize = true;
+            lblSessionTeleports.Location = new Point(12, 34);
+            lblSessionTeleports.Name = "lblSessionTeleports";
+            lblSessionTeleports.Size = new Size(68, 15);
+            lblSessionTeleports.TabIndex = 1;
+            lblSessionTeleports.Text = "Teleports: 0";
+            // 
+            // lblSessionGames
+            // 
+            lblSessionGames.AutoSize = true;
+            lblSessionGames.Location = new Point(12, 16);
+            lblSessionGames.Name = "lblSessionGames";
+            lblSessionGames.Size = new Size(56, 15);
+            lblSessionGames.TabIndex = 0;
+            lblSessionGames.Text = "Games: 0";
+            // 
             // lblEscape
             // 
             lblEscape.AutoSize = true;
@@ -470,6 +536,7 @@
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(921, 552);
             Controls.Add(lblEscape);
+            Controls.Add(grpSessionStats);
             Controls.Add(grpHotkeys);
             Controls.Add(grpCharacter);
             Controls.Add(grpStatus);
@@ -487,6 +554,8 @@
             grpCharacter.PerformLayout();
             grpHotkeys.ResumeLayout(false);
             grpHotkeys.PerformLayout();
+            grpSessionStats.ResumeLayout(false);
+            grpSessionStats.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -531,6 +600,12 @@
         private Label lblAppStatus;
         private CheckBox chkLoot;
         private CheckBox chkBlockSkill1TeleportHotkey;
+        private GroupBox grpSessionStats;
+        private Label lblSessionRuntime;
+        private Label lblSessionFailures;
+        private Label lblSessionBlocked;
+        private Label lblSessionTeleports;
+        private Label lblSessionGames;
         private Label lblEscape;
     }
 }

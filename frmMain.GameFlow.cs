@@ -90,6 +90,7 @@ namespace GoblinFarmer
             {
                 return false;
             }
+            PortIncrementGamesCreated();
 
             if (!PortWaitForGameLoadAndOpenMap(token))
             {
@@ -189,6 +190,7 @@ namespace GoblinFarmer
 
             MessageBox.Show("Could not find Diablo Start Game button.");
             PortSetAppStatus("Start Game Not Found");
+            PortCaptureDebugScreenshot("StartGameTimeout");
             return false;
         }
 
@@ -246,38 +248,50 @@ namespace GoblinFarmer
 
         private bool PortLeaveCurrentGame(CancellationToken token)
         {
+            bool succeeded = false;
             AddWorkflowStep("Leaving game");
             PortSetAppStatus("Leaving Game");
-            if (!ActivateDiabloWindow())
+            try
             {
-                return false;
-            }
+                if (!ActivateDiabloWindow())
+                {
+                    return false;
+                }
 
-            if (!PortCloseOpenPanels(token))
+                if (!PortCloseOpenPanels(token))
+                {
+                    return PortWorkflowFailed("Closing open panels");
+                }
+
+                if (!PortOpenGameMenu(token))
+                {
+                    return PortWorkflowFailed("Opening game menu");
+                }
+
+                AddWorkflowStep("Waiting for Leave Game button");
+                if (!PortWaitForLeaveGameButtonAndClick(token, 12000))
+                {
+                    return PortWorkflowFailed("Leave Game button not found");
+                }
+
+                AddWorkflowStep("Leave Game button found/clicked");
+                AddWorkflowStep("Waiting for main menu");
+                if (!PortWaitForMainMenuAfterLeave(token, 45000))
+                {
+                    return PortWorkflowFailed("Waiting for main menu");
+                }
+
+                AddWorkflowStep("Main menu confirmed");
+                succeeded = true;
+                return true;
+            }
+            finally
             {
-                return PortWorkflowFailed("Closing open panels");
+                if (!succeeded && !token.IsCancellationRequested)
+                {
+                    PortCaptureDebugScreenshot("LeaveGameFailed");
+                }
             }
-
-            if (!PortOpenGameMenu(token))
-            {
-                return PortWorkflowFailed("Opening game menu");
-            }
-
-            AddWorkflowStep("Waiting for Leave Game button");
-            if (!PortWaitForLeaveGameButtonAndClick(token, 12000))
-            {
-                return PortWorkflowFailed("Leave Game button not found");
-            }
-
-            AddWorkflowStep("Leave Game button found/clicked");
-            AddWorkflowStep("Waiting for main menu");
-            if (!PortWaitForMainMenuAfterLeave(token, 45000))
-            {
-                return PortWorkflowFailed("Waiting for main menu");
-            }
-
-            AddWorkflowStep("Main menu confirmed");
-            return true;
         }
 
         private bool PortWaitForMainMenuAfterLeave(CancellationToken token, int timeoutMs)

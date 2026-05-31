@@ -305,6 +305,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: timeout with {targetTemplates.Count} templates after {scans} scans in {perf.ElapsedMilliseconds}ms; best={PortDisplayLocation(lastResult.BestName)} confidence={lastResult.BestConfidence:0.000}, second={PortDisplayLocation(lastResult.SecondName)} confidence={lastResult.SecondConfidence:0.000}, threshold={threshold:0.000}");
+            PortCaptureDebugScreenshot("LocationDetectionTimeout");
             return false;
         }
 
