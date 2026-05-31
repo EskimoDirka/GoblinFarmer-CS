@@ -1,0 +1,190 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text;
+using DrawingPoint = System.Drawing.Point;
+
+namespace GoblinFarmer
+{
+    public partial class frmMain
+    {
+        private bool PortRepairGearFromOpenBlacksmith(CancellationToken token, bool closeAfterRepair)
+        {
+            PortSafeLeftClick(PortScaleGamePoint(portRepairCoords.GetValueOrDefault("Repair Tab", new DrawingPoint(677, 815))));
+            if (!PortWaitForImageInDiablo(Img("Repair", "Repair Menu.png"), token, 20000, PortVendorUiConfidence))
+            {
+                return false;
+            }
+
+            PortSafeLeftClick(PortScaleGamePoint(portRepairCoords.GetValueOrDefault("Repair Button", new DrawingPoint(361, 715))));
+            PortSleep(token, 350);
+
+            if (closeAfterRepair)
+            {
+                PortPressEscapeForAutomation();
+                PortSleep(token, 350);
+            }
+
+            return true;
+        }
+
+        private bool PortRepairGear(CancellationToken token)
+        {
+            AddWorkflowStep("Repairing");
+            PortSetAppStatus("Repairing Gear");
+
+            if (!PortOpenBlacksmithMenu(token))
+            {
+                return false;
+            }
+
+            return PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: true);
+        }
+
+        private bool PortSalvageInventoryFromOpenBlacksmith(CancellationToken token, bool closeAfterSalvage)
+        {
+            DrawingPoint? firstSlot = PortFirstFilledInventorySlot();
+            if (firstSlot == null)
+            {
+                AddWorkflowStep("First filled inventory slot not found");
+                AddWorkflowStep("Salvage skipped: no filled inventory slots found.");
+                if (closeAfterSalvage)
+                {
+                    PortPressEscapeForAutomation();
+                    PortSleep(token, 350);
+                }
+
+                return true;
+            }
+
+            AddWorkflowStep($"First filled inventory slot found at {firstSlot.Value.X},{firstSlot.Value.Y}");
+            PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Tab", new DrawingPoint(683, 638))));
+            if (!PortWaitForImageInDiablo(Img("Salvage", "Salvage Button.png"), token, 20000, PortVendorUiConfidence))
+            {
+                return false;
+            }
+
+            AddWorkflowStep("Inventory open requested: skipped");
+            AddWorkflowStep("Inventory open confirmed via vendor/salvage UI");
+            AddWorkflowStep("Inventory not required because vendor/salvage UI is open");
+            PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Button", new DrawingPoint(215, 382))));
+            PortSleep(token, 150);
+
+            int salvagedCount = 0;
+            DrawingPoint? slot = firstSlot;
+            for (int i = 0; i < 60; i++)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                if (slot == null)
+                {
+                    AddWorkflowStep("No more filled inventory slots found");
+                    break;
+                }
+
+                PortSafeLeftClick(slot.Value);
+                salvagedCount++;
+                if (PortWaitForImageInDiablo(Img("Salvage", "Salvage Confirmation Button.png"), token, 800, PortVendorUiConfidence))
+                {
+                    PortPressKey(PortVkReturn);
+                }
+
+                PortSleep(token, 100);
+                slot = PortFirstFilledInventorySlot();
+            }
+
+            if (closeAfterSalvage)
+            {
+                PortPressEscapeForAutomation();
+                PortSleep(token, 350);
+            }
+
+            AddWorkflowStep(salvagedCount == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {salvagedCount} slots clicked");
+            return true;
+        }
+
+        private bool PortSalvageInventory(CancellationToken token)
+        {
+            AddWorkflowStep("Salvaging");
+            PortSetAppStatus("Salvaging Inventory");
+
+            if (!PortOpenBlacksmithMenu(token))
+            {
+                return false;
+            }
+
+            return PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true);
+        }
+
+        private bool PortTownPrepAtBlacksmith(CancellationToken token)
+        {
+            AddWorkflowStep("Starting town prep at blacksmith");
+            PortSetAppStatus("Blacksmith Prep");
+
+            if (!PortOpenBlacksmithMenu(token))
+            {
+                PortWorkflowFailed("Opening blacksmith menu");
+                return false;
+            }
+
+            AddWorkflowStep("Repairing");
+            if (!PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: false))
+            {
+                PortWorkflowFailed("Repairing");
+                return false;
+            }
+
+            AddWorkflowStep("Salvaging");
+            if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true))
+            {
+                PortWorkflowFailed("Salvaging");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool PortOpenBlacksmithMenu(CancellationToken token)
+        {
+            if (!ActivateDiabloWindow())
+            {
+                return false;
+            }
+
+            if (PortImageVisibleInDiablo(Img("Repair", "Blacksmith Menu.png"), PortVendorUiConfidence))
+            {
+                return true;
+            }
+
+            DrawingPoint repairStation = portRepairCoords.GetValueOrDefault("Repair Station", new DrawingPoint(1841, 198));
+            Stopwatch sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 20000)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+                if (PortImageVisibleInDiablo(Img("Repair", "Blacksmith Menu.png"), PortVendorUiConfidence))
+                {
+                    return true;
+                }
+
+                PortSafeLeftClick(PortScaleGamePoint(repairStation));
+                PortSleep(token, 2000);
+            }
+
+            return false;
+        }
+
+        private bool PortVendorPanelVisible()
+        {
+            return PortImageVisibleInDiablo(Img("Repair", "Blacksmith Menu.png"), PortVendorUiConfidence) ||
+                PortImageVisibleInDiablo(Img("Repair", "Repair Menu.png"), PortVendorUiConfidence) ||
+                PortImageVisibleInDiablo(Img("Salvage", "Salvage Button.png"), PortVendorUiConfidence) ||
+                PortImageVisibleInDiablo(Img("Salvage", "Salvage Tab.png"), PortVendorUiConfidence);
+        }
+    }
+}

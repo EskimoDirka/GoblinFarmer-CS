@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Remove="Form1.PortedAutomation.resx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260528" />
+    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.13.0.20260528" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260528" />
+  </ItemGroup>
+
+</Project>
