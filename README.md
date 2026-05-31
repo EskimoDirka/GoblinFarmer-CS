@@ -20,7 +20,7 @@ A WinForms C# Diablo III farming assistant.
 
 ## Project Status
 
-Current Version: v1.1
+Current Version: v1.2
 
 ### Completed
 
