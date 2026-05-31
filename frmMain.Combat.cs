@@ -1,13 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Diagnostics;
 using DrawingPoint = System.Drawing.Point;
-using System.Text;
 
 namespace GoblinFarmer
 {
     public partial class frmMain
     {
+        /// <summary>
+        /// Starts or stops the active class combat loop from the combat hotkey.
+        /// </summary>
         private void PortToggleCombat()
         {
             if (portCombatRunning)

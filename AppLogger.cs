@@ -18,6 +18,47 @@ namespace GoblinFarmer
             Write("ERROR", ex == null ? message : $"{message}{Environment.NewLine}{ex}");
         }
 
+        public static void CleanupOldLogs(int retentionDays = 1)
+        {
+            try
+            {
+                if (!Directory.Exists(LogDirectory))
+                {
+                    return;
+                }
+
+                DateTime cutoff = DateTime.Now.AddDays(-retentionDays);
+                int deleted = 0;
+
+                foreach (string file in Directory.GetFiles(LogDirectory, "GoblinFarmer_*.log"))
+                {
+                    try
+                    {
+                        if (string.Equals(Path.GetFullPath(file), Path.GetFullPath(LogFilePath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (File.GetLastWriteTime(file) < cutoff)
+                        {
+                            File.Delete(file);
+                            deleted++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Error($"Failed to delete old log file: {file}", ex);
+                    }
+                }
+
+                Info($"Log retention cleanup complete: deleted={deleted}, retentionDays={retentionDays}");
+            }
+            catch (Exception ex)
+            {
+                Error("Log retention cleanup failed.", ex);
+            }
+        }
+
         private static void Write(string level, string message)
         {
             string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}";

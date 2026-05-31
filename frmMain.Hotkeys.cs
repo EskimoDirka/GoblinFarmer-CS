@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace GoblinFarmer
 {
@@ -132,6 +130,9 @@ namespace GoblinFarmer
             return DateTime.UtcNow.Ticks >= ignoreUntil && !portCombatRunning && !isAutomationRunning && PortDiabloIsActive();
         }
 
+        /// <summary>
+        /// Runs the queued teleport target selected by the current route state.
+        /// </summary>
         private void PortRunQueuedTeleportHotkey()
         {
             if (portCombatRunning || isAutomationRunning || !PortDiabloIsActive())

@@ -1,13 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Diagnostics;
-using System.Text;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
 {
     public partial class frmMain
     {
+        /// <summary>
+        /// Runs the leave-game/start-game sequence used to reset into a fresh game.
+        /// </summary>
         private bool PortMakeNewGameFlow(CancellationToken token)
         {
             AddWorkflowStep("Starting Make New Game flow");

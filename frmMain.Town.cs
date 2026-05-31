@@ -1,7 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
@@ -119,6 +118,9 @@ namespace GoblinFarmer
             return PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true);
         }
 
+        /// <summary>
+        /// Handles the blacksmith repair and salvage prep sequence while in town.
+        /// </summary>
         private bool PortTownPrepAtBlacksmith(CancellationToken token)
         {
             AddWorkflowStep("Starting town prep at blacksmith");
