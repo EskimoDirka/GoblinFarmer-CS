@@ -14,7 +14,346 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="Images\Combat\Bounty Menu Title.png" />
+    <None Remove="Images\Combat\Bounty Menu.png" />
+    <None Remove="Images\Combat\Enchantress Menu Scan Region.png" />
+    <None Remove="Images\Combat\Hex Ready.png" />
+    <None Remove="Images\Combat\Momentum Count 20.png" />
+    <None Remove="Images\Combat\Momentum Stack Scan Region.png" />
+    <None Remove="Images\Combat\Momentum Stacks.png" />
+    <None Remove="Images\Combat\No Click Regions 2560x1440.png" />
+    <None Remove="Images\Combat\Witch Doctor Hex Scan Region.png" />
+    <None Remove="Images\Current Location\Ancient Waterway.png" />
+    <None Remove="Images\Current Location\Black Canyon Mines.png" />
+    <None Remove="Images\Current Location\Caldeum Bazaar.png" />
+    <None Remove="Images\Current Location\Cathedral Level 1.png" />
+    <None Remove="Images\Current Location\Cathedral Level 2.png" />
+    <None Remove="Images\Current Location\Cathedral Level 3.png" />
+    <None Remove="Images\Current Location\Cave Of The Moon Clan Level 1.png" />
+    <None Remove="Images\Current Location\Cave Of The Moon Clan Level 2.png" />
+    <None Remove="Images\Current Location\Caverns of Frost Level 1.png" />
+    <None Remove="Images\Current Location\Caverns of Frost Level 2.png" />
+    <None Remove="Images\Current Location\Current Location Scan Region.png" />
+    <None Remove="Images\Current Location\Eastern Channel Level 1.png" />
+    <None Remove="Images\Current Location\Eastern Channel Level 2.png" />
+    <None Remove="Images\Current Location\Fields of Slaughter.png" />
+    <None Remove="Images\Current Location\Flooded Causeway.png" />
+    <None Remove="Images\Current Location\Gates of Caldeum.png" />
+    <None Remove="Images\Current Location\Hidden Camp.png" />
+    <None Remove="Images\Current Location\Highlands Cave.png" />
+    <None Remove="Images\Current Location\Leoric%27s Hunting Grounds.png" />
+    <None Remove="Images\Current Location\Leoric%27s Passage.png" />
+    <None Remove="Images\Current Location\New Tristram.png" />
+    <None Remove="Images\Current Location\Northern Highlands.png" />
+    <None Remove="Images\Current Location\Pandemonium Fortress Level 1.png" />
+    <None Remove="Images\Current Location\Pandemonium Fortress Level 2.png" />
+    <None Remove="Images\Current Location\Rakkis Crossing.png" />
+    <None Remove="Images\Current Location\Ruined Cistern.png" />
+    <None Remove="Images\Current Location\Sewers of Caldeum.png" />
+    <None Remove="Images\Current Location\Southern Highlands.png" />
+    <None Remove="Images\Current Location\Stinging Winds.png" />
+    <None Remove="Images\Current Location\The Battlefields.png" />
+    <None Remove="Images\Current Location\The Bridge Of Korsikk.png" />
+    <None Remove="Images\Current Location\The Festering Woods.png" />
+    <None Remove="Images\Current Location\The Royal Crypts.png" />
+    <None Remove="Images\Current Location\The Weeping Hollow.png" />
+    <None Remove="Images\Current Location\Western Channel Level 1.png" />
+    <None Remove="Images\Current Location\Western Channel Level 2.png" />
+    <None Remove="Images\Current Location\Whimsydale.png" />
+    <None Remove="Images\Leave Game\Leave Game Button Coordinates.txt" />
+    <None Remove="Images\Leave Game\Leave Game Button.png" />
+    <None Remove="Images\Leave Game\Leave Game Scan Region.png" />
+    <None Remove="Images\Repair\Blacksmith Menu Scan Region.png" />
+    <None Remove="Images\Repair\Blacksmith Menu.png" />
+    <None Remove="Images\Repair\Repair Menu Scan Region.png" />
+    <None Remove="Images\Repair\Repair Menu.png" />
+    <None Remove="Images\Repair\Repair Station Coordinates.txt" />
+    <None Remove="Images\Salvage\Blank Inventory Tile.png" />
+    <None Remove="Images\Salvage\GG Stash Scan Region and Placement.png" />
+    <None Remove="Images\Salvage\GG Tab Focused.png" />
+    <None Remove="Images\Salvage\GG Tab Non Focused.png" />
+    <None Remove="Images\Salvage\GG Tab Scan Region.png" />
+    <None Remove="Images\Salvage\Gibbering Gemstone.png" />
+    <None Remove="Images\Salvage\Inventory Scan Region.png" />
+    <None Remove="Images\Salvage\Salvage Button Scan Region.png" />
+    <None Remove="Images\Salvage\Salvage Button.png" />
+    <None Remove="Images\Salvage\Salvage Confirmation Button.png" />
+    <None Remove="Images\Salvage\Salvage Confirmation Scan Region.png" />
+    <None Remove="Images\Salvage\Salvage Coordinates.txt" />
+    <None Remove="Images\Salvage\Salvage Tab Scan Region.png" />
+    <None Remove="Images\Salvage\Salvage Tab.png" />
+    <None Remove="Images\Salvage\Stash Menu Scan Region.png" />
+    <None Remove="Images\Salvage\Stash.png" />
+    <None Remove="Images\Start Game\Battle Net Play Button Scan Region.png" />
+    <None Remove="Images\Start Game\Battle Net Play Button.png" />
+    <None Remove="Images\Start Game\Character Load Confirmation.png" />
+    <None Remove="Images\Start Game\Start Game Button Coordinates.txt" />
+    <None Remove="Images\Start Game\Start Game Button.png" />
+    <None Remove="Images\Start Game\Start Game Scan Region.png" />
+    <None Remove="Images\Teleport Function\Act 1 Map Header.png" />
+    <None Remove="Images\Teleport Function\Act 2.png" />
+    <None Remove="Images\Teleport Function\Act 3.png" />
+    <None Remove="Images\Teleport Function\Act 4.png" />
+    <None Remove="Images\Teleport Function\Act 5.png" />
+    <None Remove="Images\Teleport Function\Map Scan Region.jpg" />
+    <None Remove="Images\Teleport Function\Map X Y Coordinates.txt" />
+    <None Remove="Images\Teleport Function\World Map.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="GoblinFarmerIcon.ico" />
+    <Content Include="Images\Combat\Bounty Menu Title.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\Bounty Menu.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\Enchantress Menu Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\Hex Ready.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\Momentum Count 20.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\Momentum Stack Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\Momentum Stacks.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\No Click Regions 2560x1440.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Combat\Witch Doctor Hex Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Ancient Waterway.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Black Canyon Mines.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Caldeum Bazaar.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Cathedral Level 1.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Cathedral Level 2.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Cathedral Level 3.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Cave Of The Moon Clan Level 1.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Cave Of The Moon Clan Level 2.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Caverns of Frost Level 1.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Caverns of Frost Level 2.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Current Location Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Eastern Channel Level 1.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Eastern Channel Level 2.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Fields of Slaughter.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Flooded Causeway.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Gates of Caldeum.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Hidden Camp.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Highlands Cave.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Leoric's Hunting Grounds.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Leoric's Passage.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\New Tristram.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Northern Highlands.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Pandemonium Fortress Level 1.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Pandemonium Fortress Level 2.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Rakkis Crossing.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Ruined Cistern.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Sewers of Caldeum.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Southern Highlands.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Stinging Winds.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\The Battlefields.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\The Bridge Of Korsikk.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\The Festering Woods.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\The Royal Crypts.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\The Weeping Hollow.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Western Channel Level 1.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Western Channel Level 2.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Current Location\Whimsydale.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Leave Game\Leave Game Button Coordinates.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Leave Game\Leave Game Button.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Leave Game\Leave Game Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Repair\Blacksmith Menu Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Repair\Blacksmith Menu.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Repair\Repair Menu Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Repair\Repair Menu.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Repair\Repair Station Coordinates.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Blank Inventory Tile.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\GG Stash Scan Region and Placement.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\GG Tab Focused.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\GG Tab Non Focused.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\GG Tab Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Gibbering Gemstone.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Inventory Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Salvage Button Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Salvage Button.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Salvage Confirmation Button.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Salvage Confirmation Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Salvage Coordinates.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Salvage Tab Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Salvage Tab.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Stash Menu Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Salvage\Stash.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\Battle Net Play Button Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\Battle Net Play Button.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\Character Load Confirmation.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\Start Game Button Coordinates.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\Start Game Button.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\Start Game Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\Act 1 Map Header.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\Act 2.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\Act 3.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\Act 4.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\Act 5.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\Map Scan Region.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\Map X Y Coordinates.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Teleport Function\World Map.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
