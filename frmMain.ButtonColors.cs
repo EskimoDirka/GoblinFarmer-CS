@@ -85,8 +85,8 @@ namespace GoblinFarmer
                 }
             }
 
-            AppLogger.Info($"Teleport button state update: current={PortDisplayLocation(current)}, next={PortDisplayLocation(next)}");
-            AppLogger.Info($"ButtonCurrent={PortDisplayLocation(current)}; ButtonNext={PortDisplayLocation(next)}; ConfirmedLocation={PortDisplayLocation(portLastConfirmedLocation)}; DisplayLocation={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; BlockingLocation={PortDisplayLocation(PortGetConfirmedCurrentLocation())}");
+            AppLogger.Info($"Teleport button state update: current={PortDisplayLocation(current)}, next={PortDisplayLocation(next)}, currentKey={portLastTeleportKey}, nextKey={portQueuedTeleportKey}");
+            AppLogger.Info($"ButtonCurrent={PortDisplayLocation(current)}; ButtonNext={PortDisplayLocation(next)}; ConfirmedLocationRaw={PortDisplayLocation(portLastConfirmedLocation)}; ConfirmedLocationNormalized={PortDisplayLocation(PortNormalizeBlockingLocation(portLastConfirmedLocation))}; DisplayLocation={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; BlockingLocation={PortDisplayLocation(PortGetConfirmedCurrentLocation())}");
         }
     }
 }

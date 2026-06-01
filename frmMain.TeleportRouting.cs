@@ -20,23 +20,6 @@ namespace GoblinFarmer
             ["Pandemonium Fortress Level 1"] = "Pandemonium Fortress Level 2",
         };
 
-        private readonly HashSet<string> portTeleportBlockedLocations = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "Caldeum Bazaar",
-            "Ancient Waterway",
-            "Caverns of Frost Level 1",
-            "Cave Of The Moon Clan Level 1",
-            "Cathedral Level 1",
-            "Cathedral Level 2",
-            "City Of Caldeum",
-            "Eastern Channel Level 1",
-            "Flooded Causeway",
-            "Gates of Caldeum",
-            "Leoric's Passage",
-            "Sewers of Caldeum",
-            "Western Channel Level 1",
-        };
-
         private readonly Dictionary<string, string[]> portArrivalAliases = new(StringComparer.OrdinalIgnoreCase)
         {
             ["Ancient Waterway"] = ["Ancient Waterway", "Eastern Channel Level 1", "Eastern Channel Level 2", "Western Channel Level 1", "Western Channel Level 2"],
@@ -140,14 +123,16 @@ namespace GoblinFarmer
 
         private bool PortTeleportFailsafeAllows(out string blockedLocation)
         {
-            blockedLocation = PortGetConfirmedCurrentLocation();
+            string rawLocation = PortGetConfirmedCurrentLocation();
+            blockedLocation = PortNormalizeBlockingLocation(rawLocation);
 
-            AppLogger.Info($"BlockingLocation={blockedLocation}");
+            AppLogger.Info($"BlockingLocationRaw={PortDisplayLocation(rawLocation)}; BlockingLocationNormalized={PortDisplayLocation(blockedLocation)}");
 
-            bool blocked = PortIsExactBlockedTeleportLocation(blockedLocation);
-            AppLogger.Info($"Teleport blocking exact-location check: location={blockedLocation}; blocked={blocked}");
+            (bool blocked, string reason) = PortEvaluateTeleportBlock("", rawLocation, blockedLocation);
+            bool allowed = !blocked;
+            AppLogger.Info($"Teleport blocking decision: requested=Unknown; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(blockedLocation)}; blocked={blocked}; allowed={allowed}; reason={reason}");
 
-            return string.IsNullOrWhiteSpace(blockedLocation) || blocked;
+            return allowed;
         }
 
         private bool PortTeleportFailsafeAllows(string targetLocation, out string blockedLocation)
@@ -156,30 +141,145 @@ namespace GoblinFarmer
 
             if (!string.IsNullOrWhiteSpace(refreshedLocation))
             {
-                portLastConfirmedLocation = refreshedLocation;
+                string normalizedLocation = PortNormalizeBlockingLocation(refreshedLocation);
+                AppLogger.Info(
+                    $"Blocking location using latest title scan: raw={refreshedLocation}; " +
+                    $"normalized={normalizedLocation}; displayGroup={PortGetButtonLocationForDetectedLocation(refreshedLocation)}");
+
+                blockedLocation = normalizedLocation;
+
+                (bool blocked, string reason) = PortEvaluateTeleportBlock(targetLocation, refreshedLocation, normalizedLocation);
+                bool allowed = !blocked;
 
                 AppLogger.Info(
-                    $"Blocking location using latest title scan: {refreshedLocation}; " +
-                    $"displayGroup={PortGetButtonLocationForDetectedLocation(refreshedLocation)}");
+                    $"Teleport blocking decision: requested={targetLocation}; raw={refreshedLocation}; normalized={blockedLocation}; blocked={blocked}; allowed={allowed}; reason={reason}");
 
-                blockedLocation = refreshedLocation;
-
-                bool blocked = PortIsExactBlockedTeleportLocation(blockedLocation);
-
-                AppLogger.Info(
-                    $"Teleport blocking exact-location check: location={blockedLocation}; blocked={blocked}");
-
-                return string.IsNullOrWhiteSpace(blockedLocation) || blocked;
+                return allowed;
             }
 
-            return PortTeleportFailsafeAllows(out blockedLocation);
+            string rawLocation = PortGetConfirmedCurrentLocation();
+            blockedLocation = PortNormalizeBlockingLocation(rawLocation);
+            (bool fallbackBlocked, string fallbackReason) = PortEvaluateTeleportBlock(targetLocation, rawLocation, blockedLocation);
+            bool fallbackAllowed = !fallbackBlocked;
+            AppLogger.Info($"Teleport blocking decision: requested={targetLocation}; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(blockedLocation)}; blocked={fallbackBlocked}; allowed={fallbackAllowed}; reason={fallbackReason}");
+            return fallbackAllowed;
         }
 
-        private bool PortIsExactBlockedTeleportLocation(string location)
+        private (bool Blocked, string Reason) PortEvaluateTeleportBlock(string targetLocation, string rawLocation, string blockingLocation)
         {
-            string key = PortLocationKey(location);
-            return !string.IsNullOrWhiteSpace(key) &&
-                portTeleportBlockedLocations.Any(blocked => key == PortLocationKey(blocked));
+            if (string.IsNullOrWhiteSpace(blockingLocation))
+            {
+                return (false, "no blocking location detected");
+            }
+
+            string targetKey = PortLocationKey(targetLocation);
+            string rawKey = PortLocationKey(rawLocation);
+            string blockingKey = PortLocationKey(blockingLocation);
+
+            if (targetKey == PortLocationKey("Royal Crypts"))
+            {
+                if (rawKey == PortLocationKey("Cathedral Level 3"))
+                {
+                    return (false, "Cathedral Level 3 allows Royal Crypts");
+                }
+
+                if (blockingKey == PortLocationKey("Cathedral") ||
+                    rawKey == PortLocationKey("Cathedral Level 1") ||
+                    rawKey == PortLocationKey("Cathedral Level 2"))
+                {
+                    return (true, "Cathedral blocks Royal Crypts until Cathedral Level 3");
+                }
+
+                return (false, "non-Cathedral location does not block Royal Crypts");
+            }
+
+            if (targetKey == PortLocationKey("Ancient Waterway"))
+            {
+                if (rawKey == PortLocationKey("Ruined Cistern"))
+                {
+                    return (false, "Ruined Cistern allows Ancient Waterway");
+                }
+
+                if (rawKey == PortLocationKey("Western Channel Level 2"))
+                {
+                    return (false, "Western Channel Level 2 allows teleport back to Ancient Waterway");
+                }
+
+                if (blockingKey == PortLocationKey("City Of Caldeum") ||
+                    rawKey == PortLocationKey("Caldeum Bazaar") ||
+                    rawKey == PortLocationKey("Gates of Caldeum") ||
+                    rawKey == PortLocationKey("Sewers of Caldeum") ||
+                    rawKey == PortLocationKey("Flooded Causeway"))
+                {
+                    return (true, "City Of Caldeum sublocation blocks Ancient Waterway; Ruined Cistern is required");
+                }
+
+                if (rawKey == PortLocationKey("Ancient Waterway"))
+                {
+                    return (true, "Already inside Ancient Waterway; Ancient Waterway button is blocked");
+                }
+
+                if (rawKey == PortLocationKey("Western Channel Level 1") ||
+                    rawKey == PortLocationKey("Eastern Channel Level 1") ||
+                    rawKey == PortLocationKey("Eastern Channel Level 2"))
+                {
+                    return (true, $"{rawLocation} does not allow teleporting to Ancient Waterway");
+                }
+
+                return (false, "location does not block Ancient Waterway");
+            }
+
+            if (targetKey == PortLocationKey("Stinging Winds"))
+            {
+                if (rawKey == PortLocationKey("Eastern Channel Level 2") ||
+                    rawKey == PortLocationKey("Ancient Waterway"))
+                {
+                    return (false, $"{rawLocation} allows Stinging Winds");
+                }
+
+                if (rawKey == PortLocationKey("Western Channel Level 1") ||
+                    rawKey == PortLocationKey("Eastern Channel Level 1"))
+                {
+                    return (true, $"{rawLocation} blocks Stinging Winds");
+                }
+
+                if (rawKey == PortLocationKey("Western Channel Level 2"))
+                {
+                    return (true, "Western Channel Level 2 should return to Ancient Waterway, not Stinging Winds");
+                }
+
+                return (false, "location does not block Stinging Winds");
+            }
+
+            if (targetKey == PortLocationKey("Battlefields"))
+            {
+                if (rawKey == PortLocationKey("Stinging Winds"))
+                {
+                    return (true, "Stinging Winds blocks Battlefields; Black Canyon Mines is required");
+                }
+
+                if (rawKey == PortLocationKey("Black Canyon Mines"))
+                {
+                    return (false, "Black Canyon Mines allows Battlefields");
+                }
+
+                return (false, "location does not block Battlefields");
+            }
+
+            return (false, "target has no blocking rule");
+        }
+
+        private string PortNormalizeBlockingLocation(string detectedLocation)
+        {
+            string normalized = PortNormalizeLocation(detectedLocation);
+            string key = PortLocationKey(normalized);
+
+            if (key == PortLocationKey("Gates of Caldeum"))
+            {
+                return "City Of Caldeum";
+            }
+
+            return normalized;
         }
 
         private void PortNotifyTeleportBlocked(string blockedLocation, string targetLocation, string source)
@@ -190,9 +290,9 @@ namespace GoblinFarmer
 
             string exactBlockedLocation = string.IsNullOrWhiteSpace(blockedLocation)
                 ? "Unknown"
-                : blockedLocation.Trim();
+                : PortNormalizeBlockingLocation(blockedLocation).Trim();
 
-            AppLogger.Info($"Teleport blocked location: {exactBlockedLocation}; target={targetLocation}; source={source}");
+            AppLogger.Info($"Teleport blocked location: raw={PortDisplayLocation(blockedLocation)}; normalized={exactBlockedLocation}; target={targetLocation}; source={source}");
             PortSetAppStatus("Teleport Blocked");
             AddWorkflowStep($"Teleport blocked at {exactBlockedLocation}; target {targetLocation}");
             PortShowSplash($"Clear {exactBlockedLocation} before teleporting next.", 4500);
@@ -206,6 +306,8 @@ namespace GoblinFarmer
         private string PortRefreshBlockingLocationForTarget(string targetLocation)
         {
             if (PortLocationKey(targetLocation) != PortLocationKey("Ancient Waterway") &&
+                PortLocationKey(targetLocation) != PortLocationKey("Stinging Winds") &&
+                PortLocationKey(targetLocation) != PortLocationKey("Royal Crypts") &&
                 PortLocationKey(targetLocation) != PortLocationKey("Battlefields"))
             {
                 return "";
@@ -225,6 +327,10 @@ namespace GoblinFarmer
                 "Eastern Channel Level 2",
                 "Stinging Winds",
                 "Black Canyon Mines",
+                "Cathedral",
+                "Cathedral Level 1",
+                "Cathedral Level 2",
+                "Cathedral Level 3",
             };
 
             Dictionary<string, string> refreshTemplates = PortCurrentLocationTemplatesForNames(refreshNames);
@@ -239,6 +345,32 @@ namespace GoblinFarmer
 
         private string PortGetRouteLocationForDetectedLocation(string detectedLocation)
         {
+            string key = PortLocationKey(detectedLocation);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return "";
+            }
+
+            if (key == PortLocationKey("City Of Caldeum") ||
+                key == PortLocationKey("Gates of Caldeum") ||
+                key == PortLocationKey("Ruined Cistern") ||
+                key == PortLocationKey("Sewers of Caldeum") ||
+                key == PortLocationKey("Flooded Causeway"))
+            {
+                return "City Of Caldeum";
+            }
+
+            if (key == PortLocationKey("Ancient Waterway"))
+            {
+                return "Ancient Waterway";
+            }
+
+            if (key == PortLocationKey("Stinging Winds") ||
+                key == PortLocationKey("Black Canyon Mines"))
+            {
+                return "Stinging Winds";
+            }
+
             return PortGetMappedLocationForDetectedLocation(detectedLocation);
         }
 
@@ -322,24 +454,29 @@ namespace GoblinFarmer
         private string PortNextTeleportForConfirmedLocation(string requestedLocation, string confirmedLocation)
         {
             string confirmedKey = PortLocationKey(confirmedLocation);
+            string routeLocation = PortGetRouteLocationForDetectedLocation(confirmedLocation);
+            if (string.IsNullOrWhiteSpace(routeLocation))
+            {
+                routeLocation = PortGetRouteLocationForDetectedLocation(requestedLocation);
+            }
+
             if (confirmedKey == PortLocationKey("Eastern Channel Level 2"))
             {
                 AppLogger.Info("Ancient Waterway child route: Eastern Channel Level 2 may continue to Stinging Winds");
                 return "Stinging Winds";
             }
 
-            if (confirmedKey == PortLocationKey("Eastern Channel Level 1") ||
-                confirmedKey == PortLocationKey("Western Channel Level 1") ||
-                confirmedKey == PortLocationKey("Western Channel Level 2"))
+            if (confirmedKey == PortLocationKey("Western Channel Level 2"))
             {
-                AppLogger.Info($"Ancient Waterway child route held at {PortDisplayLocation(confirmedLocation)}; next teleport returns to Ancient Waterway");
+                AppLogger.Info("Ancient Waterway child route: Western Channel Level 2 returns to Ancient Waterway");
                 return "Ancient Waterway";
             }
 
-            string routeLocation = PortGetRouteLocationForDetectedLocation(confirmedLocation);
-            if (string.IsNullOrWhiteSpace(routeLocation))
+            if (confirmedKey == PortLocationKey("Eastern Channel Level 1") ||
+                confirmedKey == PortLocationKey("Western Channel Level 1"))
             {
-                routeLocation = PortGetRouteLocationForDetectedLocation(requestedLocation);
+                AppLogger.Info($"Ancient Waterway child route at {PortDisplayLocation(confirmedLocation)}; next teleport target remains Stinging Winds and blocking decides whether it is allowed");
+                return "Stinging Winds";
             }
 
             return portRouteNextTeleports.TryGetValue(routeLocation, out string? nextLocation)

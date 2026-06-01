@@ -15,9 +15,9 @@ namespace GoblinFarmer
                 buttonLocation = PortGetButtonLocationForDetectedLocation(location);
             }
 
-            AppLogger.Info($"Route decision input: requested={location}; confirmed={confirmedLocation}; buttonLocation={buttonLocation}");
+            AppLogger.Info($"Route decision input: requested={location}; rawConfirmed={PortDisplayLocation(confirmedLocation)}; normalizedConfirmed={PortDisplayLocation(PortNormalizeBlockingLocation(confirmedLocation))}; buttonLocation={buttonLocation}");
             string next = PortNextTeleportForConfirmedLocation(location, confirmedLocation);
-            AppLogger.Info($"Route decision output: next={next}");
+            AppLogger.Info($"Route decision output: selectedNext={PortDisplayLocation(next)}");
 
             if (InvokeRequired)
             {
@@ -26,7 +26,7 @@ namespace GoblinFarmer
             }
 
             portLastTeleportKey = PortLocationKey(buttonLocation);
-            AppLogger.Info($"ConfirmedLocation={PortDisplayLocation(confirmedLocation)}; DisplayLocation={PortDisplayLocation(buttonLocation)}");
+            AppLogger.Info($"ConfirmedLocation={PortDisplayLocation(confirmedLocation)}; NormalizedAppLocation={PortDisplayLocation(PortNormalizeBlockingLocation(confirmedLocation))}; DisplayLocation={PortDisplayLocation(buttonLocation)}");
             if (PortLocationKey(buttonLocation) == PortLocationKey("Ancient Waterway"))
             {
                 AppLogger.Info($"Successful Ancient Waterway button state update: confirmed={PortDisplayLocation(confirmedLocation)}; current={buttonLocation}");
@@ -44,7 +44,7 @@ namespace GoblinFarmer
             }
 
             portQueuedTeleportKey = PortLocationKey(location);
-            AppLogger.Info($"Selected next teleport target: {PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+            AppLogger.Info($"Selected next teleport target: {PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}; requested={PortDisplayLocation(location)}; queuedKey={portQueuedTeleportKey}");
             PortApplyTeleportButtonColors();
         }
 

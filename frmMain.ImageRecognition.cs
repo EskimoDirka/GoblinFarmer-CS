@@ -267,7 +267,7 @@ namespace GoblinFarmer
             PortLocationDetectionResult result = PortDetectCurrentLocationFromTemplatesDetailed(targetTemplates, $"specific location: {locationName}", logPerf: false, threshold);
             string detected = result.Detected;
             bool matched = PortLocationMatches(detected, locationName);
-            AppLogger.Info($"PERF PortDetectSpecificLocation {locationName}: {(matched ? "matched" : "not matched")} {PortDisplayLocation(detected)} with {targetTemplates.Count} templates in {perf.ElapsedMilliseconds}ms; best={PortDisplayLocation(result.BestName)} confidence={result.BestConfidence:0.000}, second={PortDisplayLocation(result.SecondName)} confidence={result.SecondConfidence:0.000}, threshold={threshold:0.000}");
+            AppLogger.Info($"PERF PortDetectSpecificLocation {locationName}: {(matched ? "matched" : "not matched")} raw={PortDisplayLocation(detected)} normalized={PortDisplayLocation(PortNormalizeBlockingLocation(detected))} button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(detected))} with {targetTemplates.Count} templates in {perf.ElapsedMilliseconds}ms; best={PortDisplayLocation(result.BestName)} confidence={result.BestConfidence:0.000}, second={PortDisplayLocation(result.SecondName)} confidence={result.SecondConfidence:0.000}, threshold={threshold:0.000}");
             return matched ? detected : "";
         }
 
@@ -278,8 +278,14 @@ namespace GoblinFarmer
 
         private bool PortWaitForSpecificLocation(string targetLocation, CancellationToken token, int timeoutMs)
         {
+            return PortWaitForSpecificLocation(targetLocation, token, timeoutMs, out _);
+        }
+
+        private bool PortWaitForSpecificLocation(string targetLocation, CancellationToken token, int timeoutMs, out string confirmedLocation)
+        {
             Stopwatch perf = Stopwatch.StartNew();
             int scans = 0;
+            confirmedLocation = "";
             Dictionary<string, string> targetTemplates = PortCurrentLocationTemplatesForTarget(targetLocation);
             double threshold = PortLocationConfidenceForTarget(targetLocation);
             PortLocationDetectionResult lastResult = new("", "", 0, "", 0, targetTemplates.Count, 0);
@@ -297,7 +303,8 @@ namespace GoblinFarmer
                 string detectedLocation = lastResult.Detected;
                 if (PortLocationMatches(detectedLocation, targetLocation))
                 {
-                    AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: matched {detectedLocation} with {targetTemplates.Count} templates after {scans} scans in {perf.ElapsedMilliseconds}ms; best={PortDisplayLocation(lastResult.BestName)} confidence={lastResult.BestConfidence:0.000}, second={PortDisplayLocation(lastResult.SecondName)} confidence={lastResult.SecondConfidence:0.000}, threshold={threshold:0.000}");
+                    confirmedLocation = detectedLocation;
+                    AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: matched raw={detectedLocation} normalized={PortDisplayLocation(PortNormalizeBlockingLocation(detectedLocation))} button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(detectedLocation))} with {targetTemplates.Count} templates after {scans} scans in {perf.ElapsedMilliseconds}ms; best={PortDisplayLocation(lastResult.BestName)} confidence={lastResult.BestConfidence:0.000}, second={PortDisplayLocation(lastResult.SecondName)} confidence={lastResult.SecondConfidence:0.000}, threshold={threshold:0.000}");
                     return true;
                 }
 
@@ -312,7 +319,27 @@ namespace GoblinFarmer
 
         private string PortDetectBlockedTeleportLocation()
         {
-            Dictionary<string, string> blockedTemplates = PortCurrentLocationTemplatesForNames(portTeleportBlockedLocations);
+            HashSet<string> blockedTemplatesToScan = new(StringComparer.OrdinalIgnoreCase)
+            {
+                "Ancient Waterway",
+                "Black Canyon Mines",
+                "Caldeum Bazaar",
+                "Cathedral",
+                "Cathedral Level 1",
+                "Cathedral Level 2",
+                "Cathedral Level 3",
+                "City Of Caldeum",
+                "Eastern Channel Level 1",
+                "Eastern Channel Level 2",
+                "Flooded Causeway",
+                "Gates of Caldeum",
+                "Ruined Cistern",
+                "Sewers of Caldeum",
+                "Stinging Winds",
+                "Western Channel Level 1",
+                "Western Channel Level 2",
+            };
+            Dictionary<string, string> blockedTemplates = PortCurrentLocationTemplatesForNames(blockedTemplatesToScan);
             return PortDetectCurrentLocationFromTemplatesDetailed(blockedTemplates, "blocked teleport location detection", logPerf: true, PortBlockedLocationConfidence).Detected;
         }
 

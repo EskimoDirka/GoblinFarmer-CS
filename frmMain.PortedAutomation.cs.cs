@@ -245,14 +245,33 @@ namespace GoblinFarmer
 
         private bool PortRunTeleportButton(string location, CancellationToken token, bool ignoreBlocking, string source)
         {
+            string previousConfirmedLocation = portLastConfirmedLocation;
+            string previousLastTeleportKey = portLastTeleportKey;
+            string previousQueuedTeleportKey = portQueuedTeleportKey;
+            AppLogger.Info($"Teleport run start: requested={PortDisplayLocation(location)}; source={source}; ignoreBlocking={ignoreBlocking}; confirmedBefore={PortDisplayLocation(previousConfirmedLocation)}; displayBefore={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(previousConfirmedLocation))}; queuedBefore={PortDisplayLocation(PortTeleportLocationForKey(previousQueuedTeleportKey))}");
             bool arrived = PortTeleportToLocation(location, token, verifyArrival: true, bypassFailsafe: ignoreBlocking, source: source);
             if (arrived)
             {
                 PortRecordTeleport(location, portLastConfirmedLocation);
             }
-            else if (!portAutomationBlockedByTeleportFailsafe)
+            else
             {
-                PortRestoreTeleportButtonStateFromLastConfirmedLocation($"teleport did not confirm: {location}");
+                if (!string.Equals(portLastConfirmedLocation, previousConfirmedLocation, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Info($"Teleport failed; restoring ConfirmedLocation from {PortDisplayLocation(portLastConfirmedLocation)} to {PortDisplayLocation(previousConfirmedLocation)}");
+                    portLastConfirmedLocation = previousConfirmedLocation;
+                }
+
+                if (!portAutomationBlockedByTeleportFailsafe)
+                {
+                    PortRestoreTeleportButtonStateFromLastConfirmedLocation($"teleport did not confirm: {location}");
+                }
+                else
+                {
+                    portLastTeleportKey = previousLastTeleportKey;
+                    portQueuedTeleportKey = previousQueuedTeleportKey;
+                    AppLogger.Info($"Teleport blocked; route state preserved: confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+                }
             }
 
             return arrived;
@@ -398,8 +417,17 @@ namespace GoblinFarmer
             }
 
             string currentLocation = PortDetectSpecificLocation(displayName);
-            AppLogger.Info($"Teleport detected current location before teleport: {PortDisplayLocation(currentLocation)}; requested={displayName}; previousConfirmed={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}");
+            AppLogger.Info($"Teleport detected current location before teleport: raw={PortDisplayLocation(currentLocation)}; normalized={PortDisplayLocation(PortNormalizeBlockingLocation(currentLocation))}; button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(currentLocation))}; requested={displayName}; previousConfirmed={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}");
             AddWorkflowStep($"Current location detected: {PortDisplayLocation(currentLocation)}");
+            if (source.Equals("Button", StringComparison.OrdinalIgnoreCase) &&
+                PortLocationKey(displayName) == PortLocationKey("Ancient Waterway") &&
+                PortLocationKey(currentLocation) == PortLocationKey("Ancient Waterway"))
+            {
+                AppLogger.Info($"Manual Ancient Waterway button blocked: requested={displayName}; rawDetected={currentLocation}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; blockingRule=Already inside Ancient Waterway");
+                PortNotifyTeleportBlocked(currentLocation, displayName, source);
+                return false;
+            }
+
             if (PortLocationIsAlreadyAtTarget(currentLocation, displayName))
             {
                 AppLogger.Info($"Already at target location: {displayName}");
@@ -477,8 +505,17 @@ namespace GoblinFarmer
 
             PortSetAppStatus("Waiting For Location Confirmation");
             int failuresBeforeArrivalConfirmation = PortFailureCount();
-            bool arrived = !verifyArrival || PortWaitForSpecificLocation(displayName, token, PortArrivalConfirmationTimeoutMs);
-            string confirmedAfter = arrived ? PortDetectSpecificLocation(displayName) : "";
+            string confirmedAfter = "";
+            bool arrived = true;
+            if (verifyArrival)
+            {
+                arrived = PortWaitForSpecificLocation(displayName, token, PortArrivalConfirmationTimeoutMs, out confirmedAfter);
+            }
+
+            if (arrived && string.IsNullOrWhiteSpace(confirmedAfter))
+            {
+                confirmedAfter = PortDetectSpecificLocation(displayName);
+            }
             if (arrived)
             {
                 portLastConfirmedLocation = confirmedAfter;
@@ -493,7 +530,7 @@ namespace GoblinFarmer
             {
                 PortRestoreTeleportButtonStateFromLastConfirmedLocation($"arrival confirmation failed: {displayName}");
             }
-            AppLogger.Info($"Teleport confirmed current location after teleport: {PortDisplayLocation(confirmedAfter)}; requested={displayName}; success={arrived}");
+            AppLogger.Info($"Teleport confirmed current location after teleport: raw={PortDisplayLocation(confirmedAfter)}; normalized={PortDisplayLocation(PortNormalizeBlockingLocation(confirmedAfter))}; button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(confirmedAfter))}; requested={displayName}; success={arrived}");
             PortSetAppStatus(arrived ? "Teleport Complete" : "Teleport Failed");
             AddWorkflowStep(arrived ? $"Teleport complete: {displayName}" : $"Teleport failed: {displayName}");
             return arrived;
