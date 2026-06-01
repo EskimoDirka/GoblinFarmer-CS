@@ -1,50 +1,37 @@
 # GoblinFarmer Agent Instructions
 
-Always read:
+## Required Before Any Code Changes
 
-Docs/Project_Status.md
+1. Read `Docs/Project_Status.md`.
+2. Treat `Docs/Project_Status.md` as the source of truth for:
+   - route logic
+   - blocking rules
+   - active issues
+   - confirmed working behavior
+   - next recommended task
 
-before making any changes.
+## Required After Any Code Changes
 
-Requirements:
-- Follow route logic defined in Project_Status.md.
-- Update Project_Status.md after every completed task.
-- Preserve existing behavior unless task explicitly changes it.
-- Build successfully before finishing.
-- Add diagnostic logging for new workflows.
-- If Project_Status.md and code behavior disagree, Project_Status.md wins.
-- When changing workflow behavior, update Docs/TEST_CHECKLIST.md if a new manual test is needed.
+1. Update `Docs/Project_Status.md`.
+2. Record:
+   - what changed
+   - what was tested
+   - what still needs testing
+   - next recommended task
 
-## Debugging Workflow
+## Coding Rules
 
-During debugging tasks:
-- Prefer logging first before changing behavior.
-- Do not remove existing logs unless asked.
-- Add enough logs to prove why a decision was made.
-- Preserve working behavior unless the task explicitly changes it.
-- If a fix affects route logic, update Docs/Project_Status.md.
+- Do not change combat logic unless explicitly requested.
+- Do not change Battle.net launch flow unless explicitly requested.
+- Do not change repair/salvage logic unless explicitly requested.
+- Preserve interrupted teleport fail-safe behavior.
+- Preserve button state after failed/interrupted teleports.
+- Keep raw detected location, normalized location, display location, and blocking location separate.
+- Do not use hardcoded absolute image paths.
+- Use project-relative image paths.
 
-## Build/Test Rule
+## Build Requirement
 
-After code changes:
-- Run a build.
-- If build fails, fix compile errors before stopping.
-- Summarize changed files, build result, and next test.
+Before finishing, run `dotnet build GoblinFarmer.csproj`.
 
-## Git Rule
-
-- Do not commit automatically unless asked.
-- After changes, summarize what should be committed.
-
-## Screenshot/Log Rule
-
-When debugging image recognition or teleport failures:
-- Save debug screenshots on failure.
-- Log image name, scan region, confidence, threshold, and best/second-best matches.
-
-## Safety Rule
-
-Do not change:
-- Battle.net launch flow
-- Combat logic
-- Repair/salvage logic unless the current task specifically asks for it.
+The build must succeed.
