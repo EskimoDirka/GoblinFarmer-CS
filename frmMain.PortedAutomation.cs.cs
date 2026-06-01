@@ -25,6 +25,8 @@ namespace GoblinFarmer
         private const int PortWmKeyUp = 0x0101;
         private const int PortWmSysKeyDown = 0x0104;
         private const int PortWmSysKeyUp = 0x0105;
+        private const int PortLaunchGracePeriodMs = 45000;
+        private const int PortDiabloMissingExitThreshold = 4;
         private const int PortArrivalConfirmationTimeoutMs = 18000;
         private const double PortStartGameButtonConfidence = 0.85;
         private const double PortCharacterLoadConfidence = 0.82;
@@ -83,6 +85,18 @@ namespace GoblinFarmer
         private long portLastLocationTemplateReloadTicks;
         private long portLastTeleportNextHotkeyTicks;
         private long portIgnoreTeleportNextUntilTicks;
+        private long portLaunchGraceUntilTicks;
+        private long portLastLaunchGraceMissingLogTicks;
+        private long portLastLaunchFlowMissingLogTicks;
+        private int portConsecutiveDiabloMissingChecks;
+        private bool portLaunchGraceStableLogged;
+        private volatile bool portBattleNetLaunchFlowActive;
+        private long portLastCombatCursorDecisionLogTicks;
+        private long portLastDemonHunterDecisionLogTicks;
+        private long portLastLootSpamDecisionLogTicks;
+        private bool? portLastCombatCursorDecisionAllowed;
+        private bool? portLastDemonHunterDecisionAllowed;
+        private bool? portLastLootSpamDecisionAllowed;
         private Form? portSplashForm;
         private Label? portSplashLabel;
         private System.Windows.Forms.Timer? portSplashTimer;
@@ -781,8 +795,8 @@ namespace GoblinFarmer
             Stopwatch perf = Stopwatch.StartNew();
             portCurrentLocationTemplates.Clear();
 
-            string currentLocationFolder = Path.Combine(ImagesPath, "Current Location");
-            string teleportFunctionFolder = Path.Combine(ImagesPath, "Teleport Function");
+            string currentLocationFolder = Img("Current Location");
+            string teleportFunctionFolder = Img("Teleport Function");
             AppLogger.Info($"Image folder resolved: Current Location={currentLocationFolder}");
             AppLogger.Info($"Image folder resolved: Teleport Function={teleportFunctionFolder}");
             if (!Directory.Exists(currentLocationFolder))
@@ -980,11 +994,12 @@ namespace GoblinFarmer
 
         private void ForceReleaseAllRuntimeInputs(string reason)
         {
+            AppLogger.Info($"ForceReleaseAllRuntimeInputs called: {reason}; {PortCombatInputContext()}");
             bool hadLootSpam = portLootSpamLeftClickDown;
             portLootSpamLeftClickDown = false;
             if (hadLootSpam)
             {
-                AppLogger.Info("Loot spam force cleanup");
+                AppLogger.Info($"Loot spam force cleanup; {PortCombatInputContext()}");
             }
 
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
@@ -999,7 +1014,7 @@ namespace GoblinFarmer
             keybd_event(0x32, 0, PortKeyUp, UIntPtr.Zero);
             keybd_event(0x33, 0, PortKeyUp, UIntPtr.Zero);
             keybd_event(0x34, 0, PortKeyUp, UIntPtr.Zero);
-            AppLogger.Info($"ForceReleaseAllRuntimeInputs: {reason}");
+            AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: {reason}; {PortCombatInputContext()}");
         }
 
         private void PortReleaseInputs(string reason = "cleanup")

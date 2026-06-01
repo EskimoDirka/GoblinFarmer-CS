@@ -713,7 +713,7 @@ namespace GoblinFarmer
             };
 
             return new PortScanRegionManager(
-                ImagesPath,
+                Img(),
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ScanRegions.json"),
                 hardCodedRegions);
         }

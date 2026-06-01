@@ -86,6 +86,8 @@
     <None Remove="Images\Salvage\Stash.png" />
     <None Remove="Images\Start Game\Battle Net Play Button Scan Region.png" />
     <None Remove="Images\Start Game\Battle Net Play Button.png" />
+    <None Remove="Images\Start Game\*D3*Tab*.png" />
+    <None Remove="Images\Start Game\*Diablo*Tab*.png" />
     <None Remove="Images\Start Game\Character Load Confirmation.png" />
     <None Remove="Images\Start Game\Start Game Button Coordinates.txt" />
     <None Remove="Images\Start Game\Start Game Button.png" />
@@ -316,6 +318,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Images\Start Game\Battle Net Play Button.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\*D3*Tab*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Start Game\*Diablo*Tab*.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Images\Start Game\Character Load Confirmation.png">

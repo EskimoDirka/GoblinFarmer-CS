@@ -85,7 +85,20 @@ namespace GoblinFarmer
             }
 
             PortSetAppStatus("Creating New Game");
-            if (!PortCreateNewGame(token))
+            bool previousLaunchFlowActive = portBattleNetLaunchFlowActive;
+            portBattleNetLaunchFlowActive = true;
+            Interlocked.Exchange(ref portLastLaunchFlowMissingLogTicks, 0);
+            bool createdGame;
+            try
+            {
+                createdGame = PortCreateNewGame(token);
+            }
+            finally
+            {
+                portBattleNetLaunchFlowActive = previousLaunchFlowActive;
+            }
+
+            if (!createdGame)
             {
                 return false;
             }
@@ -225,49 +238,67 @@ namespace GoblinFarmer
 
         private bool PortStartDiablo(CancellationToken token)
         {
-            AddWorkflowStep("Starting Battle.net");
-            StartBattleNet();
-            AddWorkflowStep("Waiting for Battle.net Play Button");
-            PortSetAppStatus("Waiting For Battle.net Play Button");
+            portBattleNetLaunchFlowActive = true;
+            Interlocked.Exchange(ref portLastLaunchFlowMissingLogTicks, 0);
 
-            bool clickedPlay = WaitForImageAndClick(
-                Img("Start Game", "Battle Net Play Button.png"),
-                timeoutMs: 60000,
-                confidence: PortStartGameButtonConfidence);
-
-            if (!clickedPlay)
+            try
             {
-                MessageBox.Show("Could not find Battle.net Play button.");
-                PortSetAppStatus("Play Button Not Found");
-                return false;
-            }
-
-            AddWorkflowStep("Clicking Play button");
-            PortSleep(token, 2000);
-            CloseBattleNet();
-            PortSetAppStatus("Launching Diablo III");
-
-            Stopwatch sw = Stopwatch.StartNew();
-            AddWorkflowStep("Waiting for Diablo process");
-
-            while (sw.ElapsedMilliseconds < 120000)
-            {
-                if (token.IsCancellationRequested)
+                AddWorkflowStep("Starting Battle.net");
+                StartBattleNet();
+                if (!PrepareBattleNetForDiabloLaunch(token))
                 {
+                    PortSetAppStatus("Battle.net Setup Failed");
                     return false;
                 }
-                if (IsDiabloRunning())
+
+                AddWorkflowStep("Waiting for Battle.net Play Button");
+                PortSetAppStatus("Waiting For Battle.net Play Button");
+
+                bool clickedPlay = WaitForBattleNetPlayButtonAndClick(
+                    Img("Start Game", "Battle Net Play Button.png"),
+                    timeoutMs: 60000,
+                    confidence: PortStartGameButtonConfidence,
+                    token: token);
+
+                if (!clickedPlay)
                 {
-                    PortSetAppStatus("Diablo III Started");
-                    return true;
+                    MessageBox.Show("Could not find Battle.net Play button.");
+                    PortSetAppStatus("Play Button Not Found");
+                    return false;
                 }
 
-                PortSleep(token, 1000);
-            }
+                AddWorkflowStep("Clicking Play button");
+                PortSleep(token, 2000);
+                CloseBattleNet();
+                PortSetAppStatus("Launching Diablo III");
 
-            MessageBox.Show("Diablo III did not start within the timeout.");
-            PortSetAppStatus("Diablo Start Timeout");
-            return false;
+                Stopwatch sw = Stopwatch.StartNew();
+                AddWorkflowStep("Waiting for Diablo process");
+
+                while (sw.ElapsedMilliseconds < 120000)
+                {
+                    if (token.IsCancellationRequested)
+                    {
+                        return false;
+                    }
+                    if (IsDiabloRunning())
+                    {
+                        AppLogger.Info($"Diablo process detected after {sw.ElapsedMilliseconds}ms");
+                        PortSetAppStatus("Diablo III Started");
+                        return true;
+                    }
+
+                    PortSleep(token, 1000);
+                }
+
+                MessageBox.Show("Diablo III did not start within the timeout.");
+                PortSetAppStatus("Diablo Start Timeout");
+                return false;
+            }
+            finally
+            {
+                portBattleNetLaunchFlowActive = false;
+            }
         }
 
         private bool PortCreateNewGame(CancellationToken token)

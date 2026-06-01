@@ -18,6 +18,8 @@ namespace GoblinFarmer
             Color,
         }
 
+        private const int SW_RESTORE = 9;
+
         public frmMain()
         {
             InitializeComponent();
@@ -58,6 +60,9 @@ namespace GoblinFarmer
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
         // Mouse-click support
         [DllImport("user32.dll")]
         private static extern bool SetCursorPos(int X, int Y);
@@ -80,13 +85,70 @@ namespace GoblinFarmer
             bool diabloRunning = diabloWindow != IntPtr.Zero;
 
             SetDiabloStatus(diabloRunning ? "Running" : "Not Running");
-            if (!diabloRunning && portDiabloWasRunning)
+            PortUpdateDiabloRuntimeMonitor(diabloRunning);
+            PortUpdateSessionStats();
+        }
+
+        private void PortUpdateDiabloRuntimeMonitor(bool diabloRunning)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            bool inLaunchGrace = nowTicks < Interlocked.Read(ref portLaunchGraceUntilTicks);
+
+            if (diabloRunning)
             {
-                PortHandleDiabloExited();
+                portConsecutiveDiabloMissingChecks = 0;
+                if (Interlocked.Read(ref portLaunchGraceUntilTicks) > 0 && !portLaunchGraceStableLogged)
+                {
+                    portLaunchGraceStableLogged = true;
+                    AppLogger.Info("Diablo process confirmed stable");
+                }
+
+                portDiabloWasRunning = true;
+                return;
             }
 
-            portDiabloWasRunning = diabloRunning;
-            PortUpdateSessionStats();
+            if (inLaunchGrace)
+            {
+                long lastLogTicks = Interlocked.Read(ref portLastLaunchGraceMissingLogTicks);
+                if (nowTicks - lastLogTicks >= TimeSpan.FromSeconds(2).Ticks)
+                {
+                    Interlocked.Exchange(ref portLastLaunchGraceMissingLogTicks, nowTicks);
+                    AppLogger.Info("Diablo missing during launch grace period ignored");
+                }
+
+                portConsecutiveDiabloMissingChecks = 0;
+                return;
+            }
+
+            if (portBattleNetLaunchFlowActive)
+            {
+                long lastLogTicks = Interlocked.Read(ref portLastLaunchFlowMissingLogTicks);
+                if (nowTicks - lastLogTicks >= TimeSpan.FromSeconds(2).Ticks)
+                {
+                    Interlocked.Exchange(ref portLastLaunchFlowMissingLogTicks, nowTicks);
+                    AppLogger.Info("Diablo missing during Battle.net launch/start-game flow ignored");
+                }
+
+                portConsecutiveDiabloMissingChecks = 0;
+                return;
+            }
+
+            if (!portDiabloWasRunning && !isAutomationRunning)
+            {
+                portConsecutiveDiabloMissingChecks = 0;
+                return;
+            }
+
+            portConsecutiveDiabloMissingChecks++;
+            if (portConsecutiveDiabloMissingChecks < PortDiabloMissingExitThreshold)
+            {
+                return;
+            }
+
+            AppLogger.Info($"Diablo exited after grace period: consecutiveMissingChecks={portConsecutiveDiabloMissingChecks}");
+            portDiabloWasRunning = false;
+            portConsecutiveDiabloMissingChecks = 0;
+            PortHandleDiabloExited();
         }
 
         // Method to find the Diablo window handle =========================================
@@ -109,6 +171,40 @@ namespace GoblinFarmer
 
                     if (process.ProcessName.Equals("Diablo III", StringComparison.OrdinalIgnoreCase) ||
                         process.ProcessName.Equals("Diablo III64", StringComparison.OrdinalIgnoreCase))
+                    {
+                        foundWindow = hWnd;
+                        return false;
+                    }
+                }
+                catch
+                {
+                    // Ignore processes that can't be accessed.
+                }
+
+                return true;
+            }, IntPtr.Zero);
+
+            return foundWindow;
+        }
+
+        private IntPtr FindBattleNetWindow()
+        {
+            IntPtr foundWindow = IntPtr.Zero;
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (!IsWindowVisible(hWnd))
+                {
+                    return true;
+                }
+
+                GetWindowThreadProcessId(hWnd, out uint processId);
+
+                try
+                {
+                    Process process = Process.GetProcessById((int)processId);
+
+                    if (process.ProcessName.Equals("Battle.net", StringComparison.OrdinalIgnoreCase))
                     {
                         foundWindow = hWnd;
                         return false;
@@ -151,61 +247,424 @@ namespace GoblinFarmer
         // Main method to start Diablo III =========================================
         private bool StartDiablo()
         {
+            portBattleNetLaunchFlowActive = true;
+            Interlocked.Exchange(ref portLastLaunchFlowMissingLogTicks, 0);
 
-            AddWorkflowStep("Starting Battle.net");
-            StartBattleNet();
-
-            AddWorkflowStep("Waiting for Battle.net Play Button");
-            SetAppStatus("Waiting For Battle.net Play Button");
-
-            bool clickedPlay = WaitForImageAndClick(
-                Img("Start Game", "Battle Net Play Button.png"),
-                timeoutMs: 60000,
-                confidence: 0.85);
-
-            if (!clickedPlay)
+            try
             {
-                MessageBox.Show("Could not find Battle.net Play button.");
-                SetAppStatus("Play Button Not Found");
-                return false;
-            }
-
-            AddWorkflowStep("Clicking Play button");
-            Thread.Sleep(2000);
-            CloseBattleNet();
-
-            SetAppStatus("Launching Diablo III");
-
-            Stopwatch sw = Stopwatch.StartNew();
-            AddWorkflowStep("Waiting for Diablo process");
-
-            while (sw.ElapsedMilliseconds < 120000)
-            {
-                if (IsDiabloRunning())
+                AddWorkflowStep("Starting Battle.net");
+                StartBattleNet();
+                if (!PrepareBattleNetForDiabloLaunch())
                 {
-                    SetAppStatus("Diablo III Started");
-                    return true;
+                    SetAppStatus("Battle.net Setup Failed");
+                    return false;
                 }
 
-                Thread.Sleep(1000);
-            }
+                AddWorkflowStep("Waiting for Battle.net Play Button");
+                SetAppStatus("Waiting For Battle.net Play Button");
 
-            MessageBox.Show("Diablo III did not start within the timeout.");
-            SetAppStatus("Diablo Start Timeout");
-            return false;
+                bool clickedPlay = WaitForBattleNetPlayButtonAndClick(
+                    Img("Start Game", "Battle Net Play Button.png"),
+                    timeoutMs: 60000,
+                    confidence: 0.85);
+
+                if (!clickedPlay)
+                {
+                    MessageBox.Show("Could not find Battle.net Play button.");
+                    SetAppStatus("Play Button Not Found");
+                    return false;
+                }
+
+                AddWorkflowStep("Clicking Play button");
+                Thread.Sleep(2000);
+                CloseBattleNet();
+
+                SetAppStatus("Launching Diablo III");
+
+                Stopwatch sw = Stopwatch.StartNew();
+                AddWorkflowStep("Waiting for Diablo process");
+
+                while (sw.ElapsedMilliseconds < 120000)
+                {
+                    if (IsDiabloRunning())
+                    {
+                        AppLogger.Info($"Diablo process detected after {sw.ElapsedMilliseconds}ms");
+                        SetAppStatus("Diablo III Started");
+                        return true;
+                    }
+
+                    Thread.Sleep(1000);
+                }
+
+                MessageBox.Show("Diablo III did not start within the timeout.");
+                SetAppStatus("Diablo Start Timeout");
+                return false;
+            }
+            finally
+            {
+                portBattleNetLaunchFlowActive = false;
+            }
         }
 
         private void StartBattleNet()
+        {
+            if (IsBattleNetRunning())
+            {
+                AppLogger.Info("Battle.net process exists");
+                IntPtr existingWindow = FindBattleNetWindow();
+                if (existingWindow != IntPtr.Zero)
+                {
+                    ShowWindow(existingWindow, SW_RESTORE);
+                    SetForegroundWindow(existingWindow);
+                    AppLogger.Info($"Battle.net visible window found: hwnd=0x{existingWindow.ToInt64():X}");
+                    AppLogger.Info($"Battle.net already running; focused existing window hwnd=0x{existingWindow.ToInt64():X}");
+                }
+                else
+                {
+                    AppLogger.Info("Battle.net process exists but no visible window found");
+                }
+
+                return;
+            }
+
+            LaunchBattleNetExecutable();
+        }
+
+        private bool LaunchBattleNetExecutable()
         {
             string battleNetPath = @"D:\Battle.net\Battle.net.exe";
 
             if (!File.Exists(battleNetPath))
             {
                 MessageBox.Show("Battle.net not found.");
-                return;
+                AppLogger.Info($"Battle.net launch failed: executable not found at {battleNetPath}");
+                return false;
             }
 
+            AppLogger.Info($"launching Battle.net.exe: {battleNetPath}");
             Process.Start(battleNetPath);
+            AppLogger.Info($"Battle.net launch requested: {battleNetPath}");
+            return true;
+        }
+
+        private bool PrepareBattleNetForDiabloLaunch(CancellationToken token = default)
+        {
+            AddWorkflowStep("Focusing Battle.net");
+            if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: 5000, logFoundAfterLaunch: false))
+            {
+                if (IsBattleNetRunning())
+                {
+                    AppLogger.Info("Battle.net process exists but no visible window found");
+                }
+
+                if (!LaunchBattleNetExecutable())
+                {
+                    AppLogger.Info("Battle.net setup failed after retry");
+                    return false;
+                }
+
+                if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: 30000, logFoundAfterLaunch: true))
+                {
+                    AppLogger.Info("Battle.net setup failed after retry");
+                    return false;
+                }
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            AddWorkflowStep("Selecting Diablo III in Battle.net");
+            if (!ClickBattleNetDiabloTab())
+            {
+                AppLogger.Info("Diablo III tab not clicked; continuing to Battle.net Play button search");
+            }
+
+            if (!PortSleepOrThreadSleep(token, 1200))
+            {
+                return false;
+            }
+
+            ConfirmBattleNetDiabloPage(token);
+            return !token.IsCancellationRequested;
+        }
+
+        private bool WaitForBattleNetWindowAndFocus(CancellationToken token = default, int timeoutMs = 30000, bool logFoundAfterLaunch = false)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                IntPtr battleNetWindow = FindBattleNetWindow();
+                if (battleNetWindow != IntPtr.Zero)
+                {
+                    ShowWindow(battleNetWindow, SW_RESTORE);
+                    SetForegroundWindow(battleNetWindow);
+                    AppLogger.Info($"Battle.net visible window found: hwnd=0x{battleNetWindow.ToInt64():X}");
+                    if (logFoundAfterLaunch)
+                    {
+                        AppLogger.Info($"Battle.net window found after launch: hwnd=0x{battleNetWindow.ToInt64():X}; elapsed={sw.ElapsedMilliseconds}ms");
+                    }
+
+                    AppLogger.Info($"Battle.net focused: hwnd=0x{battleNetWindow.ToInt64():X}; elapsed={sw.ElapsedMilliseconds}ms");
+                    return true;
+                }
+
+                PortSleepOrThreadSleep(token, 250);
+            }
+
+            return false;
+        }
+
+        private bool ClickBattleNetDiabloTab()
+        {
+            AppLogger.Info("Diablo III tab scan started");
+            bool foundTemplate = false;
+            foreach (string imagePath in BattleNetDiabloTabImageCandidates())
+            {
+                if (!File.Exists(imagePath))
+                {
+                    continue;
+                }
+
+                foundTemplate = true;
+                if (TryFindBattleNetImage(
+                    imagePath,
+                    "BattleNetD3Tab",
+                    "Diablo III tab",
+                    out DrawingPoint tabCenter,
+                    confidence: 0.80))
+                {
+                    AppLogger.Info($"Diablo III tab found by image: {Path.GetFileName(imagePath)} at {tabCenter.X},{tabCenter.Y}");
+                    LeftClick(tabCenter);
+                    AppLogger.Info($"Diablo III tab clicked: method=image; point={tabCenter.X},{tabCenter.Y}");
+                    return true;
+                }
+
+                AppLogger.Info($"Diablo III tab image not matched: {Path.GetFileName(imagePath)}");
+            }
+
+            if (!foundTemplate)
+            {
+                AppLogger.Info("Diablo III tab image not found in Images/Start Game");
+            }
+            else
+            {
+                AppLogger.Info("Diablo III tab not found in Battle.net scan region");
+            }
+
+            return false;
+        }
+
+        private string[] BattleNetDiabloTabImageCandidates()
+        {
+            string imagesRoot = Img();
+            List<string> candidates =
+            [
+                Img("Start Game", "Battle Net Diablo III Tab.png"),
+                Img("Start Game", "Battle Net Diablo III Icon.png"),
+                Img("Start Game", "Battlenet D3 Tab.png"),
+                Img("Start Game", "Battle.net D3 Tab.png"),
+                Img("Start Game", "Diablo III Tab.png"),
+                Img("Start Game", "Diablo III Icon.png"),
+            ];
+
+            if (Directory.Exists(imagesRoot))
+            {
+                candidates.AddRange(
+                    Directory
+                        .EnumerateFiles(imagesRoot, "*.png", SearchOption.AllDirectories)
+                        .Where(path =>
+                        {
+                            string fileName = Path.GetFileNameWithoutExtension(path);
+                            if (fileName.Contains("Scan Region", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return false;
+                            }
+
+                            bool isDiablo = fileName.Contains("Diablo", StringComparison.OrdinalIgnoreCase) ||
+                                fileName.Contains("D3", StringComparison.OrdinalIgnoreCase);
+                            return isDiablo &&
+                                (fileName.Contains("Tab", StringComparison.OrdinalIgnoreCase) ||
+                                 fileName.Contains("Icon", StringComparison.OrdinalIgnoreCase));
+                        }));
+            }
+
+            return candidates.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        private void ConfirmBattleNetDiabloPage(CancellationToken token = default)
+        {
+            string playButtonPath = Img("Start Game", "Battle Net Play Button.png");
+            Stopwatch sw = Stopwatch.StartNew();
+
+            while (sw.ElapsedMilliseconds < 5000)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (FindImageOnScreen(playButtonPath, out DrawingPoint playButtonCenter, confidence: 0.75))
+                {
+                    AppLogger.Info($"Diablo III page confirmed: Battle.net Play button visible at {playButtonCenter.X},{playButtonCenter.Y}; elapsed={sw.ElapsedMilliseconds}ms");
+                    return;
+                }
+
+                PortSleepOrThreadSleep(token, 250);
+            }
+
+            AppLogger.Info("Diablo III page confirmation inconclusive: Battle.net Play button not visible during brief post-tab wait");
+        }
+
+        private bool WaitForBattleNetPlayButtonAndClick(
+            string imagePath,
+            int timeoutMs,
+            double confidence,
+            CancellationToken token = default)
+        {
+            AppLogger.Info($"Play button scan started: image={Path.GetFileName(imagePath)}; timeoutMs={timeoutMs}; confidence={confidence:0.000}");
+            Stopwatch sw = Stopwatch.StartNew();
+
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                if (TryFindBattleNetImage(
+                    imagePath,
+                    "BattleNetPlayButton",
+                    "Battle.net Play button",
+                    out DrawingPoint centerPoint,
+                    confidence))
+                {
+                    AppLogger.Info($"Play button found: point={centerPoint.X},{centerPoint.Y}; elapsed={sw.ElapsedMilliseconds}ms");
+                    LeftClick(centerPoint);
+                    AppLogger.Info($"Play button clicked: point={centerPoint.X},{centerPoint.Y}");
+                    PortStartLaunchGracePeriod("Battle.net Play clicked");
+                    return true;
+                }
+
+                PortSleepOrThreadSleep(token, 250);
+            }
+
+            AppLogger.Info($"Play button not found before timeout: timeoutMs={timeoutMs}");
+            return false;
+        }
+
+        private bool TryFindBattleNetImage(
+            string imagePath,
+            string scanRegionKey,
+            string label,
+            out DrawingPoint centerPoint,
+            double confidence)
+        {
+            centerPoint = DrawingPoint.Empty;
+
+            if (!File.Exists(imagePath))
+            {
+                AppLogger.Info($"{label} image missing: {imagePath}");
+                return false;
+            }
+
+            Rectangle? referenceRegion = PortScanRegion(scanRegionKey, imagePath);
+            if (referenceRegion.HasValue)
+            {
+                Rectangle screenRegion = PortScaleReferenceRectangleToVirtualScreen(referenceRegion.Value);
+                AppLogger.Info($"{label} scan region loaded: key={scanRegionKey}; reference={FormatRectangle(referenceRegion.Value)}; screen={FormatRectangle(screenRegion)}");
+                if (TryFindImageInScreenRegion(imagePath, screenRegion, out centerPoint, confidence))
+                {
+                    return true;
+                }
+
+                AppLogger.Info($"{label} not found in scan region; falling back to full-screen search");
+            }
+            else
+            {
+                AppLogger.Info($"{label} scan region unavailable: key={scanRegionKey}; falling back to full-screen search");
+            }
+
+            return FindImageOnScreen(imagePath, out centerPoint, confidence);
+        }
+
+        private bool TryFindImageInScreenRegion(
+            string imagePath,
+            Rectangle screenRegion,
+            out DrawingPoint centerPoint,
+            double confidence)
+        {
+            centerPoint = DrawingPoint.Empty;
+            screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
+            if (screenRegion.Width <= 0 || screenRegion.Height <= 0)
+            {
+                return false;
+            }
+
+            using Bitmap screenshot = new(screenRegion.Width, screenRegion.Height);
+            using (Graphics graphics = Graphics.FromImage(screenshot))
+            {
+                graphics.CopyFromScreen(
+                    screenRegion.Left,
+                    screenRegion.Top,
+                    0,
+                    0,
+                    screenshot.Size);
+            }
+
+            if (!FindImageInBitmap(screenshot, imagePath, out DrawingPoint localCenterPoint, confidence, ImageMatchMode.Color))
+            {
+                return false;
+            }
+
+            centerPoint = new DrawingPoint(
+                screenRegion.Left + localCenterPoint.X,
+                screenRegion.Top + localCenterPoint.Y);
+            return true;
+        }
+
+        private Rectangle PortScaleReferenceRectangleToVirtualScreen(Rectangle rectangle)
+        {
+            Rectangle screen = SystemInformation.VirtualScreen;
+            return new Rectangle(
+                screen.Left + (int)Math.Round(rectangle.Left * screen.Width / (double)PortReferenceWidth),
+                screen.Top + (int)Math.Round(rectangle.Top * screen.Height / (double)PortReferenceHeight),
+                (int)Math.Round(rectangle.Width * screen.Width / (double)PortReferenceWidth),
+                (int)Math.Round(rectangle.Height * screen.Height / (double)PortReferenceHeight));
+        }
+
+        private static string FormatRectangle(Rectangle rectangle)
+        {
+            return $"{rectangle.Left},{rectangle.Top},{rectangle.Width},{rectangle.Height}";
+        }
+
+        private bool PortSleepOrThreadSleep(CancellationToken token, int milliseconds)
+        {
+            if (token.CanBeCanceled)
+            {
+                PortSleep(token, milliseconds);
+                return !token.IsCancellationRequested;
+            }
+
+            Thread.Sleep(milliseconds);
+            return true;
+        }
+
+        private void PortStartLaunchGracePeriod(string reason)
+        {
+            DateTime graceUntil = DateTime.UtcNow.AddMilliseconds(PortLaunchGracePeriodMs);
+            Interlocked.Exchange(ref portLaunchGraceUntilTicks, graceUntil.Ticks);
+            Interlocked.Exchange(ref portLastLaunchGraceMissingLogTicks, 0);
+            portConsecutiveDiabloMissingChecks = 0;
+            portLaunchGraceStableLogged = false;
+            AppLogger.Info($"Launch grace period started: reason={reason}; durationMs={PortLaunchGracePeriodMs}; untilUtc={graceUntil:O}");
         }
 
         // Method to check if Battle.net is running =========================================
@@ -619,19 +1078,19 @@ namespace GoblinFarmer
             return false;
         }
 
-        // Image Path Builder Helper
-        private const string ImagesPath = @"D:\D3\Projects\Images";
-
-        private string Img(string folder, string fileName)
+        private static string Img(params string[] parts)
         {
-            return Path.Combine(ImagesPath, folder, fileName);
+            return Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Images",
+                Path.Combine(parts));
         }
 
         // Folder Scanner ==========================================
         private string[] GetImagesFromFolder(string folder)
         {
             return Directory.GetFiles(
-                Path.Combine(ImagesPath, folder),
+                Img(folder),
                 "*.png",
                 SearchOption.AllDirectories);
         }

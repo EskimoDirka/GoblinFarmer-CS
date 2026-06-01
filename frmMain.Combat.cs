@@ -1,6 +1,7 @@
 using OpenCvSharp;
 using System;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
@@ -20,6 +21,7 @@ namespace GoblinFarmer
 
             if (isAutomationRunning || !PortDiabloIsActive())
             {
+                AppLogger.Info($"Combat start ignored: isAutomationRunning={isAutomationRunning}; {PortCombatInputContext()}");
                 return;
             }
 
@@ -29,6 +31,7 @@ namespace GoblinFarmer
             portCombatClass = radWD.Checked ? "witch_doctor" : radDH.Checked ? "demon_hunter" : "monk";
             SetCombatStatus($"{radWD.Checked switch { true => "Witch Doctor", false when radDH.Checked => "Demon Hunter", _ => "Monk" }} Running");
             AddWorkflowStep("Combat started");
+            AppLogger.Info($"Combat started: class={portCombatClass}; {PortCombatInputContext()}");
             PortLockCursorToDiablo();
             CancellationToken combatToken = portCombatCts.Token;
 
@@ -59,6 +62,7 @@ namespace GoblinFarmer
             string stoppedClass = portCombatClass;
             CancellationTokenSource? cts = portCombatCts;
             portCombatStopping = true;
+            AppLogger.Info($"Combat stopping: reason={reason}; class={stoppedClass}; {PortCombatInputContext()}");
 
             try
             {
@@ -83,6 +87,7 @@ namespace GoblinFarmer
                 SetCombatStatus("Idle");
                 SetAppStatus($"Combat Stopped ({reason})");
                 AddWorkflowStep($"Combat stopped ({reason})");
+                AppLogger.Info($"Combat stopped: reason={reason}; class={stoppedClass}; {PortCombatInputContext()}");
                 return true;
             }
             finally
@@ -329,6 +334,18 @@ namespace GoblinFarmer
 
         private void PortDemonHunterShiftLeftClick()
         {
+            bool clickSafe = PortCombatClickIsSafe();
+            PortLogCombatClickDecision(
+                "Demon Hunter Shift+Left Click",
+                clickSafe,
+                "left",
+                ref portLastDemonHunterDecisionLogTicks,
+                ref portLastDemonHunterDecisionAllowed);
+            if (!clickSafe)
+            {
+                AppLogger.Info($"Demon Hunter Shift+Left Click safety check failed, but existing rotation still sends the click; {PortCombatInputContext()}");
+            }
+
             keybd_event(PortVkShift, 0, 0, UIntPtr.Zero);
             Thread.Sleep(30);
 
@@ -349,14 +366,27 @@ namespace GoblinFarmer
             {
                 while (!token.IsCancellationRequested && portCombatRunning && portCombatClass == "demon_hunter")
                 {
-                    if (!PortCombatClickIsSafe())
+                    bool clickSafe = PortCombatClickIsSafe();
+                    PortLogCombatClickDecision(
+                        "Demon Hunter right hold",
+                        clickSafe,
+                        "right",
+                        ref portLastDemonHunterDecisionLogTicks,
+                        ref portLastDemonHunterDecisionAllowed);
+
+                    if (!clickSafe)
                     {
+                        if (rightDown)
+                        {
+                            AppLogger.Info($"Combat right click blocked: PortCombatClickIsSafe=false while rightDown=true; no new RIGHTDOWN sent; {PortCombatInputContext()}");
+                        }
                         PortSleep(token, 90);
                         continue;
                     }
 
                     if (!rightDown)
                     {
+                        AppLogger.Info($"Combat right click allowed: sending RIGHTDOWN; {PortCombatInputContext()}");
                         mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, UIntPtr.Zero);
                         rightDown = true;
                     }
@@ -383,6 +413,7 @@ namespace GoblinFarmer
             {
                 if (rightDown)
                 {
+                    AppLogger.Info($"Combat right click cleanup: sending RIGHTUP; {PortCombatInputContext()}");
                     mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
                 }
 
@@ -401,10 +432,15 @@ namespace GoblinFarmer
                 }
 
                 bool clickSafe = PortCombatClickIsSafe();
+                PortLogCombatClickDecision(
+                    "Combat cursor loop",
+                    clickSafe,
+                    "left",
+                    ref portLastCombatCursorDecisionLogTicks,
+                    ref portLastCombatCursorDecisionAllowed);
 
                 if (!clickSafe)
                 {
-                    AppLogger.Info("Combat cursor click suppressed: no-click region");
                     mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                 }
                 else
@@ -444,33 +480,7 @@ namespace GoblinFarmer
 
         private bool PortCombatClickIsSafe()
         {
-            if (!PortTryGetDiabloRect(out RECT rect) || !GetCursorPos(out DrawingPoint cursor))
-            {
-                return false;
-            }
-
-            if (cursor.X < rect.Left || cursor.X >= rect.Right || cursor.Y < rect.Top || cursor.Y >= rect.Bottom)
-            {
-                return false;
-            }
-
-            int width = rect.Right - rect.Left;
-            int height = rect.Bottom - rect.Top;
-            foreach ((double left, double top, double regionWidth, double regionHeight) in portCombatNoClickRegions)
-            {
-                Rectangle region = new(
-                    rect.Left + (int)Math.Round(width * left),
-                    rect.Top + (int)Math.Round(height * top),
-                    (int)Math.Round(width * regionWidth),
-                    (int)Math.Round(height * regionHeight));
-
-                if (region.Contains(cursor))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return PortGetCombatClickDiagnostics().Safe;
         }
 
         private void PortLockCursorToDiablo()
@@ -480,5 +490,123 @@ namespace GoblinFarmer
                 ClipCursor(ref rect);
             }
         }
+
+        private PortCombatClickDiagnostics PortGetCombatClickDiagnostics()
+        {
+            bool hasRect = PortTryGetDiabloRect(out RECT rect);
+            bool hasCursor = GetCursorPos(out DrawingPoint cursor);
+            bool cursorInsideDiablo = false;
+            bool insideNoClickRegion = false;
+            int noClickRegionIndex = -1;
+            Rectangle noClickRegion = Rectangle.Empty;
+
+            if (hasRect && hasCursor)
+            {
+                cursorInsideDiablo = cursor.X >= rect.Left &&
+                    cursor.X < rect.Right &&
+                    cursor.Y >= rect.Top &&
+                    cursor.Y < rect.Bottom;
+
+                int width = rect.Right - rect.Left;
+                int height = rect.Bottom - rect.Top;
+                for (int i = 0; i < portCombatNoClickRegions.Length; i++)
+                {
+                    (double left, double top, double regionWidth, double regionHeight) = portCombatNoClickRegions[i];
+                    Rectangle region = new(
+                        rect.Left + (int)Math.Round(width * left),
+                        rect.Top + (int)Math.Round(height * top),
+                        (int)Math.Round(width * regionWidth),
+                        (int)Math.Round(height * regionHeight));
+
+                    if (region.Contains(cursor))
+                    {
+                        insideNoClickRegion = true;
+                        noClickRegionIndex = i;
+                        noClickRegion = region;
+                        break;
+                    }
+                }
+            }
+
+            bool active = PortDiabloIsActive();
+            IntPtr foreground = GetForegroundWindow();
+            IntPtr diabloWindow = FindDiabloWindow();
+            CURSORINFO cursorInfo = new()
+            {
+                cbSize = Marshal.SizeOf<CURSORINFO>()
+            };
+            bool hasCursorInfo = GetCursorInfo(out cursorInfo);
+            bool safe = hasRect && hasCursor && cursorInsideDiablo && !insideNoClickRegion;
+
+            return new PortCombatClickDiagnostics(
+                safe,
+                hasRect,
+                hasCursor,
+                active,
+                foreground == diabloWindow && diabloWindow != IntPtr.Zero,
+                foreground,
+                diabloWindow,
+                cursor,
+                rect,
+                cursorInsideDiablo,
+                insideNoClickRegion,
+                noClickRegionIndex,
+                noClickRegion,
+                hasCursorInfo,
+                hasCursorInfo ? cursorInfo.hCursor : IntPtr.Zero,
+                hasCursorInfo ? cursorInfo.flags : 0);
+        }
+
+        private string PortCombatInputContext()
+        {
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            string cursorPosition = diagnostics.HasCursor ? $"{diagnostics.Cursor.X},{diagnostics.Cursor.Y}" : "unavailable";
+            string diabloRect = diagnostics.HasDiabloRect
+                ? $"{diagnostics.DiabloRect.Left},{diagnostics.DiabloRect.Top},{diagnostics.DiabloRect.Right},{diagnostics.DiabloRect.Bottom}"
+                : "unavailable";
+            string noClickRegion = diagnostics.InsideNoClickRegion
+                ? $"true(index={diagnostics.NoClickRegionIndex}, rect={diagnostics.NoClickRegion.Left},{diagnostics.NoClickRegion.Top},{diagnostics.NoClickRegion.Right},{diagnostics.NoClickRegion.Bottom})"
+                : "false";
+
+            return $"mouse={cursorPosition}; diabloRect={diabloRect}; diabloActive={diagnostics.DiabloActive}; foregroundIsDiablo={diagnostics.ForegroundIsDiablo}; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; diabloWindow=0x{diagnostics.DiabloWindow.ToInt64():X}; cursorInsideDiablo={diagnostics.CursorInsideDiablo}; insideNoClickRegion={noClickRegion}; PortCombatClickIsSafe={diagnostics.Safe}; cursorInfo={diagnostics.HasCursorInfo}; cursorHandle=0x{diagnostics.CursorHandle.ToInt64():X}; cursorFlags={diagnostics.CursorFlags}";
+        }
+
+        private void PortLogCombatClickDecision(
+            string source,
+            bool allowed,
+            string button,
+            ref long lastLogTicks,
+            ref bool? lastAllowed)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            bool stateChanged = lastAllowed != allowed;
+            bool throttled = nowTicks - Interlocked.Read(ref lastLogTicks) >= TimeSpan.FromSeconds(1).Ticks;
+            if (!stateChanged && !throttled)
+            {
+                return;
+            }
+
+            lastAllowed = allowed;
+            Interlocked.Exchange(ref lastLogTicks, nowTicks);
+            AppLogger.Info($"{source}: {button} click {(allowed ? "allowed" : "blocked")}; {PortCombatInputContext()}");
+        }
+
+        private sealed record PortCombatClickDiagnostics(
+            bool Safe,
+            bool HasDiabloRect,
+            bool HasCursor,
+            bool DiabloActive,
+            bool ForegroundIsDiablo,
+            IntPtr ForegroundWindow,
+            IntPtr DiabloWindow,
+            DrawingPoint Cursor,
+            RECT DiabloRect,
+            bool CursorInsideDiablo,
+            bool InsideNoClickRegion,
+            int NoClickRegionIndex,
+            Rectangle NoClickRegion,
+            bool HasCursorInfo,
+            IntPtr CursorHandle,
+            int CursorFlags);
     }
 }

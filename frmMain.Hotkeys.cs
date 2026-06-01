@@ -42,7 +42,7 @@ namespace GoblinFarmer
                     if (shouldSpamLootClick && !portLootSpamLeftClickDown)
                     {
                         portLootSpamLeftClickDown = true;
-                        AppLogger.Info("Loot spam started");
+                        AppLogger.Info($"Loot spam started; {PortCombatInputContext()}");
                     }
                     else if (!shouldSpamLootClick && portLootSpamLeftClickDown)
                     {
@@ -50,12 +50,20 @@ namespace GoblinFarmer
                         mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                         mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
                         mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
-                        AppLogger.Info("Loot spam stopped");
+                        AppLogger.Info($"Loot spam stopped; altDown={altDown}; backtickDown={backtickDown}; diabloActive={diabloActive}; {PortCombatInputContext()}");
                     }
 
                     if (shouldSpamLootClick && portLootSpamLeftClickDown)
                     {
-                        if (portCombatRunning && !PortCombatClickIsSafe())
+                        bool clickAllowed = !portCombatRunning || PortCombatClickIsSafe();
+                        PortLogCombatClickDecision(
+                            "Loot spam",
+                            clickAllowed,
+                            "left",
+                            ref portLastLootSpamDecisionLogTicks,
+                            ref portLastLootSpamDecisionAllowed);
+
+                        if (!clickAllowed)
                         {
                             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                         }
@@ -69,6 +77,7 @@ namespace GoblinFarmer
 
                     if (!diabloActive && portLootSpamLeftClickDown)
                     {
+                        AppLogger.Info($"Loot spam stopping because Diablo is not active/focused; {PortCombatInputContext()}");
                         ForceReleaseAllRuntimeInputs("Diablo lost focus");
                     }
 
@@ -135,7 +144,7 @@ namespace GoblinFarmer
                     mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                     mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
                     mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
-                    AppLogger.Info("Loot spam stopped");
+                    AppLogger.Info($"Loot spam stopped by key release; vk={vkCode}; {PortCombatInputContext()}");
                 }
 
                 if (isSkill1 && injected)
