@@ -10,6 +10,9 @@
 * [ ] Fix Waterway button clearing next-target button color.
 * [ ] Fix Eastern Channel Level 2 routing to Waterway instead of Stinging Winds.
 * [ ] Fix Stinging Winds blocking rules.
+* [x] Fix manual teleport button retry after failed/interrupted button teleports.
+* [x] Fix ButtonRetry so manual retries bypass teleport blocking.
+* [x] Log and ignore same-button clicks while waiting for teleport arrival confirmation.
 * [ ] Verify Black Canyon Mines allows Battlefields.
 * [ ] Verify all route logic matches Project_Status.md.
 
@@ -24,6 +27,7 @@
 
 * [ ] Complete full route test from Southern Highlands through Pandemonium Fortress Level 2.
 * [ ] Complete interrupted teleport testing.
+* [ ] Test failed/interrupted Royal Crypts button retry from Cathedral Level 1 and confirm retry preserves Cathedral/Royal Crypts state, bypasses manual-button blocking, and does not advance until arrival confirmation.
 * [ ] Complete Exit Game workflow testing.
 * [ ] Complete Repair workflow testing.
 * [ ] Complete Salvage workflow testing.
@@ -32,18 +36,55 @@
 
 ## Debugging Improvements
 
+### Diagnostic Overlay
+
+Status: Implemented as a read-only WinForms panel on the main form.
+
+Shows:
+
+* [x] Raw Location.
+* [x] Normalized Location.
+* [x] Display Location.
+* [x] Blocking Location.
+* [x] Current Teleport Target.
+* [x] Next Teleport Target.
+* [x] Queued Retry Target.
+* [x] Last Requested Target.
+* [x] Failed/Interrupted retry state.
+* [x] Route State.
+* [x] Combat State.
+* [x] Failure Counter.
+* [x] Diablo Running Status.
+* [x] Active Workflow.
+* [x] Last Log File.
+* [x] Screenshot Count.
+* [x] Log Count.
+* [x] Debug Package Path when available.
+
+Notes:
+
+* Refreshes through the existing status timer.
+* Uses existing runtime state and file counts only.
+* Does not run extra image-recognition scans.
+
 ### Debug Package Generator
 
-Create a one-click debug package tool.
+Status: Implemented with `Scripts\create-debug-package.ps1`.
+
+Run from the project root:
+
+`powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1`
 
 Requirements:
 
-* Include latest log.
-* Include latest debug screenshots.
-* Include Project_Status.md.
-* Include TEST_CHECKLIST.md.
-* Include current git status.
-* Export zip package.
+* [x] Include latest log.
+* [x] Include latest debug screenshots.
+* [x] Include Project_Status.md.
+* [x] Include TEST_CHECKLIST.md.
+* [x] Include TODO.md and AGENTS.md.
+* [x] Include current git status.
+* [x] Include recent git log.
+* [x] Export zip package.
 
 Example output:
 

@@ -27,7 +27,6 @@ namespace GoblinFarmer
 
             portCombatCts = new CancellationTokenSource();
             portCombatRunning = true;
-            portMonkKeyIndex = 1;
             portCombatClass = radWD.Checked ? "witch_doctor" : radDH.Checked ? "demon_hunter" : "monk";
             SetCombatStatus($"{radWD.Checked switch { true => "Witch Doctor", false when radDH.Checked => "Demon Hunter", _ => "Monk" }} Running");
             AddWorkflowStep("Combat started");

@@ -48,6 +48,7 @@ namespace GoblinFarmer
         {
             RunOnUiThread(() =>
             {
+                portLastWorkflowStep = message;
                 AppLogger.Info($"Workflow: {message}");
 
                 TextBox? workflowTextBox = FindWorkflowTextBox(this);

@@ -68,12 +68,17 @@ namespace GoblinFarmer
         private CancellationTokenSource? portAutomationCts;
         private CancellationTokenSource? portCombatCts;
         private bool portInitialized;
-        private int portMonkKeyIndex = 1;
         private long portIgnoreEscapeHotkeyUntilTicks;
         private string portCombatClass = "";
         private string portLastTeleportKey = "";
         private string portQueuedTeleportKey = "";
         private string portLastConfirmedLocation = "";
+        private string portQueuedRetryTeleportKey = "";
+        private string portLastRequestedTeleportKey = "";
+        private string portTeleportWaitingConfirmationKey = "";
+        private volatile bool portTeleportRetryFailedOrInterrupted;
+        private volatile bool portTeleportAlreadyHereNotified;
+        private volatile bool portTeleportWaitingForConfirmation;
         private volatile bool portAutomationBlockedByTeleportFailsafe;
         private volatile bool portSuppressSkill1KeyUp;
         private volatile bool portSkill1TeleportHandled;
@@ -109,6 +114,24 @@ namespace GoblinFarmer
 
         private sealed record PortMapPoint(string Name, string Act, int X, int Y);
         private sealed record PortLocationDetectionResult(string Detected, string BestName, double BestConfidence, string SecondName, double SecondConfidence, int TemplateCount, long ElapsedMilliseconds);
+
+        private sealed class PortNoActivateSplashForm : Form
+        {
+            private const int WS_EX_NOACTIVATE = 0x08000000;
+            private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+            protected override bool ShowWithoutActivation => true;
+
+            protected override CreateParams CreateParams
+            {
+                get
+                {
+                    CreateParams createParams = base.CreateParams;
+                    createParams.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+                    return createParams;
+                }
+            }
+        }
 
         private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -248,30 +271,61 @@ namespace GoblinFarmer
             string previousConfirmedLocation = portLastConfirmedLocation;
             string previousLastTeleportKey = portLastTeleportKey;
             string previousQueuedTeleportKey = portQueuedTeleportKey;
-            AppLogger.Info($"Teleport run start: requested={PortDisplayLocation(location)}; source={source}; ignoreBlocking={ignoreBlocking}; confirmedBefore={PortDisplayLocation(previousConfirmedLocation)}; displayBefore={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(previousConfirmedLocation))}; queuedBefore={PortDisplayLocation(PortTeleportLocationForKey(previousQueuedTeleportKey))}");
+            string previousRetryTeleportKey = portQueuedRetryTeleportKey;
+            bool wasRetry = source.Equals("ButtonRetry", StringComparison.OrdinalIgnoreCase);
+            portTeleportAlreadyHereNotified = false;
+            portLastRequestedTeleportKey = PortLocationKey(location);
+            AppLogger.Info($"Teleport run start: requested={PortDisplayLocation(location)}; source={source}; ignoreBlocking={ignoreBlocking}; confirmedBefore={PortDisplayLocation(previousConfirmedLocation)}; displayBefore={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(previousConfirmedLocation))}; queuedBefore={PortDisplayLocation(PortTeleportLocationForKey(previousQueuedTeleportKey))}; retryQueuedBefore={PortDisplayLocation(PortTeleportLocationForKey(previousRetryTeleportKey))}; failedOrInterrupted={portTeleportRetryFailedOrInterrupted}");
             bool arrived = PortTeleportToLocation(location, token, verifyArrival: true, bypassFailsafe: ignoreBlocking, source: source);
             if (arrived)
             {
                 PortRecordTeleport(location, portLastConfirmedLocation);
+                if (wasRetry)
+                {
+                    AppLogger.Info($"Button retry succeeded: requested={PortDisplayLocation(location)}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}");
+                }
+                PortClearPreservedTeleportRetry($"teleport confirmed: {location}");
             }
             else
             {
+                if (source.Equals("Button", StringComparison.OrdinalIgnoreCase) ||
+                    source.Equals("ButtonRetry", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Info($"Button teleport failed/interrupted: requested={PortDisplayLocation(location)}; source={source}; cancelled={token.IsCancellationRequested}; blocked={portAutomationBlockedByTeleportFailsafe}; alreadyHere={portTeleportAlreadyHereNotified}; confirmedBefore={PortDisplayLocation(previousConfirmedLocation)}; confirmedAfter={PortDisplayLocation(portLastConfirmedLocation)}");
+                }
+                else
+                {
+                    AppLogger.Info($"Teleport failed/interrupted: requested={PortDisplayLocation(location)}; source={source}; cancelled={token.IsCancellationRequested}; blocked={portAutomationBlockedByTeleportFailsafe}; alreadyHere={portTeleportAlreadyHereNotified}; confirmedBefore={PortDisplayLocation(previousConfirmedLocation)}; confirmedAfter={PortDisplayLocation(portLastConfirmedLocation)}");
+                }
+
                 if (!string.Equals(portLastConfirmedLocation, previousConfirmedLocation, StringComparison.OrdinalIgnoreCase))
                 {
                     AppLogger.Info($"Teleport failed; restoring ConfirmedLocation from {PortDisplayLocation(portLastConfirmedLocation)} to {PortDisplayLocation(previousConfirmedLocation)}");
                     portLastConfirmedLocation = previousConfirmedLocation;
                 }
 
-                if (!portAutomationBlockedByTeleportFailsafe)
+                if (!portAutomationBlockedByTeleportFailsafe && !portTeleportAlreadyHereNotified)
                 {
-                    PortRestoreTeleportButtonStateFromLastConfirmedLocation($"teleport did not confirm: {location}");
+                    portLastTeleportKey = previousLastTeleportKey;
+                    portQueuedTeleportKey = previousQueuedTeleportKey;
+                    PortPreserveTeleportRetry(location, previousLastTeleportKey, previousQueuedTeleportKey, $"teleport did not confirm: {location}");
                 }
                 else
                 {
                     portLastTeleportKey = previousLastTeleportKey;
                     portQueuedTeleportKey = previousQueuedTeleportKey;
-                    AppLogger.Info($"Teleport blocked; route state preserved: confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+                    AppLogger.Info($"Teleport did not start/confirm; route state preserved without new retry: confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}; blocked={portAutomationBlockedByTeleportFailsafe}; alreadyHere={portTeleportAlreadyHereNotified}");
                 }
+
+                if (wasRetry)
+                {
+                    AppLogger.Info($"Button retry failed: requested={PortDisplayLocation(location)}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}; retryQueued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}");
+                }
+            }
+
+            if (wasRetry)
+            {
+                AppLogger.Info($"Route state after retry: requested={PortDisplayLocation(location)}; success={arrived}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}; retryQueued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; failedOrInterrupted={portTeleportRetryFailedOrInterrupted}");
             }
 
             return arrived;
@@ -397,8 +451,16 @@ namespace GoblinFarmer
         private bool PortTeleportToLocation(string displayName, CancellationToken token, bool verifyArrival = false, bool mapAlreadyOpen = false, bool bypassFailsafe = false, string source = "Workflow")
         {
             AddWorkflowStep($"Teleporting to {displayName}");
+            bool isManualButtonSource =
+                source.Equals("Button", StringComparison.OrdinalIgnoreCase) ||
+                source.Equals("ButtonRetry", StringComparison.OrdinalIgnoreCase);
             bool shouldCheckBlocking = !bypassFailsafe && source.Equals("Hotkey", StringComparison.OrdinalIgnoreCase);
-            AppLogger.Info($"Teleport target location: {displayName}; source={source}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}");
+            bool blockingSkippedForManualSource = isManualButtonSource && !shouldCheckBlocking;
+            AppLogger.Info($"Teleport target location: {displayName}; source={source}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}; blockingSkippedForManualSource={blockingSkippedForManualSource}");
+            if (blockingSkippedForManualSource)
+            {
+                AppLogger.Info($"Teleport blocking skipped because source is {source}: requested={displayName}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}");
+            }
             PortSetAppStatus($"Teleporting To {displayName}");
             if (token.IsCancellationRequested)
             {
@@ -420,12 +482,20 @@ namespace GoblinFarmer
             AppLogger.Info($"Teleport detected current location before teleport: raw={PortDisplayLocation(currentLocation)}; normalized={PortDisplayLocation(PortNormalizeBlockingLocation(currentLocation))}; button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(currentLocation))}; requested={displayName}; previousConfirmed={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}");
             AddWorkflowStep($"Current location detected: {PortDisplayLocation(currentLocation)}");
             if (source.Equals("Button", StringComparison.OrdinalIgnoreCase) &&
-                PortLocationKey(displayName) == PortLocationKey("Ancient Waterway") &&
-                PortLocationKey(currentLocation) == PortLocationKey("Ancient Waterway"))
+                PortLocationKey(displayName) == PortLocationKey("Ancient Waterway"))
             {
-                AppLogger.Info($"Manual Ancient Waterway button blocked: requested={displayName}; rawDetected={currentLocation}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; blockingRule=Already inside Ancient Waterway");
-                PortNotifyTeleportBlocked(currentLocation, displayName, source);
-                return false;
+                string exactWaterwayLocation = PortRefreshBlockingLocationForTarget(displayName);
+                if (string.IsNullOrWhiteSpace(exactWaterwayLocation))
+                {
+                    exactWaterwayLocation = currentLocation;
+                }
+
+                if (PortLocationKey(exactWaterwayLocation) == PortLocationKey("Ancient Waterway"))
+                {
+                    AppLogger.Info($"Ancient Waterway already-here/self-teleport block: requested={displayName}; rawDetected={PortDisplayLocation(exactWaterwayLocation)}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; currentKey={portLastTeleportKey}; nextKey={portQueuedTeleportKey}; blockingRule=Already inside Ancient Waterway");
+                    PortNotifyAlreadyHere("Ancient Waterway", displayName, source);
+                    return false;
+                }
             }
 
             if (PortLocationIsAlreadyAtTarget(currentLocation, displayName))
@@ -509,7 +579,17 @@ namespace GoblinFarmer
             bool arrived = true;
             if (verifyArrival)
             {
-                arrived = PortWaitForSpecificLocation(displayName, token, PortArrivalConfirmationTimeoutMs, out confirmedAfter);
+                portTeleportWaitingForConfirmation = true;
+                portTeleportWaitingConfirmationKey = PortLocationKey(displayName);
+                try
+                {
+                    arrived = PortWaitForSpecificLocation(displayName, token, PortArrivalConfirmationTimeoutMs, out confirmedAfter);
+                }
+                finally
+                {
+                    portTeleportWaitingForConfirmation = false;
+                    portTeleportWaitingConfirmationKey = "";
+                }
             }
 
             if (arrived && string.IsNullOrWhiteSpace(confirmedAfter))
@@ -729,7 +809,7 @@ namespace GoblinFarmer
                 {
                     if (portSplashForm == null || portSplashForm.IsDisposed)
                     {
-                        portSplashForm = new Form
+                        portSplashForm = new PortNoActivateSplashForm
                         {
                             FormBorderStyle = FormBorderStyle.None,
                             StartPosition = FormStartPosition.Manual,
@@ -769,7 +849,7 @@ namespace GoblinFarmer
                     PortPositionSplash();
                     portSplashForm.Show();
                     portSplashTimer.Start();
-                    AppLogger.Info($"Teleport blocked splash shown: {message}");
+                    AppLogger.Info($"Notification shown without focus steal: message={message}; diabloActive={PortDiabloIsActive()}");
                 }
                 catch (Exception ex)
                 {

@@ -15,7 +15,37 @@ namespace GoblinFarmer
             button.UseVisualStyleBackColor = false;
             button.TextAlign = ContentAlignment.MiddleCenter;
             button.AutoEllipsis = true;
-            button.Click += (_, _) => _ = PortRunAutomationAsync(token => PortRunTeleportButton(location, token, ignoreBlocking: true, source: "Button"));
+            button.Click += (_, _) => PortQueueTeleportButtonClick(location);
+        }
+
+        private void PortQueueTeleportButtonClick(string location)
+        {
+            string requestedKey = PortLocationKey(location);
+            if (isAutomationRunning &&
+                portTeleportWaitingForConfirmation &&
+                requestedKey == portTeleportWaitingConfirmationKey)
+            {
+                AppLogger.Info($"Button click ignored because teleport is already waiting for confirmation: requested={PortDisplayLocation(location)}; waitingTarget={PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey))}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}");
+                AddWorkflowStep($"Button click ignored while waiting for {location} confirmation");
+                return;
+            }
+
+            _ = PortRunAutomationAsync(token => PortRunTeleportButtonClick(location, token));
+        }
+
+        private bool PortRunTeleportButtonClick(string location, CancellationToken token)
+        {
+            string requestedKey = PortLocationKey(location);
+            if (portTeleportRetryFailedOrInterrupted &&
+                !string.IsNullOrWhiteSpace(portQueuedRetryTeleportKey) &&
+                requestedKey == portQueuedRetryTeleportKey)
+            {
+                AppLogger.Info($"Button retry detected: requested={PortDisplayLocation(location)}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+                AppLogger.Info($"Button retry using preserved state: confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; blocking={PortDisplayLocation(PortGetConfirmedCurrentLocation())}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+                return PortRunTeleportButton(location, token, ignoreBlocking: true, source: "ButtonRetry");
+            }
+
+            return PortRunTeleportButton(location, token, ignoreBlocking: true, source: "Button");
         }
 
         private void PortClearTeleportButtonStates(string reason)
@@ -28,6 +58,7 @@ namespace GoblinFarmer
 
             portLastTeleportKey = "";
             portQueuedTeleportKey = "";
+            PortClearPreservedTeleportRetry($"button state cleared: {reason}");
             AppLogger.Info($"Teleport button state cleared: {reason}");
             PortApplyTeleportButtonColors();
         }

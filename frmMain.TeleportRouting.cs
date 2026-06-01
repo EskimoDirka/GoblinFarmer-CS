@@ -298,6 +298,15 @@ namespace GoblinFarmer
             PortShowSplash($"Clear {exactBlockedLocation} before teleporting next.", 4500);
         }
 
+        private void PortNotifyAlreadyHere(string currentLocation, string targetLocation, string source)
+        {
+            portTeleportAlreadyHereNotified = true;
+            AppLogger.Info($"Already-here notification shown without route state change: current={currentLocation}; target={targetLocation}; source={source}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; currentKey={portLastTeleportKey}; nextKey={portQueuedTeleportKey}");
+            PortSetAppStatus("Already Here");
+            AddWorkflowStep($"Already here: {currentLocation}; target {targetLocation}");
+            PortShowSplash($"Already here: {currentLocation}", 3000);
+        }
+
         private string PortGetConfirmedCurrentLocation()
         {
             return portLastConfirmedLocation;

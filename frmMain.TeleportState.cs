@@ -60,5 +60,42 @@ namespace GoblinFarmer
             PortApplyTeleportButtonColors();
         }
 
+        private void PortPreserveTeleportRetry(string intendedLocation, string preservedCurrentKey, string preservedQueuedKey, string reason)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => PortPreserveTeleportRetry(intendedLocation, preservedCurrentKey, preservedQueuedKey, reason)));
+                return;
+            }
+
+            portLastTeleportKey = preservedCurrentKey;
+            portQueuedTeleportKey = preservedQueuedKey;
+            portQueuedRetryTeleportKey = PortLocationKey(intendedLocation);
+            portLastRequestedTeleportKey = portQueuedRetryTeleportKey;
+            portTeleportRetryFailedOrInterrupted = true;
+
+            AppLogger.Info($"Retry target preserved: reason={reason}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; blocking={PortDisplayLocation(PortGetConfirmedCurrentLocation())}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+            PortApplyTeleportButtonColors();
+        }
+
+        private void PortClearPreservedTeleportRetry(string reason)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => PortClearPreservedTeleportRetry(reason)));
+                return;
+            }
+
+            if (!portTeleportRetryFailedOrInterrupted &&
+                string.IsNullOrWhiteSpace(portQueuedRetryTeleportKey))
+            {
+                return;
+            }
+
+            AppLogger.Info($"Retry target cleared: reason={reason}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; lastRequested={PortDisplayLocation(PortTeleportLocationForKey(portLastRequestedTeleportKey))}; failedOrInterrupted={portTeleportRetryFailedOrInterrupted}");
+            portQueuedRetryTeleportKey = "";
+            portTeleportRetryFailedOrInterrupted = false;
+        }
+
     }
 }

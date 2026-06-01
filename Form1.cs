@@ -28,6 +28,7 @@ namespace GoblinFarmer
         private void frmMain_Load(object sender, EventArgs e)
         {
             PortInitializeSessionStats();
+            PortInitializeDiagnosticOverlay();
             tmrStatus.Start();
 
             SetDiabloStatus("Unknown");
@@ -87,6 +88,7 @@ namespace GoblinFarmer
             SetDiabloStatus(diabloRunning ? "Running" : "Not Running");
             PortUpdateDiabloRuntimeMonitor(diabloRunning);
             PortUpdateSessionStats();
+            PortUpdateDiagnosticOverlay(diabloRunning);
         }
 
         private void PortUpdateDiabloRuntimeMonitor(bool diabloRunning)
