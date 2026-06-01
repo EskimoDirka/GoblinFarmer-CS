@@ -305,6 +305,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: timeout with {targetTemplates.Count} templates after {scans} scans in {perf.ElapsedMilliseconds}ms; best={PortDisplayLocation(lastResult.BestName)} confidence={lastResult.BestConfidence:0.000}, second={PortDisplayLocation(lastResult.SecondName)} confidence={lastResult.SecondConfidence:0.000}, threshold={threshold:0.000}");
+            PortIncrementFailures();
             PortCaptureDebugScreenshot("LocationDetectionTimeout");
             return false;
         }
@@ -318,6 +319,19 @@ namespace GoblinFarmer
         private Dictionary<string, string> PortCurrentLocationTemplatesForTarget(string targetLocation, bool fallbackToAll = true)
         {
             Dictionary<string, string> templates = PortCurrentLocationTemplatesForNames(PortLocationNamesForTarget(targetLocation));
+            if (templates.Count == 0 || (PortLocationKey(targetLocation) == PortLocationKey("Ancient Waterway") &&
+                !portCurrentLocationTemplates.ContainsKey(PortNormalizeLocation("Ancient Waterway"))))
+            {
+                long nowTicks = DateTime.UtcNow.Ticks;
+                long lastReloadTicks = Interlocked.Read(ref portLastLocationTemplateReloadTicks);
+                if (nowTicks - lastReloadTicks >= TimeSpan.FromSeconds(10).Ticks)
+                {
+                    Interlocked.Exchange(ref portLastLocationTemplateReloadTicks, nowTicks);
+                    AppLogger.Info($"Refreshing current-location templates for target: {targetLocation}");
+                    PortLoadImageCaches();
+                    templates = PortCurrentLocationTemplatesForNames(PortLocationNamesForTarget(targetLocation));
+                }
+            }
 
             return templates.Count > 0 || !fallbackToAll ? templates : portCurrentLocationTemplates;
         }
@@ -341,10 +355,19 @@ namespace GoblinFarmer
         {
             yield return targetLocation;
 
-            string key = PortLocationKey(targetLocation);
-            if (portArrivalAliases.TryGetValue(key, out string[]? aliases))
+            if (portArrivalAliases.TryGetValue(targetLocation, out string[]? aliases))
             {
                 foreach (string alias in aliases)
+                {
+                    yield return alias;
+                }
+            }
+
+            string mappedLocation = PortGetRouteLocationForDetectedLocation(targetLocation);
+            if (!string.Equals(mappedLocation, targetLocation, StringComparison.OrdinalIgnoreCase) &&
+                portArrivalAliases.TryGetValue(mappedLocation, out string[]? mappedAliases))
+            {
+                foreach (string alias in mappedAliases)
                 {
                     yield return alias;
                 }

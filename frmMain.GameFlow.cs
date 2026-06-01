@@ -72,9 +72,8 @@ namespace GoblinFarmer
                 }
 
                 AddWorkflowStep("Starting blacksmith prep");
-                if (!PortTownPrepAtBlacksmith(token))
+                if (!PortRunRepairFlow(token))
                 {
-                    PortWorkflowFailed("Blacksmith prep");
                     return false;
                 }
 
@@ -105,6 +104,123 @@ namespace GoblinFarmer
             }
 
             return arrived;
+        }
+
+        private bool PortExitGameFlow(CancellationToken token)
+        {
+            AppLogger.Info("Exit Game flow start");
+            AddWorkflowStep("Starting Exit Game flow");
+            PortSetAppStatus("Starting Exit Game Flow");
+
+            if (!IsDiabloRunning())
+            {
+                AppLogger.Info("Exit Game flow: Diablo is not running");
+                AddWorkflowStep("Diablo is not running");
+                PortSetAppStatus("Diablo Not Running");
+                AppLogger.Info("Exit Game flow end: Diablo not running");
+                return true;
+            }
+
+            if (!ActivateDiabloWindow())
+            {
+                return false;
+            }
+
+            if (PortStartGameButtonVisible(logPerf: true) && !PortPlayerIsInGame())
+            {
+                AppLogger.Info("Exit Game flow: Diablo is at main menu; closing without repair");
+                AddWorkflowStep("Diablo not in game; closing");
+                return PortCloseDiabloWindow(token);
+            }
+
+            string currentLocation = PortDetectSpecificLocation("New Tristram");
+            AddWorkflowStep($"Current location detected: {PortDisplayLocation(currentLocation)}");
+
+            if (PortLocationMatches(currentLocation, "New Tristram"))
+            {
+                PortSetAppStatus("Already In New Tristram");
+                if (!PortBounceNewTristramThroughHiddenCamp(token))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                AddWorkflowStep("Teleporting to New Tristram");
+                if (!PortTeleportToLocation("New Tristram", token, verifyArrival: true, bypassFailsafe: true))
+                {
+                    return PortWorkflowFailed("Teleporting to New Tristram");
+                }
+
+                AddWorkflowStep("New Tristram arrival confirmed");
+            }
+
+            AddWorkflowStep("Running repair flow before exit");
+            if (!PortRunRepairFlow(token))
+            {
+                return false;
+            }
+
+            if (!PortCloseDiabloWindow(token))
+            {
+                return false;
+            }
+
+            AppLogger.Info("Exit Game flow end: success");
+            AddWorkflowStep("Exit Game flow completed");
+            PortSetAppStatus("Diablo Closed");
+            return true;
+        }
+
+        private bool PortCloseDiabloWindow(CancellationToken token)
+        {
+            AppLogger.Info("Exit Game flow closing Diablo");
+            AddWorkflowStep("Closing Diablo");
+            PortSetAppStatus("Closing Diablo");
+
+            IntPtr diabloWindow = FindDiabloWindow();
+            if (diabloWindow == IntPtr.Zero)
+            {
+                AppLogger.Info("Exit Game flow closing Diablo: window already closed");
+                PortSetAppStatus("Diablo Not Running");
+                return true;
+            }
+
+            GetWindowThreadProcessId(diabloWindow, out uint processId);
+            try
+            {
+                using Process process = Process.GetProcessById((int)processId);
+                process.CloseMainWindow();
+
+                Stopwatch sw = Stopwatch.StartNew();
+                while (sw.ElapsedMilliseconds < 15000)
+                {
+                    if (token.IsCancellationRequested)
+                    {
+                        return false;
+                    }
+
+                    process.Refresh();
+                    if (process.HasExited || FindDiabloWindow() == IntPtr.Zero)
+                    {
+                        AppLogger.Info($"Exit Game flow closing Diablo: closed in {sw.ElapsedMilliseconds}ms");
+                        AddWorkflowStep("Diablo closed");
+                        return true;
+                    }
+
+                    PortSleep(token, 250);
+                }
+
+                AppLogger.Info("Exit Game flow closing Diablo: close timed out");
+                PortSetAppStatus("Diablo Close Timeout");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Exit Game flow closing Diablo failed.", ex);
+                PortSetAppStatus("Diablo Close Failed");
+                return false;
+            }
         }
 
         private bool PortStartDiablo(CancellationToken token)
@@ -160,7 +276,9 @@ namespace GoblinFarmer
             PortSetAppStatus("Waiting For Start Game Button");
 
             Stopwatch sw = Stopwatch.StartNew();
-            while (sw.ElapsedMilliseconds < 60000)
+            int attempts = 0;
+            const int maxAttempts = 3;
+            while (sw.ElapsedMilliseconds < 60000 && attempts < maxAttempts)
             {
                 if (token.IsCancellationRequested)
                 {
@@ -173,16 +291,20 @@ namespace GoblinFarmer
                     confidence: PortStartGameButtonConfidence,
                     matchMode: ImageMatchMode.Color))
                 {
+                    attempts++;
+                    AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts}: clicking center at {centerPoint.X},{centerPoint.Y}");
+                    AddWorkflowStep($"Clicking Start Game (attempt {attempts})");
                     LeftClick(centerPoint);
+                    PortSleep(token, 1200);
                     if (PortVerifyStartGameClick(token))
                     {
-                        AddWorkflowStep("Clicking Start Game");
                         PortSetAppStatus("Start Game Clicked");
                         return true;
                     }
 
-                    AppLogger.Info("Start Game click had no effect; retrying");
-                    AddWorkflowStep("Start Game click had no effect; retrying");
+                    AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts} not verified; retrying after transition wait");
+                    AddWorkflowStep("Start Game click not verified; retrying");
+                    PortSleep(token, 900);
                 }
 
                 PortSleep(token, 150);
@@ -190,6 +312,7 @@ namespace GoblinFarmer
 
             MessageBox.Show("Could not find Diablo Start Game button.");
             PortSetAppStatus("Start Game Not Found");
+            AppLogger.Info($"Start Game failed: attempts={attempts}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; loaded={PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible()}");
             PortCaptureDebugScreenshot("StartGameTimeout");
             return false;
         }
@@ -197,20 +320,35 @@ namespace GoblinFarmer
         private bool PortVerifyStartGameClick(CancellationToken token)
         {
             Stopwatch sw = Stopwatch.StartNew();
-            while (sw.ElapsedMilliseconds < 3000)
+            long buttonMissingSince = -1;
+            while (sw.ElapsedMilliseconds < 5000)
             {
                 if (token.IsCancellationRequested)
                 {
                     return false;
                 }
 
-                if (!PortStartGameButtonVisible() || PortPlayerIsInGame())
+                bool startVisible = PortStartGameButtonVisible();
+                bool loadingOrLoaded = PortCharacterLoadConfirmationVisible() ||
+                    PortGameLoadedLocationTitleVisible() ||
+                    PortPlayerIsInGame();
+                if (!startVisible)
                 {
-                    AppLogger.Info($"Start Game click verified in {sw.ElapsedMilliseconds}ms");
+                    buttonMissingSince = buttonMissingSince < 0 ? sw.ElapsedMilliseconds : buttonMissingSince;
+                }
+                else
+                {
+                    buttonMissingSince = -1;
+                }
+
+                bool buttonGoneSteady = buttonMissingSince >= 0 && sw.ElapsedMilliseconds - buttonMissingSince >= 1000;
+                if (loadingOrLoaded || buttonGoneSteady)
+                {
+                    AppLogger.Info($"Start Game click verified in {sw.ElapsedMilliseconds}ms; startVisible={startVisible}; loadingOrLoaded={loadingOrLoaded}; buttonGoneSteady={buttonGoneSteady}");
                     return true;
                 }
 
-                PortSleep(token, 150);
+                PortSleep(token, 250);
             }
 
             return false;

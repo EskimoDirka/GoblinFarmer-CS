@@ -32,6 +32,27 @@ namespace GoblinFarmer
             PortApplyTeleportButtonColors();
         }
 
+        private void PortRestoreTeleportButtonStateFromLastConfirmedLocation(string reason)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => PortRestoreTeleportButtonStateFromLastConfirmedLocation(reason)));
+                return;
+            }
+
+            string buttonLocation = PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation);
+            if (string.IsNullOrWhiteSpace(buttonLocation))
+            {
+                PortClearTeleportButtonStates($"no last confirmed location after {reason}");
+                return;
+            }
+
+            portLastTeleportKey = PortLocationKey(buttonLocation);
+            portQueuedTeleportKey = PortLocationKey(PortNextTeleportForConfirmedLocation(buttonLocation, portLastConfirmedLocation));
+            AppLogger.Info($"Restoring teleport button state after failed teleport: reason={reason}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(buttonLocation)}; next={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+            PortApplyTeleportButtonColors();
+        }
+
         private void PortApplyTeleportButtonColors()
         {
             string current = "";

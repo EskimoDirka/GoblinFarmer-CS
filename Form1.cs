@@ -48,6 +48,12 @@ namespace GoblinFarmer
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
+        [DllImport("user32.dll")]
+        private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern bool ClientToScreen(IntPtr hWnd, ref DrawingPoint lpPoint);
+
         // Used to activate the Diablo window when found
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -74,6 +80,12 @@ namespace GoblinFarmer
             bool diabloRunning = diabloWindow != IntPtr.Zero;
 
             SetDiabloStatus(diabloRunning ? "Running" : "Not Running");
+            if (!diabloRunning && portDiabloWasRunning)
+            {
+                PortHandleDiabloExited();
+            }
+
+            portDiabloWasRunning = diabloRunning;
             PortUpdateSessionStats();
         }
 
@@ -233,6 +245,8 @@ namespace GoblinFarmer
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
         private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
         private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
+        private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
 
         private void PerformMouseClick(
             DrawingPoint point,

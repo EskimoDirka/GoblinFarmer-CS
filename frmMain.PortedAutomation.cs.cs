@@ -10,8 +10,10 @@ namespace GoblinFarmer
         private const int PortReferenceWidth = 2560;
         private const int PortReferenceHeight = 1440;
         private const int PortVkShift = 0x10;
+        private const int PortVkCtrl = 0x11;
         private const int PortVkAlt = 0x12;
         private const int PortVkM = 0x4D;
+        private const int PortVkQ = 0x51;
         private const int PortVkReturn = 0x0D;
         private const int PortVkEscape = 0x1B;
         private const int PortVkUp = 0x26;
@@ -56,6 +58,7 @@ namespace GoblinFarmer
         ];
 
         private volatile bool portCombatRunning;
+        private volatile bool portCombatStopping;
         private volatile bool portHotkeysRunning;
         private Thread? portHotkeyThread;
         private IntPtr portKeyboardHookHandle = IntPtr.Zero;
@@ -71,7 +74,13 @@ namespace GoblinFarmer
         private string portLastConfirmedLocation = "";
         private volatile bool portAutomationBlockedByTeleportFailsafe;
         private volatile bool portSuppressSkill1KeyUp;
+        private volatile bool portSkill1TeleportHandled;
+        private volatile bool portLootSpamLeftClickDown;
+        private volatile bool portDiabloWasRunning;
         private volatile bool portBlockSkill1TeleportHotkey = true;
+        private bool portWitchDoctorLastHexReady;
+        private long portLastWitchDoctorHexLogTicks;
+        private long portLastLocationTemplateReloadTicks;
         private long portLastTeleportNextHotkeyTicks;
         private long portIgnoreTeleportNextUntilTicks;
         private Form? portSplashForm;
@@ -164,6 +173,7 @@ namespace GoblinFarmer
             chkCombat.Checked = true;
             chkKadala.Checked = true;
             chkLoot.Checked = true;
+            chkKeepDebugScreenshots.Checked = true;
             chkBlockSkill1TeleportHotkey.Checked = true;
             portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
             chkBlockSkill1TeleportHotkey.CheckedChanged += (_, _) => portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
@@ -172,6 +182,8 @@ namespace GoblinFarmer
             portHotkeyThread = new Thread(PortHotkeyLoop) { IsBackground = true };
             portHotkeyThread.Start();
             PortInstallKeyboardHook();
+            portDiabloWasRunning = IsDiabloRunning();
+            PortCleanupOldDebugScreenshots(AppSettings.RetentionDays);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -183,16 +195,22 @@ namespace GoblinFarmer
             portSplashForm?.Dispose();
             PortStopAllAutomation("app closing");
             PortStopCombat("app closing");
-            PortReleaseInputs();
+            ForceReleaseAllRuntimeInputs("app closing");
             ClipCursor(IntPtr.Zero);
             PortLogSessionSummary();
             base.OnFormClosing(e);
         }
 
+        protected override void OnDeactivate(EventArgs e)
+        {
+            ForceReleaseAllRuntimeInputs("app lost focus");
+            base.OnDeactivate(e);
+        }
+
         private void PortWireButtons()
         {
             btnMakeNewGame.Click += (_, _) => _ = PortRunAutomationAsync(PortMakeNewGameFlow);
-            btnExitGame.Click += (_, _) => _ = PortRunAutomationAsync(token => PortLeaveCurrentGame(token));
+            btnExitGame.Click += (_, _) => _ = PortRunAutomationAsync(PortExitGameFlow);
 
             PortWireTeleportButton(btnNewTristram, "New Tristram");
             PortWireTeleportButton(btnSouthernHighlands, "Southern Highlands");
@@ -206,7 +224,6 @@ namespace GoblinFarmer
             PortWireTeleportButton(btnAncientWaterway, "Ancient Waterway");
             PortWireTeleportButton(btnStingingWinds, "Stinging Winds");
             PortWireTeleportButton(btnBattlefields, "Battlefields");
-            PortWireTeleportButton(btnTheBridgeOfKorsikk, "The Bridge of Korsikk");
             PortWireTeleportButton(btnRakkisCrossing, "Rakkis Crossing");
             PortWireTeleportButton(btnPandemoniumFortressLevel1, "Pandemonium Fortress Level 1");
             PortWireTeleportButton(btnPandemoniumFortressLevel2, "Pandemonium Fortress Level 2");
@@ -221,7 +238,7 @@ namespace GoblinFarmer
             }
             else if (!portAutomationBlockedByTeleportFailsafe)
             {
-                PortClearTeleportButtonStates($"teleport did not confirm: {location}");
+                PortRestoreTeleportButtonStateFromLastConfirmedLocation($"teleport did not confirm: {location}");
             }
 
             return arrived;
@@ -234,17 +251,29 @@ namespace GoblinFarmer
                 return;
             }
 
+            if (!IsDiabloRunning() && work.Method.Name != nameof(PortMakeNewGameFlow))
+            {
+                PortSetAppStatus("Diablo Not Running / Idle");
+                AddWorkflowStep("Automation ignored: Diablo not running");
+                ForceReleaseAllRuntimeInputs("automation ignored: Diablo not running");
+                return;
+            }
+
             isAutomationRunning = true;
             portAutomationBlockedByTeleportFailsafe = false;
             portAutomationCts = new CancellationTokenSource();
+            var localCts = portAutomationCts;
+            var token = localCts?.Token ?? CancellationToken.None;
+
             PortSetEscapeStatus("Esc stops script activity");
             AddWorkflowStep("Automation started");
 
             try
             {
                 bool isMakeNewGameFlow = work.Method.Name == nameof(PortMakeNewGameFlow);
-                bool ok = await Task.Run(() => work(portAutomationCts.Token));
-                if (portAutomationCts.IsCancellationRequested)
+                int failuresBefore = PortFailureCount();
+                bool ok = await Task.Run(() => work(token));
+                if (token.IsCancellationRequested)
                 {
                     PortSetAppStatus("Cancelled");
                     AddWorkflowStep("Flow cancelled");
@@ -257,6 +286,10 @@ namespace GoblinFarmer
                 {
                     PortSetAppStatus(ok ? "Idle" : "Flow Failed");
                     AddWorkflowStep(ok ? "Flow completed" : "Flow failed");
+                    if (!ok && PortFailureCount() == failuresBefore)
+                    {
+                        PortIncrementFailures();
+                    }
                     if (!ok && isMakeNewGameFlow)
                     {
                         PortCaptureDebugScreenshot("MakeNewGameFailed");
@@ -279,10 +312,16 @@ namespace GoblinFarmer
             }
             finally
             {
-                portAutomationCts?.Dispose();
-                portAutomationCts = null;
-                isAutomationRunning = false;
-                portAutomationBlockedByTeleportFailsafe = false;
+                ForceReleaseAllRuntimeInputs("workflow exit");
+
+                if (ReferenceEquals(portAutomationCts, localCts))
+                {
+                    portAutomationCts?.Dispose();
+                    portAutomationCts = null;
+                    isAutomationRunning = false;
+                    portAutomationBlockedByTeleportFailsafe = false;
+                }
+
                 PortSetEscapeStatus("Press Esc to stop");
             }
         }
@@ -423,11 +462,22 @@ namespace GoblinFarmer
             }
 
             PortSetAppStatus("Waiting For Location Confirmation");
+            int failuresBeforeArrivalConfirmation = PortFailureCount();
             bool arrived = !verifyArrival || PortWaitForSpecificLocation(displayName, token, PortArrivalConfirmationTimeoutMs);
             string confirmedAfter = arrived ? PortDetectSpecificLocation(displayName) : "";
             if (arrived)
             {
                 portLastConfirmedLocation = confirmedAfter;
+            }
+            else if (verifyArrival && PortFailureCount() == failuresBeforeArrivalConfirmation)
+            {
+                PortIncrementFailures();
+                PortCaptureDebugScreenshot("TeleportFailed");
+            }
+
+            if (!arrived && verifyArrival)
+            {
+                PortRestoreTeleportButtonStateFromLastConfirmedLocation($"arrival confirmation failed: {displayName}");
             }
             AppLogger.Info($"Teleport confirmed current location after teleport: {PortDisplayLocation(confirmedAfter)}; requested={displayName}; success={arrived}");
             PortSetAppStatus(arrived ? "Teleport Complete" : "Teleport Failed");
@@ -553,7 +603,7 @@ namespace GoblinFarmer
         {
             portAutomationCts?.Cancel();
             PortStopCombat(reason);
-            PortReleaseInputs();
+            ForceReleaseAllRuntimeInputs($"automation stop: {reason}");
             ClipCursor(IntPtr.Zero);
 
             if (isAutomationRunning)
@@ -562,6 +612,21 @@ namespace GoblinFarmer
             }
 
             PortSetEscapeStatus($"Stop requested ({reason})");
+        }
+
+        private void PortHandleDiabloExited()
+        {
+            AppLogger.Info("Diablo process exited; cancelling runtime automation");
+            portAutomationCts?.Cancel();
+            PortStopCombat("Diablo exited");
+            portLootSpamLeftClickDown = false;
+            ForceReleaseAllRuntimeInputs("Diablo exited");
+            ClipCursor(IntPtr.Zero);
+            isAutomationRunning = false;
+            portAutomationBlockedByTeleportFailsafe = false;
+            PortSetAppStatus("Diablo Not Running / Idle");
+            SetCombatStatus("Idle");
+            AddWorkflowStep("Diablo exited; runtime stopped");
         }
 
         private bool PortSafeLeftClick(DrawingPoint point)
@@ -738,6 +803,25 @@ namespace GoblinFarmer
                 portCurrentLocationTemplates[name] = imagePath;
             }
 
+            foreach (string requiredLocationTemplate in new[]
+            {
+                "Ancient Waterway",
+                "Eastern Channel Level 1",
+                "Eastern Channel Level 2",
+                "Western Channel Level 1",
+                "Western Channel Level 2",
+            })
+            {
+                if (portCurrentLocationTemplates.ContainsKey(PortNormalizeLocation(requiredLocationTemplate)))
+                {
+                    AppLogger.Info($"Current-location template available: {requiredLocationTemplate}");
+                }
+                else
+                {
+                    AppLogger.Info($"WARNING Current-location template missing: {requiredLocationTemplate}");
+                }
+            }
+
             AppLogger.Info($"PERF PortLoadImageCaches: cached {portCurrentLocationTemplates.Count} current-location templates in {perf.ElapsedMilliseconds}ms");
         }
 
@@ -843,7 +927,7 @@ namespace GoblinFarmer
         private bool PortIsWaypointExactMatchRequired(string location)
         {
             string key = PortLocationKey(location);
-            return key == PortLocationKey("Ancient Waterway") || PortIsPandemoniumLocation(location);
+            return PortIsPandemoniumLocation(location);
         }
 
         private bool PortIsAncientWaterwayRegion(string location)
@@ -894,11 +978,33 @@ namespace GoblinFarmer
             return new Rectangle(left, top, width, height);
         }
 
-        private void PortReleaseInputs()
+        private void ForceReleaseAllRuntimeInputs(string reason)
         {
+            bool hadLootSpam = portLootSpamLeftClickDown;
+            portLootSpamLeftClickDown = false;
+            if (hadLootSpam)
+            {
+                AppLogger.Info("Loot spam force cleanup");
+            }
+
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
             mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+            mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
             keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(PortVkAlt, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(PortVkCtrl, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(PortVkBacktick, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(PortVkQ, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(0x31, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(0x32, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(0x33, 0, PortKeyUp, UIntPtr.Zero);
+            keybd_event(0x34, 0, PortKeyUp, UIntPtr.Zero);
+            AppLogger.Info($"ForceReleaseAllRuntimeInputs: {reason}");
+        }
+
+        private void PortReleaseInputs(string reason = "cleanup")
+        {
+            ForceReleaseAllRuntimeInputs(reason);
         }
 
         private void PortPressKey(int vk)
@@ -936,6 +1042,7 @@ namespace GoblinFarmer
             AppLogger.Error($"Workflow step failed: {step}");
             PortIncrementFailures();
             PortCaptureDebugScreenshot("WorkflowFailed");
+            ForceReleaseAllRuntimeInputs($"workflow failed: {step}");
             return false;
         }
 

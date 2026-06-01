@@ -15,8 +15,7 @@ namespace GoblinFarmer
             ["City Of Caldeum"] = "Ancient Waterway",
             ["Ancient Waterway"] = "Stinging Winds",
             ["Stinging Winds"] = "Battlefields",
-            ["Battlefields"] = "The Bridge of Korsikk",
-            ["The Bridge of Korsikk"] = "Rakkis Crossing",
+            ["Battlefields"] = "Rakkis Crossing",
             ["Rakkis Crossing"] = "Pandemonium Fortress Level 1",
             ["Pandemonium Fortress Level 1"] = "Pandemonium Fortress Level 2",
         };
@@ -24,6 +23,7 @@ namespace GoblinFarmer
         private readonly HashSet<string> portTeleportBlockedLocations = new(StringComparer.OrdinalIgnoreCase)
         {
             "Caldeum Bazaar",
+            "Ancient Waterway",
             "Caverns of Frost Level 1",
             "Cave Of The Moon Clan Level 1",
             "Cathedral Level 1",
@@ -34,7 +34,6 @@ namespace GoblinFarmer
             "Gates of Caldeum",
             "Leoric's Passage",
             "Sewers of Caldeum",
-            "Stinging Winds",
             "Western Channel Level 1",
         };
 
@@ -121,6 +120,11 @@ namespace GoblinFarmer
             }
 
             string targetKey = PortLocationKey(targetLocation);
+            if (targetKey == PortLocationKey("Ancient Waterway"))
+            {
+                return currentKey == targetKey;
+            }
+
             if (PortIsWaypointExactMatchRequired(targetLocation))
             {
                 return currentKey == targetKey;
@@ -137,19 +141,45 @@ namespace GoblinFarmer
         private bool PortTeleportFailsafeAllows(out string blockedLocation)
         {
             blockedLocation = PortGetConfirmedCurrentLocation();
-            AppLogger.Info($"BlockingLocation={PortDisplayLocation(blockedLocation)}");
-            return string.IsNullOrWhiteSpace(blockedLocation) || !portTeleportBlockedLocations.Contains(blockedLocation);
+
+            AppLogger.Info($"BlockingLocation={blockedLocation}");
+
+            bool blocked = PortIsExactBlockedTeleportLocation(blockedLocation);
+            AppLogger.Info($"Teleport blocking exact-location check: location={blockedLocation}; blocked={blocked}");
+
+            return string.IsNullOrWhiteSpace(blockedLocation) || blocked;
         }
 
         private bool PortTeleportFailsafeAllows(string targetLocation, out string blockedLocation)
         {
             string refreshedLocation = PortRefreshBlockingLocationForTarget(targetLocation);
+
             if (!string.IsNullOrWhiteSpace(refreshedLocation))
             {
                 portLastConfirmedLocation = refreshedLocation;
+
+                AppLogger.Info(
+                    $"Blocking location using latest title scan: {refreshedLocation}; " +
+                    $"displayGroup={PortGetButtonLocationForDetectedLocation(refreshedLocation)}");
+
+                blockedLocation = refreshedLocation;
+
+                bool blocked = PortIsExactBlockedTeleportLocation(blockedLocation);
+
+                AppLogger.Info(
+                    $"Teleport blocking exact-location check: location={blockedLocation}; blocked={blocked}");
+
+                return string.IsNullOrWhiteSpace(blockedLocation) || blocked;
             }
 
             return PortTeleportFailsafeAllows(out blockedLocation);
+        }
+
+        private bool PortIsExactBlockedTeleportLocation(string location)
+        {
+            string key = PortLocationKey(location);
+            return !string.IsNullOrWhiteSpace(key) &&
+                portTeleportBlockedLocations.Any(blocked => key == PortLocationKey(blocked));
         }
 
         private void PortNotifyTeleportBlocked(string blockedLocation, string targetLocation, string source)
@@ -157,11 +187,15 @@ namespace GoblinFarmer
             portAutomationBlockedByTeleportFailsafe = true;
             PortIncrementBlockedTeleports();
             PortCaptureDebugScreenshot("TeleportBlocked");
-            string displayBlockedLocation = PortFriendlyBlockedLocation(blockedLocation);
-            AppLogger.Info($"Teleport blocked location: {blockedLocation}; display={displayBlockedLocation}; target={targetLocation}; source={source}");
+
+            string exactBlockedLocation = string.IsNullOrWhiteSpace(blockedLocation)
+                ? "Unknown"
+                : blockedLocation.Trim();
+
+            AppLogger.Info($"Teleport blocked location: {exactBlockedLocation}; target={targetLocation}; source={source}");
             PortSetAppStatus("Teleport Blocked");
-            AddWorkflowStep($"Teleport blocked at {displayBlockedLocation}; target {targetLocation}");
-            PortShowSplash($"Clear {displayBlockedLocation} before teleporting next.", 4500);
+            AddWorkflowStep($"Teleport blocked at {exactBlockedLocation}; target {targetLocation}");
+            PortShowSplash($"Clear {exactBlockedLocation} before teleporting next.", 4500);
         }
 
         private string PortGetConfirmedCurrentLocation()
@@ -171,7 +205,8 @@ namespace GoblinFarmer
 
         private string PortRefreshBlockingLocationForTarget(string targetLocation)
         {
-            if (PortLocationKey(targetLocation) != PortLocationKey("Ancient Waterway"))
+            if (PortLocationKey(targetLocation) != PortLocationKey("Ancient Waterway") &&
+                PortLocationKey(targetLocation) != PortLocationKey("Battlefields"))
             {
                 return "";
             }
@@ -188,6 +223,8 @@ namespace GoblinFarmer
                 "Western Channel Level 2",
                 "Eastern Channel Level 1",
                 "Eastern Channel Level 2",
+                "Stinging Winds",
+                "Black Canyon Mines",
             };
 
             Dictionary<string, string> refreshTemplates = PortCurrentLocationTemplatesForNames(refreshNames);
@@ -267,6 +304,12 @@ namespace GoblinFarmer
 
         private string PortFriendlyBlockedLocation(string blockedLocation)
         {
+            string mappedBlockedLocation = PortGetButtonLocationForDetectedLocation(blockedLocation);
+            if (PortLocationKey(mappedBlockedLocation) == PortLocationKey("Ancient Waterway"))
+            {
+                return "Ancient Waterway";
+            }
+
             if (PortLocationKey(blockedLocation) == PortLocationKey("Gates of Caldeum") &&
                 portLastTeleportKey == PortLocationKey("City Of Caldeum"))
             {
@@ -278,6 +321,21 @@ namespace GoblinFarmer
 
         private string PortNextTeleportForConfirmedLocation(string requestedLocation, string confirmedLocation)
         {
+            string confirmedKey = PortLocationKey(confirmedLocation);
+            if (confirmedKey == PortLocationKey("Eastern Channel Level 2"))
+            {
+                AppLogger.Info("Ancient Waterway child route: Eastern Channel Level 2 may continue to Stinging Winds");
+                return "Stinging Winds";
+            }
+
+            if (confirmedKey == PortLocationKey("Eastern Channel Level 1") ||
+                confirmedKey == PortLocationKey("Western Channel Level 1") ||
+                confirmedKey == PortLocationKey("Western Channel Level 2"))
+            {
+                AppLogger.Info($"Ancient Waterway child route held at {PortDisplayLocation(confirmedLocation)}; next teleport returns to Ancient Waterway");
+                return "Ancient Waterway";
+            }
+
             string routeLocation = PortGetRouteLocationForDetectedLocation(confirmedLocation);
             if (string.IsNullOrWhiteSpace(routeLocation))
             {

@@ -29,15 +29,33 @@ namespace GoblinFarmer
 
         private bool PortRepairGear(CancellationToken token)
         {
+            return PortRunRepairFlow(token);
+        }
+
+        private bool PortRunRepairFlow(CancellationToken token)
+        {
+            AddWorkflowStep("Starting repair flow");
             AddWorkflowStep("Repairing");
             PortSetAppStatus("Repairing Gear");
 
             if (!PortOpenBlacksmithMenu(token))
             {
-                return false;
+                return PortWorkflowFailed("Opening blacksmith menu");
             }
 
-            return PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: true);
+            if (!PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: false))
+            {
+                return PortWorkflowFailed("Repairing");
+            }
+
+            AddWorkflowStep("Checking inventory for salvage");
+            if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true))
+            {
+                return PortWorkflowFailed("Salvaging");
+            }
+
+            AddWorkflowStep("Repair flow completed");
+            return true;
         }
 
         private bool PortSalvageInventoryFromOpenBlacksmith(CancellationToken token, bool closeAfterSalvage)
@@ -56,6 +74,7 @@ namespace GoblinFarmer
                 return true;
             }
 
+            AddWorkflowStep("Salvaging");
             AddWorkflowStep($"First filled inventory slot found at {firstSlot.Value.X},{firstSlot.Value.Y}");
             PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Tab", new DrawingPoint(683, 638))));
             if (!PortWaitForImageInDiablo(Img("Salvage", "Salvage Button.png"), token, 20000, PortVendorUiConfidence))
@@ -124,29 +143,7 @@ namespace GoblinFarmer
         private bool PortTownPrepAtBlacksmith(CancellationToken token)
         {
             AddWorkflowStep("Starting town prep at blacksmith");
-            PortSetAppStatus("Blacksmith Prep");
-
-            if (!PortOpenBlacksmithMenu(token))
-            {
-                PortWorkflowFailed("Opening blacksmith menu");
-                return false;
-            }
-
-            AddWorkflowStep("Repairing");
-            if (!PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: false))
-            {
-                PortWorkflowFailed("Repairing");
-                return false;
-            }
-
-            AddWorkflowStep("Salvaging");
-            if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true))
-            {
-                PortWorkflowFailed("Salvaging");
-                return false;
-            }
-
-            return true;
+            return PortRunRepairFlow(token);
         }
 
         private bool PortOpenBlacksmithMenu(CancellationToken token)

@@ -1,3 +1,4 @@
+using OpenCvSharp;
 using System;
 using System.Diagnostics;
 using DrawingPoint = System.Drawing.Point;
@@ -56,25 +57,82 @@ namespace GoblinFarmer
 
             Interlocked.Exchange(ref portIgnoreTeleportNextUntilTicks, DateTime.UtcNow.AddMilliseconds(900).Ticks);
             string stoppedClass = portCombatClass;
+            CancellationTokenSource? cts = portCombatCts;
+            portCombatStopping = true;
 
-            if (stoppedClass == "witch_doctor" && !PortWitchDoctorHexReady())
+            try
             {
-                AddWorkflowStep("Witch Doctor not in Hex ready state; pressing 1 before stopping");
-                PortPressKey(0x31);
+                portCombatRunning = false;
+                cts?.Cancel();
+                portCombatCts = null;
+                portCombatClass = "";
+
+                Thread.Sleep(75);
+                ForceReleaseAllRuntimeInputs($"combat stop: {reason}");
+                Thread.Sleep(50);
+                ForceReleaseAllRuntimeInputs($"combat stop confirm release: {reason}");
+
+                if (stoppedClass == "witch_doctor")
+                {
+                    PortCleanupWitchDoctorHexAfterStop(reason);
+                }
+
+                ForceReleaseAllRuntimeInputs($"combat stop complete: {reason}");
+                cts?.Dispose();
+                ClipCursor(IntPtr.Zero);
+                SetCombatStatus("Idle");
+                SetAppStatus($"Combat Stopped ({reason})");
+                AddWorkflowStep($"Combat stopped ({reason})");
+                return true;
+            }
+            finally
+            {
+                portCombatStopping = false;
+            }
+        }
+
+        private void PortCleanupWitchDoctorHexAfterStop(string reason)
+        {
+            AddWorkflowStep("Witch Doctor stop cleanup started");
+            AppLogger.Info($"Witch Doctor stop cleanup started: {reason}");
+
+            if (!PortDiabloIsActive())
+            {
+                AppLogger.Info("Witch Doctor stop cleanup skipped: Diablo inactive");
+                return;
+            }
+
+            bool ready = PortWitchDoctorHexReady();
+            if (!ready)
+            {
+                AppLogger.Info("Witch Doctor Hex not ready during stop cleanup; pressing 1 once to exit chicken mode");
+                AddWorkflowStep("Exiting Witch Doctor chicken mode");
+                PortPressKey(PortVk1);
+                ForceReleaseAllRuntimeInputs("Witch Doctor chicken exit press");
+                Thread.Sleep(250);
+            }
+
+            Stopwatch sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 3000)
+            {
+                if (!PortDiabloIsActive())
+                {
+                    AppLogger.Info("Witch Doctor stop cleanup ended: Diablo inactive");
+                    return;
+                }
+
+                if (PortWitchDoctorHexReady())
+                {
+                    AppLogger.Info($"Witch Doctor stop cleanup complete: Hex ready after {sw.ElapsedMilliseconds}ms");
+                    AddWorkflowStep("Witch Doctor stop cleanup complete");
+                    return;
+                }
+
                 Thread.Sleep(150);
             }
 
-            portCombatRunning = false;
-            portCombatCts?.Cancel();
-            portCombatCts?.Dispose();
-            portCombatCts = null;
-            portCombatClass = "";
-            PortReleaseInputs();
-            ClipCursor(IntPtr.Zero);
-            SetCombatStatus("Idle");
-            SetAppStatus($"Combat Stopped ({reason})");
-            AddWorkflowStep($"Combat stopped ({reason})");
-            return true;
+            AppLogger.Info("Witch Doctor stop cleanup timeout: Hex not ready");
+            AddWorkflowStep("Witch Doctor stop cleanup timed out");
         }
 
         private void PortRunCombatTask(string name, Action work)
@@ -96,7 +154,9 @@ namespace GoblinFarmer
         // Monk combat loop =================================
         private void PortMonkLoop(CancellationToken token)
         {
-            while (!token.IsCancellationRequested && portCombatRunning && portCombatClass == "monk")
+            while (!token.IsCancellationRequested &&
+                   portCombatRunning &&
+                   portCombatClass == "monk")
             {
                 if (!PortDiabloIsActive())
                 {
@@ -104,16 +164,26 @@ namespace GoblinFarmer
                     return;
                 }
 
-                int vk = 0x30 + portMonkKeyIndex;
-
-                keybd_event((byte)vk, 0, 0, UIntPtr.Zero);
+                keybd_event((byte)'1', 0, 0, UIntPtr.Zero);
                 Thread.Sleep(10);
-                keybd_event((byte)vk, 0, PortKeyUp, UIntPtr.Zero);
+                keybd_event((byte)'1', 0, PortKeyUp, UIntPtr.Zero);
 
-                portMonkKeyIndex = portMonkKeyIndex >= 3 ? 1 : portMonkKeyIndex + 1;
+                Thread.Sleep(10);
 
-                Thread.Sleep(50);
+                keybd_event((byte)'2', 0, 0, UIntPtr.Zero);
+                Thread.Sleep(10);
+                keybd_event((byte)'2', 0, PortKeyUp, UIntPtr.Zero);
+
+                Thread.Sleep(10);
+
+                keybd_event((byte)'3', 0, 0, UIntPtr.Zero);
+                Thread.Sleep(10);
+                keybd_event((byte)'3', 0, PortKeyUp, UIntPtr.Zero);
+
+                Thread.Sleep(10);
             }
+
+            ForceReleaseAllRuntimeInputs("Monk loop exit");
         }
 
         // Witch Doctor combat loop =================================
@@ -121,13 +191,13 @@ namespace GoblinFarmer
         {
             AddWorkflowStep("Witch Doctor opening rotation");
 
-            PortPressKey(0x32); // 2
-            PortSleep(token, 50);
+            if (!PortCombatPressKey(token, 0x32)) return; // 2
+            if (!PortCombatSleep(token, 50)) return;
 
-            PortPressKey(0x33); // 3
-            PortSleep(token, 50);
+            if (!PortCombatPressKey(token, 0x33)) return; // 3
+            if (!PortCombatSleep(token, 50)) return;
 
-            PortPressKey(0x31); // 1
+            if (!PortCombatPressKey(token, 0x31)) return; // 1
 
             while (!token.IsCancellationRequested && portCombatRunning && portCombatClass == "witch_doctor")
             {
@@ -141,21 +211,43 @@ namespace GoblinFarmer
                 {
                     AddWorkflowStep("Hex ready; running Witch Doctor rotation");
 
-                    PortPressKey(0x32); // 2
-                    PortSleep(token, 50);
+                    if (!PortCombatPressKey(token, 0x32)) return; // 2
+                    if (!PortCombatSleep(token, 50)) return;
 
-                    PortPressKey(0x33); // 3
-                    PortSleep(token, 50);
+                    if (!PortCombatPressKey(token, 0x33)) return; // 3
+                    if (!PortCombatSleep(token, 50)) return;
 
-                    PortPressKey(0x31); // 1
+                    if (!PortCombatPressKey(token, 0x31)) return; // 1
 
-                    PortSleep(token, 500);
+                    if (!PortCombatSleep(token, 500)) return;
                 }
                 else
                 {
-                    PortSleep(token, 100);
+                    if (!PortCombatSleep(token, 100)) return;
                 }
             }
+        }
+
+        private bool PortCombatShouldContinue(CancellationToken token)
+        {
+            return !token.IsCancellationRequested && portCombatRunning;
+        }
+
+        private bool PortCombatPressKey(CancellationToken token, int vk)
+        {
+            if (!PortCombatShouldContinue(token))
+            {
+                return false;
+            }
+
+            PortPressKey(vk);
+            return PortCombatShouldContinue(token);
+        }
+
+        private bool PortCombatSleep(CancellationToken token, int milliseconds)
+        {
+            PortSleep(token, milliseconds);
+            return PortCombatShouldContinue(token);
         }
 
         private bool PortWitchDoctorHexReady()
@@ -172,9 +264,19 @@ namespace GoblinFarmer
 
             double confidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, hexRegion);
 
-            AppLogger.Info($"Witch Doctor Hex Ready confidence={confidence:0.000}");
+            bool ready = confidence >= 0.55;
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastWitchDoctorHexLogTicks);
+            bool stateChanged = ready != portWitchDoctorLastHexReady;
+            bool throttled = nowTicks - lastLogTicks >= TimeSpan.FromSeconds(2).Ticks;
+            if (stateChanged || throttled)
+            {
+                AppLogger.Info($"Witch Doctor Hex Ready confidence={confidence:0.000}; ready={ready}");
+                portWitchDoctorLastHexReady = ready;
+                Interlocked.Exchange(ref portLastWitchDoctorHexLogTicks, nowTicks);
+            }
 
-            return confidence >= 0.55;
+            return ready;
         }
 
         // Demon Hunter combat loop =================================
@@ -298,15 +400,24 @@ namespace GoblinFarmer
                     return;
                 }
 
-                if (PortCombatClickIsSafe())
+                bool clickSafe = PortCombatClickIsSafe();
+
+                if (!clickSafe)
+                {
+                    AppLogger.Info("Combat cursor click suppressed: no-click region");
+                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                }
+                else
                 {
                     mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-                    Thread.Sleep(25);
+                    Thread.Sleep(10);
                     mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                 }
 
-                PortSleep(token, 120);
+                PortSleep(token, 50);
             }
+
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
         }
 
         private bool PortDemonHunterMomentumReady()

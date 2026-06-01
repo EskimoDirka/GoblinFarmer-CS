@@ -29,6 +29,7 @@ namespace GoblinFarmer
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
             btnMakeNewGame = new Button();
             lblCombatStatus = new Label();
             btnExitGame = new Button();
@@ -41,7 +42,6 @@ namespace GoblinFarmer
             btnPandemoniumFortressLevel1 = new Button();
             lblAct5 = new Label();
             btnRakkisCrossing = new Button();
-            btnTheBridgeOfKorsikk = new Button();
             lblAct3 = new Label();
             btnBattlefields = new Button();
             btnStingingWinds = new Button();
@@ -64,6 +64,7 @@ namespace GoblinFarmer
             radMonk = new RadioButton();
             grpHotkeys = new GroupBox();
             chkBlockSkill1TeleportHotkey = new CheckBox();
+            chkKeepDebugScreenshots = new CheckBox();
             chkLoot = new CheckBox();
             chkKadala = new CheckBox();
             chkCombat = new CheckBox();
@@ -125,7 +126,7 @@ namespace GoblinFarmer
             // 
             // btnSouthernHighlands
             // 
-            btnSouthernHighlands.Location = new Point(19, 98);
+            btnSouthernHighlands.Location = new Point(12, 99);
             btnSouthernHighlands.Name = "btnSouthernHighlands";
             btnSouthernHighlands.Size = new Size(140, 29);
             btnSouthernHighlands.TabIndex = 5;
@@ -149,7 +150,6 @@ namespace GoblinFarmer
             grpRoutes.Controls.Add(btnPandemoniumFortressLevel1);
             grpRoutes.Controls.Add(lblAct5);
             grpRoutes.Controls.Add(btnRakkisCrossing);
-            grpRoutes.Controls.Add(btnTheBridgeOfKorsikk);
             grpRoutes.Controls.Add(lblAct3);
             grpRoutes.Controls.Add(btnBattlefields);
             grpRoutes.Controls.Add(btnStingingWinds);
@@ -176,7 +176,7 @@ namespace GoblinFarmer
             // 
             btnPandemoniumFortressLevel2.Location = new Point(313, 300);
             btnPandemoniumFortressLevel2.Name = "btnPandemoniumFortressLevel2";
-            btnPandemoniumFortressLevel2.Size = new Size(194, 31);
+            btnPandemoniumFortressLevel2.Size = new Size(194, 27);
             btnPandemoniumFortressLevel2.TabIndex = 23;
             btnPandemoniumFortressLevel2.Text = "Pandemonium Fortress Level 2";
             btnPandemoniumFortressLevel2.UseVisualStyleBackColor = true;
@@ -185,7 +185,7 @@ namespace GoblinFarmer
             // 
             btnPandemoniumFortressLevel1.Location = new Point(313, 263);
             btnPandemoniumFortressLevel1.Name = "btnPandemoniumFortressLevel1";
-            btnPandemoniumFortressLevel1.Size = new Size(194, 31);
+            btnPandemoniumFortressLevel1.Size = new Size(194, 27);
             btnPandemoniumFortressLevel1.TabIndex = 22;
             btnPandemoniumFortressLevel1.Text = "Pandemonium Fortress Level 1";
             btnPandemoniumFortressLevel1.UseVisualStyleBackColor = true;
@@ -201,26 +201,17 @@ namespace GoblinFarmer
             // 
             // btnRakkisCrossing
             // 
-            btnRakkisCrossing.Location = new Point(341, 133);
+            btnRakkisCrossing.Location = new Point(341, 98);
             btnRakkisCrossing.Name = "btnRakkisCrossing";
-            btnRakkisCrossing.Size = new Size(132, 27);
+            btnRakkisCrossing.Size = new Size(140, 27);
             btnRakkisCrossing.TabIndex = 20;
             btnRakkisCrossing.Text = "Rakkis Crossing";
             btnRakkisCrossing.UseVisualStyleBackColor = true;
             // 
-            // btnTheBridgeOfKorsikk
-            // 
-            btnTheBridgeOfKorsikk.Location = new Point(319, 100);
-            btnTheBridgeOfKorsikk.Name = "btnTheBridgeOfKorsikk";
-            btnTheBridgeOfKorsikk.Size = new Size(178, 27);
-            btnTheBridgeOfKorsikk.TabIndex = 19;
-            btnTheBridgeOfKorsikk.Text = "The Bridge of Korsikk";
-            btnTheBridgeOfKorsikk.UseVisualStyleBackColor = true;
-            // 
             // lblAct3
             // 
             lblAct3.AutoSize = true;
-            lblAct3.Location = new Point(388, 28);
+            lblAct3.Location = new Point(401, 28);
             lblAct3.Name = "lblAct3";
             lblAct3.Size = new Size(34, 15);
             lblAct3.TabIndex = 18;
@@ -228,45 +219,45 @@ namespace GoblinFarmer
             // 
             // btnBattlefields
             // 
-            btnBattlefields.Location = new Point(319, 64);
+            btnBattlefields.Location = new Point(342, 63);
             btnBattlefields.Name = "btnBattlefields";
-            btnBattlefields.Size = new Size(178, 30);
+            btnBattlefields.Size = new Size(140, 27);
             btnBattlefields.TabIndex = 17;
             btnBattlefields.Text = "Battlefields";
             btnBattlefields.UseVisualStyleBackColor = true;
             // 
             // btnStingingWinds
             // 
-            btnStingingWinds.Location = new Point(87, 337);
+            btnStingingWinds.Location = new Point(85, 337);
             btnStingingWinds.Name = "btnStingingWinds";
-            btnStingingWinds.Size = new Size(126, 30);
+            btnStingingWinds.Size = new Size(140, 27);
             btnStingingWinds.TabIndex = 16;
             btnStingingWinds.Text = "Stinging Winds";
             btnStingingWinds.UseVisualStyleBackColor = true;
             // 
             // btnAncientWaterway
             // 
-            btnAncientWaterway.Location = new Point(151, 300);
+            btnAncientWaterway.Location = new Point(158, 300);
             btnAncientWaterway.Name = "btnAncientWaterway";
-            btnAncientWaterway.Size = new Size(132, 31);
+            btnAncientWaterway.Size = new Size(140, 27);
             btnAncientWaterway.TabIndex = 15;
             btnAncientWaterway.Text = "Ancient Waterway";
             btnAncientWaterway.UseVisualStyleBackColor = true;
             // 
             // btnCityOfCaldeum
             // 
-            btnCityOfCaldeum.Location = new Point(19, 300);
+            btnCityOfCaldeum.Location = new Point(12, 300);
             btnCityOfCaldeum.Name = "btnCityOfCaldeum";
-            btnCityOfCaldeum.Size = new Size(126, 31);
+            btnCityOfCaldeum.Size = new Size(140, 27);
             btnCityOfCaldeum.TabIndex = 14;
             btnCityOfCaldeum.Text = "City of Caldeum";
             btnCityOfCaldeum.UseVisualStyleBackColor = true;
             // 
             // btnHiddenCamp
             // 
-            btnHiddenCamp.Location = new Point(97, 263);
+            btnHiddenCamp.Location = new Point(85, 263);
             btnHiddenCamp.Name = "btnHiddenCamp";
-            btnHiddenCamp.Size = new Size(116, 31);
+            btnHiddenCamp.Size = new Size(140, 27);
             btnHiddenCamp.TabIndex = 13;
             btnHiddenCamp.Text = "Hidden Camp";
             btnHiddenCamp.UseVisualStyleBackColor = true;
@@ -282,16 +273,16 @@ namespace GoblinFarmer
             // 
             // btnRoyalCrypts
             // 
-            btnRoyalCrypts.Location = new Point(166, 166);
+            btnRoyalCrypts.Location = new Point(158, 166);
             btnRoyalCrypts.Name = "btnRoyalCrypts";
-            btnRoyalCrypts.Size = new Size(132, 27);
+            btnRoyalCrypts.Size = new Size(140, 27);
             btnRoyalCrypts.TabIndex = 11;
             btnRoyalCrypts.Text = "Royal Crypts";
             btnRoyalCrypts.UseVisualStyleBackColor = true;
             // 
             // btnCathedral
             // 
-            btnCathedral.Location = new Point(19, 166);
+            btnCathedral.Location = new Point(12, 166);
             btnCathedral.Name = "btnCathedral";
             btnCathedral.Size = new Size(140, 27);
             btnCathedral.TabIndex = 10;
@@ -300,36 +291,36 @@ namespace GoblinFarmer
             // 
             // btnTheFesteringWoods
             // 
-            btnTheFesteringWoods.Location = new Point(166, 133);
+            btnTheFesteringWoods.Location = new Point(158, 133);
             btnTheFesteringWoods.Name = "btnTheFesteringWoods";
-            btnTheFesteringWoods.Size = new Size(132, 27);
+            btnTheFesteringWoods.Size = new Size(140, 27);
             btnTheFesteringWoods.TabIndex = 9;
             btnTheFesteringWoods.Text = "The Festering Woods";
             btnTheFesteringWoods.UseVisualStyleBackColor = true;
             // 
             // btnTheWeepingHollow
             // 
-            btnTheWeepingHollow.Location = new Point(19, 133);
+            btnTheWeepingHollow.Location = new Point(12, 133);
             btnTheWeepingHollow.Name = "btnTheWeepingHollow";
-            btnTheWeepingHollow.Size = new Size(140, 31);
+            btnTheWeepingHollow.Size = new Size(140, 27);
             btnTheWeepingHollow.TabIndex = 8;
             btnTheWeepingHollow.Text = "The Weeping Hollow";
             btnTheWeepingHollow.UseVisualStyleBackColor = true;
             // 
             // btnNewTristram
             // 
-            btnNewTristram.Location = new Point(97, 63);
+            btnNewTristram.Location = new Point(85, 63);
             btnNewTristram.Name = "btnNewTristram";
-            btnNewTristram.Size = new Size(116, 29);
+            btnNewTristram.Size = new Size(140, 27);
             btnNewTristram.TabIndex = 7;
             btnNewTristram.Text = "New Tristram";
             btnNewTristram.UseVisualStyleBackColor = true;
             // 
             // btnNorthernHighlands
             // 
-            btnNorthernHighlands.Location = new Point(166, 98);
+            btnNorthernHighlands.Location = new Point(158, 98);
             btnNorthernHighlands.Name = "btnNorthernHighlands";
-            btnNorthernHighlands.Size = new Size(132, 29);
+            btnNorthernHighlands.Size = new Size(140, 30);
             btnNorthernHighlands.TabIndex = 6;
             btnNorthernHighlands.Text = "Northern Highlands";
             btnNorthernHighlands.UseVisualStyleBackColor = true;
@@ -412,12 +403,13 @@ namespace GoblinFarmer
             // grpHotkeys
             // 
             grpHotkeys.Controls.Add(chkBlockSkill1TeleportHotkey);
+            grpHotkeys.Controls.Add(chkKeepDebugScreenshots);
             grpHotkeys.Controls.Add(chkLoot);
             grpHotkeys.Controls.Add(chkKadala);
             grpHotkeys.Controls.Add(chkCombat);
             grpHotkeys.Location = new Point(12, 393);
             grpHotkeys.Name = "grpHotkeys";
-            grpHotkeys.Size = new Size(270, 138);
+            grpHotkeys.Size = new Size(270, 163);
             grpHotkeys.TabIndex = 10;
             grpHotkeys.TabStop = false;
             grpHotkeys.Text = "Hotkeys";
@@ -432,14 +424,24 @@ namespace GoblinFarmer
             chkBlockSkill1TeleportHotkey.Text = "Block Skill 1 During Teleport Hotkey";
             chkBlockSkill1TeleportHotkey.UseVisualStyleBackColor = true;
             // 
+            // chkKeepDebugScreenshots
+            // 
+            chkKeepDebugScreenshots.AutoSize = true;
+            chkKeepDebugScreenshots.Location = new Point(15, 124);
+            chkKeepDebugScreenshots.Name = "chkKeepDebugScreenshots";
+            chkKeepDebugScreenshots.Size = new Size(156, 19);
+            chkKeepDebugScreenshots.TabIndex = 4;
+            chkKeepDebugScreenshots.Text = "Keep Debug Screenshots";
+            chkKeepDebugScreenshots.UseVisualStyleBackColor = true;
+            // 
             // chkLoot
             // 
             chkLoot.AutoSize = true;
             chkLoot.Location = new Point(15, 74);
             chkLoot.Name = "chkLoot";
-            chkLoot.Size = new Size(177, 19);
+            chkLoot.Size = new Size(99, 19);
             chkLoot.TabIndex = 2;
-            chkLoot.Text = "Shift + tilde/backtick to Loot";
+            chkLoot.Text = "Alt + ` to Loot";
             chkLoot.UseVisualStyleBackColor = true;
             // 
             // chkKadala
@@ -481,7 +483,7 @@ namespace GoblinFarmer
             lblSessionRuntime.AutoSize = true;
             lblSessionRuntime.Location = new Point(12, 88);
             lblSessionRuntime.Name = "lblSessionRuntime";
-            lblSessionRuntime.Size = new Size(98, 15);
+            lblSessionRuntime.Size = new Size(100, 15);
             lblSessionRuntime.TabIndex = 4;
             lblSessionRuntime.Text = "Runtime: 00:00:00";
             // 
@@ -490,7 +492,7 @@ namespace GoblinFarmer
             lblSessionFailures.AutoSize = true;
             lblSessionFailures.Location = new Point(12, 70);
             lblSessionFailures.Name = "lblSessionFailures";
-            lblSessionFailures.Size = new Size(60, 15);
+            lblSessionFailures.Size = new Size(59, 15);
             lblSessionFailures.TabIndex = 3;
             lblSessionFailures.Text = "Failures: 0";
             // 
@@ -499,7 +501,7 @@ namespace GoblinFarmer
             lblSessionBlocked.AutoSize = true;
             lblSessionBlocked.Location = new Point(12, 52);
             lblSessionBlocked.Name = "lblSessionBlocked";
-            lblSessionBlocked.Size = new Size(60, 15);
+            lblSessionBlocked.Size = new Size(61, 15);
             lblSessionBlocked.TabIndex = 2;
             lblSessionBlocked.Text = "Blocked: 0";
             // 
@@ -508,7 +510,7 @@ namespace GoblinFarmer
             lblSessionTeleports.AutoSize = true;
             lblSessionTeleports.Location = new Point(12, 34);
             lblSessionTeleports.Name = "lblSessionTeleports";
-            lblSessionTeleports.Size = new Size(68, 15);
+            lblSessionTeleports.Size = new Size(67, 15);
             lblSessionTeleports.TabIndex = 1;
             lblSessionTeleports.Text = "Teleports: 0";
             // 
@@ -517,7 +519,7 @@ namespace GoblinFarmer
             lblSessionGames.AutoSize = true;
             lblSessionGames.Location = new Point(12, 16);
             lblSessionGames.Name = "lblSessionGames";
-            lblSessionGames.Size = new Size(56, 15);
+            lblSessionGames.Size = new Size(55, 15);
             lblSessionGames.TabIndex = 0;
             lblSessionGames.Text = "Games: 0";
             // 
@@ -534,7 +536,7 @@ namespace GoblinFarmer
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(921, 552);
+            ClientSize = new Size(921, 567);
             Controls.Add(lblEscape);
             Controls.Add(grpSessionStats);
             Controls.Add(grpHotkeys);
@@ -542,6 +544,7 @@ namespace GoblinFarmer
             Controls.Add(grpStatus);
             Controls.Add(grpRoutes);
             Controls.Add(grpFlows);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "frmMain";
             Text = "Goblin Farmer";
             Load += frmMain_Load;
@@ -584,7 +587,6 @@ namespace GoblinFarmer
         private Button btnCityOfCaldeum;
         private Button btnHiddenCamp;
         private Button btnRakkisCrossing;
-        private Button btnTheBridgeOfKorsikk;
         private Label lblAct3;
         private Button btnPandemoniumFortressLevel2;
         private Button btnPandemoniumFortressLevel1;
@@ -600,6 +602,7 @@ namespace GoblinFarmer
         private Label lblAppStatus;
         private CheckBox chkLoot;
         private CheckBox chkBlockSkill1TeleportHotkey;
+        private CheckBox chkKeepDebugScreenshots;
         private GroupBox grpSessionStats;
         private Label lblSessionRuntime;
         private Label lblSessionFailures;

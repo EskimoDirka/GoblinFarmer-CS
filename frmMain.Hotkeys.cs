@@ -12,17 +12,17 @@ namespace GoblinFarmer
             {
                 bool backtickWasDown = false;
                 bool escapeWasDown = false;
-                long nextLootAt = 0;
                 long nextKadalaAt = 0;
                 Stopwatch sw = Stopwatch.StartNew();
 
                 while (portHotkeysRunning)
                 {
-                    bool escapeDown = (GetAsyncKeyState(PortVkEscape) & 0x8000) != 0;
-                    bool backtickDown = (GetAsyncKeyState(PortVkBacktick) & 0x8000) != 0;
-                    bool altDown = (GetAsyncKeyState(PortVkAlt) & 0x8000) != 0;
-                    long now = sw.ElapsedMilliseconds;
+                bool escapeDown = (GetAsyncKeyState(PortVkEscape) & 0x8000) != 0;
+                bool backtickDown = (GetAsyncKeyState(PortVkBacktick) & 0x8000) != 0;
+                bool altDown = (GetAsyncKeyState(PortVkAlt) & 0x8000) != 0;
+                long now = sw.ElapsedMilliseconds;
                     bool scriptedEscapeActive = DateTime.UtcNow.Ticks < Interlocked.Read(ref portIgnoreEscapeHotkeyUntilTicks);
+                    bool diabloActive = PortDiabloIsActive();
 
                     if (!scriptedEscapeActive && escapeDown && !escapeWasDown && (isAutomationRunning || portCombatRunning))
                     {
@@ -38,15 +38,41 @@ namespace GoblinFarmer
 
                     backtickWasDown = backtickDown;
 
-                    if (chkLoot.Checked && altDown && backtickDown && PortDiabloIsActive() && now >= nextLootAt)
+                    bool shouldSpamLootClick = chkLoot.Checked && altDown && backtickDown && diabloActive;
+                    if (shouldSpamLootClick && !portLootSpamLeftClickDown)
                     {
-                        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-                        Thread.Sleep(25);
+                        portLootSpamLeftClickDown = true;
+                        AppLogger.Info("Loot spam started");
+                    }
+                    else if (!shouldSpamLootClick && portLootSpamLeftClickDown)
+                    {
+                        portLootSpamLeftClickDown = false;
                         mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                        nextLootAt = now + 75;
+                        mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                        mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
+                        AppLogger.Info("Loot spam stopped");
                     }
 
-                    if (chkKadala.Checked && (GetAsyncKeyState(PortVkUp) & 0x8000) != 0 && PortDiabloIsActive() && now >= nextKadalaAt)
+                    if (shouldSpamLootClick && portLootSpamLeftClickDown)
+                    {
+                        if (portCombatRunning && !PortCombatClickIsSafe())
+                        {
+                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                        }
+                        else
+                        {
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                            Thread.Sleep(12);
+                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                        }
+                    }
+
+                    if (!diabloActive && portLootSpamLeftClickDown)
+                    {
+                        ForceReleaseAllRuntimeInputs("Diablo lost focus");
+                    }
+
+                    if (chkKadala.Checked && (GetAsyncKeyState(PortVkUp) & 0x8000) != 0 && diabloActive && now >= nextKadalaAt)
                     {
                         mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, UIntPtr.Zero);
                         Thread.Sleep(25);
@@ -54,7 +80,7 @@ namespace GoblinFarmer
                         nextKadalaAt = now + 100;
                     }
 
-                    Thread.Sleep(30);
+                    Thread.Sleep(15);
                 }
             }
             catch (Exception ex)
@@ -99,25 +125,64 @@ namespace GoblinFarmer
                 int vkCode = keyInfo.vkCode;
                 bool injected = (keyInfo.flags & 0x10) != 0;
                 bool isSkill1 = vkCode == PortVk1;
+                bool isLootReleaseKey = vkCode == PortVkAlt || vkCode == PortVkBacktick;
                 bool keyDown = message == PortWmKeyDown || message == PortWmSysKeyDown;
                 bool keyUp = message == PortWmKeyUp || message == PortWmSysKeyUp;
+
+                if (isLootReleaseKey && keyUp && portLootSpamLeftClickDown)
+                {
+                    portLootSpamLeftClickDown = false;
+                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                    mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                    mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
+                    AppLogger.Info("Loot spam stopped");
+                }
 
                 if (isSkill1 && injected)
                 {
                     return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
                 }
 
+                if (isSkill1 && (portCombatRunning || portCombatStopping))
+                {
+                    if (keyDown && !portSkill1TeleportHandled)
+                    {
+                        portSkill1TeleportHandled = true;
+                        portSuppressSkill1KeyUp = true;
+                        AppLogger.Info(portCombatStopping
+                            ? "Teleport hotkey ignored because combat stop cleanup is active"
+                            : "Teleport hotkey ignored because combat is active");
+                    }
+                    else if (keyUp)
+                    {
+                        portSkill1TeleportHandled = false;
+                        portSuppressSkill1KeyUp = false;
+                    }
+
+                    return new IntPtr(1);
+                }
+
                 if (isSkill1 && keyDown && PortShouldHandleTeleportNextHotkey())
                 {
-                    portSuppressSkill1KeyUp = portBlockSkill1TeleportHotkey;
-                    BeginInvoke(new Action(PortRunQueuedTeleportHotkey));
-                    return portBlockSkill1TeleportHotkey ? new IntPtr(1) : CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+                    if (!portSkill1TeleportHandled)
+                    {
+                        portSkill1TeleportHandled = true;
+                        portSuppressSkill1KeyUp = true;
+                        BeginInvoke(new Action(PortRunQueuedTeleportHotkey));
+                    }
+
+                    return new IntPtr(1);
                 }
 
                 if (isSkill1 && keyUp && portSuppressSkill1KeyUp)
                 {
                     portSuppressSkill1KeyUp = false;
+                    portSkill1TeleportHandled = false;
                     return new IntPtr(1);
+                }
+                else if (isSkill1 && keyUp)
+                {
+                    portSkill1TeleportHandled = false;
                 }
             }
 
@@ -127,7 +192,7 @@ namespace GoblinFarmer
         private bool PortShouldHandleTeleportNextHotkey()
         {
             long ignoreUntil = Interlocked.Read(ref portIgnoreTeleportNextUntilTicks);
-            return DateTime.UtcNow.Ticks >= ignoreUntil && !portCombatRunning && !isAutomationRunning && PortDiabloIsActive();
+            return DateTime.UtcNow.Ticks >= ignoreUntil && !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
         }
 
         /// <summary>
@@ -135,7 +200,7 @@ namespace GoblinFarmer
         /// </summary>
         private void PortRunQueuedTeleportHotkey()
         {
-            if (portCombatRunning || isAutomationRunning || !PortDiabloIsActive())
+            if (portCombatRunning || portCombatStopping || !PortDiabloIsActive())
             {
                 return;
             }
@@ -148,6 +213,13 @@ namespace GoblinFarmer
             }
 
             Interlocked.Exchange(ref portLastTeleportNextHotkeyTicks, now);
+            if (isAutomationRunning)
+            {
+                AppLogger.Info("Teleport Next hotkey preempting active non-combat automation");
+                portAutomationCts?.Cancel();
+                isAutomationRunning = false;
+                ForceReleaseAllRuntimeInputs("teleport hotkey preempted automation");
+            }
 
             string target = PortTeleportLocationForKey(portQueuedTeleportKey);
             if (string.IsNullOrWhiteSpace(target) &&

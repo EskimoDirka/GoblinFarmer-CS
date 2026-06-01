@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>GoblinFarmerIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,9 +14,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="GoblinFarmerIcon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260528" />
     <PackageReference Include="OpenCvSharp4.Extensions" Version="4.13.0.20260528" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260528" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Docs\" />
   </ItemGroup>
 
 </Project>
