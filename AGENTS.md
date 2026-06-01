@@ -13,6 +13,7 @@ Requirements:
 - Build successfully before finishing.
 - Add diagnostic logging for new workflows.
 - If Project_Status.md and code behavior disagree, Project_Status.md wins.
+- When changing workflow behavior, update Docs/TEST_CHECKLIST.md if a new manual test is needed.
 
 ## Debugging Workflow
 
@@ -32,8 +33,8 @@ After code changes:
 
 ## Git Rule
 
-Do not commit automatically unless asked.
-After changes, summarize what should be committed.
+- Do not commit automatically unless asked.
+- After changes, summarize what should be committed.
 
 ## Screenshot/Log Rule
 
@@ -46,5 +47,4 @@ When debugging image recognition or teleport failures:
 Do not change:
 - Battle.net launch flow
 - Combat logic
-- Repair/salvage logic
-unless the current task specifically asks for it.
+- Repair/salvage logic unless the current task specifically asks for it.
