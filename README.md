@@ -1,63 +1,92 @@
-# GoblinFarmer-CS
+# GoblinFarmer
 
-A WinForms C# Diablo III farming assistant.
+GoblinFarmer is a Windows Forms C# assistant for Diablo III farming workflows. It combines image recognition, route-aware teleporting, Battle.net launch support, combat helpers, town automation, and diagnostic tooling for troubleshooting long farming sessions.
 
-## Features
+This README is intentionally high-level and user-facing. The detailed developer source of truth is [Docs/Project_Status.md](Docs/Project_Status.md).
 
-- Teleport routing system
-- Teleport Next hotkey
-- Location verification
-- Teleport blocking logic
-- Combat automation
-    - Monk
-    - Demon Hunter
-    - Witch Doctor
-- Make New Game flow
-- Leave Game flow
-- Repair automation
-- Salvage automation
-- Image recognition with scan region support
+## Current Status
 
-## Project Status
+The project is in an active reliability phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on Battle.net window-relative Play button detection, Start Game reliability, Exit Game cleanup behavior, and full-route testing.
 
-Current Version: v1.2
+The current recommended validation target is Battle.net Play button detection using the window-relative scan region. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
 
-### Completed
+## Stable Systems
 
-- Python to C# port
-- Partial class architecture
-- Teleport routing
-- Combat profiles
-- Game flow automation
-- Town automation
+- Teleport Routing tracks the configured farming route and preserves raw, normalized, display, and blocking locations separately.
+- Teleport Blocking prevents known bad route transitions, such as blocked Cathedral, City of Caldeum, Ancient Waterway, and Stinging Winds cases.
+- Teleport Retry Logic preserves failed or interrupted manual and hotkey teleport state until arrival confirmation succeeds or the user explicitly changes course.
+- Combat Automation includes current Monk, Demon Hunter, and Witch Doctor support.
+- Battle.net Launch Flow can relaunch or focus Battle.net and uses window-relative tab/Play button image searches with full-screen fallback.
+- Start Game Flow is implemented and has passed prior validation, though image-recognition reliability is still being improved.
+- Repair and salvage workflows are implemented, with repair still using coordinate-based station clicks.
+- Runtime input cleanup tracks held mouse/Shift state to avoid unsafe post-exit releases.
 
-### Planned
+## Systems Under Active Improvement
 
-- Performance metrics
-- Screenshot debug mode
-- Combat profile editor
-- UI improvements
+- Battle.net Play button detection across fullscreen, windowed, moved-window, and multi-monitor setups.
+- Start Game image recognition and possible cursor interference.
+- Exit Game cleanup validation after Diablo closes.
+- Repair and salvage timing validation.
+- Full route validation from Southern Highlands through Pandemonium Fortress Level 2.
+- Release/publish validation to ensure runtime images are included.
 
-## Structure
+## Diagnostics And Debugging
 
-```text
-frmMain.Combat.cs
-frmMain.GameFlow.cs
-frmMain.Hotkeys.cs
-frmMain.TeleportRouting.cs
-frmMain.TeleportState.cs
-frmMain.Town.cs
-frmMain.PortedAutomation.cs
-```
+- Diagnostic Overlay: compact read-only live status panel for location, route, combat, retry, failure, log, and screenshot state.
+- Route State Inspector: fuller read-only diagnostics tab for route decisions, blocking state, retry state, active workflow, Diablo focus/running status, and latest evidence paths.
+- Screenshot-On-Failure: captures failure screenshots for major workflow failures, including teleport, Start Game, Battle.net, repair, cancellation, and unexpected exception cases.
+- Debug Package Generator: packages logs, failure screenshots, normal debug screenshots, key docs, git status/log output, and a manifest for troubleshooting.
 
-## Release Workflow
-
-Run the release script from the repository root:
+Run the debug package generator from the project root:
 
 ```powershell
-.\Scripts\release.ps1 -Version "v1.2" -Message "Add session stats and debug screenshots"
+powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
 
-The script stages changes, commits with `<Version> <Message>`, pushes the branch, creates the git tag, and pushes the tag to `origin`. If GitHub CLI is installed, it also creates a GitHub release with `gh release create`.
+## Build Instructions
 
-`README.md` is manual and is not overwritten by the release script. Update `CHANGELOG.md` before releasing; it is used as the release notes file when GitHub CLI is available.
+Requirements:
+
+- Windows
+- .NET SDK compatible with `net10.0-windows`
+- Diablo III and Battle.net installed for runtime use
+
+Build from the project root:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+```
+
+The project uses project-relative image assets and copies runtime images into the build output.
+
+## Project Structure
+
+```text
+Docs/
+  Project_Status.md       Detailed developer source of truth
+  TODO.md                 Current work items and backlog
+  TEST_CHECKLIST.md       Manual validation checklist
+
+Images/
+  Combat/                 Combat templates and scan regions
+  Current Location/       Location detection templates
+  Start Game/             Battle.net and Start Game templates
+  Teleport Function/      Map templates and waypoint coordinates
+  Repair/                 Repair templates and coordinates
+  Salvage/                Salvage templates and coordinates
+
+Scripts/
+  create-debug-package.ps1
+
+frmMain.*.cs              Main WinForms feature areas
+Form1.cs                  Form and shared app logic
+GoblinFarmer.csproj       Project file
+```
+
+## Source Of Truth
+
+- [Docs/Project_Status.md](Docs/Project_Status.md): authoritative route logic, stable systems, known issues, recent fixes, and next recommended task.
+- [Docs/TODO.md](Docs/TODO.md): actionable development and validation checklist.
+- [AGENTS.md](AGENTS.md): coding and documentation rules for contributors and agents.
+
+README.md should stay concise and user-facing. Detailed implementation notes belong in `Docs/Project_Status.md`.

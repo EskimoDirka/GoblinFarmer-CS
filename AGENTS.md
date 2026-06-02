@@ -35,3 +35,16 @@
 Before finishing, run `dotnet build GoblinFarmer.csproj`.
 
 The build must succeed.
+
+## Documentation Rules
+
+After updating Docs/Project_Status.md:
+
+- Keep README.md synchronized with:
+  - Stable Systems
+  - Current Focus
+  - Current Improvements
+
+README.md should remain high-level and user-facing.
+
+Project_Status.md remains the detailed developer source of truth.
