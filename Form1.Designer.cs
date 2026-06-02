@@ -536,7 +536,7 @@ namespace GoblinFarmer
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(921, 567);
+            ClientSize = new Size(918, 567);
             Controls.Add(lblEscape);
             Controls.Add(grpSessionStats);
             Controls.Add(grpHotkeys);

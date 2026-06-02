@@ -316,7 +316,6 @@ namespace GoblinFarmer
                 IntPtr existingWindow = FindBattleNetWindow();
                 if (existingWindow != IntPtr.Zero)
                 {
-                    ShowWindow(existingWindow, SW_RESTORE);
                     SetForegroundWindow(existingWindow);
                     AppLogger.Info($"Battle.net visible window found: hwnd=0x{existingWindow.ToInt64():X}");
                     AppLogger.Info($"Battle.net already running; focused existing window hwnd=0x{existingWindow.ToInt64():X}");
@@ -352,7 +351,7 @@ namespace GoblinFarmer
         private bool PrepareBattleNetForDiabloLaunch(CancellationToken token = default)
         {
             AddWorkflowStep("Focusing Battle.net");
-            if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: 5000, logFoundAfterLaunch: false))
+            if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: 1500, logFoundAfterLaunch: false))
             {
                 if (IsBattleNetRunning())
                 {
@@ -376,6 +375,33 @@ namespace GoblinFarmer
             {
                 return false;
             }
+
+            string playButtonPath = Img("Start Game", "Battle Net Play Button.png");
+
+            Stopwatch playPrecheckWait = Stopwatch.StartNew();
+
+            while (playPrecheckWait.ElapsedMilliseconds < 3000)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                if (TryFindBattleNetImage(
+                    playButtonPath,
+                    "BattleNetPlayButton",
+                    "Battle.net Play button pre-check",
+                    out DrawingPoint precheckPlayButtonCenter,
+                    confidence: 0.85))
+                {
+                    AppLogger.Info($"Battle.net Play button visible during pre-check; skipping Diablo III tab selection; point={precheckPlayButtonCenter.X},{precheckPlayButtonCenter.Y}; elapsed={playPrecheckWait.ElapsedMilliseconds}ms");
+                    return true;
+                }
+
+                PortSleepOrThreadSleep(token, 250);
+            }
+
+            AppLogger.Info($"Battle.net Play button not visible after pre-check wait; falling back to Diablo III tab selection; elapsed={playPrecheckWait.ElapsedMilliseconds}ms");
 
             AddWorkflowStep("Selecting Diablo III in Battle.net");
             if (!ClickBattleNetDiabloTab())
@@ -407,7 +433,6 @@ namespace GoblinFarmer
                 IntPtr battleNetWindow = FindBattleNetWindow();
                 if (battleNetWindow != IntPtr.Zero)
                 {
-                    ShowWindow(battleNetWindow, SW_RESTORE);
                     SetForegroundWindow(battleNetWindow);
                     AppLogger.Info($"Battle.net visible window found: hwnd=0x{battleNetWindow.ToInt64():X}");
                     if (logFoundAfterLaunch)
@@ -648,7 +673,6 @@ namespace GoblinFarmer
                 return false;
             }
 
-            ShowWindow(battleNetWindow, SW_RESTORE);
             SetForegroundWindow(battleNetWindow);
             if (!GetWindowRect(battleNetWindow, out RECT windowRect))
             {
@@ -661,7 +685,7 @@ namespace GoblinFarmer
                 windowRect.Top,
                 windowRect.Right - windowRect.Left,
                 windowRect.Bottom - windowRect.Top);
-            AppLogger.Info($"Battle.net window restored/focused for {label}: hwnd=0x{battleNetWindow.ToInt64():X}; rect={FormatRectangle(rect)}");
+            AppLogger.Info($"Battle.net window focused for {label}: hwnd=0x{battleNetWindow.ToInt64():X}; rect={FormatRectangle(rect)}");
             return true;
         }
 

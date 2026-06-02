@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Battle.net Play button window-relative scan region validation.
+Battle.net launch speed optimization and repair timing polish.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -45,12 +45,14 @@ Battle.net Play button window-relative scan region validation.
 - Battle.net tab and Play button image searches use Battle.net-window-local cached scan regions plus the current Battle.net window left/top, with full-screen search as fallback.
 - Runtime input cleanup releases only tracked held left/right/Shift inputs while Diablo is available and clears tracked state without mouse events after Diablo closes.
 - Diagnostic Overlay, Route State Inspector, Screenshot-On-Failure, and Debug Package Generator are implemented.
+- Exit Game workflow no longer generates desktop right-clicks after Diablo exits.
+- Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
+- Battle.net Play button window-relative scan region successfully detects Play in-region before fallback.
 
 ## Under Active Improvement
-- Battle.net Play button window-relative scan validation.
+- Battle.net launch speed optimization (skip Diablo tab selection when Play button is already visible).
 - Battle.net tab/Play detection across fullscreen, windowed, moved-window, and multi-monitor setups.
 - Start Game image recognition reliability, especially possible cursor interference with detection/click verification.
-- Exit Game post-Diablo cleanup validation.
 - Repair/salvage timing validation after route and launch changes.
 - Full route validation from Southern Highlands through Pandemonium Fortress Level 2.
 - Publish/release folder validation to confirm Images are included.
@@ -61,8 +63,6 @@ Battle.net Play button window-relative scan region validation.
 - Need to test full teleport route from Southern Highlands through Northern Highlands and onward.
 - Need to test interrupted teleport recovery.
 - Need to manually confirm repeated failed/interrupted button retry from Cathedral Level 1 to Royal Crypts preserves current=Cathedral, next/retry=Royal Crypts, bypasses manual-button blocking, and does not advance until arrival is confirmed.
-- Need to test Exit Game workflow.
-- Need to manually validate Exit Game workflow no longer produces a desktop right-click or closes the app after Diablo exits.
 - Need to verify repair + salvage flow.
 - Need to validate publish/release folder includes Images.
 - Need waypoint coordinates before routing Northern Highlands directly to Leoric's Passage.
@@ -84,13 +84,20 @@ Battle.net Play button window-relative scan region validation.
 - Fixed manual teleport button retry after failed/interrupted button teleports.
 
 ## Next Recommended Task
-Manually validate Battle.net Play button detection in the window-relative region. Confirm logs show:
-- `BattleNetPlayButton` cached region `30,853,292,75`.
-- Battle.net window rect.
-- Resolved screen region equal to Battle.net window origin plus cached offsets.
-- Play button found in the window-relative region before full-screen fallback.
 
-After that, validate the Exit Game cleanup fix and confirm no desktop right-click or app close occurs after Diablo exits.
+Optimize Battle.net launch speed.
+
+Goal:
+- Check for Battle.net Play button first.
+- If Play button is visible, skip Diablo III tab selection entirely.
+- Click Play immediately.
+- Only use Diablo III tab selection as a fallback when Play is not visible.
+
+Validation:
+- Battle.net already on Diablo page.
+- Battle.net windowed.
+- Battle.net fullscreen.
+- Battle.net moved to another monitor.
 
 ## System Notes
 
