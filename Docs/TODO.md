@@ -29,6 +29,7 @@
 * [ ] Complete interrupted teleport testing.
 * [ ] Test failed/interrupted Royal Crypts button retry from Cathedral Level 1 and confirm retry preserves Cathedral/Royal Crypts state, bypasses manual-button blocking, and does not advance until arrival confirmation.
 * [ ] Complete Exit Game workflow testing.
+* [ ] Confirm Exit Game no longer causes a post-Diablo desktop right-click or app close.
 * [ ] Complete Repair workflow testing.
 * [ ] Complete Salvage workflow testing.
 
@@ -67,37 +68,125 @@ Notes:
 * Uses existing runtime state and file counts only.
 * Does not run extra image-recognition scans.
 
+### Route State Inspector
+
+Status: Implemented as a read-only `Route State` diagnostics tab beside the compact overlay.
+
+Shows:
+
+* [x] Raw detected location.
+* [x] Normalized app location.
+* [x] Display location.
+* [x] Blocking location.
+* [x] Current button location.
+* [x] Next button location.
+* [x] Queued teleport target.
+* [x] Retry queued target.
+* [x] Last requested teleport target.
+* [x] Last teleport source.
+* [x] Last blocking decision.
+* [x] Last blocking reason.
+* [x] Last route decision output.
+* [x] Whether currently waiting for arrival confirmation.
+* [x] Waiting confirmation target.
+* [x] Whether failed/interrupted retry state is active.
+* [x] Failure counter.
+* [x] Latest log path.
+* [x] Latest debug screenshot path.
+* [x] Screenshot count.
+* [x] Log count.
+* [x] Active workflow.
+* [x] Diablo running status.
+* [x] Diablo focused/active status.
+
+Notes:
+
+* Refreshes through the existing status timer.
+* Uses existing route/session state and small passive diagnostic fields.
+* Does not run extra image-recognition scans or activate Diablo.
+* Does not change route, combat, Battle.net, Start Game, repair, salvage, normalization, or notification logic.
+
 ### Debug Package Generator
 
-Status: Implemented with `Scripts\create-debug-package.ps1`.
+Status: Implemented and validated with `Scripts\create-debug-package.ps1`.
 
 Run from the project root:
 
 `powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1`
 
+Optional screenshot limits:
+
+`powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1 -MaxScreenshots 10 -MaxFailureScreenshots 10`
+
 Requirements:
 
 * [x] Include latest log.
-* [x] Include latest debug screenshots.
+* [x] Include latest failure screenshots.
+* [x] Include latest normal debug screenshots.
 * [x] Include Project_Status.md.
 * [x] Include TEST_CHECKLIST.md.
 * [x] Include TODO.md and AGENTS.md.
 * [x] Include current git status.
 * [x] Include recent git log.
+* [x] Include debug-package-manifest.txt.
+* [x] Include latest screenshot failure type when available.
+* [x] Use package filename timestamp with seconds.
+* [x] Display clear console summary.
+* [x] Warn for missing optional files or folders.
+* [x] Exclude bin and obj folders.
+* [x] Avoid huge build artifacts.
+* [x] Document how to run the script.
 * [x] Export zip package.
 
 Example output:
 
 DebugPackages/
 
-* GoblinFarmer_Debug_YYYYMMDD_HHMM.zip
+* GoblinFarmer_Debug_YYYYMMDD_HHMMSS.zip
 
 ### Enhanced Failure Logging
 
 * [ ] Save screenshots automatically when image recognition fails.
-* [ ] Save screenshots automatically when teleports fail.
-* [ ] Save screenshots automatically when Start Game fails.
+* [x] Save screenshots automatically when teleports fail.
+* [x] Save screenshots automatically when Start Game fails.
+* [x] Save screenshots automatically when Battle.net Play button is not found.
+* [x] Save screenshots automatically when Diablo tab is not found.
+* [x] Save screenshots automatically when repair station is not found.
+* [x] Save screenshots automatically when repair fails.
+* [x] Save screenshots automatically when workflows are cancelled.
+* [x] Save screenshots automatically for unexpected exceptions.
+* [x] Show latest screenshot path in diagnostics.
+* [x] Show latest failure screenshot type in diagnostics.
 * [ ] Record image name, confidence, scan region, threshold, and best match information.
+
+Failure screenshot types:
+
+* [x] TeleportBlocked.
+* [x] TeleportInterrupted.
+* [x] TeleportConfirmationTimeout.
+* [x] StartGameButtonNotFound.
+* [x] StartGameVerificationFailed.
+* [x] BattleNetPlayButtonNotFound.
+* [x] DiabloTabNotFound.
+* [x] RepairStationNotFound.
+* [x] RepairFailed.
+* [x] WorkflowCancelled.
+* [x] UnexpectedException.
+
+### Runtime Input Cleanup
+
+Status: Implemented; needs manual Exit Game validation.
+
+* [x] Track runtime-held left mouse, right mouse, and Shift state.
+* [x] Release only tracked held inputs during cleanup while Diablo is available.
+* [x] Clear tracked held-input state without sending mouse events after Diablo closes.
+* [x] Log held left/right/Shift state before cleanup.
+* [x] Log cleanup reason and Diablo window/rect availability.
+* [x] Log whether left/right/Shift release was sent or skipped.
+* [x] Avoid duplicate cleanup calls generating extra mouse events.
+* [x] Preserve combat input cleanup behavior while Diablo is running.
+* [x] Preserve repair-station coordinate-based clicks.
+* [ ] Validate with a real Exit Game run and confirm no desktop right-click/app close after Diablo exits.
 
 ### Diagnostic Tools
 
@@ -178,8 +267,13 @@ Benefits:
 
 ### Battle.net Scan Regions
 
-* [ ] Convert Battle.net scan regions to window-relative coordinates.
-* [ ] Keep fullscreen search as fallback.
+* [x] Convert Battle.net tab and Play button scan regions to window-relative coordinates.
+* [x] Interpret cached `BattleNetD3Tab` and `BattleNetPlayButton` regions as Battle.net-window-local pixel offsets.
+* [x] Restore/focus Battle.net before resolving scan regions.
+* [x] Keep fullscreen search as fallback.
+* [x] Preserve existing scan-region cache/reference format.
+* [x] Log cached region, Battle.net window rect, resolved screen region, window-relative result, outside-window warnings, and fallback search.
+* [ ] Manually test Battle.net detection when fullscreen, windowed, moved, and on another monitor.
 
 ### Folder Structure Cleanup
 

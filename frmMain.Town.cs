@@ -47,6 +47,7 @@ namespace GoblinFarmer
 
             if (!PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: false))
             {
+                PortCaptureFailureScreenshot("RepairFailed");
                 return PortWorkflowFailed("Repairing");
             }
 
@@ -183,6 +184,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"Repair station wait/click timing: blacksmith menu not visible after {attempts} clicks in {sw.ElapsedMilliseconds}ms");
+            PortCaptureFailureScreenshot("RepairStationNotFound");
             return false;
         }
 

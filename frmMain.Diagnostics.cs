@@ -3,16 +3,23 @@ namespace GoblinFarmer
     public partial class frmMain
     {
         private readonly Dictionary<string, Label> portDiagnosticLabels = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Label> portRouteInspectorLabels = new(StringComparer.OrdinalIgnoreCase);
         private DateTime portLastDiagnosticFileScan = DateTime.MinValue;
         private string portDiagnosticLastLogFile = "none";
+        private string portDiagnosticLatestScreenshotPath = "none";
+        private string portDiagnosticLatestFailureScreenshotType = "none";
         private string portDiagnosticLatestPackagePath = "none";
         private string portLastWorkflowStep = "Idle";
+        private string portLastTeleportSource = "Unknown";
+        private string portLastBlockingDecision = "Unknown";
+        private string portLastBlockingReason = "Unknown";
+        private string portLastRouteDecisionOutput = "Unknown";
         private int portDiagnosticLogCount;
         private int portDiagnosticScreenshotCount;
 
         private void PortInitializeDiagnosticOverlay()
         {
-            if (portDiagnosticLabels.Count > 0)
+            if (portDiagnosticLabels.Count > 0 || portRouteInspectorLabels.Count > 0)
             {
                 return;
             }
@@ -20,15 +27,86 @@ namespace GoblinFarmer
             ClientSize = new Size(1350, 567);
             MinimumSize = new Size(1080, 606);
 
-            GroupBox grpDiagnostics = new()
+            TabControl tabs = new()
             {
                 Location = new Point(914, 63),
-                Name = "grpDiagnostics",
+                Name = "tabDiagnostics",
                 Size = new Size(420, 493),
-                TabStop = false,
-                Text = "Diagnostic Overlay",
             };
 
+            TabPage compactTab = new()
+            {
+                Name = "tabDiagnosticOverlay",
+                Text = "Overlay",
+                UseVisualStyleBackColor = true,
+            };
+
+            TabPage inspectorTab = new()
+            {
+                Name = "tabRouteStateInspector",
+                Text = "Route State",
+                UseVisualStyleBackColor = true,
+            };
+
+            TableLayoutPanel table = PortCreateDiagnosticTable(labelWidth: 155F);
+            TableLayoutPanel inspectorTable = PortCreateDiagnosticTable(labelWidth: 170F);
+
+            compactTab.Controls.Add(table);
+            inspectorTab.Controls.Add(inspectorTable);
+            tabs.TabPages.Add(compactTab);
+            tabs.TabPages.Add(inspectorTab);
+            Controls.Add(tabs);
+
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Raw Location", "RawLocation");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Normalized Location", "NormalizedLocation");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Display Location", "DisplayLocation");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Blocking Location", "BlockingLocation");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Current Teleport Target", "CurrentTeleportTarget");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Next Teleport Target", "NextTeleportTarget");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Queued Retry Target", "QueuedRetryTarget");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Last Requested Target", "LastRequestedTarget");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Failed/Interrupted", "FailedInterruptedState");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Route State", "RouteState", 42);
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Combat State", "CombatState", 42);
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Failure Counter", "FailureCounter");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Diablo Running Status", "DiabloRunningStatus");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Active Workflow", "ActiveWorkflow", 42);
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Last Log File", "LastLogFile", 42);
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Latest Screenshot", "LatestScreenshotPath", 42);
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Latest Failure Type", "LatestFailureScreenshotType");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Screenshot Count", "ScreenshotCount");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Log Count", "LogCount");
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Debug Package Path", "DebugPackagePath", 58);
+
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Raw Detected Location", "RawDetectedLocation");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Normalized App Location", "NormalizedAppLocation");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Display Location", "DisplayLocation");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Blocking Location", "BlockingLocation");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Current Button Location", "CurrentButtonLocation");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Next Button Location", "NextButtonLocation");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Queued Teleport Target", "QueuedTeleportTarget");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Retry Queued Target", "RetryQueuedTarget");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Last Requested Target", "LastRequestedTeleportTarget");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Last Teleport Source", "LastTeleportSource");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Last Blocking Decision", "LastBlockingDecision", 42);
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Last Blocking Reason", "LastBlockingReason", 42);
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Last Route Output", "LastRouteDecisionOutput", 42);
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Waiting Confirmation", "WaitingConfirmation");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Waiting Target", "WaitingConfirmationTarget");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Retry State Active", "RetryStateActive");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Failure Counter", "FailureCounter");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Latest Log Path", "LatestLogPath", 42);
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Latest Screenshot Path", "LatestScreenshotPath", 42);
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Latest Failure Type", "LatestFailureScreenshotType");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Screenshot Count", "ScreenshotCount");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Log Count", "LogCount");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Active Workflow", "ActiveWorkflow", 42);
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Diablo Running Status", "DiabloRunningStatus");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Diablo Active Status", "DiabloActiveStatus");
+        }
+
+        private TableLayoutPanel PortCreateDiagnosticTable(float labelWidth)
+        {
             TableLayoutPanel table = new()
             {
                 AutoScroll = true,
@@ -37,33 +115,12 @@ namespace GoblinFarmer
                 Padding = new Padding(10, 12, 10, 10),
                 RowCount = 0,
             };
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155F));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, labelWidth));
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-
-            grpDiagnostics.Controls.Add(table);
-            Controls.Add(grpDiagnostics);
-
-            PortAddDiagnosticRow(table, "Raw Location", "RawLocation");
-            PortAddDiagnosticRow(table, "Normalized Location", "NormalizedLocation");
-            PortAddDiagnosticRow(table, "Display Location", "DisplayLocation");
-            PortAddDiagnosticRow(table, "Blocking Location", "BlockingLocation");
-            PortAddDiagnosticRow(table, "Current Teleport Target", "CurrentTeleportTarget");
-            PortAddDiagnosticRow(table, "Next Teleport Target", "NextTeleportTarget");
-            PortAddDiagnosticRow(table, "Queued Retry Target", "QueuedRetryTarget");
-            PortAddDiagnosticRow(table, "Last Requested Target", "LastRequestedTarget");
-            PortAddDiagnosticRow(table, "Failed/Interrupted", "FailedInterruptedState");
-            PortAddDiagnosticRow(table, "Route State", "RouteState", 42);
-            PortAddDiagnosticRow(table, "Combat State", "CombatState", 42);
-            PortAddDiagnosticRow(table, "Failure Counter", "FailureCounter");
-            PortAddDiagnosticRow(table, "Diablo Running Status", "DiabloRunningStatus");
-            PortAddDiagnosticRow(table, "Active Workflow", "ActiveWorkflow", 42);
-            PortAddDiagnosticRow(table, "Last Log File", "LastLogFile", 42);
-            PortAddDiagnosticRow(table, "Screenshot Count", "ScreenshotCount");
-            PortAddDiagnosticRow(table, "Log Count", "LogCount");
-            PortAddDiagnosticRow(table, "Debug Package Path", "DebugPackagePath", 58);
+            return table;
         }
 
-        private void PortAddDiagnosticRow(TableLayoutPanel table, string labelText, string key, int rowHeight = 26)
+        private void PortAddDiagnosticRow(TableLayoutPanel table, Dictionary<string, Label> labels, string labelText, string key, int rowHeight = 26)
         {
             int row = table.RowCount++;
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
@@ -89,7 +146,7 @@ namespace GoblinFarmer
 
             table.Controls.Add(label, 0, row);
             table.Controls.Add(value, 1, row);
-            portDiagnosticLabels[key] = value;
+            labels[key] = value;
         }
 
         private void PortUpdateDiagnosticOverlay(bool diabloRunning)
@@ -116,6 +173,9 @@ namespace GoblinFarmer
             string queuedRetryTarget = PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey));
             string lastRequestedTarget = PortDisplayLocation(PortTeleportLocationForKey(portLastRequestedTeleportKey));
             string failedInterruptedState = portTeleportRetryFailedOrInterrupted ? "True" : "False";
+            string waitingConfirmation = portTeleportWaitingForConfirmation ? "True" : "False";
+            string waitingConfirmationTarget = PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey));
+            string diabloActiveStatus = PortDiabloIsActive() ? "Active" : "Not Active";
             string routeState = $"CurrentKey={PortDisplayLocation(portLastTeleportKey)}; NextKey={PortDisplayLocation(portQueuedTeleportKey)}; RetryKey={PortDisplayLocation(portQueuedRetryTeleportKey)}; FailsafeBlocked={portAutomationBlockedByTeleportFailsafe}";
             string combatState = $"Running={portCombatRunning}; Stopping={portCombatStopping}; Class={PortDisplayLocation(portCombatClass)}; LootLeftDown={portLootSpamLeftClickDown}";
             string appStatus = lblAppStatus.Text.Replace("App Status:", "", StringComparison.OrdinalIgnoreCase).Trim();
@@ -138,14 +198,50 @@ namespace GoblinFarmer
             PortSetDiagnosticLabel("DiabloRunningStatus", diabloRunning ? "Running" : "Not Running");
             PortSetDiagnosticLabel("ActiveWorkflow", activeWorkflow);
             PortSetDiagnosticLabel("LastLogFile", portDiagnosticLastLogFile);
+            PortSetDiagnosticLabel("LatestScreenshotPath", portDiagnosticLatestScreenshotPath);
+            PortSetDiagnosticLabel("LatestFailureScreenshotType", portDiagnosticLatestFailureScreenshotType);
             PortSetDiagnosticLabel("ScreenshotCount", portDiagnosticScreenshotCount.ToString());
             PortSetDiagnosticLabel("LogCount", portDiagnosticLogCount.ToString());
             PortSetDiagnosticLabel("DebugPackagePath", portDiagnosticLatestPackagePath);
+
+            PortSetRouteInspectorLabel("RawDetectedLocation", rawLocation);
+            PortSetRouteInspectorLabel("NormalizedAppLocation", normalizedLocation);
+            PortSetRouteInspectorLabel("DisplayLocation", displayLocation);
+            PortSetRouteInspectorLabel("BlockingLocation", blockingLocation);
+            PortSetRouteInspectorLabel("CurrentButtonLocation", currentTeleportTarget);
+            PortSetRouteInspectorLabel("NextButtonLocation", nextTeleportTarget);
+            PortSetRouteInspectorLabel("QueuedTeleportTarget", nextTeleportTarget);
+            PortSetRouteInspectorLabel("RetryQueuedTarget", queuedRetryTarget);
+            PortSetRouteInspectorLabel("LastRequestedTeleportTarget", lastRequestedTarget);
+            PortSetRouteInspectorLabel("LastTeleportSource", portLastTeleportSource);
+            PortSetRouteInspectorLabel("LastBlockingDecision", portLastBlockingDecision);
+            PortSetRouteInspectorLabel("LastBlockingReason", portLastBlockingReason);
+            PortSetRouteInspectorLabel("LastRouteDecisionOutput", portLastRouteDecisionOutput);
+            PortSetRouteInspectorLabel("WaitingConfirmation", waitingConfirmation);
+            PortSetRouteInspectorLabel("WaitingConfirmationTarget", waitingConfirmationTarget);
+            PortSetRouteInspectorLabel("RetryStateActive", failedInterruptedState);
+            PortSetRouteInspectorLabel("FailureCounter", PortFailureCount().ToString());
+            PortSetRouteInspectorLabel("LatestLogPath", portDiagnosticLastLogFile);
+            PortSetRouteInspectorLabel("LatestScreenshotPath", portDiagnosticLatestScreenshotPath);
+            PortSetRouteInspectorLabel("LatestFailureScreenshotType", portDiagnosticLatestFailureScreenshotType);
+            PortSetRouteInspectorLabel("ScreenshotCount", portDiagnosticScreenshotCount.ToString());
+            PortSetRouteInspectorLabel("LogCount", portDiagnosticLogCount.ToString());
+            PortSetRouteInspectorLabel("ActiveWorkflow", activeWorkflow);
+            PortSetRouteInspectorLabel("DiabloRunningStatus", diabloRunning ? "Running" : "Not Running");
+            PortSetRouteInspectorLabel("DiabloActiveStatus", diabloActiveStatus);
         }
 
         private void PortSetDiagnosticLabel(string key, string value)
         {
             if (portDiagnosticLabels.TryGetValue(key, out Label? label))
+            {
+                label.Text = string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
+            }
+        }
+
+        private void PortSetRouteInspectorLabel(string key, string value)
+        {
+            if (portRouteInspectorLabels.TryGetValue(key, out Label? label))
             {
                 label.Text = string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
             }
@@ -174,6 +270,7 @@ namespace GoblinFarmer
             portDiagnosticLogCount = logFiles.Length;
             portDiagnosticScreenshotCount = screenshotFiles.Length;
             portDiagnosticLastLogFile = logFiles.OrderByDescending(file => file.LastWriteTime).FirstOrDefault()?.FullName ?? "none";
+            portDiagnosticLatestScreenshotPath = screenshotFiles.OrderByDescending(file => file.LastWriteTime).FirstOrDefault()?.FullName ?? "none";
             portDiagnosticLatestPackagePath = PortFindLatestDebugPackagePath();
         }
 

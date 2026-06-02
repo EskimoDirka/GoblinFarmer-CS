@@ -75,67 +75,53 @@ namespace GoblinFarmer
             AppLogger.Info("=====================================");
         }
 
-        private void PortCaptureDebugScreenshot(string reason)
+        private string PortCaptureFailureScreenshot(string failureType)
+        {
+            portDiagnosticLatestFailureScreenshotType = string.IsNullOrWhiteSpace(failureType) ? "Unknown" : failureType;
+            string path = PortCaptureDebugScreenshot(portDiagnosticLatestFailureScreenshotType);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                AppLogger.Info($"Failure screenshot saved: type={portDiagnosticLatestFailureScreenshotType}; path={path}");
+            }
+
+            return path;
+        }
+
+        private string PortCaptureDebugScreenshot(string reason)
         {
             try
             {
                 if (chkKeepDebugScreenshots != null && !chkKeepDebugScreenshots.Checked)
                 {
                     AppLogger.Info($"Debug screenshot skipped: disabled by Keep Debug Screenshots setting; reason={reason}");
-                    return;
+                    return "";
                 }
 
                 IntPtr diabloWindow = FindDiabloWindow();
-                if (diabloWindow == IntPtr.Zero)
+                RECT rect;
+                if (diabloWindow != IntPtr.Zero && PortTryGetDiabloClientScreenRect(diabloWindow, reason, out rect))
                 {
-                    AppLogger.Info($"Debug screenshot skipped: Diablo window unavailable; reason={reason}");
-                    return;
+                    AppLogger.Info($"Debug screenshot capturing Diablo client: reason={reason}");
                 }
-
-                GetWindowThreadProcessId(diabloWindow, out uint processId);
-                try
+                else
                 {
-                    using System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById((int)processId);
-                    if (!process.ProcessName.Equals("Diablo III", StringComparison.OrdinalIgnoreCase) &&
-                        !process.ProcessName.Equals("Diablo III64", StringComparison.OrdinalIgnoreCase))
+                    Rectangle screen = SystemInformation.VirtualScreen;
+                    rect = new RECT
                     {
-                        AppLogger.Info($"Debug screenshot skipped: handle is not Diablo; process={process.ProcessName}; reason={reason}");
-                        return;
-                    }
+                        Left = screen.Left,
+                        Top = screen.Top,
+                        Right = screen.Right,
+                        Bottom = screen.Bottom,
+                    };
+                    AppLogger.Info($"Debug screenshot capturing virtual screen fallback: reason={reason}; bounds={screen.Left},{screen.Top},{screen.Width},{screen.Height}");
                 }
-                catch (Exception ex)
-                {
-                    AppLogger.Error($"Debug screenshot skipped: Diablo process verification failed; reason={reason}", ex);
-                    return;
-                }
-
-                if (!GetClientRect(diabloWindow, out RECT clientRect))
-                {
-                    AppLogger.Info($"Debug screenshot skipped: Diablo client rectangle unavailable; reason={reason}");
-                    return;
-                }
-
-                DrawingPoint clientTopLeft = new(clientRect.Left, clientRect.Top);
-                if (!ClientToScreen(diabloWindow, ref clientTopLeft))
-                {
-                    AppLogger.Info($"Debug screenshot skipped: Diablo client origin unavailable; reason={reason}");
-                    return;
-                }
-
-                RECT rect = new()
-                {
-                    Left = clientTopLeft.X,
-                    Top = clientTopLeft.Y,
-                    Right = clientTopLeft.X + (clientRect.Right - clientRect.Left),
-                    Bottom = clientTopLeft.Y + (clientRect.Bottom - clientRect.Top),
-                };
 
                 int width = rect.Right - rect.Left;
                 int height = rect.Bottom - rect.Top;
                 if (width <= 0 || height <= 0)
                 {
-                    AppLogger.Info($"Debug screenshot skipped: Diablo window rectangle invalid; reason={reason}");
-                    return;
+                    AppLogger.Info($"Debug screenshot skipped: capture rectangle invalid; reason={reason}");
+                    return "";
                 }
 
                 string screenshotDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Screenshots");
@@ -157,12 +143,58 @@ namespace GoblinFarmer
                 }
 
                 screenshot.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                portDiagnosticLatestScreenshotPath = path;
                 AppLogger.Info($"Debug screenshot saved: {path}");
+                return path;
             }
             catch (Exception ex)
             {
                 AppLogger.Error($"Debug screenshot capture failed: {reason}", ex);
+                return "";
             }
+        }
+
+        private bool PortTryGetDiabloClientScreenRect(IntPtr diabloWindow, string reason, out RECT rect)
+        {
+            rect = new RECT();
+            GetWindowThreadProcessId(diabloWindow, out uint processId);
+            try
+            {
+                using System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById((int)processId);
+                if (!process.ProcessName.Equals("Diablo III", StringComparison.OrdinalIgnoreCase) &&
+                    !process.ProcessName.Equals("Diablo III64", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Info($"Debug screenshot skipped Diablo client: handle is not Diablo; process={process.ProcessName}; reason={reason}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Debug screenshot skipped Diablo client: process verification failed; reason={reason}", ex);
+                return false;
+            }
+
+            if (!GetClientRect(diabloWindow, out RECT clientRect))
+            {
+                AppLogger.Info($"Debug screenshot skipped Diablo client: client rectangle unavailable; reason={reason}");
+                return false;
+            }
+
+            DrawingPoint clientTopLeft = new(clientRect.Left, clientRect.Top);
+            if (!ClientToScreen(diabloWindow, ref clientTopLeft))
+            {
+                AppLogger.Info($"Debug screenshot skipped Diablo client: client origin unavailable; reason={reason}");
+                return false;
+            }
+
+            rect = new RECT
+            {
+                Left = clientTopLeft.X,
+                Top = clientTopLeft.Y,
+                Right = clientTopLeft.X + (clientRect.Right - clientRect.Left),
+                Bottom = clientTopLeft.Y + (clientRect.Bottom - clientRect.Top),
+            };
+            return true;
         }
 
         private void PortCleanupOldDebugScreenshots(int retentionDays)

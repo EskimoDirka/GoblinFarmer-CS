@@ -47,9 +47,10 @@ namespace GoblinFarmer
                     else if (!shouldSpamLootClick && portLootSpamLeftClickDown)
                     {
                         portLootSpamLeftClickDown = false;
-                        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                        mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
-                        mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
+                        if (portRuntimeLeftMouseHeld)
+                        {
+                            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                        }
                         AppLogger.Info($"Loot spam stopped; altDown={altDown}; backtickDown={backtickDown}; diabloActive={diabloActive}; {PortCombatInputContext()}");
                     }
 
@@ -65,13 +66,16 @@ namespace GoblinFarmer
 
                         if (!clickAllowed)
                         {
-                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                            if (portRuntimeLeftMouseHeld)
+                            {
+                                PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                            }
                         }
                         else
                         {
-                            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                            PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
                             Thread.Sleep(12);
-                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
                         }
                     }
 
@@ -83,9 +87,9 @@ namespace GoblinFarmer
 
                     if (chkKadala.Checked && (GetAsyncKeyState(PortVkUp) & 0x8000) != 0 && diabloActive && now >= nextKadalaAt)
                     {
-                        mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, UIntPtr.Zero);
+                        PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN);
                         Thread.Sleep(25);
-                        mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                        PortRuntimeMouseUp(MOUSEEVENTF_RIGHTUP);
                         nextKadalaAt = now + 100;
                     }
 
@@ -141,9 +145,10 @@ namespace GoblinFarmer
                 if (isLootReleaseKey && keyUp && portLootSpamLeftClickDown)
                 {
                     portLootSpamLeftClickDown = false;
-                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                    mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
-                    mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
+                    if (portRuntimeLeftMouseHeld)
+                    {
+                        PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                    }
                     AppLogger.Info($"Loot spam stopped by key release; vk={vkCode}; {PortCombatInputContext()}");
                 }
 

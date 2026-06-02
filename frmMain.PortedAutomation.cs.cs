@@ -83,6 +83,9 @@ namespace GoblinFarmer
         private volatile bool portSuppressSkill1KeyUp;
         private volatile bool portSkill1TeleportHandled;
         private volatile bool portLootSpamLeftClickDown;
+        private volatile bool portRuntimeLeftMouseHeld;
+        private volatile bool portRuntimeRightMouseHeld;
+        private volatile bool portRuntimeShiftHeld;
         private volatile bool portDiabloWasRunning;
         private volatile bool portBlockSkill1TeleportHotkey = true;
         private bool portWitchDoctorLastHexReady;
@@ -288,6 +291,11 @@ namespace GoblinFarmer
             }
             else
             {
+                if (token.IsCancellationRequested)
+                {
+                    PortCaptureFailureScreenshot("TeleportInterrupted");
+                }
+
                 if (source.Equals("Button", StringComparison.OrdinalIgnoreCase) ||
                     source.Equals("ButtonRetry", StringComparison.OrdinalIgnoreCase))
                 {
@@ -362,6 +370,7 @@ namespace GoblinFarmer
                 bool ok = await Task.Run(() => work(token));
                 if (token.IsCancellationRequested)
                 {
+                    PortCaptureFailureScreenshot("WorkflowCancelled");
                     PortSetAppStatus("Cancelled");
                     AddWorkflowStep("Flow cancelled");
                 }
@@ -385,6 +394,7 @@ namespace GoblinFarmer
             }
             catch (OperationCanceledException)
             {
+                PortCaptureFailureScreenshot("WorkflowCancelled");
                 PortSetAppStatus("Cancelled");
                 AddWorkflowStep("Flow cancelled");
             }
@@ -392,7 +402,7 @@ namespace GoblinFarmer
             {
                 AppLogger.Error("Unhandled exception in automation run.", ex);
                 PortIncrementFailures();
-                PortCaptureDebugScreenshot("WorkflowFailed");
+                PortCaptureFailureScreenshot("UnexpectedException");
                 PortSetAppStatus("Flow Failed");
                 AddWorkflowStep("Flow failed");
                 MessageBox.Show(ex.Message);
@@ -451,6 +461,7 @@ namespace GoblinFarmer
         private bool PortTeleportToLocation(string displayName, CancellationToken token, bool verifyArrival = false, bool mapAlreadyOpen = false, bool bypassFailsafe = false, string source = "Workflow")
         {
             AddWorkflowStep($"Teleporting to {displayName}");
+            portLastTeleportSource = source;
             bool isManualButtonSource =
                 source.Equals("Button", StringComparison.OrdinalIgnoreCase) ||
                 source.Equals("ButtonRetry", StringComparison.OrdinalIgnoreCase);
@@ -459,6 +470,8 @@ namespace GoblinFarmer
             AppLogger.Info($"Teleport target location: {displayName}; source={source}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}; blockingSkippedForManualSource={blockingSkippedForManualSource}");
             if (blockingSkippedForManualSource)
             {
+                portLastBlockingDecision = $"Skipped; Source={source}; Requested={PortDisplayLocation(displayName)}; IgnoreBlocking={bypassFailsafe}; BlockingChecked={shouldCheckBlocking}";
+                portLastBlockingReason = "Manual button source skips teleport blocking";
                 AppLogger.Info($"Teleport blocking skipped because source is {source}: requested={displayName}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}");
             }
             PortSetAppStatus($"Teleporting To {displayName}");
@@ -603,7 +616,7 @@ namespace GoblinFarmer
             else if (verifyArrival && PortFailureCount() == failuresBeforeArrivalConfirmation)
             {
                 PortIncrementFailures();
-                PortCaptureDebugScreenshot("TeleportFailed");
+                PortCaptureFailureScreenshot(token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout");
             }
 
             if (!arrived && verifyArrival)
@@ -780,9 +793,9 @@ namespace GoblinFarmer
 
             SetCursorPos(point.X, point.Y);
             Thread.Sleep(80);
-            mouse_event(down, 0, 0, 0, UIntPtr.Zero);
+            PortRuntimeMouseDown(down);
             Thread.Sleep(40);
-            mouse_event(up, 0, 0, 0, UIntPtr.Zero);
+            PortRuntimeMouseUp(up);
             return true;
         }
 
@@ -1111,27 +1124,78 @@ namespace GoblinFarmer
 
         private void ForceReleaseAllRuntimeInputs(string reason)
         {
-            AppLogger.Info($"ForceReleaseAllRuntimeInputs called: {reason}; {PortCombatInputContext()}");
+            IntPtr diabloWindow = FindDiabloWindow();
+            RECT diabloRect = default;
+            bool hasDiabloRect = diabloWindow != IntPtr.Zero && GetWindowRect(diabloWindow, out diabloRect) && diabloRect.Right > diabloRect.Left && diabloRect.Bottom > diabloRect.Top;
+            string windowText = diabloWindow == IntPtr.Zero ? "0x0" : $"0x{diabloWindow.ToInt64():X}";
+            string rectText = hasDiabloRect
+                ? $"{diabloRect.Left},{diabloRect.Top},{diabloRect.Right - diabloRect.Left}x{diabloRect.Bottom - diabloRect.Top}"
+                : "unavailable";
+            bool heldLeft = portRuntimeLeftMouseHeld;
+            bool heldRight = portRuntimeRightMouseHeld;
+            bool heldShift = portRuntimeShiftHeld;
             bool hadLootSpam = portLootSpamLeftClickDown;
+
+            AppLogger.Info($"ForceReleaseAllRuntimeInputs called: reason={reason}; heldLeft={heldLeft}; heldRight={heldRight}; heldShift={heldShift}; lootSpamActive={hadLootSpam}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
             portLootSpamLeftClickDown = false;
             if (hadLootSpam)
             {
                 AppLogger.Info($"Loot spam force cleanup; {PortCombatInputContext()}");
             }
 
-            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-            mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
-            mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
-            keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(PortVkAlt, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(PortVkCtrl, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(PortVkBacktick, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(PortVkQ, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(0x31, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(0x32, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(0x33, 0, PortKeyUp, UIntPtr.Zero);
-            keybd_event(0x34, 0, PortKeyUp, UIntPtr.Zero);
-            AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: {reason}; {PortCombatInputContext()}");
+            if (!hasDiabloRect)
+            {
+                portRuntimeLeftMouseHeld = false;
+                portRuntimeRightMouseHeld = false;
+                portRuntimeShiftHeld = false;
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=left; held={heldLeft}; sent=false; Diablo window unavailable; state cleared");
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=right; held={heldRight}; sent=false; Diablo window unavailable; state cleared");
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held={heldShift}; sent=false; Diablo window unavailable; state cleared");
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft=false; sentRight=false; sentShift=false; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+                return;
+            }
+
+            bool sentLeft = false;
+            bool sentRight = false;
+            bool sentShift = false;
+
+            if (heldLeft)
+            {
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                portRuntimeLeftMouseHeld = false;
+                sentLeft = true;
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=left; held=true; diabloWindow={windowText}; diabloRect={rectText}");
+            }
+            else
+            {
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=left; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
+            }
+
+            if (heldRight)
+            {
+                mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                portRuntimeRightMouseHeld = false;
+                sentRight = true;
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=right; held=true; diabloWindow={windowText}; diabloRect={rectText}");
+            }
+            else
+            {
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=right; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
+            }
+
+            if (heldShift)
+            {
+                keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
+                portRuntimeShiftHeld = false;
+                sentShift = true;
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=shift; held=true; diabloWindow={windowText}; diabloRect={rectText}");
+            }
+            else
+            {
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
+            }
+
+            AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft={sentLeft}; sentRight={sentRight}; sentShift={sentShift}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
         }
 
         private void PortReleaseInputs(string reason = "cleanup")
@@ -1144,6 +1208,46 @@ namespace GoblinFarmer
             keybd_event((byte)vk, 0, 0, UIntPtr.Zero);
             Thread.Sleep(10);
             keybd_event((byte)vk, 0, PortKeyUp, UIntPtr.Zero);
+        }
+
+        private void PortRuntimeMouseDown(uint buttonDown)
+        {
+            if (buttonDown == MOUSEEVENTF_LEFTDOWN)
+            {
+                portRuntimeLeftMouseHeld = true;
+            }
+            else if (buttonDown == MOUSEEVENTF_RIGHTDOWN)
+            {
+                portRuntimeRightMouseHeld = true;
+            }
+
+            mouse_event(buttonDown, 0, 0, 0, UIntPtr.Zero);
+        }
+
+        private void PortRuntimeMouseUp(uint buttonUp)
+        {
+            mouse_event(buttonUp, 0, 0, 0, UIntPtr.Zero);
+
+            if (buttonUp == MOUSEEVENTF_LEFTUP)
+            {
+                portRuntimeLeftMouseHeld = false;
+            }
+            else if (buttonUp == MOUSEEVENTF_RIGHTUP)
+            {
+                portRuntimeRightMouseHeld = false;
+            }
+        }
+
+        private void PortRuntimeShiftDown()
+        {
+            portRuntimeShiftHeld = true;
+            keybd_event(PortVkShift, 0, 0, UIntPtr.Zero);
+        }
+
+        private void PortRuntimeShiftUp()
+        {
+            keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
+            portRuntimeShiftHeld = false;
         }
 
         private void PortPressEscapeForAutomation()

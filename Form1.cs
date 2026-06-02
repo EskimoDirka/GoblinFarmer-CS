@@ -380,6 +380,7 @@ namespace GoblinFarmer
             AddWorkflowStep("Selecting Diablo III in Battle.net");
             if (!ClickBattleNetDiabloTab())
             {
+                PortCaptureFailureScreenshot("DiabloTabNotFound");
                 AppLogger.Info("Diablo III tab not clicked; continuing to Battle.net Play button search");
             }
 
@@ -559,6 +560,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"Play button not found before timeout: timeoutMs={timeoutMs}");
+            PortCaptureFailureScreenshot("BattleNetPlayButtonNotFound");
             return false;
         }
 
@@ -580,21 +582,87 @@ namespace GoblinFarmer
             Rectangle? referenceRegion = PortScanRegion(scanRegionKey, imagePath);
             if (referenceRegion.HasValue)
             {
-                Rectangle screenRegion = PortScaleReferenceRectangleToVirtualScreen(referenceRegion.Value);
-                AppLogger.Info($"{label} scan region loaded: key={scanRegionKey}; reference={FormatRectangle(referenceRegion.Value)}; screen={FormatRectangle(screenRegion)}");
-                if (TryFindImageInScreenRegion(imagePath, screenRegion, out centerPoint, confidence))
+                AppLogger.Info($"{label} cached Battle.net scan region loaded: key={scanRegionKey}; cached={FormatRectangle(referenceRegion.Value)}");
+                if (TryResolveBattleNetWindowRelativeScanRegion(referenceRegion.Value, label, out Rectangle screenRegion))
                 {
-                    return true;
+                    AppLogger.Info($"{label} resolved Battle.net screen scan region: cached={FormatRectangle(referenceRegion.Value)}; screen={FormatRectangle(screenRegion)}");
+                    if (TryFindImageInScreenRegion(imagePath, screenRegion, out centerPoint, confidence))
+                    {
+                        AppLogger.Info($"{label} found in Battle.net window-relative region: point={centerPoint.X},{centerPoint.Y}; region={FormatRectangle(screenRegion)}");
+                        return true;
+                    }
+
+                    AppLogger.Info($"{label} not found in Battle.net window-relative region: region={FormatRectangle(screenRegion)}");
                 }
 
-                AppLogger.Info($"{label} not found in scan region; falling back to full-screen search");
+                AppLogger.Info($"{label} fallback full-screen search used after Battle.net region miss");
             }
             else
             {
-                AppLogger.Info($"{label} scan region unavailable: key={scanRegionKey}; falling back to full-screen search");
+                AppLogger.Info($"{label} scan region unavailable: key={scanRegionKey}; fallback full-screen search used");
             }
 
-            return FindImageOnScreen(imagePath, out centerPoint, confidence);
+            bool found = FindImageOnScreen(imagePath, out centerPoint, confidence);
+            AppLogger.Info(found
+                ? $"{label} found by fallback full-screen search: point={centerPoint.X},{centerPoint.Y}"
+                : $"{label} not found by fallback full-screen search");
+            return found;
+        }
+
+        private bool TryResolveBattleNetWindowRelativeScanRegion(Rectangle cachedRegion, string label, out Rectangle screenRegion)
+        {
+            screenRegion = Rectangle.Empty;
+            if (!TryGetFocusedBattleNetWindowRect(label, out Rectangle battleNetRect))
+            {
+                return false;
+            }
+
+            AppLogger.Info($"Battle.net window rect for {label}: {FormatRectangle(battleNetRect)}");
+            if (cachedRegion.Width <= 0 ||
+                cachedRegion.Height <= 0 ||
+                cachedRegion.Left < 0 ||
+                cachedRegion.Top < 0 ||
+                cachedRegion.Right > battleNetRect.Width ||
+                cachedRegion.Bottom > battleNetRect.Height)
+            {
+                AppLogger.Info($"WARNING {label} cached Battle.net scan region outside window; cached={FormatRectangle(cachedRegion)}; windowRect={FormatRectangle(battleNetRect)}; fallback full-screen search will be used");
+                return false;
+            }
+
+            screenRegion = new Rectangle(
+                battleNetRect.Left + cachedRegion.Left,
+                battleNetRect.Top + cachedRegion.Top,
+                cachedRegion.Width,
+                cachedRegion.Height);
+            AppLogger.Info($"{label} Battle.net scan region resolved from window origin: cached={FormatRectangle(cachedRegion)}; windowRect={FormatRectangle(battleNetRect)}; screen={FormatRectangle(screenRegion)}");
+            return true;
+        }
+
+        private bool TryGetFocusedBattleNetWindowRect(string label, out Rectangle rect)
+        {
+            rect = Rectangle.Empty;
+            IntPtr battleNetWindow = FindBattleNetWindow();
+            if (battleNetWindow == IntPtr.Zero)
+            {
+                AppLogger.Info($"Battle.net window unavailable while resolving {label} scan region");
+                return false;
+            }
+
+            ShowWindow(battleNetWindow, SW_RESTORE);
+            SetForegroundWindow(battleNetWindow);
+            if (!GetWindowRect(battleNetWindow, out RECT windowRect))
+            {
+                AppLogger.Info($"Battle.net window rect unavailable while resolving {label} scan region: hwnd=0x{battleNetWindow.ToInt64():X}");
+                return false;
+            }
+
+            rect = new Rectangle(
+                windowRect.Left,
+                windowRect.Top,
+                windowRect.Right - windowRect.Left,
+                windowRect.Bottom - windowRect.Top);
+            AppLogger.Info($"Battle.net window restored/focused for {label}: hwnd=0x{battleNetWindow.ToInt64():X}; rect={FormatRectangle(rect)}");
+            return true;
         }
 
         private bool TryFindImageInScreenRegion(

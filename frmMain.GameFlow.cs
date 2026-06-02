@@ -333,6 +333,7 @@ namespace GoblinFarmer
                         return true;
                     }
 
+                    PortCaptureFailureScreenshot("StartGameVerificationFailed");
                     AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts} not verified; retrying after transition wait");
                     AddWorkflowStep("Start Game click not verified; retrying");
                     PortSleep(token, 900);
@@ -344,7 +345,7 @@ namespace GoblinFarmer
             MessageBox.Show("Could not find Diablo Start Game button.");
             PortSetAppStatus("Start Game Not Found");
             AppLogger.Info($"Start Game failed: attempts={attempts}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; loaded={PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible()}");
-            PortCaptureDebugScreenshot("StartGameTimeout");
+            PortCaptureFailureScreenshot("StartGameButtonNotFound");
             return false;
         }
 

@@ -345,14 +345,14 @@ namespace GoblinFarmer
                 AppLogger.Info($"Demon Hunter Shift+Left Click safety check failed, but existing rotation still sends the click; {PortCombatInputContext()}");
             }
 
-            keybd_event(PortVkShift, 0, 0, UIntPtr.Zero);
+            PortRuntimeShiftDown();
             Thread.Sleep(30);
 
-            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+            PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
             Thread.Sleep(30);
-            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
 
-            keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
+            PortRuntimeShiftUp();
         }
 
         private void PortDemonHunterLoop(CancellationToken token)
@@ -386,7 +386,7 @@ namespace GoblinFarmer
                     if (!rightDown)
                     {
                         AppLogger.Info($"Combat right click allowed: sending RIGHTDOWN; {PortCombatInputContext()}");
-                        mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, UIntPtr.Zero);
+                        PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN);
                         rightDown = true;
                     }
 
@@ -410,13 +410,20 @@ namespace GoblinFarmer
             }
             finally
             {
-                if (rightDown)
+                if (rightDown && portRuntimeRightMouseHeld)
                 {
                     AppLogger.Info($"Combat right click cleanup: sending RIGHTUP; {PortCombatInputContext()}");
-                    mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                    PortRuntimeMouseUp(MOUSEEVENTF_RIGHTUP);
+                }
+                else if (rightDown)
+                {
+                    AppLogger.Info($"Combat right click cleanup skipped: localRightDown=true; runtimeRightHeld=false; {PortCombatInputContext()}");
                 }
 
-                keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
+                if (portRuntimeShiftHeld)
+                {
+                    PortRuntimeShiftUp();
+                }
             }
         }
 
@@ -440,19 +447,25 @@ namespace GoblinFarmer
 
                 if (!clickSafe)
                 {
-                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                    if (portRuntimeLeftMouseHeld)
+                    {
+                        PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                    }
                 }
                 else
                 {
-                    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                    PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
                     Thread.Sleep(10);
-                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                    PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
                 }
 
                 PortSleep(token, 50);
             }
 
-            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+            if (portRuntimeLeftMouseHeld)
+            {
+                PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+            }
         }
 
         private bool PortDemonHunterMomentumReady()

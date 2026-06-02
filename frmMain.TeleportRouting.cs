@@ -130,6 +130,7 @@ namespace GoblinFarmer
 
             (bool blocked, string reason) = PortEvaluateTeleportBlock("", rawLocation, blockedLocation);
             bool allowed = !blocked;
+            PortRecordBlockingDecision("Unknown", rawLocation, blockedLocation, blocked, allowed, reason);
             AppLogger.Info($"Teleport blocking decision: requested=Unknown; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(blockedLocation)}; blocked={blocked}; allowed={allowed}; reason={reason}");
 
             return allowed;
@@ -150,6 +151,7 @@ namespace GoblinFarmer
 
                 (bool blocked, string reason) = PortEvaluateTeleportBlock(targetLocation, refreshedLocation, normalizedLocation);
                 bool allowed = !blocked;
+                PortRecordBlockingDecision(targetLocation, refreshedLocation, blockedLocation, blocked, allowed, reason);
 
                 AppLogger.Info(
                     $"Teleport blocking decision: requested={targetLocation}; raw={refreshedLocation}; normalized={blockedLocation}; blocked={blocked}; allowed={allowed}; reason={reason}");
@@ -161,8 +163,15 @@ namespace GoblinFarmer
             blockedLocation = PortNormalizeBlockingLocation(rawLocation);
             (bool fallbackBlocked, string fallbackReason) = PortEvaluateTeleportBlock(targetLocation, rawLocation, blockedLocation);
             bool fallbackAllowed = !fallbackBlocked;
+            PortRecordBlockingDecision(targetLocation, rawLocation, blockedLocation, fallbackBlocked, fallbackAllowed, fallbackReason);
             AppLogger.Info($"Teleport blocking decision: requested={targetLocation}; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(blockedLocation)}; blocked={fallbackBlocked}; allowed={fallbackAllowed}; reason={fallbackReason}");
             return fallbackAllowed;
+        }
+
+        private void PortRecordBlockingDecision(string targetLocation, string rawLocation, string blockingLocation, bool blocked, bool allowed, string reason)
+        {
+            portLastBlockingDecision = $"Requested={PortDisplayLocation(targetLocation)}; Raw={PortDisplayLocation(rawLocation)}; Normalized={PortDisplayLocation(blockingLocation)}; Blocked={blocked}; Allowed={allowed}";
+            portLastBlockingReason = PortDisplayLocation(reason);
         }
 
         private (bool Blocked, string Reason) PortEvaluateTeleportBlock(string targetLocation, string rawLocation, string blockingLocation)
@@ -286,7 +295,7 @@ namespace GoblinFarmer
         {
             portAutomationBlockedByTeleportFailsafe = true;
             PortIncrementBlockedTeleports();
-            PortCaptureDebugScreenshot("TeleportBlocked");
+            PortCaptureFailureScreenshot("TeleportBlocked");
 
             string exactBlockedLocation = string.IsNullOrWhiteSpace(blockedLocation)
                 ? "Unknown"
