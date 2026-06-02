@@ -6,9 +6,9 @@ This README is intentionally high-level and user-facing. The detailed developer 
 
 ## Current Status
 
-The project is in an active reliability phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on Battle.net window-relative Play button detection, Start Game reliability, Exit Game cleanup behavior, and full-route testing.
+The project is in an active reliability phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on Battle.net window-relative Play button accuracy, Start Game reliability, repair timing, and full-route testing.
 
-The current recommended validation target is Battle.net Play button detection using the window-relative scan region. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
+The current recommended validation target is Battle.net Play button detection using the window-relative scan region and fallback comparison diagnostics. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
 
 ## Stable Systems
 
@@ -24,8 +24,8 @@ The current recommended validation target is Battle.net Play button detection us
 ## Systems Under Active Improvement
 
 - Battle.net Play button detection across fullscreen, windowed, moved-window, and multi-monitor setups.
+- Battle.net Play button fallback comparison diagnostics for region accuracy.
 - Start Game image recognition and possible cursor interference.
-- Exit Game cleanup validation after Diablo closes.
 - Repair and salvage timing validation.
 - Full route validation from Southern Highlands through Pandemonium Fortress Level 2.
 - Release/publish validation to ensure runtime images are included.

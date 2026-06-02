@@ -605,11 +605,15 @@ namespace GoblinFarmer
             }
 
             Rectangle? referenceRegion = PortScanRegion(scanRegionKey, imagePath);
+            Rectangle? resolvedScreenRegion = null;
+            Rectangle? resolvedBattleNetRect = null;
             if (referenceRegion.HasValue)
             {
                 AppLogger.Info($"{label} cached Battle.net scan region loaded: key={scanRegionKey}; cached={FormatRectangle(referenceRegion.Value)}");
-                if (TryResolveBattleNetWindowRelativeScanRegion(referenceRegion.Value, label, out Rectangle screenRegion))
+                if (TryResolveBattleNetWindowRelativeScanRegion(referenceRegion.Value, label, out Rectangle screenRegion, out Rectangle battleNetRect))
                 {
+                    resolvedScreenRegion = screenRegion;
+                    resolvedBattleNetRect = battleNetRect;
                     AppLogger.Info($"{label} resolved Battle.net screen scan region: cached={FormatRectangle(referenceRegion.Value)}; screen={FormatRectangle(screenRegion)}");
                     if (TryFindImageInScreenRegion(imagePath, screenRegion, out centerPoint, confidence))
                     {
@@ -631,13 +635,19 @@ namespace GoblinFarmer
             AppLogger.Info(found
                 ? $"{label} found by fallback full-screen search: point={centerPoint.X},{centerPoint.Y}"
                 : $"{label} not found by fallback full-screen search");
+            if (found && referenceRegion.HasValue)
+            {
+                LogBattleNetFallbackRegionDiagnostic(label, referenceRegion.Value, resolvedBattleNetRect, resolvedScreenRegion, centerPoint);
+            }
+
             return found;
         }
 
-        private bool TryResolveBattleNetWindowRelativeScanRegion(Rectangle cachedRegion, string label, out Rectangle screenRegion)
+        private bool TryResolveBattleNetWindowRelativeScanRegion(Rectangle cachedRegion, string label, out Rectangle screenRegion, out Rectangle battleNetRect)
         {
             screenRegion = Rectangle.Empty;
-            if (!TryGetFocusedBattleNetWindowRect(label, out Rectangle battleNetRect))
+            battleNetRect = Rectangle.Empty;
+            if (!TryGetFocusedBattleNetWindowRect(label, out battleNetRect))
             {
                 return false;
             }
@@ -661,6 +671,43 @@ namespace GoblinFarmer
                 cachedRegion.Height);
             AppLogger.Info($"{label} Battle.net scan region resolved from window origin: cached={FormatRectangle(cachedRegion)}; windowRect={FormatRectangle(battleNetRect)}; screen={FormatRectangle(screenRegion)}");
             return true;
+        }
+
+        private void LogBattleNetFallbackRegionDiagnostic(
+            string label,
+            Rectangle cachedRegion,
+            Rectangle? battleNetRect,
+            Rectangle? resolvedScreenRegion,
+            DrawingPoint fallbackPoint)
+        {
+            if (!battleNetRect.HasValue || !resolvedScreenRegion.HasValue)
+            {
+                AppLogger.Info($"{label} fallback region diagnostic: cached={FormatRectangle(cachedRegion)}; windowRect=unavailable; resolvedScreenRegion=unavailable; fallbackPoint={FormatPoint(fallbackPoint)}; expectedCenter=unavailable; distance=unavailable; assessment=unable to compare because the window-relative region was not resolved");
+                return;
+            }
+
+            Rectangle window = battleNetRect.Value;
+            Rectangle screenRegion = resolvedScreenRegion.Value;
+            DrawingPoint expectedCenter = new(
+                screenRegion.Left + (screenRegion.Width / 2),
+                screenRegion.Top + (screenRegion.Height / 2));
+            int deltaX = fallbackPoint.X - expectedCenter.X;
+            int deltaY = fallbackPoint.Y - expectedCenter.Y;
+            double distance = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+            bool fallbackInsideResolvedRegion = screenRegion.Contains(fallbackPoint);
+            DrawingPoint fallbackWindowLocalPoint = new(
+                fallbackPoint.X - window.Left,
+                fallbackPoint.Y - window.Top);
+            Rectangle suggestedCachedRegion = new(
+                Math.Max(0, fallbackWindowLocalPoint.X - (cachedRegion.Width / 2)),
+                Math.Max(0, fallbackWindowLocalPoint.Y - (cachedRegion.Height / 2)),
+                cachedRegion.Width,
+                cachedRegion.Height);
+            string assessment = fallbackInsideResolvedRegion
+                ? "fallback point is inside resolved region; likely template/confidence/content issue rather than region offset"
+                : "fallback point is outside resolved region; cached region is likely offset for this Battle.net window";
+
+            AppLogger.Info($"{label} fallback region diagnostic: cached={FormatRectangle(cachedRegion)}; windowRect={FormatRectangle(window)}; resolvedScreenRegion={FormatRectangle(screenRegion)}; expectedCenter={FormatPoint(expectedCenter)}; fallbackPoint={FormatPoint(fallbackPoint)}; delta={deltaX},{deltaY}; distance={distance:0.0}px; fallbackInsideResolvedRegion={fallbackInsideResolvedRegion}; fallbackWindowLocalPoint={FormatPoint(fallbackWindowLocalPoint)}; suggestedCachedRegionSameSize={FormatRectangle(suggestedCachedRegion)}; assessment={assessment}");
         }
 
         private bool TryGetFocusedBattleNetWindowRect(string label, out Rectangle rect)
@@ -737,6 +784,11 @@ namespace GoblinFarmer
         private static string FormatRectangle(Rectangle rectangle)
         {
             return $"{rectangle.Left},{rectangle.Top},{rectangle.Width},{rectangle.Height}";
+        }
+
+        private static string FormatPoint(DrawingPoint point)
+        {
+            return $"{point.X},{point.Y}";
         }
 
         private bool PortSleepOrThreadSleep(CancellationToken token, int milliseconds)

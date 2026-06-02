@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Battle.net launch speed optimization and repair timing polish.
+BattleNetPlayButton window-relative region accuracy diagnostics.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -47,9 +47,10 @@ Battle.net launch speed optimization and repair timing polish.
 - Diagnostic Overlay, Route State Inspector, Screenshot-On-Failure, and Debug Package Generator are implemented.
 - Exit Game workflow no longer generates desktop right-clicks after Diablo exits.
 - Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
-- Battle.net Play button window-relative scan region successfully detects Play in-region before fallback.
+- Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region remains `30,853,292,75` pending runtime validation.
 
 ## Under Active Improvement
+- BattleNetPlayButton region accuracy validation using fallback point comparison.
 - Battle.net launch speed optimization (skip Diablo tab selection when Play button is already visible).
 - Battle.net tab/Play detection across fullscreen, windowed, moved-window, and multi-monitor setups.
 - Start Game image recognition reliability, especially possible cursor interference with detection/click verification.
@@ -59,6 +60,7 @@ Battle.net launch speed optimization and repair timing polish.
 
 ## Known Issues
 - Need runtime log validation that `BattleNetD3Tab=120,76,81,76` and `BattleNetPlayButton=30,853,292,75` resolve by adding the Battle.net window origin and that the Play button is found before fallback.
+- If BattleNetPlayButton still falls back, inspect the new fallback region diagnostic log for fallback point, expected region center, delta, distance, fallback-inside-region state, and suggested same-size cached region.
 - Need to manually validate Battle.net tab/Play button detection with Battle.net fullscreen, windowed, moved, and on another monitor.
 - Need to test full teleport route from Southern Highlands through Northern Highlands and onward.
 - Need to test interrupted teleport recovery.
@@ -71,6 +73,7 @@ Battle.net launch speed optimization and repair timing polish.
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Added BattleNetPlayButton fallback comparison diagnostics. When full-screen fallback finds the Play button after a window-relative miss, logs now show Battle.net window rect, cached region, resolved screen region, fallback point, expected region center, delta, distance, and suggested same-size cached region.
 - Updated only `BattleNetPlayButton` from old fullscreen-style region `1200,1070,156,72` to Battle.net-window-local region `30,853,292,75`, measured from `Images\Start Game\Battlet Net Windowed Scan Region 2560x1440.png`; `BattleNetD3Tab` was not changed.
 - Corrected Battle.net cached-region interpretation so tab/Play cached regions are window-local pixel offsets, not fullscreen-scaled regions.
 - Added Battle.net window-relative logs for cached region, Battle.net window rect, resolved screen region, window-relative found/not-found result, outside-window warnings, and fallback full-screen search.
@@ -85,19 +88,17 @@ Battle.net launch speed optimization and repair timing polish.
 
 ## Next Recommended Task
 
-Optimize Battle.net launch speed.
-
-Goal:
-- Check for Battle.net Play button first.
-- If Play button is visible, skip Diablo III tab selection entirely.
-- Click Play immediately.
-- Only use Diablo III tab selection as a fallback when Play is not visible.
+Run Battle.net Play button detection and inspect logs.
 
 Validation:
-- Battle.net already on Diablo page.
-- Battle.net windowed.
-- Battle.net fullscreen.
-- Battle.net moved to another monitor.
+- Confirm cached region is `BattleNetPlayButton=30,853,292,75`.
+- Confirm Battle.net window rect is logged.
+- Confirm resolved screen region is Battle.net window origin plus cached offsets.
+- If window-relative detection misses and fallback succeeds, compare fallback point to expected center using the logged delta/distance.
+- If fallback point is outside the resolved region, update the cached region from `suggestedCachedRegionSameSize` and rebuild.
+- If fallback point is inside the resolved region, investigate template/confidence/content mismatch instead of moving the region.
+
+After that, optimize Battle.net launch speed by clicking Play immediately when it is already visible and using Diablo III tab selection only as fallback.
 
 ## System Notes
 
@@ -106,6 +107,7 @@ Validation:
 - `BattleNetPlayButton`: `30,853,292,75`.
 - Cached regions are interpreted as Battle.net-window-local pixel offsets.
 - Full-screen image search remains as a safety fallback.
+- Fallback diagnostics compare fallback detection point against resolved region center and log delta/distance plus a suggested same-size cached region.
 - Static review confirmed these changes do not alter Diablo in-game Start Game logic, teleport logic, combat logic, repair/salvage logic, debug package generator, or diagnostics UI.
 
 ### Runtime Input Cleanup
@@ -138,6 +140,8 @@ Validation:
 - Manifest records package path, latest log path, latest failure screenshot type, latest failure screenshot path, screenshot counts, and explicit build-artifact exclusions.
 
 ## Last Validation
+- Built after adding BattleNetPlayButton fallback comparison diagnostics; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed this only adds Battle.net Play scan diagnostics and preserves fallback behavior; Start Game, teleport, combat, and repair/salvage logic were not changed.
 - Built `GoblinFarmer.csproj` successfully after updating only `BattleNetPlayButton` to `30,853,292,75`; build succeeded with 0 warnings and 0 errors.
 - Static review confirmed `BattleNetD3Tab`, Start Game logic, teleport logic, combat logic, and repair/salvage logic were not changed by the Play button region update.
 - Built after correcting Battle.net cached-region interpretation to window-local pixel offsets; build succeeded with 0 warnings and 0 errors.
