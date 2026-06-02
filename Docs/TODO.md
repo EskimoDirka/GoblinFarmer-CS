@@ -28,6 +28,7 @@
 * [ ] Complete full route test from Southern Highlands through Pandemonium Fortress Level 2.
 * [ ] Complete interrupted teleport testing.
 * [ ] Test failed/interrupted Royal Crypts button retry from Cathedral Level 1 and confirm retry preserves Cathedral/Royal Crypts state, bypasses manual-button blocking, and does not advance until arrival confirmation.
+* [ ] Confirm Battle.net Play button is found in the window-relative region before full-screen fallback.
 * [ ] Complete Exit Game workflow testing.
 * [ ] Confirm Exit Game no longer causes a post-Diablo desktop right-click or app close.
 * [ ] Complete Repair workflow testing.
@@ -269,6 +270,7 @@ Benefits:
 
 * [x] Convert Battle.net tab and Play button scan regions to window-relative coordinates.
 * [x] Interpret cached `BattleNetD3Tab` and `BattleNetPlayButton` regions as Battle.net-window-local pixel offsets.
+* [x] Update only `BattleNetPlayButton` to window-local region `30,853,292,75` from the green-box reference screenshot.
 * [x] Restore/focus Battle.net before resolving scan regions.
 * [x] Keep fullscreen search as fallback.
 * [x] Preserve existing scan-region cache/reference format.

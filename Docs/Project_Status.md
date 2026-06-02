@@ -1,7 +1,9 @@
 # GoblinFarmer Project Status
 
+This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
+
 ## Current Focus
-Post-exit input cleanup safety for Exit Game workflow shutdown.
+Battle.net Play button window-relative scan region validation.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -18,39 +20,43 @@ Post-exit input cleanup safety for Exit Game workflow shutdown.
 - Pandemonium Fortress Level 1: next Pandemonium Fortress Level 2; no block.
 - Pandemonium Fortress Level 2: next Make New Game flow; no block.
 
-## Last Known Good
-- Images moved into project and pushed to GitHub.
-- Battle.net can relaunch/focus if process exists but no visible window exists.
-- Diablo launch grace period prevents false cancellation.
-- Start Game verified successfully.
-- Make New Game flow created 1 game and completed first teleport to Southern Highlands.
-- Route state now preserves the previous confirmed location when teleport confirmation fails or is blocked.
-- Teleport blocking now blocks only exact intended blocked locations instead of blocking normal route locations.
-- Leoric's Passage is detected as unavailable as a waypoint because it is not present in `Images\Teleport Function\Map X Y Coordinates.txt`; Northern Highlands falls back to the configured route.
-- Gates of Caldeum now normalizes to City Of Caldeum for blocking output.
-- Waterway sub-regions now keep their raw identity for blocking decisions; Western Channel Level 1 and Eastern Channel Level 1 block, Western Channel Level 2 returns to Ancient Waterway, and Eastern Channel Level 2 continues to Stinging Winds.
-- Stinging Winds blocks the Battlefields teleport unless the current detected sub-region is Black Canyon Mines.
-- Waterway button state keeps the Waterway button current/green while selecting the next intended target instead of clearing orange next state.
-- Interrupted teleport retry behavior remains preserved.
-- Blocking rules are now target-specific instead of using a generic blocked-location list.
+## Known Stable Systems
+- Images are project-relative and copied into the build output.
+- Battle.net can relaunch/focus if the process exists but no visible window exists.
+- Diablo launch grace period prevents false cancellation while Diablo starts.
+- Start Game has verified successfully in prior runs, though reliability work remains open.
+- Make New Game flow has created a game and completed the first teleport to Southern Highlands in prior validation.
+- Teleport routing preserves raw detected location, normalized app location, display location, and blocking location as separate concepts.
+- Route state preserves the previous confirmed location when teleport confirmation fails or is blocked.
+- Interrupted teleport fail-safes preserve route and button state.
+- Manual teleport buttons preserve failed/interrupted intended targets as retry state.
+- Manual button retries bypass teleport blocking like the original manual button request.
+- Manual same-button clicks while a teleport is waiting for arrival confirmation are ignored and logged to avoid overlapping waypoint workflows.
+- In-game notifications use a no-activate overlay so blocked/already-here messages should not steal Diablo focus.
+- Gates of Caldeum normalizes to City Of Caldeum for blocking output.
+- Waterway sub-regions keep their raw identity for blocking decisions.
 - Cathedral blocks Royal Crypts unless the raw detected location is Cathedral Level 3.
 - City Of Caldeum blocks Ancient Waterway unless the raw detected location is Ruined Cistern.
-- Western Channel Level 2 now selects Ancient Waterway as the next target; Eastern Channel Level 2 selects Stinging Winds.
-- Manual Ancient Waterway button clicks are blocked when the raw detected location is already Ancient Waterway.
-- City Of Caldeum blocking works correctly; Gates of Caldeum displays as City Of Caldeum.
-- Western Channel Level 1 blocks correctly; Western Channel Level 2 does not block incorrectly.
-- Eastern Channel Level 1 blocks correctly; Eastern Channel Level 2 teleports to Stinging Winds correctly.
-- Stinging Winds blocks correctly; Black Canyon Mines teleports to Battlefields correctly.
-- Interrupted teleport fail-safes preserve route and button state.
-- Manual teleport buttons now preserve failed/interrupted intended targets as retry state. Clicking the same intended button again uses preserved route state while still bypassing teleport blocking like the original manual button request.
-- Manual same-button clicks while a teleport is already waiting for arrival confirmation are ignored and logged to avoid overlapping waypoint workflows.
-- In-game notifications now use a no-activate overlay so blocked/already-here messages should not steal Diablo focus.
-- Ancient Waterway self-click now blocks before opening the map and preserves current/next button state.
-- Repair flow now waits for New Tristram/vendor readiness and logs repair-station click timing before using the repair-station coordinate fallback.
-- Battle.net Diablo tab and Play button image searches now treat cached scan regions as Battle.net-window-local pixel offsets, add the current Battle.net window left/top, and retain full-screen search as fallback.
-- Runtime input cleanup now releases only tracked held left/right/Shift inputs while Diablo is available, and clears held-input state without sending mouse events after Diablo closes.
+- Western Channel Level 2 selects Ancient Waterway as the next target; Eastern Channel Level 2 selects Stinging Winds.
+- Stinging Winds blocks Battlefields unless the current detected sub-region is Black Canyon Mines.
+- Ancient Waterway self-click blocks before opening the map and preserves current/next button state.
+- Repair flow waits for New Tristram/vendor readiness and logs repair-station click timing before using the repair-station coordinate fallback.
+- Combat automation is stable enough for current route work; do not change combat logic unless explicitly requested.
+- Battle.net tab and Play button image searches use Battle.net-window-local cached scan regions plus the current Battle.net window left/top, with full-screen search as fallback.
+- Runtime input cleanup releases only tracked held left/right/Shift inputs while Diablo is available and clears tracked state without mouse events after Diablo closes.
+- Diagnostic Overlay, Route State Inspector, Screenshot-On-Failure, and Debug Package Generator are implemented.
 
-## Active Issues
+## Under Active Improvement
+- Battle.net Play button window-relative scan validation.
+- Battle.net tab/Play detection across fullscreen, windowed, moved-window, and multi-monitor setups.
+- Start Game image recognition reliability, especially possible cursor interference with detection/click verification.
+- Exit Game post-Diablo cleanup validation.
+- Repair/salvage timing validation after route and launch changes.
+- Full route validation from Southern Highlands through Pandemonium Fortress Level 2.
+- Publish/release folder validation to confirm Images are included.
+
+## Known Issues
+- Need runtime log validation that `BattleNetD3Tab=120,76,81,76` and `BattleNetPlayButton=30,853,292,75` resolve by adding the Battle.net window origin and that the Play button is found before fallback.
 - Need to manually validate Battle.net tab/Play button detection with Battle.net fullscreen, windowed, moved, and on another monitor.
 - Need to test full teleport route from Southern Highlands through Northern Highlands and onward.
 - Need to test interrupted teleport recovery.
@@ -62,117 +68,97 @@ Post-exit input cleanup safety for Exit Game workflow shutdown.
 - Need waypoint coordinates before routing Northern Highlands directly to Leoric's Passage.
 - Start Game button detection/click verification is still inconsistent, suspected cursor interference with image recognition.
 - Battle.net can launch windowed/not full-window; eventually maximize/focus Battle.net after launching.
-- Need runtime log validation that `BattleNetD3Tab` and `BattleNetPlayButton` cached regions resolve by adding the Battle.net window origin, not by scaling fullscreen reference coordinates.
+- Nested project folder structure remains messy and should be cleaned up later.
 
-## Debug Package Generator
-- Added `Scripts\create-debug-package.ps1`.
-- Run from the project root with: `powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1`.
-- Creates `DebugPackages\GoblinFarmer_Debug_YYYYMMDD_HHMMSS.zip`.
-- Includes the latest app log if found, latest failure screenshots, latest normal debug screenshots if found, `AGENTS.md`, `Docs\Project_Status.md`, `Docs\TEST_CHECKLIST.md`, `Docs\TODO.md`, `git-status.txt`, `git-log.txt`, and `debug-package-manifest.txt`.
-- The manifest records the package path, latest log path, latest failure screenshot type, latest failure screenshot path, screenshot counts, and explicit build-artifact exclusions.
-- The console summary clearly reports package path, latest log, failure screenshot count, normal screenshot count, latest failure type, git capture status, and manifest name.
-- The script warns for missing optional folders/files and collects explicit files only, so `bin`, `obj`, and large build artifacts are not packaged.
+## Recently Fixed
+- Updated only `BattleNetPlayButton` from old fullscreen-style region `1200,1070,156,72` to Battle.net-window-local region `30,853,292,75`, measured from `Images\Start Game\Battlet Net Windowed Scan Region 2560x1440.png`; `BattleNetD3Tab` was not changed.
+- Corrected Battle.net cached-region interpretation so tab/Play cached regions are window-local pixel offsets, not fullscreen-scaled regions.
+- Added Battle.net window-relative logs for cached region, Battle.net window rect, resolved screen region, window-relative found/not-found result, outside-window warnings, and fallback full-screen search.
+- Added runtime input cleanup tracking for held left mouse, right mouse, and Shift.
+- Prevented post-Diablo cleanup from sending mouse/key events when Diablo is unavailable; duplicate cleanup calls now skip releases when no tracked input is held.
+- Added Screenshot-On-Failure coverage for TeleportBlocked, TeleportInterrupted, TeleportConfirmationTimeout, StartGameButtonNotFound, StartGameVerificationFailed, BattleNetPlayButtonNotFound, DiabloTabNotFound, RepairStationNotFound, RepairFailed, WorkflowCancelled, and UnexpectedException.
+- Added a read-only Route State Inspector diagnostics tab.
+- Added compact Diagnostic Overlay fields for queued retry target, last requested target, failed/interrupted retry state, latest screenshot path, and latest failure screenshot type.
+- Polished `Scripts\create-debug-package.ps1`; generated packages include docs, latest log, latest failure screenshots, latest normal debug screenshots, git status/log snapshots, and a manifest while excluding `bin`/`obj`.
+- Fixed ButtonRetry so manual retries skip teleport blocking and preserve retry state until success or explicit cancellation.
+- Fixed manual teleport button retry after failed/interrupted button teleports.
 
-## Battle.net Window-Relative Scan Regions
-- Battle.net image searches now restore/focus the visible Battle.net window, read its current window rectangle, and resolve cached scan regions by adding `window.Left/window.Top` to cached region `Left/Top`.
-- Applies to Diablo III tab detection (`BattleNetD3Tab`) and Battle.net Play button detection (`BattleNetPlayButton`).
-- Logs cached region, Battle.net window rect, resolved screen scan region, found/not-found result in the window-relative region, warning when a cached region is outside the Battle.net window, and final full-screen fallback search result.
-- Preserves the existing scan-region cache format and keeps full-screen image search as fallback.
-- Static review confirmed this changes only Battle.net scan-region resolution; Diablo in-game Start Game logic, teleport logic, combat logic, repair/salvage logic, debug package generator, and diagnostics UI were not changed.
+## Next Recommended Task
+Manually validate Battle.net Play button detection in the window-relative region. Confirm logs show:
+- `BattleNetPlayButton` cached region `30,853,292,75`.
+- Battle.net window rect.
+- Resolved screen region equal to Battle.net window origin plus cached offsets.
+- Play button found in the window-relative region before full-screen fallback.
 
-## Runtime Input Cleanup
-- `ForceReleaseAllRuntimeInputs` now logs the cleanup reason, tracked held left/right/Shift state before cleanup, Diablo window handle, and Diablo rect availability.
+After that, validate the Exit Game cleanup fix and confirm no desktop right-click or app close occurs after Diablo exits.
+
+## System Notes
+
+### Battle.net Window-Relative Scan Regions
+- `BattleNetD3Tab`: `120,76,81,76`.
+- `BattleNetPlayButton`: `30,853,292,75`.
+- Cached regions are interpreted as Battle.net-window-local pixel offsets.
+- Full-screen image search remains as a safety fallback.
+- Static review confirmed these changes do not alter Diablo in-game Start Game logic, teleport logic, combat logic, repair/salvage logic, debug package generator, or diagnostics UI.
+
+### Runtime Input Cleanup
+- `ForceReleaseAllRuntimeInputs` logs cleanup reason, tracked held left/right/Shift state before cleanup, Diablo window handle, and Diablo rect availability.
 - Cleanup sends `LEFTUP`, `RIGHTUP`, or Shift key-up only when runtime state says that input is currently held and the Diablo window rectangle is available.
-- When Diablo is unavailable, cleanup clears tracked held-input state without generating mouse or key events, preventing post-exit desktop right-click behavior.
-- Duplicate cleanup calls are idempotent: later cleanup calls log skipped releases when no tracked input remains held.
-- Combat and hotkey runtime click paths now update tracked held-input state, including Demon Hunter right-hold cleanup, Shift-left clicks, loot-click pulses, Kadala right-click pulses, and automation safe clicks.
-- Static review confirmed this does not change Battle.net logic, teleport logic, repair/salvage logic, or repair-station coordinate clicks.
+- When Diablo is unavailable, cleanup clears tracked held-input state without generating mouse or key events.
+- Combat and hotkey runtime click paths update tracked held-input state, including Demon Hunter right-hold cleanup, Shift-left clicks, loot-click pulses, Kadala right-click pulses, and automation safe clicks.
 
-## Diagnostic Overlay
-- Added a read-only WinForms `Diagnostic Overlay` panel on the main form.
+### Diagnostic Overlay
+- Read-only WinForms panel on the main form.
 - Refreshes from the existing status timer with no new image-recognition scans.
-- Shows raw location, normalized location, display location, blocking location, current teleport target, next teleport target, route state, combat state, failure counter, Diablo running status, active workflow, last log file, screenshot count, log count, and latest debug package path if one exists.
-- Also shows queued retry target, last requested target, and failed/interrupted retry state for manual teleport retry diagnostics.
-- Uses existing runtime state and file counts only; route, combat, Battle.net, repair, and salvage logic were not changed.
+- Shows raw location, normalized location, display location, blocking location, current teleport target, next teleport target, queued retry target, last requested target, failed/interrupted retry state, route state, combat state, failure counter, Diablo running status, active workflow, last log file, screenshot count, log count, and latest debug package path if one exists.
 
-## Route State Inspector
-- Added a read-only `Route State` diagnostics tab beside the compact overlay.
+### Route State Inspector
+- Read-only `Route State` diagnostics tab beside the compact overlay.
 - Refreshes from the existing status timer and cached diagnostic/file state; it does not run extra image-recognition scans or activate Diablo.
 - Shows raw detected location, normalized app location, display location, blocking location, current/next button locations, queued teleport target, retry queued target, last requested teleport target, last teleport source, last blocking decision and reason, last route decision output, arrival-confirmation wait state and target, failed/interrupted retry state, failure counter, latest log path, latest debug screenshot path, screenshot/log counts, active workflow, Diablo running status, and Diablo focused/active status.
-- Added small read-only state fields for last teleport source, last blocking decision/reason, last route output, and latest screenshot path.
-- Static review confirmed this is diagnostics-only; route logic, combat logic, Battle.net logic, Start Game flow, repair/salvage logic, City of Caldeum/Gates normalization, and focus-safe notifications were not changed.
 
-## Screenshot-On-Failure Expansion
-- Added `PortCaptureFailureScreenshot` on top of the existing debug screenshot infrastructure.
-- Failure screenshots now record the latest failure screenshot type and log the saved path when capture succeeds.
-- Screenshot capture still catches/logs failures and does not throw back into workflows.
-- Capture now falls back to the virtual screen when a Diablo client capture is unavailable, so Battle.net/startup failures can still produce evidence.
-- Added failure screenshot coverage for TeleportBlocked, TeleportInterrupted, TeleportConfirmationTimeout, StartGameButtonNotFound, StartGameVerificationFailed, BattleNetPlayButtonNotFound, DiabloTabNotFound, RepairStationNotFound, RepairFailed, WorkflowCancelled, and UnexpectedException.
-- Compact Diagnostic Overlay and Route State Inspector now show latest screenshot path and latest failure screenshot type.
-- Static review confirmed this is diagnostics-only; route logic, combat logic, Battle.net behavior, repair/salvage behavior, and teleport behavior were not changed.
+### Screenshot-On-Failure
+- Built on top of the existing debug screenshot infrastructure.
+- Failure screenshots record the latest failure screenshot type and log the saved path when capture succeeds.
+- Screenshot capture catches/logs failures and does not throw back into workflows.
+- Capture falls back to the virtual screen when a Diablo client capture is unavailable, so Battle.net/startup failures can still produce evidence.
 
-## Next Test
-Run a focused regression pass:
-- Trigger blocked/already-here notifications and confirm Diablo keeps focus.
-- Click Ancient Waterway while exactly inside Ancient Waterway and confirm no map open and no button-state change.
-- Confirm Western Channel Level 2 selects/allows Ancient Waterway, while Eastern Channel Level 2 selects/allows Stinging Winds.
-- Run Make New Game through New Tristram repair and confirm repair-station click timing is stable.
-- Re-test interrupted teleport retry and confirm current/next button colors remain preserved.
-- Re-test manual Royal Crypts button retry after an interrupted button teleport from Cathedral Level 1 and confirm the retry uses preserved state without applying hotkey blocking checks.
-- Open the Route State tab during retry testing and confirm source, blocking decision, retry target, waiting-confirmation state, latest log, and latest screenshot fields update as expected.
-- Trigger one safe failure path in a controlled manual run and confirm latest screenshot path plus latest failure screenshot type update in both diagnostics views.
-- Generate a debug package after a fresh manual failure and confirm the newest failure screenshot type is reflected in `debug-package-manifest.txt`.
-- Test Battle.net launch flow with Battle.net fullscreen, windowed, moved, and on another monitor; confirm logs show window-relative scan regions before fallback.
-- Confirm logs for `BattleNetD3Tab=120,76,81,76` and `BattleNetPlayButton=1200,1070,156,72` show screen regions calculated as Battle.net window origin plus cached offsets.
-- Run Exit Game, confirm logs show `ForceReleaseAllRuntimeInputs` with `diabloWindow=0x0`/`diabloRect=unavailable`, skipped right release, cleared held state, and no desktop right-click or app close after Diablo exits.
-
-Next recommended task: manually validate the Exit Game cleanup fix, then isolate Start Game button cursor/image-recognition interference.
+### Debug Package Generator
+- Script: `Scripts\create-debug-package.ps1`.
+- Run from the project root with: `powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1`.
+- Creates `DebugPackages\GoblinFarmer_Debug_YYYYMMDD_HHMMSS.zip`.
+- Includes latest app log if found, latest failure screenshots, latest normal debug screenshots if found, `AGENTS.md`, `Docs\Project_Status.md`, `Docs\TEST_CHECKLIST.md`, `Docs\TODO.md`, `git-status.txt`, `git-log.txt`, and `debug-package-manifest.txt`.
+- Manifest records package path, latest log path, latest failure screenshot type, latest failure screenshot path, screenshot counts, and explicit build-artifact exclusions.
 
 ## Last Validation
-- Built `GoblinFarmer.csproj` successfully.
-- Confirmed `Map X Y Coordinates.txt` has Southern Highlands and Northern Highlands but no Leoric's Passage coordinate.
-- Static route review confirmed Make New Game and Exit Game use `bypassFailsafe: true`.
-- Static route review confirmed teleport-next hotkey uses blocking checks with `ignoreBlocking: false`.
-- Built after route blocking changes with 0 warnings and 0 errors.
-- Static review confirmed Battle.net launch flow, combat logic, and repair/salvage logic were not changed for the route-blocking fix.
-- Built after official route-source update; Battle.net launch flow, combat logic, and repair/salvage logic were not changed.
-- Built after post-route-test fixes; build succeeded with the pre-existing `portMonkKeyIndex` unused-field warning.
-- Static review confirmed combat logic and Battle.net Play flow were not changed.
-- Added and ran the debug package generator; it created a timestamped package with docs, latest runtime log, latest screenshots, and git status/log snapshots.
-- Built after adding the debug package generator with 0 warnings and 0 errors.
-- Built after adding the diagnostic overlay with 0 warnings and 0 errors.
-- Static review confirmed the diagnostic overlay reads existing state only and does not change route, combat, Battle.net, repair, or salvage logic.
-- Built after manual button retry fix; final build succeeded with 0 warnings and 0 errors.
-- Static review confirmed manual button retry state is scoped to teleport button handling/diagnostics and does not change combat logic, Battle.net flow, repair, or salvage logic.
-- Built after ButtonRetry manual-blocking fix; build succeeded with 0 warnings and 0 errors.
-- Static review confirmed only the manual button retry/blocking path and same-button confirmation guard changed; hotkey blocking behavior, combat, Battle.net, Start Game, repair, salvage, normalization, and focus-safe notifications were not changed.
-- Built after adding the Route State Inspector; build succeeded with 0 warnings and 0 errors.
-- Static review confirmed the Route State Inspector uses existing timer/state and passive diagnostic fields only, with no gameplay-flow changes.
-- Built after Screenshot-On-Failure expansion; build succeeded with 0 warnings and 0 errors.
+- Built `GoblinFarmer.csproj` successfully after updating only `BattleNetPlayButton` to `30,853,292,75`; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed `BattleNetD3Tab`, Start Game logic, teleport logic, combat logic, and repair/salvage logic were not changed by the Play button region update.
+- Built after correcting Battle.net cached-region interpretation to window-local pixel offsets; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed cached Battle.net regions are no longer scaled as fullscreen reference regions; invalid/outside-window cached regions warn and fall back to full-screen search.
 - Built after post-exit input cleanup fix; build succeeded with 0 warnings and 0 errors.
 - Static review confirmed cleanup changes are limited to tracked runtime input release behavior and do not change Battle.net, teleport, repair/salvage, or repair-station coordinate click logic.
-- Static review confirmed screenshot additions are failure-diagnostics only and do not alter route, combat, Battle.net, repair/salvage, or teleport decisions.
 - Polished and ran `Scripts\create-debug-package.ps1`; it created `DebugPackages\GoblinFarmer_Debug_20260601_184528.zip`.
 - Inspected the generated package: included `AGENTS.md`, `Docs\Project_Status.md`, `Docs\TODO.md`, `Docs\TEST_CHECKLIST.md`, latest log, 10 failure screenshots, 10 normal debug screenshots, `git-status.txt`, `git-log.txt`, and `debug-package-manifest.txt`.
 - Verified the generated package has no `bin/` or `obj/` entries; manifest reported latest failure screenshot type `TeleportBlocked`.
-- Built after Debug Package Generator polish; build succeeded with 0 warnings and 0 errors.
-- Built after Battle.net window-relative scan-region change; build succeeded with 0 warnings and 0 errors.
-- Static review confirmed only Battle.net tab/Play button scan-region resolution changed; gameplay route, teleport, combat, Start Game, repair/salvage, debug package, and diagnostics UI logic were not changed.
-- Built after correcting Battle.net cached-region interpretation to window-local pixel offsets; build succeeded with 0 warnings and 0 errors.
-- Static review confirmed cached Battle.net regions are no longer scaled as fullscreen reference regions; invalid/outside-window cached regions warn and fall back to full-screen search.
+- Built after Screenshot-On-Failure expansion; build succeeded with 0 warnings and 0 errors.
+- Built after adding the Route State Inspector; build succeeded with 0 warnings and 0 errors.
+- Built after ButtonRetry manual-blocking fix; build succeeded with 0 warnings and 0 errors.
+- Built after manual button retry fix; final build succeeded with 0 warnings and 0 errors.
 
 ## Backlog
-- Make Battle.net scan regions relative to Battle.net window.
+- Validate Battle.net Play button window-relative scan region across fullscreen/windowed/moved monitor setups.
 - Clean up nested GoblinFarmer folder structure later.
 - Review right-click behavior after Battle.net Play.
 - Improve Start Game diagnostics if it fails again.
+- Consider moving route logic into configuration after current reliability work stabilizes.
+- Add developer/test utilities for current location detection, map detection, Battle.net Play testing, Start Game testing, and image-recognition diagnostics.
 
 ## Important Paths
 Project:
-D:\D3\Projects\GoblinFarmer\GoblinFarmer\GoblinFarmer
+`D:\D3\Projects\GoblinFarmer\GoblinFarmer\GoblinFarmer`
 
 Runtime Images:
-bin\Debug\net10.0-windows\Images
+`bin\Debug\net10.0-windows\Images`
 
 Release Target:
-D:\GoblinFarmer
+`D:\GoblinFarmer`
