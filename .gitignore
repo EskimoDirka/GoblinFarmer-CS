@@ -427,3 +427,15 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# GoblinFarmer runtime/debug artifacts
+Screenshots/
+DebugPackages/
+Sessions/
+debug-screenshots/
+
+# Generated diagnostics
+session-info.txt
+route-failure-summary.txt
+debug-package-manifest.txt
+debug-screenshot-manifest.txt

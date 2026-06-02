@@ -94,6 +94,28 @@ namespace GoblinFarmer
             return currentKey == targetKey;
         }
 
+        private bool PortLocationMatchesForArrival(string currentLocation, string targetLocation)
+        {
+            string currentKey = PortLocationKey(currentLocation);
+            if (string.IsNullOrWhiteSpace(currentKey))
+            {
+                return false;
+            }
+
+            string targetKey = PortLocationKey(targetLocation);
+            if (targetKey == PortLocationKey("Ancient Waterway"))
+            {
+                return currentKey == targetKey;
+            }
+
+            if (PortIsWaypointExactMatchRequired(targetLocation))
+            {
+                return currentKey == targetKey;
+            }
+
+            return PortLocationMatches(currentLocation, targetLocation);
+        }
+
         private bool PortLocationIsAlreadyAtTarget(string currentLocation, string targetLocation)
         {
             string currentKey = PortLocationKey(currentLocation);
@@ -155,6 +177,19 @@ namespace GoblinFarmer
 
                 AppLogger.Info(
                     $"Teleport blocking decision: requested={targetLocation}; raw={refreshedLocation}; normalized={blockedLocation}; blocked={blocked}; allowed={allowed}; reason={reason}");
+                if (allowed)
+                {
+                    PortLogRouteDebugSummary(
+                        "TeleportAllowed",
+                        targetLocation,
+                        portLastTeleportSource,
+                        refreshedLocation,
+                        blockedLocation,
+                        PortGetButtonLocationForDetectedLocation(refreshedLocation),
+                        refreshedLocation,
+                        reason,
+                        PortLikelyRouteExplanation(targetLocation, refreshedLocation, reason, false));
+                }
 
                 return allowed;
             }
@@ -165,6 +200,19 @@ namespace GoblinFarmer
             bool fallbackAllowed = !fallbackBlocked;
             PortRecordBlockingDecision(targetLocation, rawLocation, blockedLocation, fallbackBlocked, fallbackAllowed, fallbackReason);
             AppLogger.Info($"Teleport blocking decision: requested={targetLocation}; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(blockedLocation)}; blocked={fallbackBlocked}; allowed={fallbackAllowed}; reason={fallbackReason}");
+            if (fallbackAllowed)
+            {
+                PortLogRouteDebugSummary(
+                    "TeleportAllowed",
+                    targetLocation,
+                    portLastTeleportSource,
+                    rawLocation,
+                    blockedLocation,
+                    PortGetButtonLocationForDetectedLocation(rawLocation),
+                    rawLocation,
+                    fallbackReason,
+                    PortLikelyRouteExplanation(targetLocation, rawLocation, fallbackReason, false));
+            }
             return fallbackAllowed;
         }
 
@@ -172,6 +220,55 @@ namespace GoblinFarmer
         {
             portLastBlockingDecision = $"Requested={PortDisplayLocation(targetLocation)}; Raw={PortDisplayLocation(rawLocation)}; Normalized={PortDisplayLocation(blockingLocation)}; Blocked={blocked}; Allowed={allowed}";
             portLastBlockingReason = PortDisplayLocation(reason);
+        }
+
+        private string PortRouteStateFields(
+            string requestedTarget,
+            string source,
+            string rawLocation,
+            string normalizedLocation,
+            string displayLocation,
+            string blockingLocation,
+            string blockingReason,
+            string screenshotPath)
+        {
+            return $"requestedTarget={PortLogField(PortDisplayLocation(requestedTarget))}; source={PortLogField(PortDisplayLocation(source))}; rawLocation={PortLogField(PortDisplayLocation(rawLocation))}; normalizedLocation={PortLogField(PortDisplayLocation(normalizedLocation))}; displayLocation={PortLogField(PortDisplayLocation(displayLocation))}; blockingLocation={PortLogField(PortDisplayLocation(blockingLocation))}; currentButton={PortLogField(PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey)))}; nextButton={PortLogField(PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey)))}; queuedRetryTarget={PortLogField(PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey)))}; blockingReason={PortLogField(PortDisplayLocation(blockingReason))}; screenshotPath={PortLogField(PortDisplayLocation(screenshotPath))}";
+        }
+
+        private static string PortLogField(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? "Unknown"
+                : value.Replace(";", ",").Replace(Environment.NewLine, " ");
+        }
+
+        private void PortLogRouteFailureSummary(
+            string eventType,
+            string requestedTarget,
+            string source,
+            string rawLocation,
+            string normalizedLocation,
+            string displayLocation,
+            string blockingLocation,
+            string blockingReason,
+            string screenshotPath,
+            string likelyExplanation)
+        {
+            AppLogger.Info($"RouteFailureSummary: event={PortLogField(eventType)}; {PortRouteStateFields(requestedTarget, source, rawLocation, normalizedLocation, displayLocation, blockingLocation, blockingReason, screenshotPath)}; likelyExplanation={PortLogField(likelyExplanation)}");
+        }
+
+        private void PortLogRouteDebugSummary(
+            string eventType,
+            string requestedTarget,
+            string source,
+            string rawLocation,
+            string normalizedLocation,
+            string displayLocation,
+            string blockingLocation,
+            string blockingReason,
+            string likelyExplanation)
+        {
+            AppLogger.Info($"RouteDebugSummary: event={PortLogField(eventType)}; {PortRouteStateFields(requestedTarget, source, rawLocation, normalizedLocation, displayLocation, blockingLocation, blockingReason, "")}; likelyExplanation={PortLogField(likelyExplanation)}");
         }
 
         private (bool Blocked, string Reason) PortEvaluateTeleportBlock(string targetLocation, string rawLocation, string blockingLocation)
@@ -295,16 +392,65 @@ namespace GoblinFarmer
         {
             portAutomationBlockedByTeleportFailsafe = true;
             PortIncrementBlockedTeleports();
-            PortCaptureFailureScreenshot("TeleportBlocked");
+            string screenshotPath = PortCaptureFailureScreenshot("TeleportBlocked", "Teleport");
 
             string exactBlockedLocation = string.IsNullOrWhiteSpace(blockedLocation)
                 ? "Unknown"
                 : PortNormalizeBlockingLocation(blockedLocation).Trim();
 
             AppLogger.Info($"Teleport blocked location: raw={PortDisplayLocation(blockedLocation)}; normalized={exactBlockedLocation}; target={targetLocation}; source={source}");
+            PortLogRouteFailureSummary(
+                "TeleportBlocked",
+                targetLocation,
+                source,
+                blockedLocation,
+                exactBlockedLocation,
+                PortGetButtonLocationForDetectedLocation(blockedLocation),
+                blockedLocation,
+                portLastBlockingReason,
+                screenshotPath,
+                PortLikelyRouteExplanation(targetLocation, blockedLocation, portLastBlockingReason, false));
             PortSetAppStatus("Teleport Blocked");
             AddWorkflowStep($"Teleport blocked at {exactBlockedLocation}; target {targetLocation}");
             PortShowSplash($"Clear {exactBlockedLocation} before teleporting next.", 4500);
+        }
+
+        private string PortLikelyRouteExplanation(string requestedTarget, string rawLocation, string reason, bool cancelled)
+        {
+            if (cancelled)
+            {
+                return "Automation was cancelled before arrival confirmation completed; route state should remain on the previous confirmed location.";
+            }
+
+            string targetKey = PortLocationKey(requestedTarget);
+            string rawKey = PortLocationKey(rawLocation);
+            if (targetKey == PortLocationKey("Ancient Waterway") &&
+                (rawKey == PortLocationKey("Western Channel Level 1") ||
+                 rawKey == PortLocationKey("Western Channel Level 2") ||
+                 rawKey == PortLocationKey("Eastern Channel Level 1") ||
+                 rawKey == PortLocationKey("Eastern Channel Level 2")))
+            {
+                return "Ancient Waterway target confirmation requires the exact Ancient Waterway title; channel children are used for route/blocking decisions but should not complete the waypoint click.";
+            }
+
+            if (targetKey == PortLocationKey("Ancient Waterway") &&
+                rawKey == PortLocationKey("Ruined Cistern"))
+            {
+                return "Ruined Cistern is the intended City Of Caldeum sublocation that allows Ancient Waterway.";
+            }
+
+            if (targetKey == PortLocationKey("Battlefields") &&
+                rawKey == PortLocationKey("Black Canyon Mines"))
+            {
+                return "Black Canyon Mines is the Stinging Winds sublocation that allows Battlefields.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                return reason;
+            }
+
+            return "Review requested target, detected raw location, blocking reason, and screenshot together.";
         }
 
         private void PortNotifyAlreadyHere(string currentLocation, string targetLocation, string source)

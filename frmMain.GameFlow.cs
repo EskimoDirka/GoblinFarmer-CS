@@ -182,6 +182,7 @@ namespace GoblinFarmer
             AppLogger.Info("Exit Game flow end: success");
             AddWorkflowStep("Exit Game flow completed");
             PortSetAppStatus("Diablo Closed");
+            PortCaptureSuccessScreenshot("ExitGame", "ExitGameComplete");
             return true;
         }
 
@@ -238,6 +239,7 @@ namespace GoblinFarmer
 
         private bool PortStartDiablo(CancellationToken token)
         {
+            ResetBattleNetLaunchDiagnostics();
             portBattleNetLaunchFlowActive = true;
             Interlocked.Exchange(ref portLastLaunchFlowMissingLogTicks, 0);
 
@@ -267,9 +269,18 @@ namespace GoblinFarmer
                     return false;
                 }
 
-                AddWorkflowStep("Clicking Play button");
-                PortSleep(token, 2000);
-                CloseBattleNet();
+                if (battleNetPlayClickAcceptedByBattleNet)
+                {
+                    AddWorkflowStep("Battle.net accepted Play click");
+                    PortSleep(token, 2000);
+                    CloseBattleNet();
+                }
+                else
+                {
+                    AddWorkflowStep("Waiting for Diablo after unconfirmed Play click");
+                    AppLogger.Info("Battle.net close skipped before Diablo launch because app Play click was not confirmed accepted.");
+                }
+
                 PortSetAppStatus("Launching Diablo III");
 
                 Stopwatch sw = Stopwatch.StartNew();
@@ -285,6 +296,8 @@ namespace GoblinFarmer
                     {
                         AppLogger.Info($"Diablo process detected after {sw.ElapsedMilliseconds}ms");
                         PortSetAppStatus("Diablo III Started");
+                        PortRecordDiabloLaunchAfterBattleNet(sw.ElapsedMilliseconds);
+                        PortCaptureSuccessScreenshot("DiabloLaunch", "DiabloProcessDetected");
                         return true;
                     }
 
@@ -330,10 +343,12 @@ namespace GoblinFarmer
                     if (PortVerifyStartGameClick(token))
                     {
                         PortSetAppStatus("Start Game Clicked");
+                        PortCaptureSuccessScreenshot("StartGame", "StartGameClicked");
                         return true;
                     }
 
-                    PortCaptureFailureScreenshot("StartGameVerificationFailed");
+                    string screenshotPath = PortCaptureFailureScreenshot("StartGameVerificationFailed", "StartGame");
+                    PortLogStartGameVerificationFailure(attempts, maxAttempts, centerPoint, screenshotPath);
                     AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts} not verified; retrying after transition wait");
                     AddWorkflowStep("Start Game click not verified; retrying");
                     PortSleep(token, 900);
@@ -345,8 +360,32 @@ namespace GoblinFarmer
             MessageBox.Show("Could not find Diablo Start Game button.");
             PortSetAppStatus("Start Game Not Found");
             AppLogger.Info($"Start Game failed: attempts={attempts}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; loaded={PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible()}");
-            PortCaptureFailureScreenshot("StartGameButtonNotFound");
+            PortCaptureFailureScreenshot("StartGameButtonNotFound", "StartGame");
             return false;
+        }
+
+        private void PortLogStartGameVerificationFailure(int attempt, int maxAttempts, DrawingPoint clickPoint, string screenshotPath)
+        {
+            string imagePath = Img("Start Game", "Start Game Button.png");
+            Rectangle referenceRegion = PortScanRegion("StartGameButton", imagePath);
+            string screenRegion = "unavailable";
+            if (PortTryGetDiabloRect(out RECT rect))
+            {
+                Rectangle resolved = PortScaleReferenceRectangle(referenceRegion, rect);
+                screenRegion = $"{resolved.Left},{resolved.Top},{resolved.Width},{resolved.Height}";
+            }
+
+            bool cursorAvailable = GetCursorPos(out DrawingPoint cursor);
+            bool buttonVisible = FindImageInDiabloWindow(
+                imagePath,
+                out DrawingPoint visibleCenter,
+                confidence: PortStartGameButtonConfidence,
+                matchMode: ImageMatchMode.Color);
+            bool loaded = PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible() || PortPlayerIsInGame();
+            string likelyExplanation = buttonVisible
+                ? "Start Game button remained visible after click, so the menu did not transition before verification timeout, retry is expected."
+                : "Start Game button was no longer visible, but no loading or in-game evidence was detected before verification timeout.";
+            AppLogger.Info($"StartGameVerificationFailureSummary: attempt={attempt}/{maxAttempts}; clickPoint={clickPoint.X},{clickPoint.Y}; cursor={(cursorAvailable ? $"{cursor.X},{cursor.Y}" : "unavailable")}; scanRegionReference={FormatRectangle(referenceRegion)}; scanRegionScreen={screenRegion}; buttonVisible={buttonVisible}; visibleButtonCenter={(buttonVisible ? $"{visibleCenter.X},{visibleCenter.Y}" : "unavailable")}; loaded={loaded}; screenshotReason=StartGameVerificationFailed; screenshotPath={PortLogField(PortDisplayLocation(screenshotPath))}; likelyExplanation={PortLogField(likelyExplanation)}");
         }
 
         private bool PortVerifyStartGameClick(CancellationToken token)
@@ -452,6 +491,7 @@ namespace GoblinFarmer
                 }
 
                 AddWorkflowStep("Main menu confirmed");
+                PortCaptureSuccessScreenshot("ExitGame", "LeaveGameMainMenuConfirmed");
                 succeeded = true;
                 return true;
             }

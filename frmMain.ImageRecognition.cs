@@ -301,7 +301,13 @@ namespace GoblinFarmer
                 scans++;
                 lastResult = PortDetectCurrentLocationFromTemplatesDetailed(targetTemplates, $"specific wait: {targetLocation}", logPerf: false, threshold);
                 string detectedLocation = lastResult.Detected;
-                if (PortLocationMatches(detectedLocation, targetLocation))
+                bool arrivalMatch = PortLocationMatchesForArrival(detectedLocation, targetLocation);
+                if (!arrivalMatch && PortLocationMatches(detectedLocation, targetLocation))
+                {
+                    AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: grouped alias detected but arrival not accepted raw={PortDisplayLocation(detectedLocation)} normalized={PortDisplayLocation(PortNormalizeBlockingLocation(detectedLocation))} button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(detectedLocation))}; exact target confirmation still required");
+                }
+
+                if (arrivalMatch)
                 {
                     confirmedLocation = detectedLocation;
                     AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: matched raw={detectedLocation} normalized={PortDisplayLocation(PortNormalizeBlockingLocation(detectedLocation))} button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(detectedLocation))} with {targetTemplates.Count} templates after {scans} scans in {perf.ElapsedMilliseconds}ms; best={PortDisplayLocation(lastResult.BestName)} confidence={lastResult.BestConfidence:0.000}, second={PortDisplayLocation(lastResult.SecondName)} confidence={lastResult.SecondConfidence:0.000}, threshold={threshold:0.000}");

@@ -6,15 +6,16 @@ This README is intentionally high-level and user-facing. The detailed developer 
 
 ## Current Status
 
-The project is in an active reliability phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on combat mouse suppression over no-click UI regions, Battle.net window-relative Play button accuracy, Start Game reliability, repair timing, and full-route testing.
+The project is in an active reliability phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on session-relevant debug packages, full-run reconstruction, route failure summaries, Start Game verification diagnostics, Battle.net window-relative Play button accuracy, and repair timing.
 
-The current recommended validation target is combat no-click suppression, including Demon Hunter right-hold behavior, Witch Doctor held/channel behavior, and combat keyboard filtering. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
+The current recommended validation target is a full route run with `route-failure-summary.txt` and `debug-screenshot-manifest.txt` inspected afterward, especially Ancient Waterway/channel state, Caldeum-to-Waterway blocking, Stinging Winds arrival diagnostics, Black Canyon Mines/Battlefields evidence, Start Game retry explanation, and paired success/failure screenshots. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
 
 ## Stable Systems
 
 - Teleport Routing tracks the configured farming route and preserves raw, normalized, display, and blocking locations separately.
 - Teleport Blocking prevents known bad route transitions, such as blocked Cathedral, City of Caldeum, Ancient Waterway, and Stinging Winds cases.
 - Teleport Retry Logic preserves failed or interrupted manual and hotkey teleport state until arrival confirmation succeeds or the user explicitly changes course.
+- Ancient Waterway arrival confirmation requires the exact Ancient Waterway title, while channel child locations remain available for route and blocking decisions.
 - Combat Automation includes current Monk, Demon Hunter, and Witch Doctor support.
 - Combat no-click safety suppresses physical mouse clicks in known UI regions, including the extended lower-right hover menu area, without moving the cursor or stopping combat.
 - Demon Hunter right-hold starts only from a safe world area and remains held through hover/no-click regions to better match the old Python app feel.
@@ -22,14 +23,22 @@ The current recommended validation target is combat no-click suppression, includ
 - Witch Doctor held/channel input starts only from a safe world area and remains held through combat no-click regions without sending new mouse clicks.
 - Combat keyboard filtering suppresses physical `1`/`2` during combat while allowing injected automation key events through.
 - Battle.net Launch Flow can relaunch or focus Battle.net and uses window-relative tab/Play button image searches with full-screen fallback.
+- Battle.net Launch Diagnostics distinguish app-sent Play clicks, suspected manual Play clicks, Diablo launches without app Play clicks, successful Diablo launches after app clicks, and post-launch Battle.net close failures.
 - Start Game Flow is implemented and has passed prior validation, though image-recognition reliability is still being improved.
 - Repair and salvage workflows are implemented, with repair still using coordinate-based station clicks.
 - Runtime input cleanup tracks held mouse/Shift state to avoid unsafe post-exit releases.
+- Diagnostic screenshot capture records paired Diablo/App evidence for major workflow success and failure milestones.
+- Debug package screenshot selection is session-only, so stale screenshots from previous app runs are excluded while normal retention cleanup remains unchanged.
 
 ## Systems Under Active Improvement
 
-- Combat no-click suppression validation.
+- Full route validation with generated route-failure summaries.
+- Fresh runtime validation of paired success/failure screenshots and `debug-screenshot-manifest.txt`.
+- Validation that debug packages include only current-session screenshots and report package size/session details.
+- Ancient Waterway/channel route-state validation.
+- Caldeum-to-Waterway and Black Canyon Mines/Battlefields allowed-location proof in logs and debug packages.
 - Battle.net Play button detection across fullscreen, windowed, moved-window, and multi-monitor setups after cached-region recalibration.
+- Battle.net launch and post-launch close diagnostics validation.
 - Battle.net Play button fallback comparison diagnostics for region accuracy.
 - Start Game image recognition and possible cursor interference.
 - Repair and salvage timing validation.
@@ -40,8 +49,10 @@ The current recommended validation target is combat no-click suppression, includ
 
 - Diagnostic Overlay: compact read-only live status panel for location, route, combat, retry, failure, log, and screenshot state.
 - Route State Inspector: fuller read-only diagnostics tab for route decisions, blocking state, retry state, active workflow, Diablo focus/running status, and latest evidence paths.
-- Screenshot-On-Failure: captures failure screenshots for major workflow failures, including teleport, Start Game, Battle.net, repair, cancellation, and unexpected exception cases.
-- Debug Package Generator: packages logs, failure screenshots, normal debug screenshots, key docs, git status/log output, and a manifest for troubleshooting.
+- Screenshot-On-Failure: captures paired Diablo/App failure screenshots for major workflow failures, including teleport, Start Game, Battle.net, repair, cancellation, and unexpected exception cases.
+- Success Screenshot Capture: captures paired Diablo/App screenshots for sparse workflow milestones such as Battle.net Play clicked, Diablo launch detected, Start Game verified, teleport confirmed, repair/salvage complete, and Exit Game complete.
+- Debug Package Generator: packages logs, current-session success screenshots, current-session failure screenshots, current-session debug screenshots, key docs, git status/log output, `route-failure-summary.txt`, `debug-screenshot-manifest.txt`, package size/session details, and a manifest for troubleshooting.
+- Route/workflow summaries include Battle.net launch verdicts and separate post-launch close verdicts, so a successful app-click launch is not confused with a Battle.net close failure.
 
 Run the debug package generator from the project root:
 

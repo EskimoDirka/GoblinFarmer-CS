@@ -6,22 +6,23 @@
 
 * [ ] Fix City of Caldeum / Gates of Caldeum normalization.
 * [ ] Fix Western Channel Level 1 normalization.
-* [ ] Fix Western Channel Level 2 blocking behavior.
-* [ ] Fix Waterway button clearing next-target button color.
+* [x] Fix Western/Eastern Channel alias behavior so channel levels do not complete Ancient Waterway waypoint arrival confirmation.
+* [x] Fix Waterway button clearing next-target button color by requiring exact Ancient Waterway arrival confirmation before advancing state.
 * [ ] Fix Eastern Channel Level 2 routing to Waterway instead of Stinging Winds.
 * [ ] Fix Stinging Winds blocking rules.
 * [x] Fix manual teleport button retry after failed/interrupted button teleports.
 * [x] Fix ButtonRetry so manual retries bypass teleport blocking.
 * [x] Log and ignore same-button clicks while waiting for teleport arrival confirmation.
 * [ ] Verify Black Canyon Mines allows Battlefields.
+* [ ] Verify Ruined Cistern allows Ancient Waterway and City Of Caldeum/Sewers/Flooded Causeway remain blocked with clear summary explanations.
 * [ ] Verify all route logic matches Project_Status.md.
 
 ### Start Game Reliability
 
 * [ ] Investigate Start Game image recognition failures.
 * [ ] Determine if cursor is interfering with Start Game image detection.
-* [ ] Add Start Game diagnostic logging.
-* [ ] Capture debug screenshots when Start Game verification fails.
+* [x] Add Start Game diagnostic logging.
+* [x] Capture debug screenshots when Start Game verification fails.
 
 ### Testing
 
@@ -32,9 +33,29 @@
 * [ ] Validate Witch Doctor held/channel mode: start in a safe world area, move into SkillBar/ResourceGlobe/BottomRightButtons/ExtendedRightMenu no-click regions, confirm held input stays active without UI clicks, keyboard/Hex timers continue, and logs show `WitchDoctorHeldInputNoClickSuppressionActive`.
 * [ ] Validate combat keyboard filtering: while combat is active, physical `1`/`2` are suppressed, injected automation key rotation continues, and logs show physical `2` suppression if pressed by the user.
 * [ ] Complete full route test from Southern Highlands through Pandemonium Fortress Level 2.
+* [ ] Validate `route-failure-summary.txt` after the next fresh route run and confirm each block/cancel/failure includes target, source, locations, route state, screenshot, and likely explanation.
+* [ ] Validate `debug-screenshot-manifest.txt` after the next fresh run and confirm success/failure milestones have paired Diablo/App screenshots.
+* [ ] Validate `session-info.txt` after the next app launch and confirm debug packages filter screenshots from that session start.
+* [ ] Retest manual Ancient Waterway from Western/Eastern Channel levels and confirm current/next/retry state is preserved until exact Ancient Waterway confirmation.
 * [ ] Complete interrupted teleport testing.
 * [ ] Test failed/interrupted Royal Crypts button retry from Cathedral Level 1 and confirm retry preserves Cathedral/Royal Crypts state, bypasses manual-button blocking, and does not advance until arrival confirmation.
 * [ ] Confirm Battle.net Play button is found in recalibrated window-relative region `16,1256,292,75` before full-screen fallback.
+* [ ] Validate Battle.net launch diagnostics distinguish app Play click sent, Battle.net Play click accepted, Diablo launched because of the accepted app click, and manual Play suspected.
+* [ ] Validate Battle.net Play click waits for 1500ms stable Play detection at a same/similar point while Battle.net remains foreground before clicking.
+* [ ] Validate Battle.net Play click waits 500ms after stable detection, immediately reconfirms Play exists, then sends the click.
+* [ ] Validate `BattleNetPlayClickInputSequence` logs the click point, 100ms move settle, and 75ms mouse down-to-up timing.
+* [ ] Validate `BattleNetPlayClickRetry` retries up to two more times with 1500ms delay when Play remains visible and Diablo has not started after an unaccepted app click.
+* [ ] Validate `BattleNetPlayClickSentByApp` appears immediately after the app sends the mouse click and is not treated as a successful launch by itself.
+* [ ] Validate `BattleNetPlayClickAccepted` appears only after Battle.net UI transition, Battle.net window/process transition, or Diablo process start confirms the app Play click was accepted.
+* [ ] Validate `BattleNetManualPlaySuspected` appears if Diablo launches without `battleNetPlayClickAcceptedByBattleNet=True`, including when the app sent a click but acceptance was not verified.
+* [ ] Validate `BattleNetStillOpenAfterDiabloLaunch` appears if Battle.net remains open after Diablo launches.
+* [ ] Validate `BattleNetPostLaunchCloseSummary` marks Diablo launch successful only after an accepted app Play click while reporting Battle.net close requested/succeeded/failed/timed out separately.
+* [ ] Validate debug package workflow output reports app play click sent, app play click accepted, manual play suspected, Diablo launched, and Battle.net still open after launch as separate fields.
+* [ ] Validate route-failure-summary/debug workflow output has one Battle.net launch verdict and one post-launch close verdict, with no conflicting duplicate entries for the same event.
+* [ ] Validate `CaptureDebugScreenshot(actionName, reason, region)` saves failed/suspicious detection captures under `debug-screenshots/<category>` with timestamp, action, reason, and optional region in the filename.
+* [ ] Validate debug screenshot logs include `DebugScreenshotCaptured` metadata with action, reason, path, region, and window title.
+* [ ] Validate debug screenshot throttling logs `DebugScreenshotSkipped` and does not capture the same action/reason more than once every 10 seconds or more than 50 screenshots per app run.
+* [ ] Validate debug packages include current-session `debug-screenshots` folders and report the debug screenshot count.
 * [ ] If Battle.net Play button falls back, inspect fallback region diagnostics and update `BattleNetPlayButton` from the suggested same-size cached region if the fallback point is outside the resolved region.
 * [ ] Complete Exit Game workflow testing.
 * [ ] Confirm Exit Game no longer causes a post-Diablo desktop right-click or app close.
@@ -130,6 +151,7 @@ Requirements:
 
 * [x] Include latest log.
 * [x] Include latest failure screenshots.
+* [x] Include latest success screenshots.
 * [x] Include latest normal debug screenshots.
 * [x] Include Project_Status.md.
 * [x] Include TEST_CHECKLIST.md.
@@ -137,7 +159,10 @@ Requirements:
 * [x] Include current git status.
 * [x] Include recent git log.
 * [x] Include debug-package-manifest.txt.
+* [x] Include debug-screenshot-manifest.txt.
+* [x] Include package size, session start, session duration, total screenshot count, success screenshot count, failure screenshot count, and stale screenshot exclusions in debug-package-manifest.txt.
 * [x] Include latest screenshot failure type when available.
+* [x] Include route-failure-summary.txt.
 * [x] Use package filename timestamp with seconds.
 * [x] Display clear console summary.
 * [x] Warn for missing optional files or folders.
@@ -145,6 +170,8 @@ Requirements:
 * [x] Avoid huge build artifacts.
 * [x] Document how to run the script.
 * [x] Export zip package.
+* [x] Filter packaged screenshots to the current GoblinFarmer session only.
+* [x] Exclude stale screenshots from previous sessions while preserving retention cleanup behavior.
 
 Example output:
 
@@ -165,7 +192,42 @@ DebugPackages/
 * [x] Save screenshots automatically for unexpected exceptions.
 * [x] Show latest screenshot path in diagnostics.
 * [x] Show latest failure screenshot type in diagnostics.
+* [x] Log route failure summaries for teleport blocks, cancels, failed confirmations, allowed route-debug decisions, and Start Game verification failures.
+* [x] Capture paired Diablo/App screenshots for major workflow failures.
+* [x] Capture paired Diablo/App screenshots for `BattleNetPlayButtonNotClickedByApp`.
+* [x] Capture paired Diablo/App screenshots for `BattleNetManualPlaySuspected`.
+* [x] Capture paired Diablo/App screenshots for `BattleNetStillOpenAfterDiabloLaunch`.
 * [ ] Record image name, confidence, scan region, threshold, and best match information.
+
+### Success Screenshot Capture
+
+Status: Implemented for sparse workflow milestones; needs manual validation during a fresh run.
+
+* [x] Capture paired Diablo/App screenshots for Battle.net Play clicked.
+* [x] Capture paired Diablo/App screenshots for Diablo process detected.
+* [x] Capture paired Diablo/App screenshots for Start Game verified.
+* [x] Capture paired Diablo/App screenshots for teleport confirmed.
+* [x] Capture paired Diablo/App screenshots for repair complete.
+* [x] Capture paired Diablo/App screenshots for salvage complete or skipped.
+* [x] Capture paired Diablo/App screenshots for Leave Game main menu confirmed.
+* [x] Capture paired Diablo/App screenshots for Exit Game complete.
+* [x] Reuse the existing `Screenshots` directory and retention cleanup.
+* [x] Avoid combat loops and rapid polling loops.
+* [ ] Validate fresh runtime success screenshots in a real route run.
+
+### Package Size And Relevance
+
+Status: Implemented in debug package generation; needs validation after the next full fresh run.
+
+* [x] Track application session start in runtime `session-info.txt`.
+* [x] Prefer session metadata for screenshot cutoff.
+* [x] Fall back to latest log creation time for older runs without session metadata.
+* [x] Exclude screenshots older than session start from packages.
+* [x] Report package size in console output.
+* [x] Report package size in `debug-package-manifest.txt`.
+* [x] Report stale screenshot exclusion count.
+* [x] Keep existing screenshot retention cleanup unchanged.
+* [ ] Compare package size before/after on the next full route debug package.
 
 Failure screenshot types:
 
@@ -302,6 +364,9 @@ Benefits:
 * [x] Keep fullscreen search as fallback.
 * [x] Preserve existing scan-region cache/reference format.
 * [x] Log cached region, Battle.net window rect, resolved screen region, window-relative result, outside-window warnings, and fallback search.
+* [x] Track Battle.net app Play click state, click point, click timestamp, Diablo launch after app click, and Diablo launch without app click.
+* [x] Log suspected manual Battle.net Play intervention when Diablo launches without a recorded app Play click.
+* [x] Log and capture Battle.net still-open-after-launch evidence, then request existing safe Battle.net close behavior.
 * [ ] Manually test Battle.net detection when fullscreen, windowed, moved, and on another monitor.
 
 ### Folder Structure Cleanup
@@ -336,6 +401,13 @@ Include:
 * Runtime.
 * Last known issue.
 * Relevant screenshots.
+
+### Debug Package Attachments
+
+Future possibility:
+
+* [ ] Include optional voice recording attachments in debug packages.
+* [ ] Do not implement audio recording unless explicitly requested.
 
 ### Notifications
 

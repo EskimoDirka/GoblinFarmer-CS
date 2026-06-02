@@ -101,6 +101,26 @@ namespace GoblinFarmer
         private long portLaunchGraceUntilTicks;
         private long portLastLaunchGraceMissingLogTicks;
         private long portLastLaunchFlowMissingLogTicks;
+        private bool battleNetPlayClickSentByApp;
+        private bool battleNetPlayClickAcceptedByBattleNet;
+        private DrawingPoint battleNetPlayClickPoint = DrawingPoint.Empty;
+        private DateTime? battleNetPlayClickTimestamp;
+        private DateTime? battleNetPlayClickAcceptedTimestamp;
+        private string battleNetPlayClickAcceptedReason = "Unknown";
+        private bool diabloLaunchedAfterAppPlayClick;
+        private bool diabloLaunchedWithoutAppPlayClick;
+        private bool battleNetManualPlaySuspected;
+        private bool battleNetLaunchOutcomeRecorded;
+        private bool battleNetPostLaunchCloseEvaluated;
+        private bool battleNetStillOpenAfterLaunch;
+        private bool battleNetCloseRequested;
+        private bool battleNetCloseSucceeded;
+        private bool battleNetCloseTimedOut;
+        private bool battleNetCloseProcessRemaining;
+        private bool battleNetCloseVisibleWindowRemaining;
+        private readonly Dictionary<string, DateTime> portDebugScreenshotLastCaptured = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object portDebugScreenshotLock = new();
+        private int portDebugScreenshotCountThisRun;
         private int portConsecutiveDiabloMissingChecks;
         private bool portLaunchGraceStableLogged;
         private volatile bool portBattleNetLaunchFlowActive;
@@ -302,7 +322,7 @@ namespace GoblinFarmer
             {
                 if (token.IsCancellationRequested)
                 {
-                    PortCaptureFailureScreenshot("TeleportInterrupted");
+                    PortCaptureFailureScreenshot("TeleportInterrupted", "Teleport");
                 }
 
                 if (source.Equals("Button", StringComparison.OrdinalIgnoreCase) ||
@@ -314,6 +334,18 @@ namespace GoblinFarmer
                 {
                     AppLogger.Info($"Teleport failed/interrupted: requested={PortDisplayLocation(location)}; source={source}; cancelled={token.IsCancellationRequested}; blocked={portAutomationBlockedByTeleportFailsafe}; alreadyHere={portTeleportAlreadyHereNotified}; confirmedBefore={PortDisplayLocation(previousConfirmedLocation)}; confirmedAfter={PortDisplayLocation(portLastConfirmedLocation)}");
                 }
+
+                PortLogRouteFailureSummary(
+                    token.IsCancellationRequested ? "TeleportCancelled" : portAutomationBlockedByTeleportFailsafe ? "TeleportBlockedStatePreserved" : "TeleportFailed",
+                    location,
+                    source,
+                    portLastConfirmedLocation,
+                    PortNormalizeBlockingLocation(portLastConfirmedLocation),
+                    PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation),
+                    portLastConfirmedLocation,
+                    portAutomationBlockedByTeleportFailsafe ? portLastBlockingReason : token.IsCancellationRequested ? "cancelled during teleport or arrival confirmation" : "arrival confirmation did not complete",
+                    "",
+                    PortLikelyRouteExplanation(location, portLastConfirmedLocation, portLastBlockingReason, token.IsCancellationRequested));
 
                 if (!string.Equals(portLastConfirmedLocation, previousConfirmedLocation, StringComparison.OrdinalIgnoreCase))
                 {
@@ -379,7 +411,7 @@ namespace GoblinFarmer
                 bool ok = await Task.Run(() => work(token));
                 if (token.IsCancellationRequested)
                 {
-                    PortCaptureFailureScreenshot("WorkflowCancelled");
+                    PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
                     PortSetAppStatus("Cancelled");
                     AddWorkflowStep("Flow cancelled");
                 }
@@ -403,7 +435,7 @@ namespace GoblinFarmer
             }
             catch (OperationCanceledException)
             {
-                PortCaptureFailureScreenshot("WorkflowCancelled");
+                PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
                 PortSetAppStatus("Cancelled");
                 AddWorkflowStep("Flow cancelled");
             }
@@ -411,7 +443,7 @@ namespace GoblinFarmer
             {
                 AppLogger.Error("Unhandled exception in automation run.", ex);
                 PortIncrementFailures();
-                PortCaptureFailureScreenshot("UnexpectedException");
+                PortCaptureFailureScreenshot("UnexpectedException", "Workflow");
                 PortSetAppStatus("Flow Failed");
                 AddWorkflowStep("Flow failed");
                 MessageBox.Show(ex.Message);
@@ -589,9 +621,13 @@ namespace GoblinFarmer
             }
 
             PortSetAppStatus("Clicking Destination");
+            DrawingPoint destinationReferencePoint = new(target.X, target.Y);
+            DrawingPoint destinationClickPoint = PortScaleGamePoint(destinationReferencePoint);
             AppLogger.Info($"Teleport to {displayName}: clicking destination at {target.X},{target.Y}");
-            if (!PortSafeLeftClick(PortScaleGamePoint(new DrawingPoint(target.X, target.Y))))
+            AppLogger.Info($"Teleport click diagnostics: requested={displayName}; source={source}; currentMapAct={PortDisplayLocation(currentAct)}; targetAct={target.Act}; targetReferencePoint={target.X},{target.Y}; destinationClickPoint={destinationClickPoint.X},{destinationClickPoint.Y}; mapAlreadyOpen={mapAlreadyOpen}; verifyArrival={verifyArrival}; currentButton={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; nextButton={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}; queuedRetryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}");
+            if (!PortSafeLeftClick(destinationClickPoint))
             {
+                AppLogger.Info($"Teleport to {displayName} failed: destination click was unsafe; destinationClickPoint={destinationClickPoint.X},{destinationClickPoint.Y}; currentMapAct={PortDisplayLocation(currentAct)}; targetAct={target.Act}; targetReferencePoint={target.X},{target.Y}");
                 return false;
             }
 
@@ -621,11 +657,23 @@ namespace GoblinFarmer
             if (arrived)
             {
                 portLastConfirmedLocation = confirmedAfter;
+                PortCaptureSuccessScreenshot("Teleport", $"TeleportConfirmed_{displayName}");
             }
             else if (verifyArrival && PortFailureCount() == failuresBeforeArrivalConfirmation)
             {
                 PortIncrementFailures();
-                PortCaptureFailureScreenshot(token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout");
+                string screenshotPath = PortCaptureFailureScreenshot(token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout", "Teleport");
+                PortLogRouteFailureSummary(
+                    token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout",
+                    displayName,
+                    source,
+                    confirmedAfter,
+                    PortNormalizeBlockingLocation(confirmedAfter),
+                    PortGetButtonLocationForDetectedLocation(confirmedAfter),
+                    portLastConfirmedLocation,
+                    token.IsCancellationRequested ? "cancelled during arrival confirmation" : "arrival confirmation timed out",
+                    screenshotPath,
+                    $"{PortLikelyRouteExplanation(displayName, confirmedAfter, "", token.IsCancellationRequested)} Map diagnostics: currentMapAct={PortDisplayLocation(currentAct)}, targetAct={target.Act}, targetReferencePoint={target.X},{target.Y}, destinationClickPoint={destinationClickPoint.X},{destinationClickPoint.Y}.");
             }
 
             if (!arrived && verifyArrival)

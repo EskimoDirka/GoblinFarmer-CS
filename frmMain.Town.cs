@@ -24,6 +24,7 @@ namespace GoblinFarmer
                 PortSleep(token, 350);
             }
 
+            PortCaptureSuccessScreenshot("Repair", "RepairComplete");
             return true;
         }
 
@@ -47,7 +48,7 @@ namespace GoblinFarmer
 
             if (!PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: false))
             {
-                PortCaptureFailureScreenshot("RepairFailed");
+                PortCaptureFailureScreenshot("RepairFailed", "Repair");
                 return PortWorkflowFailed("Repairing");
             }
 
@@ -74,6 +75,7 @@ namespace GoblinFarmer
                     PortSleep(token, 350);
                 }
 
+                PortCaptureSuccessScreenshot("Salvage", "SalvageSkippedNoFilledSlots");
                 return true;
             }
 
@@ -124,6 +126,7 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep(salvagedCount == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {salvagedCount} slots clicked");
+            PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
         }
 
@@ -184,7 +187,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"Repair station wait/click timing: blacksmith menu not visible after {attempts} clicks in {sw.ElapsedMilliseconds}ms");
-            PortCaptureFailureScreenshot("RepairStationNotFound");
+            PortCaptureFailureScreenshot("RepairStationNotFound", "Repair");
             return false;
         }
 

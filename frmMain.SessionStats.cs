@@ -14,6 +14,7 @@ namespace GoblinFarmer
         private void PortInitializeSessionStats()
         {
             sessionStartTime = DateTime.Now;
+            PortWriteSessionMetadata();
             PortUpdateSessionStats();
         }
 
@@ -75,16 +76,44 @@ namespace GoblinFarmer
             AppLogger.Info("=====================================");
         }
 
-        private string PortCaptureFailureScreenshot(string failureType)
+        private void PortWriteSessionMetadata()
+        {
+            try
+            {
+                string metadataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-info.txt");
+                string[] lines =
+                [
+                    $"SessionStartLocal={sessionStartTime:O}",
+                    $"SessionStartUtc={sessionStartTime.ToUniversalTime():O}",
+                    $"ProcessId={Environment.ProcessId}",
+                    $"BaseDirectory={AppDomain.CurrentDomain.BaseDirectory}"
+                ];
+                File.WriteAllLines(metadataPath, lines);
+                AppLogger.Info($"Session metadata written: {metadataPath}; sessionStartLocal={sessionStartTime:O}");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Session metadata write failed.", ex);
+            }
+        }
+
+        private string PortCaptureFailureScreenshot(string failureType, string workflow = "Workflow")
         {
             portDiagnosticLatestFailureScreenshotType = string.IsNullOrWhiteSpace(failureType) ? "Unknown" : failureType;
-            string path = PortCaptureDebugScreenshot(portDiagnosticLatestFailureScreenshotType);
-            if (!string.IsNullOrWhiteSpace(path))
+            CaptureDebugScreenshot(workflow, portDiagnosticLatestFailureScreenshotType);
+            PortScreenshotPair pair = PortCaptureDiagnosticScreenshotPair("Failure", workflow, portDiagnosticLatestFailureScreenshotType);
+            if (!string.IsNullOrWhiteSpace(pair.DiabloPath) || !string.IsNullOrWhiteSpace(pair.AppPath))
             {
+                string path = !string.IsNullOrWhiteSpace(pair.DiabloPath) ? pair.DiabloPath : pair.AppPath;
                 AppLogger.Info($"Failure screenshot saved: type={portDiagnosticLatestFailureScreenshotType}; path={path}");
             }
 
-            return path;
+            return pair.DiabloPath;
+        }
+
+        private PortScreenshotPair PortCaptureSuccessScreenshot(string workflow, string action)
+        {
+            return PortCaptureDiagnosticScreenshotPair("Success", workflow, action);
         }
 
         private string PortCaptureDebugScreenshot(string reason)
@@ -152,6 +181,118 @@ namespace GoblinFarmer
                 AppLogger.Error($"Debug screenshot capture failed: {reason}", ex);
                 return "";
             }
+        }
+
+        private PortScreenshotPair PortCaptureDiagnosticScreenshotPair(string outcome, string workflow, string action)
+        {
+            try
+            {
+                if (chkKeepDebugScreenshots != null && !chkKeepDebugScreenshots.Checked)
+                {
+                    AppLogger.Info($"Diagnostic screenshot pair skipped: disabled by Keep Debug Screenshots setting; outcome={outcome}; workflow={workflow}; action={action}");
+                    return new PortScreenshotPair("", "");
+                }
+
+                string screenshotDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Screenshots");
+                Directory.CreateDirectory(screenshotDirectory);
+
+                DateTime timestamp = DateTime.Now;
+                string safeOutcome = PortSafeScreenshotName(outcome, "Debug");
+                string safeWorkflow = PortSafeScreenshotName(workflow, "Workflow");
+                string safeAction = PortSafeScreenshotName(action, "Action");
+                string filePrefix = $"{timestamp:yyyy-MM-dd_HHmmss_fff}_{safeOutcome}_{safeWorkflow}_{safeAction}";
+
+                string diabloPath = Path.Combine(screenshotDirectory, $"{filePrefix}_Diablo.png");
+                string appPath = Path.Combine(screenshotDirectory, $"{filePrefix}_App.png");
+
+                string savedDiabloPath = PortCaptureDiabloScreenshotToFile(diabloPath, $"{outcome}:{workflow}:{action}");
+                string savedAppPath = PortCaptureAppScreenshotToFile(appPath, $"{outcome}:{workflow}:{action}");
+
+                string latestPath = !string.IsNullOrWhiteSpace(savedDiabloPath) ? savedDiabloPath : savedAppPath;
+                if (!string.IsNullOrWhiteSpace(latestPath))
+                {
+                    portDiagnosticLatestScreenshotPath = latestPath;
+                }
+
+                AppLogger.Info($"Diagnostic screenshot pair saved: timestamp={timestamp:yyyy-MM-dd HH:mm:ss.fff}; outcome={safeOutcome}; workflow={safeWorkflow}; action={safeAction}; diablo={PortDisplayLocation(savedDiabloPath)}; app={PortDisplayLocation(savedAppPath)}");
+                return new PortScreenshotPair(savedDiabloPath, savedAppPath);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Diagnostic screenshot pair capture failed: outcome={outcome}; workflow={workflow}; action={action}", ex);
+                return new PortScreenshotPair("", "");
+            }
+        }
+
+        private string PortCaptureDiabloScreenshotToFile(string path, string reason)
+        {
+            IntPtr diabloWindow = FindDiabloWindow();
+            RECT rect;
+            if (diabloWindow != IntPtr.Zero && PortTryGetDiabloClientScreenRect(diabloWindow, reason, out rect))
+            {
+                AppLogger.Info($"Diagnostic screenshot capturing Diablo client: reason={reason}");
+            }
+            else
+            {
+                Rectangle screen = SystemInformation.VirtualScreen;
+                rect = new RECT
+                {
+                    Left = screen.Left,
+                    Top = screen.Top,
+                    Right = screen.Right,
+                    Bottom = screen.Bottom,
+                };
+                AppLogger.Info($"Diagnostic screenshot capturing virtual screen fallback for Diablo evidence: reason={reason}; bounds={screen.Left},{screen.Top},{screen.Width},{screen.Height}");
+            }
+
+            return PortCaptureScreenRectangleToFile(rect, path, reason);
+        }
+
+        private string PortCaptureAppScreenshotToFile(string path, string reason)
+        {
+            if (InvokeRequired)
+            {
+                return (string)Invoke(new Func<string>(() => PortCaptureAppScreenshotToFile(path, reason)));
+            }
+
+            Rectangle bounds = Bounds;
+            RECT rect = new()
+            {
+                Left = bounds.Left,
+                Top = bounds.Top,
+                Right = bounds.Right,
+                Bottom = bounds.Bottom,
+            };
+
+            AppLogger.Info($"Diagnostic screenshot capturing app window: reason={reason}; bounds={bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height}");
+            return PortCaptureScreenRectangleToFile(rect, path, reason);
+        }
+
+        private string PortCaptureScreenRectangleToFile(RECT rect, string path, string reason)
+        {
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            if (width <= 0 || height <= 0)
+            {
+                AppLogger.Info($"Diagnostic screenshot skipped: capture rectangle invalid; reason={reason}; path={path}");
+                return "";
+            }
+
+            using Bitmap screenshot = new(width, height);
+            using (Graphics graphics = Graphics.FromImage(screenshot))
+            {
+                graphics.CopyFromScreen(rect.Left, rect.Top, 0, 0, screenshot.Size);
+            }
+
+            screenshot.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            return path;
+        }
+
+        private static string PortSafeScreenshotName(string value, string fallback)
+        {
+            string safe = string.Join("_", (value ?? "").Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+            safe = safe.Replace(" ", "");
+            return string.IsNullOrWhiteSpace(safe) ? fallback : safe;
         }
 
         private bool PortTryGetDiabloClientScreenRect(IntPtr diabloWindow, string reason, out RECT rect)
@@ -236,5 +377,7 @@ namespace GoblinFarmer
                 AppLogger.Error("Screenshot retention cleanup failed.", ex);
             }
         }
+
+        private sealed record PortScreenshotPair(string DiabloPath, string AppPath);
     }
 }

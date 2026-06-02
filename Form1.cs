@@ -54,6 +54,9 @@ namespace GoblinFarmer
         [DllImport("user32.dll")]
         private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
         [DllImport("user32.dll")]
         private static extern bool ClientToScreen(IntPtr hWnd, ref DrawingPoint lpPoint);
 
@@ -99,6 +102,11 @@ namespace GoblinFarmer
             if (diabloRunning)
             {
                 portConsecutiveDiabloMissingChecks = 0;
+                if (portBattleNetLaunchFlowActive && !diabloLaunchedAfterAppPlayClick && !diabloLaunchedWithoutAppPlayClick)
+                {
+                    PortRecordDiabloLaunchAfterBattleNet(-1);
+                }
+
                 if (Interlocked.Read(ref portLaunchGraceUntilTicks) > 0 && !portLaunchGraceStableLogged)
                 {
                     portLaunchGraceStableLogged = true;
@@ -249,6 +257,7 @@ namespace GoblinFarmer
         // Main method to start Diablo III =========================================
         private bool StartDiablo()
         {
+            ResetBattleNetLaunchDiagnostics();
             portBattleNetLaunchFlowActive = true;
             Interlocked.Exchange(ref portLastLaunchFlowMissingLogTicks, 0);
 
@@ -277,9 +286,17 @@ namespace GoblinFarmer
                     return false;
                 }
 
-                AddWorkflowStep("Clicking Play button");
-                Thread.Sleep(2000);
-                CloseBattleNet();
+                if (battleNetPlayClickAcceptedByBattleNet)
+                {
+                    AddWorkflowStep("Battle.net accepted Play click");
+                    Thread.Sleep(2000);
+                    CloseBattleNet();
+                }
+                else
+                {
+                    AddWorkflowStep("Waiting for Diablo after unconfirmed Play click");
+                    AppLogger.Info("Battle.net close skipped before Diablo launch because app Play click was not confirmed accepted.");
+                }
 
                 SetAppStatus("Launching Diablo III");
 
@@ -292,6 +309,7 @@ namespace GoblinFarmer
                     {
                         AppLogger.Info($"Diablo process detected after {sw.ElapsedMilliseconds}ms");
                         SetAppStatus("Diablo III Started");
+                        PortRecordDiabloLaunchAfterBattleNet(sw.ElapsedMilliseconds);
                         return true;
                     }
 
@@ -406,7 +424,7 @@ namespace GoblinFarmer
             AddWorkflowStep("Selecting Diablo III in Battle.net");
             if (!ClickBattleNetDiabloTab())
             {
-                PortCaptureFailureScreenshot("DiabloTabNotFound");
+                PortCaptureFailureScreenshot("DiabloTabNotFound", "BattleNetLaunch");
                 AppLogger.Info("Diablo III tab not clicked; continuing to Battle.net Play button search");
             }
 
@@ -567,6 +585,13 @@ namespace GoblinFarmer
                     return false;
                 }
 
+                if (IsDiabloRunning())
+                {
+                    PortRecordDiabloLaunchAfterBattleNet(sw.ElapsedMilliseconds);
+                    AppLogger.Info($"Play button wait ended because Diablo is already running: elapsed={sw.ElapsedMilliseconds}ms; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}");
+                    return battleNetPlayClickSentByApp;
+                }
+
                 if (TryFindBattleNetImage(
                     imagePath,
                     "BattleNetPlayButton",
@@ -576,8 +601,20 @@ namespace GoblinFarmer
                 {
                     AppLogger.Info($"Play button found: point={centerPoint.X},{centerPoint.Y}; elapsed={sw.ElapsedMilliseconds}ms");
                     LeftClick(centerPoint);
-                    AppLogger.Info($"Play button clicked: point={centerPoint.X},{centerPoint.Y}");
+                    PortRecordBattleNetPlayClickByApp(centerPoint);
+                    AppLogger.Info($"Play button click sent: point={centerPoint.X},{centerPoint.Y}");
                     PortStartLaunchGracePeriod("Battle.net Play clicked");
+                    bool accepted = WaitForBattleNetPlayClickAccepted(
+                        imagePath,
+                        confidence,
+                        token,
+                        timeoutMs: 10000,
+                        clickElapsedMs: sw.ElapsedMilliseconds);
+                    if (!accepted)
+                    {
+                        AppLogger.Info($"Battle.net Play click acceptance not verified before timeout: battleNetPlayClickSentByApp=True; battleNetPlayClickAcceptedByBattleNet=False; elapsedMs={sw.ElapsedMilliseconds}");
+                    }
+
                     return true;
                 }
 
@@ -585,8 +622,169 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"Play button not found before timeout: timeoutMs={timeoutMs}");
-            PortCaptureFailureScreenshot("BattleNetPlayButtonNotFound");
+            PortCaptureFailureScreenshot("BattleNetPlayButtonNotFound", "BattleNetLaunch");
+            string notClickedScreenshotPath = PortCaptureFailureScreenshot("BattleNetPlayButtonNotClickedByApp", "BattleNetLaunch");
+            AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetPlayButtonNotClickedByApp; launchSuccessful=False; battleNetPlayClickSentByApp=False; battleNetPlayClickAcceptedByBattleNet=False; battleNetPlayClickAcceptedReason=Unknown; battleNetPlayClickPoint=Unknown; battleNetPlayClickTimestamp=Unknown; battleNetPlayClickAcceptedTimestamp=Unknown; diabloLaunched=False; diabloLaunchedAfterAppPlayClick=False; diabloLaunchedWithoutAppPlayClick=False; battleNetManualPlaySuspected=False; {PortBattleNetCloseSummaryFields()}; elapsedMs={sw.ElapsedMilliseconds}; screenshotPath={PortLogField(PortDisplayLocation(notClickedScreenshotPath))}; likelyExplanation=GoblinFarmer did not find and click Battle.net Play before timeout.");
             return false;
+        }
+
+        private bool WaitForBattleNetPlayClickAccepted(
+            string imagePath,
+            double confidence,
+            CancellationToken token,
+            int timeoutMs,
+            long clickElapsedMs)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            int consecutivePlayButtonMissing = 0;
+            AppLogger.Info($"Battle.net Play click acceptance verification started: timeoutMs={timeoutMs}; clickElapsedMs={clickElapsedMs}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}");
+
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                if (IsDiabloRunning())
+                {
+                    PortRecordBattleNetPlayClickAccepted("Diablo process started after app Play click", clickElapsedMs + sw.ElapsedMilliseconds);
+                    return true;
+                }
+
+                IntPtr battleNetWindow = FindBattleNetWindow();
+                bool battleNetRunning = IsBattleNetRunning();
+                if (battleNetWindow == IntPtr.Zero || !battleNetRunning)
+                {
+                    PortRecordBattleNetPlayClickAccepted("Battle.net launch transition observed after app Play click", clickElapsedMs + sw.ElapsedMilliseconds);
+                    return true;
+                }
+
+                bool playButtonStillVisible = TryFindBattleNetImage(
+                    imagePath,
+                    "BattleNetPlayButton",
+                    "Battle.net Play button post-click verification",
+                    out _,
+                    confidence);
+                if (!playButtonStillVisible)
+                {
+                    consecutivePlayButtonMissing++;
+                    if (consecutivePlayButtonMissing >= 2)
+                    {
+                        PortRecordBattleNetPlayClickAccepted("Battle.net Play button disappeared after app Play click", clickElapsedMs + sw.ElapsedMilliseconds);
+                        return true;
+                    }
+                }
+                else
+                {
+                    consecutivePlayButtonMissing = 0;
+                }
+
+                PortSleepOrThreadSleep(token, 250);
+            }
+
+            return false;
+        }
+
+        private void ResetBattleNetLaunchDiagnostics()
+        {
+            battleNetPlayClickSentByApp = false;
+            battleNetPlayClickAcceptedByBattleNet = false;
+            battleNetPlayClickPoint = DrawingPoint.Empty;
+            battleNetPlayClickTimestamp = null;
+            battleNetPlayClickAcceptedTimestamp = null;
+            battleNetPlayClickAcceptedReason = "Unknown";
+            diabloLaunchedAfterAppPlayClick = false;
+            diabloLaunchedWithoutAppPlayClick = false;
+            battleNetManualPlaySuspected = false;
+            battleNetLaunchOutcomeRecorded = false;
+            battleNetPostLaunchCloseEvaluated = false;
+            battleNetStillOpenAfterLaunch = false;
+            battleNetCloseRequested = false;
+            battleNetCloseSucceeded = false;
+            battleNetCloseTimedOut = false;
+            battleNetCloseProcessRemaining = false;
+            battleNetCloseVisibleWindowRemaining = false;
+            AppLogger.Info("BattleNetLaunchStateReset: battleNetPlayClickSentByApp=False; battleNetPlayClickAcceptedByBattleNet=False; battleNetPlayClickPoint=Unknown; battleNetPlayClickTimestamp=Unknown; battleNetPlayClickAcceptedTimestamp=Unknown; diabloLaunchedAfterAppPlayClick=False; diabloLaunchedWithoutAppPlayClick=False; battleNetManualPlaySuspected=False");
+        }
+
+        private void PortRecordBattleNetPlayClickByApp(DrawingPoint point)
+        {
+            battleNetPlayClickSentByApp = true;
+            battleNetPlayClickPoint = point;
+            battleNetPlayClickTimestamp = DateTime.Now;
+            AppLogger.Info($"BattleNetPlayClickSentByApp: battleNetPlayClickSentByApp=True; battleNetPlayClickAcceptedByBattleNet=False; battleNetPlayClickPoint={point.X},{point.Y}; battleNetPlayClickTimestamp={battleNetPlayClickTimestamp:O}");
+        }
+
+        private void PortRecordBattleNetPlayClickAccepted(string reason, long elapsedMs)
+        {
+            if (battleNetPlayClickAcceptedByBattleNet)
+            {
+                return;
+            }
+
+            battleNetPlayClickAcceptedByBattleNet = true;
+            battleNetPlayClickAcceptedTimestamp = DateTime.Now;
+            battleNetPlayClickAcceptedReason = reason;
+            AppLogger.Info($"BattleNetPlayClickAccepted: battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet=True; battleNetPlayClickAcceptedReason={PortLogField(reason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={battleNetPlayClickAcceptedTimestamp:O}; elapsedMs={elapsedMs}");
+            PortCaptureSuccessScreenshot("BattleNetLaunch", "BattleNetPlayClickAccepted");
+        }
+
+        private void PortRecordDiabloLaunchAfterBattleNet(long elapsedMs)
+        {
+            if (battleNetLaunchOutcomeRecorded)
+            {
+                return;
+            }
+
+            battleNetLaunchOutcomeRecorded = true;
+
+            if (battleNetPlayClickAcceptedByBattleNet)
+            {
+                diabloLaunchedAfterAppPlayClick = true;
+                diabloLaunchedWithoutAppPlayClick = false;
+                battleNetManualPlaySuspected = false;
+                AppLogger.Info($"BattleNetLaunchSummary: event=DiabloLaunchedBecauseOfAppClick; launchSuccessful=True; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet=True; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}; battleNetPlayClickTimestamp={battleNetPlayClickTimestamp:O}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick=True; diabloLaunchedWithoutAppPlayClick=False; battleNetManualPlaySuspected=False; {PortBattleNetCloseSummaryFields()}; elapsedMs={elapsedMs}; likelyExplanation=App sent Battle.net Play click, Battle.net accepted it, then Diablo launched.");
+            }
+            else
+            {
+                diabloLaunchedAfterAppPlayClick = false;
+                diabloLaunchedWithoutAppPlayClick = true;
+                battleNetManualPlaySuspected = true;
+                string manualScreenshotPath = PortCaptureFailureScreenshot("BattleNetManualPlaySuspected", "BattleNetLaunch");
+                if (!battleNetPlayClickSentByApp)
+                {
+                    PortCaptureFailureScreenshot("BattleNetPlayButtonNotClickedByApp", "BattleNetLaunch");
+                }
+
+                const string manualReason = "Diablo launched but app Play click was not confirmed accepted";
+                AppLogger.Info($"BattleNetManualPlaySuspected: reason={PortLogField(manualReason)}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet=False; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick=False; diabloLaunchedWithoutAppPlayClick=True; battleNetManualPlaySuspected=True; elapsedMs={elapsedMs}; screenshotPath={PortLogField(PortDisplayLocation(manualScreenshotPath))}; likelyExplanation={PortLogField(manualReason)}.");
+                AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetManualPlaySuspected; launchSuccessful=False; reason={PortLogField(manualReason)}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet=False; battleNetPlayClickAcceptedReason=Unknown; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp=Unknown; diabloLaunched=True; diabloLaunchedAfterAppPlayClick=False; diabloLaunchedWithoutAppPlayClick=True; battleNetManualPlaySuspected=True; {PortBattleNetCloseSummaryFields()}; elapsedMs={elapsedMs}; screenshotPath={PortLogField(PortDisplayLocation(manualScreenshotPath))}; likelyExplanation={PortLogField(manualReason)}.");
+            }
+
+            PortLogBattleNetStillOpenAfterDiabloLaunch();
+        }
+
+        private void PortLogBattleNetStillOpenAfterDiabloLaunch()
+        {
+            IntPtr battleNetWindow = FindBattleNetWindow();
+            bool battleNetStillOpen = battleNetWindow != IntPtr.Zero || IsBattleNetRunning();
+            battleNetStillOpenAfterLaunch = battleNetStillOpen;
+            if (!battleNetStillOpen)
+            {
+                AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetClosedAfterDiabloLaunch; launchSuccessful={battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick}; battleNetStillOpenAfterLaunch=False; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; {PortBattleNetCloseSummaryFields()}; likelyExplanation=Battle.net was not visible/running after Diablo launch.");
+                return;
+            }
+
+            string stillOpenScreenshotPath = PortCaptureFailureScreenshot("BattleNetStillOpenAfterDiabloLaunch", "BattleNetLaunch");
+            AppLogger.Info($"BattleNetStillOpenAfterDiabloLaunch: battleNetStillOpenAfterLaunch=True; battleNetWindow=0x{battleNetWindow.ToInt64():X}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; screenshotPath={PortLogField(PortDisplayLocation(stillOpenScreenshotPath))}; likelyExplanation=Battle.net remained open after Diablo launched. Existing close behavior will be requested again.");
+            AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetStillOpenAfterDiabloLaunch; launchSuccessful={battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick}; battleNetStillOpenAfterLaunch=True; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; {PortBattleNetCloseSummaryFields()}; screenshotPath={PortLogField(PortDisplayLocation(stillOpenScreenshotPath))}; likelyExplanation=Battle.net remained open after Diablo launch.");
+            CloseBattleNet();
+        }
+
+        private string PortBattleNetCloseSummaryFields()
+        {
+            return $"battleNetCloseRequested={battleNetCloseRequested}; battleNetCloseSucceeded={battleNetCloseSucceeded}; battleNetCloseTimedOut={battleNetCloseTimedOut}; battleNetCloseProcessRemaining={battleNetCloseProcessRemaining}; battleNetCloseVisibleWindowRemaining={battleNetCloseVisibleWindowRemaining}";
         }
 
         private bool TryFindBattleNetImage(
@@ -601,6 +799,7 @@ namespace GoblinFarmer
             if (!File.Exists(imagePath))
             {
                 AppLogger.Info($"{label} image missing: {imagePath}");
+                CaptureDebugScreenshot("BattleNet", $"{label} image missing");
                 return false;
             }
 
@@ -622,6 +821,7 @@ namespace GoblinFarmer
                     }
 
                     AppLogger.Info($"{label} not found in Battle.net window-relative region: region={FormatRectangle(screenRegion)}");
+                    CaptureDebugScreenshot("BattleNet", $"{label} not found in window-relative region", screenRegion);
                 }
 
                 AppLogger.Info($"{label} fallback full-screen search used after Battle.net region miss");
@@ -629,12 +829,18 @@ namespace GoblinFarmer
             else
             {
                 AppLogger.Info($"{label} scan region unavailable: key={scanRegionKey}; fallback full-screen search used");
+                CaptureDebugScreenshot("BattleNet", $"{label} scan region unavailable");
             }
 
             bool found = FindImageOnScreen(imagePath, out centerPoint, confidence);
             AppLogger.Info(found
                 ? $"{label} found by fallback full-screen search: point={centerPoint.X},{centerPoint.Y}"
                 : $"{label} not found by fallback full-screen search");
+            if (!found)
+            {
+                CaptureDebugScreenshot("BattleNet", $"{label} not found by fallback full-screen search");
+            }
+
             if (found && referenceRegion.HasValue)
             {
                 LogBattleNetFallbackRegionDiagnostic(label, referenceRegion.Value, resolvedBattleNetRect, resolvedScreenRegion, centerPoint);
@@ -649,6 +855,7 @@ namespace GoblinFarmer
             battleNetRect = Rectangle.Empty;
             if (!TryGetFocusedBattleNetWindowRect(label, out battleNetRect))
             {
+                CaptureDebugScreenshot("BattleNet", $"{label} Battle.net window unavailable");
                 return false;
             }
 
@@ -661,6 +868,7 @@ namespace GoblinFarmer
                 cachedRegion.Bottom > battleNetRect.Height)
             {
                 AppLogger.Info($"WARNING {label} cached Battle.net scan region outside window; cached={FormatRectangle(cachedRegion)}; windowRect={FormatRectangle(battleNetRect)}; fallback full-screen search will be used");
+                CaptureDebugScreenshot("BattleNet", $"{label} cached scan region outside window");
                 return false;
             }
 
@@ -771,6 +979,151 @@ namespace GoblinFarmer
             return true;
         }
 
+        private string CaptureDebugScreenshot(string actionName, string reason, Rectangle? region = null)
+        {
+            actionName = string.IsNullOrWhiteSpace(actionName) ? "Unknown" : actionName.Trim();
+            reason = string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason.Trim();
+            string throttleKey = $"{actionName}|{reason}";
+            Rectangle captureRegion = region.HasValue
+                ? Rectangle.Intersect(SystemInformation.VirtualScreen, region.Value)
+                : SystemInformation.VirtualScreen;
+            string regionText = region.HasValue ? FormatRectangle(region.Value) : "full-screen";
+
+            if (captureRegion.Width <= 0 || captureRegion.Height <= 0)
+            {
+                AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=empty or invalid region");
+                return "";
+            }
+
+            lock (portDebugScreenshotLock)
+            {
+                if (portDebugScreenshotCountThisRun >= 50)
+                {
+                    AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=run cap reached");
+                    return "";
+                }
+
+                if (portDebugScreenshotLastCaptured.TryGetValue(throttleKey, out DateTime lastCaptured) &&
+                    DateTime.Now - lastCaptured < TimeSpan.FromSeconds(10))
+                {
+                    AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=throttled");
+                    return "";
+                }
+
+                portDebugScreenshotLastCaptured[throttleKey] = DateTime.Now;
+                portDebugScreenshotCountThisRun++;
+            }
+
+            string windowTitle = PortForegroundWindowTitle();
+
+            try
+            {
+                string category = PortDebugScreenshotCategory(actionName);
+                string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "debug-screenshots", category);
+                Directory.CreateDirectory(directory);
+
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+                string regionSuffix = region.HasValue ? $"_{PortSafeFileName(regionText)}" : "";
+                string fileName = $"{timestamp}_{PortSafeFileName(actionName)}_{PortSafeFileName(reason)}{regionSuffix}.png";
+                string path = Path.Combine(directory, fileName);
+
+                using Bitmap screenshot = new(captureRegion.Width, captureRegion.Height);
+                using (Graphics graphics = Graphics.FromImage(screenshot))
+                {
+                    graphics.CopyFromScreen(
+                        captureRegion.Left,
+                        captureRegion.Top,
+                        0,
+                        0,
+                        screenshot.Size);
+                }
+
+                screenshot.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                AppLogger.Info($"DebugScreenshotCaptured: action={PortLogField(actionName)}; reason={PortLogField(reason)}; path={PortLogField(path)}; region={PortLogField(regionText)}; windowTitle={PortLogField(windowTitle)}");
+                return path;
+            }
+            catch (Exception ex)
+            {
+                lock (portDebugScreenshotLock)
+                {
+                    portDebugScreenshotCountThisRun = Math.Max(0, portDebugScreenshotCountThisRun - 1);
+                }
+
+                AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=capture failed: {PortLogField(ex.Message)}");
+                return "";
+            }
+        }
+
+        private static string PortDebugScreenshotCategory(string actionName)
+        {
+            if (actionName.Contains("BattleNet", StringComparison.OrdinalIgnoreCase) ||
+                actionName.Contains("Battle.net", StringComparison.OrdinalIgnoreCase))
+            {
+                return "BattleNet";
+            }
+
+            if (actionName.Contains("DiabloLaunch", StringComparison.OrdinalIgnoreCase) ||
+                actionName.Contains("Diablo Launch", StringComparison.OrdinalIgnoreCase))
+            {
+                return "DiabloLaunch";
+            }
+
+            if (actionName.Contains("Teleport", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Teleport";
+            }
+
+            if (actionName.Contains("Repair", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Repair";
+            }
+
+            if (actionName.Contains("Salvage", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Salvage";
+            }
+
+            if (actionName.Contains("Stash", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Stash";
+            }
+
+            if (actionName.Contains("StartGame", StringComparison.OrdinalIgnoreCase) ||
+                actionName.Contains("Start Game", StringComparison.OrdinalIgnoreCase))
+            {
+                return "StartGame";
+            }
+
+            return "Unknown";
+        }
+
+        private static string PortSafeFileName(string value)
+        {
+            string safe = string.IsNullOrWhiteSpace(value) ? "Unknown" : value.Trim();
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+            {
+                safe = safe.Replace(invalid, '_');
+            }
+
+            safe = System.Text.RegularExpressions.Regex.Replace(safe, @"\s+", "_");
+            safe = System.Text.RegularExpressions.Regex.Replace(safe, @"[^A-Za-z0-9_.-]+", "_");
+            safe = safe.Trim('_');
+            return string.IsNullOrWhiteSpace(safe) ? "Unknown" : safe;
+        }
+
+        private string PortForegroundWindowTitle()
+        {
+            IntPtr foreground = GetForegroundWindow();
+            if (foreground == IntPtr.Zero)
+            {
+                return "Unknown";
+            }
+
+            System.Text.StringBuilder title = new(256);
+            int length = GetWindowText(foreground, title, title.Capacity);
+            return length > 0 ? title.ToString() : "Unknown";
+        }
+
         private Rectangle PortScaleReferenceRectangleToVirtualScreen(Rectangle rectangle)
         {
             Rectangle screen = SystemInformation.VirtualScreen;
@@ -832,16 +1185,48 @@ namespace GoblinFarmer
         // Close Battlnet after starting Diablo
         private void CloseBattleNet()
         {
+            int closeRequested = 0;
             foreach (Process process in Process.GetProcessesByName("Battle.net"))
             {
                 try
                 {
                     process.CloseMainWindow();
+                    closeRequested++;
                 }
                 catch
                 {
                     // Ignore if Battle.net cannot be closed.
                 }
+            }
+
+            battleNetCloseRequested = closeRequested > 0;
+            AppLogger.Info($"Battle.net close requested: processes={closeRequested}; battleNetCloseRequested={battleNetCloseRequested}");
+
+            Stopwatch sw = Stopwatch.StartNew();
+            bool stillRunning;
+            IntPtr stillVisibleWindow;
+            do
+            {
+                Thread.Sleep(250);
+                stillRunning = IsBattleNetRunning();
+                stillVisibleWindow = FindBattleNetWindow();
+                if (!stillRunning && stillVisibleWindow == IntPtr.Zero)
+                {
+                    break;
+                }
+            }
+            while (sw.ElapsedMilliseconds < 5000);
+
+            battleNetCloseProcessRemaining = stillRunning;
+            battleNetCloseVisibleWindowRemaining = stillVisibleWindow != IntPtr.Zero;
+            battleNetCloseTimedOut = battleNetCloseProcessRemaining || battleNetCloseVisibleWindowRemaining;
+            battleNetCloseSucceeded = battleNetCloseRequested && !battleNetCloseTimedOut;
+            AppLogger.Info($"Battle.net close result: closeRequested={closeRequested}; battleNetCloseRequested={battleNetCloseRequested}; battleNetCloseSucceeded={battleNetCloseSucceeded}; battleNetCloseTimedOut={battleNetCloseTimedOut}; battleNetCloseProcessRemaining={battleNetCloseProcessRemaining}; battleNetCloseVisibleWindowRemaining={battleNetCloseVisibleWindowRemaining}; visibleWindow=0x{stillVisibleWindow.ToInt64():X}; elapsedMs={sw.ElapsedMilliseconds}");
+
+            if (portBattleNetLaunchFlowActive || battleNetLaunchOutcomeRecorded)
+            {
+                battleNetPostLaunchCloseEvaluated = true;
+                AppLogger.Info($"BattleNetPostLaunchCloseSummary: event=BattleNetPostLaunchCloseSummary; launchSuccessful={battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched={diabloLaunchedAfterAppPlayClick || diabloLaunchedWithoutAppPlayClick}; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; battleNetStillOpenAfterLaunch={battleNetStillOpenAfterLaunch}; battleNetPostLaunchCloseEvaluated={battleNetPostLaunchCloseEvaluated}; {PortBattleNetCloseSummaryFields()}; likelyExplanation=Battle.net close state recorded after launch handling.");
             }
         }
 
