@@ -138,6 +138,8 @@ namespace GoblinFarmer
                 int vkCode = keyInfo.vkCode;
                 bool injected = (keyInfo.flags & 0x10) != 0;
                 bool isSkill1 = vkCode == PortVk1;
+                bool isSkill2 = vkCode == PortVk2;
+                bool isAutomationNumberHotkey = isSkill1 || isSkill2;
                 bool isLootReleaseKey = vkCode == PortVkAlt || vkCode == PortVkBacktick;
                 bool keyDown = message == PortWmKeyDown || message == PortWmSysKeyDown;
                 bool keyUp = message == PortWmKeyUp || message == PortWmSysKeyUp;
@@ -152,9 +154,26 @@ namespace GoblinFarmer
                     AppLogger.Info($"Loot spam stopped by key release; vk={vkCode}; {PortCombatInputContext()}");
                 }
 
-                if (isSkill1 && injected)
+                if (isAutomationNumberHotkey && injected)
                 {
                     return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+                }
+
+                if (isSkill2 && (portCombatRunning || portCombatStopping))
+                {
+                    if (keyDown && !portSkill2CombatHandled)
+                    {
+                        portSkill2CombatHandled = true;
+                        AppLogger.Info(portCombatStopping
+                            ? "Physical Skill2 key suppressed because combat stop cleanup is active; injected=false; automationHotkey=2; injected combat keys are allowed"
+                            : "Physical Skill2 key suppressed because combat is active; injected=false; automationHotkey=2; injected combat keys are allowed");
+                    }
+                    else if (keyUp)
+                    {
+                        portSkill2CombatHandled = false;
+                    }
+
+                    return new IntPtr(1);
                 }
 
                 if (isSkill1 && (portCombatRunning || portCombatStopping))
@@ -164,8 +183,8 @@ namespace GoblinFarmer
                         portSkill1TeleportHandled = true;
                         portSuppressSkill1KeyUp = true;
                         AppLogger.Info(portCombatStopping
-                            ? "Teleport hotkey ignored because combat stop cleanup is active"
-                            : "Teleport hotkey ignored because combat is active");
+                            ? "Teleport hotkey ignored because combat stop cleanup is active; injected=false; automationHotkey=1; injected combat keys are allowed"
+                            : "Teleport hotkey ignored because combat is active; injected=false; automationHotkey=1; injected combat keys are allowed");
                     }
                     else if (keyUp)
                     {
@@ -197,6 +216,11 @@ namespace GoblinFarmer
                 else if (isSkill1 && keyUp)
                 {
                     portSkill1TeleportHandled = false;
+                }
+
+                if (isSkill2 && keyUp)
+                {
+                    portSkill2CombatHandled = false;
                 }
             }
 

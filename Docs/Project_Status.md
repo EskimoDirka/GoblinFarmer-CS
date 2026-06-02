@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-BattleNetPlayButton window-relative region accuracy diagnostics.
+Combat mouse input behavior over no-click regions.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -42,6 +42,11 @@ BattleNetPlayButton window-relative region accuracy diagnostics.
 - Ancient Waterway self-click blocks before opening the map and preserves current/next button state.
 - Repair flow waits for New Tristram/vendor readiness and logs repair-station click timing before using the repair-station coordinate fallback.
 - Combat automation is stable enough for current route work; do not change combat logic unless explicitly requested.
+- Combat click safety blocks existing UI no-click regions and now includes the extended lower-right hover menu area without moving the cursor or stopping combat.
+- Combat no-click suppression keeps non-mouse combat actions running where safe; Demon Hunter key rotation continues while mouse clicks are suppressed over UI regions.
+- Combat keyboard-hook filtering matches the old Python app's injected-key behavior for combat-relevant number keys: physical `1`/`2` are suppressed during combat, while injected automation key events pass through.
+- Demon Hunter right mouse now follows the old Python app's pattern: start holding right mouse only in a safe region, then keep the hold active through hover/no-click regions without sending new click events.
+- Demon Hunter sustained combat now treats shared cursor-loop left-click suppression as active right-held combat when right mouse is already held from a safe region.
 - Battle.net tab and Play button image searches use Battle.net-window-local cached scan regions plus the current Battle.net window left/top, with full-screen search as fallback.
 - Runtime input cleanup releases only tracked held left/right/Shift inputs while Diablo is available and clears tracked state without mouse events after Diablo closes.
 - Diagnostic Overlay, Route State Inspector, Screenshot-On-Failure, and Debug Package Generator are implemented.
@@ -50,6 +55,8 @@ BattleNetPlayButton window-relative region accuracy diagnostics.
 - Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region remains `30,853,292,75` pending runtime validation.
 
 ## Under Active Improvement
+- Combat hover-menu no-click validation using `ExtendedRightMenuNoClickRegion`.
+- Combat mouse input behavior comparison against the old Python app.
 - BattleNetPlayButton region accuracy validation using fallback point comparison.
 - Battle.net launch speed optimization (skip Diablo tab selection when Play button is already visible).
 - Battle.net tab/Play detection across fullscreen, windowed, moved-window, and multi-monitor setups.
@@ -59,6 +66,9 @@ BattleNetPlayButton window-relative region accuracy diagnostics.
 - Publish/release folder validation to confirm Images are included.
 
 ## Known Issues
+- Need manual combat validation that hovering over the extended lower-right menu blocks combat clicks with `blockReason=ExtendedRightMenuNoClickRegion`, while combat continues and normal clicks resume after moving away.
+- Need manual validation that Demon Hunter right-hold continues through no-click hover regions without clicking UI, while left/Shift-left clicks remain suppressed in protected regions.
+- Need manual validation that logs show `DemonHunterRightHeldNoClickSuppressionActive` while right-hold remains active and shared cursor-loop left clicks are suppressed in no-click regions.
 - Need runtime log validation that `BattleNetD3Tab=120,76,81,76` and `BattleNetPlayButton=30,853,292,75` resolve by adding the Battle.net window origin and that the Play button is found before fallback.
 - If BattleNetPlayButton still falls back, inspect the new fallback region diagnostic log for fallback point, expected region center, delta, distance, fallback-inside-region state, and suggested same-size cached region.
 - Need to manually validate Battle.net tab/Play button detection with Battle.net fullscreen, windowed, moved, and on another monitor.
@@ -73,6 +83,16 @@ BattleNetPlayButton window-relative region accuracy diagnostics.
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Matched the old Python app's combat keyboard-hook behavior more closely: C# now suppresses physical `2` during combat/cleanup while still allowing injected combat key events, preserving Demon Hunter key rotation without letting user input conflict with automation.
+- Added Demon Hunter-specific right-held no-click suppression state so the shared combat cursor loop logs `DemonHunterRightHeldNoClickSuppressionActive` instead of making sustained combat look stopped/interrupted while right mouse is still held.
+- Diagnostic combat state now shows `DemonHunterRightHeld` and `RuntimeRightHeld` so UI/debug text reflects active right-held combat.
+- Compared against the old Python repo `GoblinFarming.py`: left/right combat mouse actions use physical Win32 `mouse_event`, not `pyautogui`, `pydirectinput`, `pynput`, `SendInput`, or window-targeted `PostMessage` mouse clicks.
+- Matched the Python Demon Hunter right-hold behavior more closely: C# now starts right-hold only when safe, keeps the hold active when the cursor later enters no-click regions, and avoids sending new right-click down/up events over UI.
+- Improved combat mouse suppression behavior to better match the old app feel without allowing UI clicks: Demon Hunter right-hold no longer skips its `1/2/3/4` key rotation when the cursor is over a no-click region.
+- Combat logs now identify `combatInputMode`, `clickSendMethod`, whether clicks were sent or suppressed, block reason, no-click region name, cursor position, Diablo rect, and foreground window.
+- Added `ExtendedRightMenuNoClickRegion`, a Diablo-window-relative combat-only no-click rectangle covering the lower-right hover menu shown in `Images\Combat\Hover Menu No Click Region.png`.
+- Combat click logging now reports named no-click block reasons, including `blockReason=ExtendedRightMenuNoClickRegion`, current mouse position, intended click point, Diablo rect, region rectangle, combat active state, and blocked state.
+- Demon Hunter Shift-left clicks now skip sending the click when combat safety reports an unsafe region, and Demon Hunter right-hold now remains held when the cursor enters an unsafe region while combat continues.
 - Added BattleNetPlayButton fallback comparison diagnostics. When full-screen fallback finds the Play button after a window-relative miss, logs now show Battle.net window rect, cached region, resolved screen region, fallback point, expected region center, delta, distance, and suggested same-size cached region.
 - Updated only `BattleNetPlayButton` from old fullscreen-style region `1200,1070,156,72` to Battle.net-window-local region `30,853,292,75`, measured from `Images\Start Game\Battlet Net Windowed Scan Region 2560x1440.png`; `BattleNetD3Tab` was not changed.
 - Corrected Battle.net cached-region interpretation so tab/Play cached regions are window-local pixel offsets, not fullscreen-scaled regions.
@@ -88,17 +108,20 @@ BattleNetPlayButton window-relative region accuracy diagnostics.
 
 ## Next Recommended Task
 
-Run Battle.net Play button detection and inspect logs.
+Validate combat no-click suppression behavior.
 
 Validation:
-- Confirm cached region is `BattleNetPlayButton=30,853,292,75`.
-- Confirm Battle.net window rect is logged.
-- Confirm resolved screen region is Battle.net window origin plus cached offsets.
-- If window-relative detection misses and fallback succeeds, compare fallback point to expected center using the logged delta/distance.
-- If fallback point is outside the resolved region, update the cached region from `suggestedCachedRegionSameSize` and rebuild.
-- If fallback point is inside the resolved region, investigate template/confidence/content mismatch instead of moving the region.
+- Start combat in a normal safe world area and confirm combat clicks continue normally.
+- Hover over the lower-right menu shown in `Images\Combat\Hover Menu No Click Region.png`.
+- Confirm combat continues running and does not move the cursor.
+- Confirm combat clicks in the menu area are suppressed and logs show `combatInputMode=PhysicalCursorNoClickSuppression`, `clickSendMethod=suppressed`, and `blockReason=ExtendedRightMenuNoClickRegion`.
+- Confirm Demon Hunter keyboard rotation continues while left/Shift-left clicks are suppressed.
+- Confirm Demon Hunter right-hold, once started in a safe region, stays held while hovering over no-click regions and logs `combatInputMode=PhysicalCursorHeldFromSafeRegion`.
+- Confirm shared cursor-loop suppression logs `DemonHunterRightHeldNoClickSuppressionActive` while right mouse remains held, and diagnostic combat state shows `DemonHunterRightHeld=True`.
+- Move the cursor away and confirm normal combat clicks resume.
+- Spot-check unrelated workflows: teleport, repair, salvage, Battle.net launch/start-game, and exit-game.
 
-After that, optimize Battle.net launch speed by clicking Play immediately when it is already visible and using Diablo III tab selection only as fallback.
+After that, run Battle.net Play button detection and inspect fallback comparison diagnostics.
 
 ## System Notes
 
@@ -115,6 +138,18 @@ After that, optimize Battle.net launch speed by clicking Play immediately when i
 - Cleanup sends `LEFTUP`, `RIGHTUP`, or Shift key-up only when runtime state says that input is currently held and the Diablo window rectangle is available.
 - When Diablo is unavailable, cleanup clears tracked held-input state without generating mouse or key events.
 - Combat and hotkey runtime click paths update tracked held-input state, including Demon Hunter right-hold cleanup, Shift-left clicks, loot-click pulses, Kadala right-click pulses, and automation safe clicks.
+
+### Combat No-Click Regions
+- Combat no-click regions are Diablo-window-relative rectangles, not absolute screen coordinates.
+- `ExtendedRightMenuNoClickRegion`: reference-space rectangle `2410,1120,150,240`, based on the green-box hover menu reference image.
+- This region is combat-only and does not affect teleport, repair, salvage, Battle.net launch, Start Game, or Exit Game flows.
+- Hover menus are expected in-game behavior; combat should continue running while mouse clicks in the unsafe area are suppressed.
+- Current combat mouse input uses physical cursor Win32 `mouse_event`, not `SendInput`, `PostMessage`, or `SendMessage`.
+- Window-targeted mouse input has not been implemented because Diablo may ignore or inconsistently handle posted mouse messages, and unsafe coordinates could still interact with UI.
+- Safe mode is `PhysicalCursorNoClickSuppression`: suppress new mouse clicks in no-click regions while continuing non-mouse combat actions where possible.
+- Demon Hunter right-hold uses `PhysicalCursorHeldFromSafeRegion`: the hold must start in a safe region, then no new right-click is sent while hovering over protected UI.
+- Demon Hunter-only `DemonHunterRightHeldNoClickSuppressionActive` means right mouse is already held, shared left-click cursor-loop input is suppressed, keyboard/timers continue, and right mouse is not released.
+- Combat keyboard hook suppresses physical `1`/`2` while combat is active or stopping, but allows `LLKHF_INJECTED` key events so automation-generated combat keys are not filtered.
 
 ### Diagnostic Overlay
 - Read-only WinForms panel on the main form.
@@ -140,6 +175,16 @@ After that, optimize Battle.net launch speed by clicking Play immediately when i
 - Manifest records package path, latest log path, latest failure screenshot type, latest failure screenshot path, screenshot counts, and explicit build-artifact exclusions.
 
 ## Last Validation
+- Built after adding combat keyboard-hook filtering for physical `2`; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed the change is scoped to combat-active keyboard filtering and does not add a mouse hook, move the cursor, alter mouse click safety, or change teleport, repair, salvage, Battle.net launch, Start Game, or Exit Game flows.
+- Built after adding Demon Hunter right-held no-click suppression state/logging; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed the change is scoped to Demon Hunter sustained combat diagnostics/left-click suppression handling and does not change Monk/Witch Doctor, teleport, repair, salvage, Battle.net launch, Start Game, or Exit Game flows.
+- Built after aligning Demon Hunter right-hold behavior with the old Python app pattern; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed the change is scoped to combat right-hold behavior/logging and does not alter teleport, repair, salvage, Battle.net launch, Start Game, or Exit Game flows.
+- Built after improving combat no-click suppression behavior; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed the change is scoped to combat input/logging. Teleport, repair, salvage, Battle.net launch, Start Game, and Exit Game flows were not changed.
+- Built after adding `ExtendedRightMenuNoClickRegion`; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed the change is scoped to combat click safety/logging and does not alter teleport, repair, salvage, Battle.net launch, Start Game, or Exit Game flows.
 - Built after adding BattleNetPlayButton fallback comparison diagnostics; build succeeded with 0 warnings and 0 errors.
 - Static review confirmed this only adds Battle.net Play scan diagnostics and preserves fallback behavior; Start Game, teleport, combat, and repair/salvage logic were not changed.
 - Built `GoblinFarmer.csproj` successfully after updating only `BattleNetPlayButton` to `30,853,292,75`; build succeeded with 0 warnings and 0 errors.

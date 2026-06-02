@@ -177,7 +177,7 @@ namespace GoblinFarmer
             string waitingConfirmationTarget = PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey));
             string diabloActiveStatus = PortDiabloIsActive() ? "Active" : "Not Active";
             string routeState = $"CurrentKey={PortDisplayLocation(portLastTeleportKey)}; NextKey={PortDisplayLocation(portQueuedTeleportKey)}; RetryKey={PortDisplayLocation(portQueuedRetryTeleportKey)}; FailsafeBlocked={portAutomationBlockedByTeleportFailsafe}";
-            string combatState = $"Running={portCombatRunning}; Stopping={portCombatStopping}; Class={PortDisplayLocation(portCombatClass)}; LootLeftDown={portLootSpamLeftClickDown}";
+            string combatState = $"Running={portCombatRunning}; Stopping={portCombatStopping}; Class={PortDisplayLocation(portCombatClass)}; LootLeftDown={portLootSpamLeftClickDown}; DemonHunterRightHeld={portDemonHunterRightHeldFromSafeRegion}; RuntimeRightHeld={portRuntimeRightMouseHeld}";
             string appStatus = lblAppStatus.Text.Replace("App Status:", "", StringComparison.OrdinalIgnoreCase).Trim();
             string activeWorkflow = string.IsNullOrWhiteSpace(portLastWorkflowStep)
                 ? appStatus

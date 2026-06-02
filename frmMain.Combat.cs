@@ -342,7 +342,8 @@ namespace GoblinFarmer
                 ref portLastDemonHunterDecisionAllowed);
             if (!clickSafe)
             {
-                AppLogger.Info($"Demon Hunter Shift+Left Click safety check failed, but existing rotation still sends the click; {PortCombatInputContext()}");
+                AppLogger.Info($"Demon Hunter Shift+Left Click blocked by combat safety; no click sent; {PortCombatInputContext()}");
+                return;
             }
 
             PortRuntimeShiftDown();
@@ -377,16 +378,14 @@ namespace GoblinFarmer
                     {
                         if (rightDown)
                         {
-                            AppLogger.Info($"Combat right click blocked: PortCombatClickIsSafe=false while rightDown=true; no new RIGHTDOWN sent; {PortCombatInputContext()}");
+                            AppLogger.Info($"Combat right click suppressed while held: combatInputMode=PhysicalCursorHeldFromSafeRegion; clickSendMethod=held-right-no-new-click; rightDown=true; no release sent; {PortCombatInputContext()}");
                         }
-                        PortSleep(token, 90);
-                        continue;
                     }
-
-                    if (!rightDown)
+                    else if (!rightDown)
                     {
                         AppLogger.Info($"Combat right click allowed: sending RIGHTDOWN; {PortCombatInputContext()}");
                         PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN);
+                        portDemonHunterRightHeldFromSafeRegion = true;
                         rightDown = true;
                     }
 
@@ -420,6 +419,8 @@ namespace GoblinFarmer
                     AppLogger.Info($"Combat right click cleanup skipped: localRightDown=true; runtimeRightHeld=false; {PortCombatInputContext()}");
                 }
 
+                portDemonHunterRightHeldFromSafeRegion = false;
+
                 if (portRuntimeShiftHeld)
                 {
                     PortRuntimeShiftUp();
@@ -447,6 +448,11 @@ namespace GoblinFarmer
 
                 if (!clickSafe)
                 {
+                    if (portCombatClass == "demon_hunter" && portDemonHunterRightHeldFromSafeRegion && portRuntimeRightMouseHeld)
+                    {
+                        PortLogDemonHunterRightHeldNoClickSuppressionActive();
+                    }
+
                     if (portRuntimeLeftMouseHeld)
                     {
                         PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
@@ -466,6 +472,19 @@ namespace GoblinFarmer
             {
                 PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
             }
+        }
+
+        private void PortLogDemonHunterRightHeldNoClickSuppressionActive()
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastDemonHunterRightHeldNoClickLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromSeconds(1).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastDemonHunterRightHeldNoClickLogTicks, nowTicks);
+            AppLogger.Info($"DemonHunterRightHeldNoClickSuppressionActive: combatInputMode=PhysicalCursorHeldFromSafeRegion; clickSendMethod=left-suppressed-right-held; rightDown=true; leftClickSent=false; rightReleased=false; combatRunning={portCombatRunning}; combatClass={portCombatClass}; {PortCombatInputContext()}");
         }
 
         private bool PortDemonHunterMomentumReady()
@@ -509,6 +528,7 @@ namespace GoblinFarmer
             bool hasCursor = GetCursorPos(out DrawingPoint cursor);
             bool cursorInsideDiablo = false;
             bool insideNoClickRegion = false;
+            string noClickRegionName = "";
             int noClickRegionIndex = -1;
             Rectangle noClickRegion = Rectangle.Empty;
 
@@ -523,16 +543,17 @@ namespace GoblinFarmer
                 int height = rect.Bottom - rect.Top;
                 for (int i = 0; i < portCombatNoClickRegions.Length; i++)
                 {
-                    (double left, double top, double regionWidth, double regionHeight) = portCombatNoClickRegions[i];
+                    PortCombatNoClickRegion noClickDefinition = portCombatNoClickRegions[i];
                     Rectangle region = new(
-                        rect.Left + (int)Math.Round(width * left),
-                        rect.Top + (int)Math.Round(height * top),
-                        (int)Math.Round(width * regionWidth),
-                        (int)Math.Round(height * regionHeight));
+                        rect.Left + (int)Math.Round(width * noClickDefinition.Left),
+                        rect.Top + (int)Math.Round(height * noClickDefinition.Top),
+                        (int)Math.Round(width * noClickDefinition.Width),
+                        (int)Math.Round(height * noClickDefinition.Height));
 
                     if (region.Contains(cursor))
                     {
                         insideNoClickRegion = true;
+                        noClickRegionName = noClickDefinition.Name;
                         noClickRegionIndex = i;
                         noClickRegion = region;
                         break;
@@ -562,6 +583,7 @@ namespace GoblinFarmer
                 rect,
                 cursorInsideDiablo,
                 insideNoClickRegion,
+                noClickRegionName,
                 noClickRegionIndex,
                 noClickRegion,
                 hasCursorInfo,
@@ -577,7 +599,7 @@ namespace GoblinFarmer
                 ? $"{diagnostics.DiabloRect.Left},{diagnostics.DiabloRect.Top},{diagnostics.DiabloRect.Right},{diagnostics.DiabloRect.Bottom}"
                 : "unavailable";
             string noClickRegion = diagnostics.InsideNoClickRegion
-                ? $"true(index={diagnostics.NoClickRegionIndex}, rect={diagnostics.NoClickRegion.Left},{diagnostics.NoClickRegion.Top},{diagnostics.NoClickRegion.Right},{diagnostics.NoClickRegion.Bottom})"
+                ? $"true(blockReason={diagnostics.NoClickRegionName}, index={diagnostics.NoClickRegionIndex}, rect={diagnostics.NoClickRegion.Left},{diagnostics.NoClickRegion.Top},{diagnostics.NoClickRegion.Right},{diagnostics.NoClickRegion.Bottom}, intendedClickPoint={cursorPosition})"
                 : "false";
 
             return $"mouse={cursorPosition}; diabloRect={diabloRect}; diabloActive={diagnostics.DiabloActive}; foregroundIsDiablo={diagnostics.ForegroundIsDiablo}; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; diabloWindow=0x{diagnostics.DiabloWindow.ToInt64():X}; cursorInsideDiablo={diagnostics.CursorInsideDiablo}; insideNoClickRegion={noClickRegion}; PortCombatClickIsSafe={diagnostics.Safe}; cursorInfo={diagnostics.HasCursorInfo}; cursorHandle=0x{diagnostics.CursorHandle.ToInt64():X}; cursorFlags={diagnostics.CursorFlags}";
@@ -600,7 +622,27 @@ namespace GoblinFarmer
 
             lastAllowed = allowed;
             Interlocked.Exchange(ref lastLogTicks, nowTicks);
-            AppLogger.Info($"{source}: {button} click {(allowed ? "allowed" : "blocked")}; {PortCombatInputContext()}");
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            string blockReason = !allowed && diagnostics.InsideNoClickRegion
+                ? diagnostics.NoClickRegionName
+                : "";
+            string intendedClickPoint = diagnostics.HasCursor ? $"{diagnostics.Cursor.X},{diagnostics.Cursor.Y}" : "unavailable";
+            string diabloRect = diagnostics.HasDiabloRect
+                ? $"{diagnostics.DiabloRect.Left},{diagnostics.DiabloRect.Top},{diagnostics.DiabloRect.Right},{diagnostics.DiabloRect.Bottom}"
+                : "unavailable";
+            string regionRectangle = diagnostics.InsideNoClickRegion
+                ? $"{diagnostics.NoClickRegion.Left},{diagnostics.NoClickRegion.Top},{diagnostics.NoClickRegion.Right},{diagnostics.NoClickRegion.Bottom}"
+                : "unavailable";
+
+            if (!string.IsNullOrWhiteSpace(blockReason))
+            {
+                AppLogger.Info($"{source}: {button} click suppressed; combatInputMode=PhysicalCursorNoClickSuppression; clickSendMethod=suppressed; blockReason={blockReason}; noClickRegionName={diagnostics.NoClickRegionName}; mouse={intendedClickPoint}; intendedClickPoint={intendedClickPoint}; diabloRect={diabloRect}; regionRect={regionRectangle}; combatActive={portCombatRunning}; blocked=true; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; {PortCombatInputContext()}");
+                return;
+            }
+
+            string inputMode = allowed ? "PhysicalCursor" : "PhysicalCursorNoClickSuppression";
+            string clickSendMethod = allowed ? "mouse_event" : "suppressed";
+            AppLogger.Info($"{source}: {button} click {(allowed ? "allowed" : "blocked")}; combatInputMode={inputMode}; clickSendMethod={clickSendMethod}; blocked={!allowed}; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; {PortCombatInputContext()}");
         }
 
         private sealed record PortCombatClickDiagnostics(
@@ -615,6 +657,7 @@ namespace GoblinFarmer
             RECT DiabloRect,
             bool CursorInsideDiablo,
             bool InsideNoClickRegion,
+            string NoClickRegionName,
             int NoClickRegionIndex,
             Rectangle NoClickRegion,
             bool HasCursorInfo,

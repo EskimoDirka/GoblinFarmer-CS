@@ -25,6 +25,11 @@
 
 ### Testing
 
+* [ ] Validate `ExtendedRightMenuNoClickRegion`: hover over the lower-right menu, confirm combat continues, cursor does not move, clicks are blocked with `blockReason=ExtendedRightMenuNoClickRegion`, and clicks resume after moving away.
+* [ ] Validate combat no-click suppression mode: logs show `combatInputMode=PhysicalCursorNoClickSuppression`, `clickSendMethod=suppressed`, and Demon Hunter key rotation continues while mouse clicks are suppressed.
+* [ ] Validate Demon Hunter right-hold mode: start right-hold in a safe area, hover over no-click UI, confirm no new right click is sent, UI is not clicked, and logs show `combatInputMode=PhysicalCursorHeldFromSafeRegion`.
+* [ ] Validate Demon Hunter shared cursor-loop suppression: while right-hold is active over no-click UI, logs show `DemonHunterRightHeldNoClickSuppressionActive` and diagnostics show `DemonHunterRightHeld=True`.
+* [ ] Validate combat keyboard filtering: while combat is active, physical `1`/`2` are suppressed, injected automation key rotation continues, and logs show physical `2` suppression if pressed by the user.
 * [ ] Complete full route test from Southern Highlands through Pandemonium Fortress Level 2.
 * [ ] Complete interrupted teleport testing.
 * [ ] Test failed/interrupted Royal Crypts button retry from Cathedral Level 1 and confirm retry preserves Cathedral/Royal Crypts state, bypasses manual-button blocking, and does not advance until arrival confirmation.
@@ -198,6 +203,24 @@ Status: Implemented; needs manual Exit Game validation.
 * [ ] Add Battle.net Play test button.
 * [ ] Add Start Game test button.
 * [ ] Add image recognition test utility.
+
+### Combat Safety
+
+* [x] Add named combat no-click region for the extended lower-right hover menu.
+* [x] Keep the extended hover menu handling rectangle-based; no image recognition.
+* [x] Keep combat running when the cursor is inside the hover menu region.
+* [x] Do not move the cursor when the hover menu appears.
+* [x] Log `blockReason=ExtendedRightMenuNoClickRegion` when this region blocks combat clicks.
+* [x] Confirm current C# combat mouse input uses physical cursor `mouse_event`, not `SendInput`, `PostMessage`, or `SendMessage`.
+* [x] Keep no-click regions protected by suppressing physical mouse clicks in unsafe UI zones.
+* [x] Continue Demon Hunter non-mouse key rotation while mouse clicks are suppressed in no-click regions.
+* [x] Compare old Python input path: combat mouse uses physical Win32 `mouse_event`, while Demon Hunter right mouse starts in a safe region and remains held.
+* [x] Align C# Demon Hunter right-hold with Python pattern by keeping the safe-started right hold active through no-click hover regions.
+* [x] Add Demon Hunter-only `DemonHunterRightHeldNoClickSuppressionActive` logging for shared cursor-loop left-click suppression while right mouse remains held.
+* [x] Show Demon Hunter right-held state in diagnostics so combat does not appear stopped while right-hold is active.
+* [x] Match old Python keyboard-hook behavior for combat-relevant number keys by suppressing physical `1`/`2` during combat while allowing injected automation key events.
+* [x] Log combat input mode and click send method for allowed/suppressed combat clicks.
+* [ ] Manually validate that unrelated workflows still work after the combat-only no-click update.
 
 ---
 
