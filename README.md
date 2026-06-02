@@ -8,7 +8,7 @@ This README is intentionally high-level and user-facing. The detailed developer 
 
 The project is in an active reliability phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on combat mouse suppression over no-click UI regions, Battle.net window-relative Play button accuracy, Start Game reliability, repair timing, and full-route testing.
 
-The current recommended validation target is combat no-click suppression, including Demon Hunter right-hold behavior and combat keyboard filtering. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
+The current recommended validation target is combat no-click suppression, including Demon Hunter right-hold behavior, Witch Doctor held/channel behavior, and combat keyboard filtering. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
 
 ## Stable Systems
 
@@ -19,6 +19,7 @@ The current recommended validation target is combat no-click suppression, includ
 - Combat no-click safety suppresses physical mouse clicks in known UI regions, including the extended lower-right hover menu area, without moving the cursor or stopping combat.
 - Demon Hunter right-hold starts only from a safe world area and remains held through hover/no-click regions to better match the old Python app feel.
 - Demon Hunter sustained combat reports active right-held no-click suppression instead of appearing stopped when shared left-click input is suppressed over UI.
+- Witch Doctor held/channel input starts only from a safe world area and remains held through combat no-click regions without sending new mouse clicks.
 - Combat keyboard filtering suppresses physical `1`/`2` during combat while allowing injected automation key events through.
 - Battle.net Launch Flow can relaunch or focus Battle.net and uses window-relative tab/Play button image searches with full-screen fallback.
 - Start Game Flow is implemented and has passed prior validation, though image-recognition reliability is still being improved.
@@ -28,7 +29,7 @@ The current recommended validation target is combat no-click suppression, includ
 ## Systems Under Active Improvement
 
 - Combat no-click suppression validation.
-- Battle.net Play button detection across fullscreen, windowed, moved-window, and multi-monitor setups.
+- Battle.net Play button detection across fullscreen, windowed, moved-window, and multi-monitor setups after cached-region recalibration.
 - Battle.net Play button fallback comparison diagnostics for region accuracy.
 - Start Game image recognition and possible cursor interference.
 - Repair and salvage timing validation.

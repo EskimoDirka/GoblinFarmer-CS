@@ -430,44 +430,86 @@ namespace GoblinFarmer
 
         private void PortCombatCursorLoop(CancellationToken token)
         {
-            while (!token.IsCancellationRequested && portCombatRunning)
+            try
             {
-                if (!PortDiabloIsActive())
+                while (!token.IsCancellationRequested && portCombatRunning)
                 {
-                    BeginInvoke(new Action(() => PortStopCombat("Diablo inactive")));
-                    return;
-                }
-
-                bool clickSafe = PortCombatClickIsSafe();
-                PortLogCombatClickDecision(
-                    "Combat cursor loop",
-                    clickSafe,
-                    "left",
-                    ref portLastCombatCursorDecisionLogTicks,
-                    ref portLastCombatCursorDecisionAllowed);
-
-                if (!clickSafe)
-                {
-                    if (portCombatClass == "demon_hunter" && portDemonHunterRightHeldFromSafeRegion && portRuntimeRightMouseHeld)
+                    if (!PortDiabloIsActive())
                     {
-                        PortLogDemonHunterRightHeldNoClickSuppressionActive();
+                        BeginInvoke(new Action(() => PortStopCombat("Diablo inactive")));
+                        return;
                     }
 
-                    if (portRuntimeLeftMouseHeld)
+                    bool clickSafe = PortCombatClickIsSafe();
+                    PortLogCombatClickDecision(
+                        "Combat cursor loop",
+                        clickSafe,
+                        "left",
+                        ref portLastCombatCursorDecisionLogTicks,
+                        ref portLastCombatCursorDecisionAllowed);
+
+                    if (portCombatClass == "witch_doctor")
                     {
+                        PortHandleWitchDoctorCursorInput(clickSafe);
+                    }
+                    else if (!clickSafe)
+                    {
+                        if (portCombatClass == "demon_hunter" && portDemonHunterRightHeldFromSafeRegion && portRuntimeRightMouseHeld)
+                        {
+                            PortLogDemonHunterRightHeldNoClickSuppressionActive();
+                        }
+
+                        if (portRuntimeLeftMouseHeld)
+                        {
+                            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                        }
+                    }
+                    else
+                    {
+                        PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+                        Thread.Sleep(10);
                         PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
                     }
+
+                    PortSleep(token, 50);
                 }
-                else
+            }
+            finally
+            {
+                if (portRuntimeLeftMouseHeld)
                 {
-                    PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
-                    Thread.Sleep(10);
                     PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
                 }
 
-                PortSleep(token, 50);
+                if (portWitchDoctorHeldInputFromSafeRegion)
+                {
+                    AppLogger.Info($"WitchDoctorHeldInputReleased: combatInputMode=PhysicalCursorHeldFromSafeRegion; clickSendMethod=left-up-cleanup; held=false; leftDown=false; inputReleased=true; combatRunning={portCombatRunning}; combatClass=witch_doctor; {PortCombatInputContext()}");
+                    portWitchDoctorHeldInputFromSafeRegion = false;
+                }
+            }
+        }
+
+        private void PortHandleWitchDoctorCursorInput(bool clickSafe)
+        {
+            if (clickSafe)
+            {
+                if (!portRuntimeLeftMouseHeld)
+                {
+                    PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+                    portWitchDoctorHeldInputFromSafeRegion = true;
+                    AppLogger.Info($"WitchDoctorScrollHeldFromSafeRegion: combatInputMode=PhysicalCursorHeldFromSafeRegion; scrollSendMethod=left-held-channel; held=true; leftDown=true; inputSent=true; combatRunning={portCombatRunning}; combatClass=witch_doctor; {PortCombatInputContext()}");
+                }
+
+                return;
             }
 
+            if (portWitchDoctorHeldInputFromSafeRegion && portRuntimeLeftMouseHeld)
+            {
+                PortLogWitchDoctorHeldInputNoClickSuppressionActive();
+                return;
+            }
+
+            PortLogWitchDoctorScrollSuppressedNoClickRegion();
             if (portRuntimeLeftMouseHeld)
             {
                 PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
@@ -485,6 +527,34 @@ namespace GoblinFarmer
 
             Interlocked.Exchange(ref portLastDemonHunterRightHeldNoClickLogTicks, nowTicks);
             AppLogger.Info($"DemonHunterRightHeldNoClickSuppressionActive: combatInputMode=PhysicalCursorHeldFromSafeRegion; clickSendMethod=left-suppressed-right-held; rightDown=true; leftClickSent=false; rightReleased=false; combatRunning={portCombatRunning}; combatClass={portCombatClass}; {PortCombatInputContext()}");
+        }
+
+        private void PortLogWitchDoctorHeldInputNoClickSuppressionActive()
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastWitchDoctorHeldInputNoClickLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromSeconds(1).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastWitchDoctorHeldInputNoClickLogTicks, nowTicks);
+            AppLogger.Info($"WitchDoctorHeldInputNoClickSuppressionActive: combatInputMode=PhysicalCursorHeldFromSafeRegion; scrollSendMethod=left-held-no-new-click; held=true; leftDown={portRuntimeLeftMouseHeld}; inputSent=false; inputSuppressed=true; inputReleased=false; combatRunning={portCombatRunning}; combatClass=witch_doctor; {PortCombatInputContext()}");
+        }
+
+        private void PortLogWitchDoctorScrollSuppressedNoClickRegion()
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastWitchDoctorScrollSuppressedNoClickLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromSeconds(1).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastWitchDoctorScrollSuppressedNoClickLogTicks, nowTicks);
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            string noClickRegionName = diagnostics.InsideNoClickRegion ? diagnostics.NoClickRegionName : "";
+            AppLogger.Info($"WitchDoctorScrollSuppressedNoClickRegion: combatInputMode=PhysicalCursorNoClickSuppression; scrollSendMethod=suppressed; held={portWitchDoctorHeldInputFromSafeRegion}; leftDown={portRuntimeLeftMouseHeld}; inputSent=false; inputSuppressed=true; inputReleased=false; noClickRegionName={noClickRegionName}; combatRunning={portCombatRunning}; combatClass=witch_doctor; {PortCombatInputContext()}");
         }
 
         private bool PortDemonHunterMomentumReady()

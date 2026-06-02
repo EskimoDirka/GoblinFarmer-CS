@@ -90,6 +90,7 @@ namespace GoblinFarmer
         private volatile bool portRuntimeRightMouseHeld;
         private volatile bool portRuntimeShiftHeld;
         private volatile bool portDemonHunterRightHeldFromSafeRegion;
+        private volatile bool portWitchDoctorHeldInputFromSafeRegion;
         private volatile bool portDiabloWasRunning;
         private volatile bool portBlockSkill1TeleportHotkey = true;
         private bool portWitchDoctorLastHexReady;
@@ -106,6 +107,8 @@ namespace GoblinFarmer
         private long portLastCombatCursorDecisionLogTicks;
         private long portLastDemonHunterDecisionLogTicks;
         private long portLastDemonHunterRightHeldNoClickLogTicks;
+        private long portLastWitchDoctorHeldInputNoClickLogTicks;
+        private long portLastWitchDoctorScrollSuppressedNoClickLogTicks;
         private long portLastLootSpamDecisionLogTicks;
         private bool? portLastCombatCursorDecisionAllowed;
         private bool? portLastDemonHunterDecisionAllowed;

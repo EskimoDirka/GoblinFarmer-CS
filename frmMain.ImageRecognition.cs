@@ -731,7 +731,7 @@ namespace GoblinFarmer
                 ["CurrentLocation"] = PortReferenceRegion(2050, 0, 500, 42),
                 ["MapHeader"] = PortReferenceRegion(970, 55, 620, 110),
                 ["CharacterLoad"] = PortReferenceRegion(600, 1200, 1200, 220),
-                ["BattleNetPlayButton"] = PortReferenceRegion(30, 853, 292, 75),
+                ["BattleNetPlayButton"] = PortReferenceRegion(16, 1256, 292, 75),
                 ["WitchDoctorHex"] = PortReferenceRegion(842, 1336, 73, 73),
                 ["MomentumStack"] = PortReferenceRegion(
                     (int)(PortReferenceWidth * 0.325),

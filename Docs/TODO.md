@@ -29,11 +29,12 @@
 * [ ] Validate combat no-click suppression mode: logs show `combatInputMode=PhysicalCursorNoClickSuppression`, `clickSendMethod=suppressed`, and Demon Hunter key rotation continues while mouse clicks are suppressed.
 * [ ] Validate Demon Hunter right-hold mode: start right-hold in a safe area, hover over no-click UI, confirm no new right click is sent, UI is not clicked, and logs show `combatInputMode=PhysicalCursorHeldFromSafeRegion`.
 * [ ] Validate Demon Hunter shared cursor-loop suppression: while right-hold is active over no-click UI, logs show `DemonHunterRightHeldNoClickSuppressionActive` and diagnostics show `DemonHunterRightHeld=True`.
+* [ ] Validate Witch Doctor held/channel mode: start in a safe world area, move into SkillBar/ResourceGlobe/BottomRightButtons/ExtendedRightMenu no-click regions, confirm held input stays active without UI clicks, keyboard/Hex timers continue, and logs show `WitchDoctorHeldInputNoClickSuppressionActive`.
 * [ ] Validate combat keyboard filtering: while combat is active, physical `1`/`2` are suppressed, injected automation key rotation continues, and logs show physical `2` suppression if pressed by the user.
 * [ ] Complete full route test from Southern Highlands through Pandemonium Fortress Level 2.
 * [ ] Complete interrupted teleport testing.
 * [ ] Test failed/interrupted Royal Crypts button retry from Cathedral Level 1 and confirm retry preserves Cathedral/Royal Crypts state, bypasses manual-button blocking, and does not advance until arrival confirmation.
-* [ ] Confirm Battle.net Play button is found in the window-relative region before full-screen fallback.
+* [ ] Confirm Battle.net Play button is found in recalibrated window-relative region `16,1256,292,75` before full-screen fallback.
 * [ ] If Battle.net Play button falls back, inspect fallback region diagnostics and update `BattleNetPlayButton` from the suggested same-size cached region if the fallback point is outside the resolved region.
 * [ ] Complete Exit Game workflow testing.
 * [ ] Confirm Exit Game no longer causes a post-Diablo desktop right-click or app close.
@@ -217,6 +218,7 @@ Status: Implemented; needs manual Exit Game validation.
 * [x] Compare old Python input path: combat mouse uses physical Win32 `mouse_event`, while Demon Hunter right mouse starts in a safe region and remains held.
 * [x] Align C# Demon Hunter right-hold with Python pattern by keeping the safe-started right hold active through no-click hover regions.
 * [x] Add Demon Hunter-only `DemonHunterRightHeldNoClickSuppressionActive` logging for shared cursor-loop left-click suppression while right mouse remains held.
+* [x] Add Witch Doctor-only safe-start held/channel behavior so held input stays active through no-click regions without sending new mouse clicks.
 * [x] Show Demon Hunter right-held state in diagnostics so combat does not appear stopped while right-hold is active.
 * [x] Match old Python keyboard-hook behavior for combat-relevant number keys by suppressing physical `1`/`2` during combat while allowing injected automation key events.
 * [x] Log combat input mode and click send method for allowed/suppressed combat clicks.
@@ -294,7 +296,7 @@ Benefits:
 
 * [x] Convert Battle.net tab and Play button scan regions to window-relative coordinates.
 * [x] Interpret cached `BattleNetD3Tab` and `BattleNetPlayButton` regions as Battle.net-window-local pixel offsets.
-* [x] Update only `BattleNetPlayButton` to window-local region `30,853,292,75` from the green-box reference screenshot.
+* [x] Update only `BattleNetPlayButton` to diagnostic-suggested window-local region `16,1256,292,75`.
 * [x] Add BattleNetPlayButton fallback diagnostics showing window rect, cached region, resolved screen region, fallback point, expected center, delta, distance, inside/outside assessment, and suggested same-size cached region.
 * [x] Restore/focus Battle.net before resolving scan regions.
 * [x] Keep fullscreen search as fallback.

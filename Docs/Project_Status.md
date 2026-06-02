@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Combat mouse input behavior over no-click regions.
+Combat mouse input behavior over no-click regions, with Witch Doctor held/channel behavior now queued for manual validation.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -47,12 +47,13 @@ Combat mouse input behavior over no-click regions.
 - Combat keyboard-hook filtering matches the old Python app's injected-key behavior for combat-relevant number keys: physical `1`/`2` are suppressed during combat, while injected automation key events pass through.
 - Demon Hunter right mouse now follows the old Python app's pattern: start holding right mouse only in a safe region, then keep the hold active through hover/no-click regions without sending new click events.
 - Demon Hunter sustained combat now treats shared cursor-loop left-click suppression as active right-held combat when right mouse is already held from a safe region.
+- Witch Doctor held/channel mouse input starts only from a safe world region, remains held through combat no-click regions without sending new clicks, and continues keyboard/Hex timers while UI clicks are suppressed.
 - Battle.net tab and Play button image searches use Battle.net-window-local cached scan regions plus the current Battle.net window left/top, with full-screen search as fallback.
 - Runtime input cleanup releases only tracked held left/right/Shift inputs while Diablo is available and clears tracked state without mouse events after Diablo closes.
 - Diagnostic Overlay, Route State Inspector, Screenshot-On-Failure, and Debug Package Generator are implemented.
 - Exit Game workflow no longer generates desktop right-clicks after Diablo exits.
 - Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
-- Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region remains `30,853,292,75` pending runtime validation.
+- Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region is `16,1256,292,75`, recalibrated from fallback diagnostics.
 
 ## Under Active Improvement
 - Combat hover-menu no-click validation using `ExtendedRightMenuNoClickRegion`.
@@ -69,7 +70,8 @@ Combat mouse input behavior over no-click regions.
 - Need manual combat validation that hovering over the extended lower-right menu blocks combat clicks with `blockReason=ExtendedRightMenuNoClickRegion`, while combat continues and normal clicks resume after moving away.
 - Need manual validation that Demon Hunter right-hold continues through no-click hover regions without clicking UI, while left/Shift-left clicks remain suppressed in protected regions.
 - Need manual validation that logs show `DemonHunterRightHeldNoClickSuppressionActive` while right-hold remains active and shared cursor-loop left clicks are suppressed in no-click regions.
-- Need runtime log validation that `BattleNetD3Tab=120,76,81,76` and `BattleNetPlayButton=30,853,292,75` resolve by adding the Battle.net window origin and that the Play button is found before fallback.
+- Need manual validation that Witch Doctor held/channel input starts from a safe region, stays held through no-click regions without UI clicks, continues keyboard/Hex timers, and releases cleanly on combat stop/focus loss.
+- Need runtime log validation that `BattleNetD3Tab=120,76,81,76` and `BattleNetPlayButton=16,1256,292,75` resolve by adding the Battle.net window origin and that the Play button is found before fallback.
 - If BattleNetPlayButton still falls back, inspect the new fallback region diagnostic log for fallback point, expected region center, delta, distance, fallback-inside-region state, and suggested same-size cached region.
 - Need to manually validate Battle.net tab/Play button detection with Battle.net fullscreen, windowed, moved, and on another monitor.
 - Need to test full teleport route from Southern Highlands through Northern Highlands and onward.
@@ -83,6 +85,8 @@ Combat mouse input behavior over no-click regions.
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Recalibrated the cached Battle.net Play button scan region from `30,853,292,75` to the diagnostic-suggested `16,1256,292,75` while preserving Diablo III tab fallback, full-screen Play fallback, and fallback comparison diagnostics.
+- Added Witch Doctor-only held/channel input handling: the shared cursor loop now starts Witch Doctor held input only in a safe region, keeps it held through combat no-click regions without new mouse clicks, logs Witch Doctor suppression state, and releases via existing runtime cleanup.
 - Matched the old Python app's combat keyboard-hook behavior more closely: C# now suppresses physical `2` during combat/cleanup while still allowing injected combat key events, preserving Demon Hunter key rotation without letting user input conflict with automation.
 - Added Demon Hunter-specific right-held no-click suppression state so the shared combat cursor loop logs `DemonHunterRightHeldNoClickSuppressionActive` instead of making sustained combat look stopped/interrupted while right mouse is still held.
 - Diagnostic combat state now shows `DemonHunterRightHeld` and `RuntimeRightHeld` so UI/debug text reflects active right-held combat.
@@ -118,6 +122,7 @@ Validation:
 - Confirm Demon Hunter keyboard rotation continues while left/Shift-left clicks are suppressed.
 - Confirm Demon Hunter right-hold, once started in a safe region, stays held while hovering over no-click regions and logs `combatInputMode=PhysicalCursorHeldFromSafeRegion`.
 - Confirm shared cursor-loop suppression logs `DemonHunterRightHeldNoClickSuppressionActive` while right mouse remains held, and diagnostic combat state shows `DemonHunterRightHeld=True`.
+- Confirm Witch Doctor held/channel input starts in a safe region, remains held in SkillBar/ResourceGlobe/BottomRightButtons/ExtendedRightMenu no-click regions without UI clicks, logs `WitchDoctorHeldInputNoClickSuppressionActive`, and releases on combat stop.
 - Move the cursor away and confirm normal combat clicks resume.
 - Spot-check unrelated workflows: teleport, repair, salvage, Battle.net launch/start-game, and exit-game.
 
@@ -127,7 +132,7 @@ After that, run Battle.net Play button detection and inspect fallback comparison
 
 ### Battle.net Window-Relative Scan Regions
 - `BattleNetD3Tab`: `120,76,81,76`.
-- `BattleNetPlayButton`: `30,853,292,75`.
+- `BattleNetPlayButton`: `16,1256,292,75`.
 - Cached regions are interpreted as Battle.net-window-local pixel offsets.
 - Full-screen image search remains as a safety fallback.
 - Fallback diagnostics compare fallback detection point against resolved region center and log delta/distance plus a suggested same-size cached region.
@@ -149,6 +154,7 @@ After that, run Battle.net Play button detection and inspect fallback comparison
 - Safe mode is `PhysicalCursorNoClickSuppression`: suppress new mouse clicks in no-click regions while continuing non-mouse combat actions where possible.
 - Demon Hunter right-hold uses `PhysicalCursorHeldFromSafeRegion`: the hold must start in a safe region, then no new right-click is sent while hovering over protected UI.
 - Demon Hunter-only `DemonHunterRightHeldNoClickSuppressionActive` means right mouse is already held, shared left-click cursor-loop input is suppressed, keyboard/timers continue, and right mouse is not released.
+- Witch Doctor held/channel input uses the same safe-start principle: the left-held channel starts only in a safe region, then no new mouse input is sent and the hold is not released solely because the cursor enters a combat no-click region.
 - Combat keyboard hook suppresses physical `1`/`2` while combat is active or stopping, but allows `LLKHF_INJECTED` key events so automation-generated combat keys are not filtered.
 
 ### Diagnostic Overlay
@@ -175,6 +181,8 @@ After that, run Battle.net Play button detection and inspect fallback comparison
 - Manifest records package path, latest log path, latest failure screenshot type, latest failure screenshot path, screenshot counts, and explicit build-artifact exclusions.
 
 ## Last Validation
+- Built after recalibrating `BattleNetPlayButton` to `16,1256,292,75` and adding Witch Doctor-only held/channel no-click handling; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed the code changes are limited to the Battle.net Play cached region and Witch Doctor combat cursor handling/state. Demon Hunter, Monk, debug package generation, repair, salvage, teleport, Exit Game, and Start Game workflows were not changed.
 - Built after adding combat keyboard-hook filtering for physical `2`; build succeeded with 0 warnings and 0 errors.
 - Static review confirmed the change is scoped to combat-active keyboard filtering and does not add a mouse hook, move the cursor, alter mouse click safety, or change teleport, repair, salvage, Battle.net launch, Start Game, or Exit Game flows.
 - Built after adding Demon Hunter right-held no-click suppression state/logging; build succeeded with 0 warnings and 0 errors.

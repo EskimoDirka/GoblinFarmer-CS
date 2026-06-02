@@ -155,6 +155,8 @@ if ($MaxFailureScreenshots -lt 1) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Write-Host "PSScriptRoot = $PSScriptRoot"
+Write-Host "RepoRoot     = $repoRoot"
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $packageDirectory = Join-Path $repoRoot "DebugPackages"
 $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) "GoblinFarmer_Debug_$timestamp"
