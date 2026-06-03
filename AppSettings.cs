@@ -41,10 +41,23 @@ namespace GoblinFarmer
                 }
                 else
                 {
-                    SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(File.ReadAllText(configPath), JsonOptions);
+                    string json = File.ReadAllText(configPath);
+                    bool hasSavedDebugScreenshotsPreference = HasSavedDebugScreenshotsPreference(json);
+                    SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(json, JsonOptions);
                     settings = loaded ?? SettingsModel.Default();
+                    bool shouldSaveLoadedSettings = loaded == null;
+                    if (!hasSavedDebugScreenshotsPreference)
+                    {
+                        settings.Debug.EnableDebugScreenshots = DebugSettings.DefaultEnableDebugScreenshots;
+                        shouldSaveLoadedSettings = true;
+                        AppLogger.Info($"AppSettings missing Debug.EnableDebugScreenshots; using build default {settings.Debug.EnableDebugScreenshots}.");
+                    }
+
                     settings.Normalize();
-                    Save();
+                    if (shouldSaveLoadedSettings)
+                    {
+                        Save();
+                    }
                 }
             }
             catch (Exception ex)
@@ -71,6 +84,27 @@ namespace GoblinFarmer
             }
         }
 
+        private static bool HasSavedDebugScreenshotsPreference(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
+
+                return document.RootElement.TryGetProperty("Debug", out JsonElement debugElement) &&
+                    debugElement.ValueKind == JsonValueKind.Object &&
+                    debugElement.TryGetProperty("EnableDebugScreenshots", out _);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to inspect AppSettings Debug.EnableDebugScreenshots preference.", ex);
+                return false;
+            }
+        }
+
         public static string ResolveRuntimePath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -89,6 +123,30 @@ namespace GoblinFarmer
 
         public static string ImagesRootPath => ResolveRuntimePath(Runtime.ImagesRoot);
         public static string ScanRegionCachePath => ResolveRuntimePath(Runtime.ScanRegionCachePath);
+
+        public static string ResolveBattleNetExecutablePathForLaunch(out string source, out string configuredPath, out string detectedPath)
+        {
+            configuredPath = string.IsNullOrWhiteSpace(Runtime.BattleNetExecutablePath)
+                ? ""
+                : ResolveRuntimePath(Runtime.BattleNetExecutablePath);
+            detectedPath = "";
+
+            if (ExecutableExists(Runtime.BattleNetExecutablePath))
+            {
+                source = "configured";
+                return configuredPath;
+            }
+
+            detectedPath = DiscoverBattleNetExecutable();
+            if (!string.IsNullOrWhiteSpace(detectedPath) && ExecutableExists(detectedPath))
+            {
+                source = "detected";
+                return detectedPath;
+            }
+
+            source = "missing";
+            return configuredPath;
+        }
 
         public static bool DiscoverMissingRuntimePaths()
         {
@@ -386,9 +444,15 @@ namespace GoblinFarmer
             public bool DebugMode { get; set; }
             public bool ShowDiagnosticOverlay { get; set; }
             public bool ShowRouteInspector { get; set; }
-            public bool EnableDebugScreenshots { get; set; }
+            public bool EnableDebugScreenshots { get; set; } = DefaultEnableDebugScreenshots;
             public bool EnableMissingAssetPrompts { get; set; }
             public bool EnableVerboseLogging { get; set; }
+
+#if DEBUG
+            public const bool DefaultEnableDebugScreenshots = true;
+#else
+            public const bool DefaultEnableDebugScreenshots = false;
+#endif
         }
 
         internal sealed class UiSettings

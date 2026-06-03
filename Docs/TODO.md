@@ -80,6 +80,9 @@
 * [ ] Complete interrupted teleport testing.
 * [ ] Test failed/interrupted Royal Crypts button retry from Cathedral Level 1 and confirm retry preserves Cathedral/Royal Crypts state, bypasses manual-button blocking, and does not advance until arrival confirmation.
 * [ ] Confirm Battle.net Play button is found in recalibrated window-relative region `16,1256,292,75` before full-screen fallback.
+* [x] Make Battle.net startup detection window-based instead of process-based, because `Battle.net.exe` can remain running in the background without a launch-ready UI.
+* [x] Retry Battle.net launch requests every 1s for up to 5s using the configured executable path first and installation discovery as fallback.
+* [x] Poll Battle.net Play button detection every 100ms and click only from a current confidence-passing image match.
 * [ ] Validate Battle.net launch diagnostics distinguish app Play click sent, Battle.net Play click accepted, Diablo launched because of the accepted app click, and manual Play suspected.
 * [ ] Validate Battle.net Play click waits for 1500ms stable Play detection at a same/similar point while Battle.net remains foreground before clicking.
 * [ ] Validate Battle.net Play click waits 500ms after stable detection, immediately reconfirms Play exists, then sends the click.
@@ -88,7 +91,8 @@
 * [ ] Validate `BattleNetPlayClickSentByApp` appears immediately after the app sends the mouse click and is not treated as a successful launch by itself.
 * [ ] Validate `BattleNetPlayClickAccepted` appears only after Battle.net UI transition, Battle.net window/process transition, or Diablo process start confirms the app Play click was accepted.
 * [ ] Validate `BattleNetManualPlaySuspected` appears if Diablo launches without `battleNetPlayClickAcceptedByBattleNet=True`, including when the app sent a click but acceptance was not verified.
-* [ ] Validate `BattleNetStillOpenAfterDiabloLaunch` appears if Battle.net remains open after Diablo launches.
+* [ ] Validate `BattleNetStillOpenAfterDiabloLaunch` appears only if the visible Battle.net window remains open after Diablo launches.
+* [x] Treat background/tray Battle.net processes after Diablo launch as informational, not as close or launch failures.
 * [ ] Validate `BattleNetPostLaunchCloseSummary` marks Diablo launch successful only after an accepted app Play click while reporting Battle.net close requested/succeeded/failed/timed out separately.
 * [ ] Validate debug package workflow output reports app play click sent, app play click accepted, manual play suspected, Diablo launched, and Battle.net still open after launch as separate fields.
 * [ ] Validate route-failure-summary/debug workflow output has one Battle.net launch verdict and one post-launch close verdict, with no conflicting duplicate entries for the same event.
@@ -135,6 +139,10 @@
 * [x] Add Diablo III and Battle.net executable auto-discovery before first-run prompting.
 * [x] Hide Diagnostic Overlay and Route Inspector unless enabled by config.
 * [x] Add Debug Mode toggle and keep debug-only controls hidden during normal use.
+* [x] Add visible default-on Hotkeys entries for `1 - Teleport Next Location` and `2 - Exit Game`.
+* [x] Default `EnableDebugScreenshots` to on in Debug builds and off in Release builds only when no saved user preference exists.
+* [x] Keep Debug Mode from overwriting the saved `EnableDebugScreenshots` preference.
+* [x] Increase the startup form client height enough to show the full Settings area and Debug Mode checkbox without resizing.
 * [x] Gate debug screenshots and missing-asset prompts through config.
 * [x] Keep route-rule config as design review only; do not migrate live route rules yet.
 * [x] Add self-contained release publish script.
@@ -455,6 +463,10 @@ Benefits:
 * [x] Preserve existing scan-region cache/reference format.
 * [x] Log cached region, Battle.net window rect, resolved screen region, window-relative result, outside-window warnings, and fallback search.
 * [x] Track Battle.net app Play click state, click point, click timestamp, Diablo launch after app click, and Diablo launch without app click.
+* [x] Treat only a visible Battle.net window as launch-ready; process status is diagnostic-only during startup because Battle.net can run in the background.
+* [x] Add 5s Battle.net launch retry loop with 1s retry spacing and detailed path/attempt/window-detection logging.
+* [x] Change Battle.net Play polling to 100ms and log detection attempts before sending the current-match click.
+* [x] Treat only the visible Battle.net window remaining after Diablo launch as a post-launch close warning; background tray processes are expected and informational.
 * [x] Log suspected manual Battle.net Play intervention when Diablo launches without a recorded app Play click.
 * [x] Log and capture Battle.net still-open-after-launch evidence, then request existing safe Battle.net close behavior.
 * [ ] Manually test Battle.net detection when fullscreen, windowed, moved, and on another monitor.

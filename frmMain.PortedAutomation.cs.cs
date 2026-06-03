@@ -100,6 +100,8 @@ namespace GoblinFarmer
         private volatile bool portDemonHunterRightHeldFromSafeRegion;
         private volatile bool portWitchDoctorHeldInputFromSafeRegion;
         private volatile bool portDiabloWasRunning;
+        private volatile bool portTeleportNextHotkeyEnabled = true;
+        private volatile bool portExitGameHotkeyEnabled = true;
         private volatile bool portBlockSkill1TeleportHotkey = true;
         private bool portWitchDoctorLastHexReady;
         private long portLastWitchDoctorHexLogTicks;
@@ -272,6 +274,12 @@ namespace GoblinFarmer
             }
 
             chkCombat.Checked = true;
+            chkTeleportNextHotkey.Checked = true;
+            portTeleportNextHotkeyEnabled = chkTeleportNextHotkey.Checked;
+            chkTeleportNextHotkey.CheckedChanged += (_, _) => portTeleportNextHotkeyEnabled = chkTeleportNextHotkey.Checked;
+            chkExitGameHotkey.Checked = true;
+            portExitGameHotkeyEnabled = chkExitGameHotkey.Checked;
+            chkExitGameHotkey.CheckedChanged += (_, _) => portExitGameHotkeyEnabled = chkExitGameHotkey.Checked;
             chkKadala.Checked = true;
             chkLoot.Checked = true;
             chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;

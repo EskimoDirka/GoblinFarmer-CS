@@ -277,12 +277,12 @@ namespace GoblinFarmer
         private bool PortShouldHandleTeleportNextHotkey()
         {
             long ignoreUntil = Interlocked.Read(ref portIgnoreTeleportNextUntilTicks);
-            return DateTime.UtcNow.Ticks >= ignoreUntil && !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
+            return portTeleportNextHotkeyEnabled && DateTime.UtcNow.Ticks >= ignoreUntil && !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
         }
 
         private bool PortShouldHandleExitGameHotkey()
         {
-            return !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
+            return portExitGameHotkeyEnabled && !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
         }
 
         private void PortRunExitGameHotkey()

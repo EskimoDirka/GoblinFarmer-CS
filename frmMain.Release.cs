@@ -64,7 +64,6 @@ namespace GoblinFarmer
             portDebugModeCheckBox.CheckedChanged += (_, _) =>
             {
                 AppSettings.Debug.DebugMode = portDebugModeCheckBox.Checked;
-                AppSettings.Debug.EnableDebugScreenshots = portDebugModeCheckBox.Checked;
                 AppSettings.Debug.EnableMissingAssetPrompts = portDebugModeCheckBox.Checked;
                 AppSettings.Debug.ShowDiagnosticOverlay = portDebugModeCheckBox.Checked;
                 AppSettings.Debug.ShowRouteInspector = portDebugModeCheckBox.Checked;
@@ -415,6 +414,8 @@ namespace GoblinFarmer
                 btnPandemoniumFortressLevel1,
                 btnPandemoniumFortressLevel2,
                 chkCombat,
+                chkTeleportNextHotkey,
+                chkExitGameHotkey,
                 chkKadala,
                 chkLoot,
                 chkBlockSkill1TeleportHotkey,
@@ -434,7 +435,7 @@ namespace GoblinFarmer
                 chkKeepDebugScreenshots.Visible = debugMode;
             }
 
-            grpHotkeys.Size = debugMode ? new Size(270, 154) : new Size(270, 132);
+            grpHotkeys.Size = debugMode ? new Size(270, 204) : new Size(270, 182);
 
             Control? diagnostics = Controls.Find("tabDiagnostics", searchAllChildren: false).FirstOrDefault();
             if (!debugMode && diagnostics != null)
@@ -444,7 +445,7 @@ namespace GoblinFarmer
                 portDiagnosticLabels.Clear();
                 portRouteInspectorLabels.Clear();
                 ClientSize = new Size(918, 610);
-                MinimumSize = Size.Empty;
+                MinimumSize = new Size(934, 649);
                 AppLogger.Info("Diagnostic UI removed because Debug Mode is disabled.");
             }
             else if (debugMode && diagnostics == null)

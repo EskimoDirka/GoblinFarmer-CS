@@ -246,7 +246,12 @@ namespace GoblinFarmer
             try
             {
                 AddWorkflowStep("Starting Battle.net");
-                StartBattleNet();
+                if (!StartBattleNet(token))
+                {
+                    PortSetAppStatus("Battle.net Launch Failed");
+                    return false;
+                }
+
                 if (!PrepareBattleNetForDiabloLaunch(token))
                 {
                     PortSetAppStatus("Battle.net Setup Failed");

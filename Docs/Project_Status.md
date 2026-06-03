@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Final release preparation: Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, and cautious health/performance review while preserving current automation behavior.
+Final release preparation: Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, Hotkeys visibility polish, Debug screenshot defaults, startup form sizing, Battle.net visible-window launch/close semantics, and cautious health/performance review while preserving current automation behavior.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -52,11 +52,14 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Combat click safety blocks existing UI no-click regions and now includes the extended lower-right hover menu area without moving the cursor or stopping combat.
 - Combat no-click suppression keeps non-mouse combat actions running where safe; Demon Hunter key rotation continues while mouse clicks are suppressed over UI regions.
 - Combat keyboard-hook filtering matches the old Python app's injected-key behavior for combat-relevant number keys: physical `1`/`2` are suppressed during combat, while injected automation key events pass through.
+- The Hotkeys group now shows default-on entries for physical `1 - Teleport Next Location` and `2 - Exit Game` beside the existing hotkey controls; unchecking either opt-out disables only that physical hotkey path.
 - Physical `2` starts Exit Game when Diablo is focused and combat is inactive; combat and combat-stop cleanup suppress it before the Exit Game hotkey path can run.
 - Demon Hunter right mouse now follows the old Python app's pattern: start holding right mouse only in a safe region, then keep the hold active through hover/no-click regions without sending new click events.
 - Demon Hunter sustained combat now treats shared cursor-loop left-click suppression as active right-held combat when right mouse is already held from a safe region.
 - Witch Doctor held/channel mouse input starts only from a safe world region, remains held through combat no-click regions without sending new clicks, and continues keyboard/Hex timers while UI clicks are suppressed.
 - Battle.net tab and Play button image searches use Battle.net-window-local cached scan regions plus the current Battle.net window left/top, with full-screen search as fallback.
+- Battle.net startup uses the configured executable path first and falls back to installation discovery when the configured path is unavailable, then retries launch requests every 1s for up to 5s until a visible Battle.net window exists. Background `Battle.net.exe` process status is logged for diagnostics only and does not count as launch-ready.
+- Battle.net Play button detection polls every 100ms and clicks only from a current image match that passes the configured confidence threshold.
 - Battle.net launch diagnostics explicitly track whether GoblinFarmer sent the Play click, the click point/timestamp, whether Diablo launched after that app click, whether Diablo launched without an app click, whether Battle.net remained open after Diablo launch, and whether the post-launch Battle.net close was requested, succeeded, failed, or timed out.
 - Runtime input cleanup releases only tracked held left/right/Shift inputs while Diablo is available and clears tracked state without mouse events after Diablo closes.
 - Diagnostic Overlay, Route State Inspector, Screenshot-On-Failure, Success Screenshot Capture, and Debug Package Generator are implemented.
@@ -70,7 +73,9 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Bounty close logging now includes `CombatMenuWatcherStarted`, `BountyMenuDetected`, `BountyMenuEscapeSent`, `InjectedEscapeIgnoredByStopWatcher`, and `CombatMenuWatcherStopped`, with combat state and `automationCancelled=false` where relevant.
 - `Config\AppSettings.json` centralizes release/debug configuration, auto-creates when missing, logs loaded values, and currently controls diagnostic panes, debug screenshots, missing-asset prompts, notification display, repair timing, teleport confirmation timeout, and Bounty Complete watcher poll/cooldown timing.
 - `Config\AppSettings.json` now also stores Diablo III and Battle.net executable paths, the relative Images root, scan-region cache path, launch timings, and image-recognition thresholds. Missing executable paths trigger auto-discovery and first-run setup instead of relying on source-machine install paths.
+- `Debug.EnableDebugScreenshots` defaults to enabled in Debug builds and disabled in Release builds only when no saved preference exists. Existing saved preferences are honored, and the Debug Mode toggle no longer overwrites the screenshot preference.
 - Normal UI mode keeps diagnostic panes and debug screenshot controls hidden unless Debug Mode is enabled from the Settings panel.
+- The startup form client size is tall enough to show the full Settings group and Debug Mode checkbox without manual resizing while preserving the compact layout.
 - Release publishing uses `Scripts\publish-release.ps1` for a self-contained `win-x64` folder and `Installer\GoblinFarmer.iss` for an Inno Setup installer targeting `%LOCALAPPDATA%\Programs\GoblinFarmer`.
 - Exit Game workflow no longer generates desktop right-clicks after Diablo exits.
 - Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
@@ -80,7 +85,7 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Full route validation from Southern Highlands through Pandemonium Fortress Level 2, with route-failure-summary evidence checked after each run.
 - Fresh run validation that success and failure screenshot pairs are generated for major workflow milestones and appear in `debug-screenshot-manifest.txt`.
 - Missing-asset prompt validation should confirm missing templates log state, show a non-blocking capture/skip prompt outside combat, save accepted captures to the expected Images folder, and suppress prompts during combat.
-- Battle.net launch validation should confirm the debug package distinguishes app Play click, suspected manual Play click, Diablo launch without app click, successful Diablo launch after app click, and post-launch Battle.net close failures/timeouts.
+- Battle.net launch validation should confirm window-based startup detection, configured-path-first launch selection, installation-discovery fallback when no valid configured path exists, 1s launch retries up to 5s, 100ms Play polling, app Play click, suspected manual Play click, Diablo launch without app click, successful Diablo launch after app click, and post-launch visible-window close warnings without treating background/tray Battle.net processes as failures.
 - Ancient Waterway/channel retest: manual Ancient Waterway from channel levels must not advance route state until exact Ancient Waterway arrival is confirmed.
 - Caldeum to Ancient Waterway and Stinging Winds to Battlefields validation should prove the allowing raw locations (`Ruined Cistern`, `Black Canyon Mines`) in the summary/logs.
 - Start Game image recognition reliability, especially possible cursor interference with detection/click verification.
@@ -98,7 +103,11 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Need manual validation that logs show `DemonHunterRightHeldNoClickSuppressionActive` while right-hold remains active and shared cursor-loop left clicks are suppressed in no-click regions.
 - Need manual validation that Witch Doctor held/channel input starts from a safe region, stays held through no-click regions without UI clicks, continues keyboard/Hex timers, and releases cleanly on combat stop/focus loss.
 - Need runtime log validation that `BattleNetD3Tab=120,76,81,76` and `BattleNetPlayButton=16,1256,292,75` resolve by adding the Battle.net window origin and that the Play button is found before fallback.
-- Need manual validation of the new `BattleNetManualPlaySuspected`, `BattleNetPlayButtonNotClickedByApp`, `BattleNetStillOpenAfterDiabloLaunch`, and `BattleNetPostLaunchCloseSummary` diagnostics during a run where the user manually clicks Play or Battle.net remains open.
+- Need live validation that Battle.net startup fails when no visible Battle.net window appears within 5s even if the background `Battle.net.exe` process exists.
+- Need live validation that Battle.net launch logs show the selected executable path, launch attempts, retry count, elapsed time, process-observed state, and window-detected launch-ready state.
+- Need live validation that Play button detection attempts occur at 100ms cadence and click only after a current confidence-passing image match.
+- Need manual validation of the new `BattleNetManualPlaySuspected`, `BattleNetPlayButtonNotClickedByApp`, `BattleNetStillOpenAfterDiabloLaunch`, and `BattleNetPostLaunchCloseSummary` diagnostics during a run where the user manually clicks Play or the visible Battle.net window remains open.
+- Need manual validation that background/tray Battle.net processes after Diablo launch log as informational and do not cause close timeout/failure when no visible Battle.net window remains.
 - If BattleNetPlayButton still falls back, inspect the new fallback region diagnostic log for fallback point, expected region center, delta, distance, fallback-inside-region state, and suggested same-size cached region.
 - Need to manually validate Battle.net tab/Play button detection with Battle.net fullscreen, windowed, moved, and on another monitor.
 - Need manual validation that Ancient Waterway requested from Western/Eastern Channel levels preserves correct Waterway state and next target until exact arrival confirmation.
@@ -120,6 +129,13 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Added Debug/Release build defaults for `EnableDebugScreenshots` when no saved preference exists, while honoring existing saved preferences and avoiding routine config rewrites on startup.
+- Prevented the Debug Mode checkbox from overwriting `EnableDebugScreenshots`; the Keep Debug Screenshots checkbox remains the source of truth for that setting.
+- Increased the normal startup client size/minimum size so the Settings group and Debug Mode checkbox are visible without manual resizing.
+- Updated Battle.net post-launch close/status logging so only a visible Battle.net window remaining after Diablo launch is treated as a warning; background/tray Battle.net processes are informational.
+- Added Hotkeys group entries for `1 - Teleport Next Location` and `2 - Exit Game`, defaulted on with small opt-out gates for their existing physical hotkey paths.
+- Updated Battle.net startup to select the configured executable path first, fall back to installation discovery when needed, retry launch requests every 1s for up to 5s, and treat only a visible Battle.net window as launch-ready.
+- Updated Battle.net Play button detection to poll every 100ms and log each detection attempt before clicking the current confidence-passing image match.
 - Added release-ready runtime path configuration, auto-discovery for Diablo III and Battle.net, first-run setup, Settings panel validation/change controls, and automation blocking while required config is invalid.
 - Added configurable launch timings and image-recognition thresholds for user-adjustable release tuning without source edits.
 - Added a self-contained publish script and Inno Setup installer definition with Start Menu/desktop shortcuts, icon preservation, and config preservation across installer upgrades.
@@ -284,10 +300,14 @@ Migration plan:
 
 ### Battle.net Launch Diagnostics
 - Launch state is reset at Battle.net launch start.
+- Launch startup readiness is based on a visible Battle.net window, not the background `Battle.net.exe` process. Process status is retained in logs only as `processObserved`.
+- Launch startup logs configured/detected executable path selection, each launch attempt, retry count, elapsed time, and whether a launch-ready window was detected.
+- Play button scanning logs each 100ms polling attempt and sends the click only from the current confidence-passing image match.
+- Post-launch close status is based on whether the visible Battle.net window remains. Background/tray Battle.net processes may remain after Diablo launches and are logged as informational, not failures.
 - `BattleNetPlayClickSentByApp` logs the app click point and timestamp when GoblinFarmer sends the Play click.
 - `BattleNetManualPlaySuspected` logs when Diablo appears during launch flow without a recorded app Play click.
 - `BattleNetLaunchSummary` records whether launch should be considered fully automated. It is fully automated only when the app recorded the Play click and Diablo launched afterward.
-- `BattleNetStillOpenAfterDiabloLaunch` logs and captures evidence when Battle.net remains open after Diablo launches, then requests the existing safe Battle.net close path again.
+- `BattleNetStillOpenAfterDiabloLaunch` logs and captures evidence when the visible Battle.net window remains open after Diablo launches, then requests the existing safe Battle.net close path again.
 
 ### Runtime Input Cleanup
 - `ForceReleaseAllRuntimeInputs` logs cleanup reason, tracked held left/right/Shift state before cleanup, Diablo window handle, and Diablo rect availability.
@@ -347,6 +367,10 @@ Migration plan:
 - Package manifest and console summary report package size, session start, session duration, total screenshots, success screenshots, failure screenshots, normal screenshots, and stale screenshot exclusions.
 
 ## Last Validation
+- Built after Debug screenshot defaulting, startup form sizing, and Battle.net visible-window close/status polish; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed no changes were made to Battle.net launch retry behavior, Play button detection/click behavior, Diablo launch verification, combat, teleport, route, bounty, repair, or salvage logic.
+- Built after adding Hotkeys visibility entries and Battle.net window-based startup retry/100ms Play polling; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed Battle.net launch readiness is based on the visible Battle.net window, not the background process, and that Diablo post-Play launch verification remains in the existing flow.
 - Built after reviewing `GoblinFarmer_Debug_20260602_210617.zip`, adding the AppSettings config foundation, fixing already-at-queued-destination teleport start logging/dispatch, changing bounty menu Escape to automation-safe injected Escape, adding Start Game stable-button diagnostics, and reducing repair settle to the config default 50ms; build succeeded with 0 warnings and 0 errors.
 - Built after reviewing `GoblinFarmer_Debug_20260602_204323.zip` and adding Cave Of The Moon Clan Level 1 blocking, Teleport Next fresh-scan route advancement, 75ms repair settle, and expanded bounty menu skip diagnostics; build succeeded with 0 warnings and 0 errors.
 - Inspected `GoblinFarmer_Debug_20260602_204323.zip`: session summary reported Games Created `1`, Teleports Completed `15`, Blocked Teleports `0`, Failures `0`.

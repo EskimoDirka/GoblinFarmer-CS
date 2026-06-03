@@ -6,7 +6,7 @@ This README is intentionally high-level and user-facing. The detailed developer 
 
 ## Current Status
 
-The project is in an active reliability and release-readiness phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on centralized config, release UI cleanup, route failure summaries, Whimsy hotkey route blocking, Start Game retry monitoring, Battle.net window-relative Play button accuracy, and Bounty Complete auto-close during combat.
+The project is in an active reliability and release-readiness phase. Core route, combat, diagnostic, and launch systems are implemented, while current validation is focused on centralized config, release UI cleanup, Debug screenshot defaults, startup form sizing, route failure summaries, Hotkeys visibility polish, Whimsy hotkey route blocking, Start Game retry monitoring, Battle.net visible-window startup/close behavior, and Bounty Complete auto-close during combat.
 
 The latest reviewed package, `GoblinFarmer_Debug_20260602_221905.zip`, showed Bounty Complete detection now works during combat, but the app needed the old Python behavior ported more directly. Combat-active bounty popups now use a dedicated combat-menu watcher that polls the bounty title region and sends an automation-safe injected Escape with a 1s cooldown, while the app stop watcher ignores that injected Escape. The current recommended validation target is a focused run for WhimsyDale blocking, Bounty Complete combat-close, Start Game consistency, and config toggles. See [Docs/Project_Status.md](Docs/Project_Status.md) for the exact current focus and latest known issues.
 
@@ -24,13 +24,17 @@ The latest reviewed package, `GoblinFarmer_Debug_20260602_221905.zip`, showed Bo
 - Demon Hunter sustained combat reports active right-held no-click suppression instead of appearing stopped when shared left-click input is suppressed over UI.
 - Witch Doctor held/channel input starts only from a safe world area and remains held through combat no-click regions without sending new mouse clicks.
 - Combat keyboard filtering suppresses physical `1`/`2` during combat while allowing injected automation key events through.
+- The Hotkeys panel shows default-on entries for `1 - Teleport Next Location` and `2 - Exit Game`.
 - Physical `2` starts Exit Game when Diablo is focused and combat is inactive.
-- Battle.net Launch Flow can relaunch or focus Battle.net and uses window-relative tab/Play button image searches with full-screen fallback.
+- Battle.net Launch Flow can relaunch or focus Battle.net, treats only a visible Battle.net window as launch-ready, and uses window-relative tab/Play button image searches with full-screen fallback.
+- Battle.net startup retries launch requests every 1s for up to 5s using the configured executable first and installation discovery as fallback.
+- Battle.net can remain as a background/tray process after Diablo launches; only a visible Battle.net window remaining is treated as a post-launch close warning.
 - Battle.net Launch Diagnostics distinguish app-sent Play clicks, suspected manual Play clicks, Diablo launches without app Play clicks, successful Diablo launches after app clicks, and post-launch Battle.net close failures.
 - Start Game Flow is implemented with stable-button click confirmation and retry diagnostics, though image-recognition reliability is still being improved.
 - Repair and salvage workflows are implemented, with repair still using coordinate-based station clicks, visual menu polling, and detailed station/menu duration logs.
 - Bounty menu auto-close has foreground/combat/throttle diagnostics for detected, sent, and skipped injected-Escape decisions.
 - `Config/AppSettings.json` centralizes release/debug configuration and auto-creates with safe defaults when missing.
+- Debug screenshot capture defaults to on for Debug builds and off for Release builds only when no saved preference exists.
 - Runtime input cleanup tracks held mouse/Shift state to avoid unsafe post-exit releases.
 - Diagnostic screenshot capture records paired Diablo/App evidence for major workflow success and failure milestones.
 - Missing screenshot/template assets can trigger an optional non-combat debug prompt to capture the current Diablo window or known scan region into the expected Images folder.
@@ -45,6 +49,8 @@ The latest reviewed package, `GoblinFarmer_Debug_20260602_221905.zip`, showed Bo
 - Ancient Waterway/channel route-state validation.
 - Caldeum-to-Waterway and Black Canyon Mines/Battlefields allowed-location proof in logs and debug packages.
 - Battle.net Play button detection across fullscreen, windowed, moved-window, and multi-monitor setups after cached-region recalibration.
+- Battle.net window-based startup retry validation.
+- Battle.net visible-window close/status validation while background tray processes remain.
 - Battle.net launch and post-launch close diagnostics validation.
 - Battle.net Play button fallback comparison diagnostics for region accuracy.
 - Start Game image recognition and possible cursor interference.

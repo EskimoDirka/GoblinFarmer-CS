@@ -63,6 +63,8 @@ namespace GoblinFarmer
             radDH = new RadioButton();
             radMonk = new RadioButton();
             grpHotkeys = new GroupBox();
+            chkTeleportNextHotkey = new CheckBox();
+            chkExitGameHotkey = new CheckBox();
             chkBlockSkill1TeleportHotkey = new CheckBox();
             chkKeepDebugScreenshots = new CheckBox();
             chkLoot = new CheckBox();
@@ -95,7 +97,6 @@ namespace GoblinFarmer
             // lblCombatStatus
             // 
             lblCombatStatus.AutoEllipsis = true;
-            lblCombatStatus.AutoSize = false;
             lblCombatStatus.Location = new Point(14, 61);
             lblCombatStatus.Name = "lblCombatStatus";
             lblCombatStatus.Size = new Size(280, 18);
@@ -119,7 +120,6 @@ namespace GoblinFarmer
             // lblDiabloStatus
             // 
             lblDiabloStatus.AutoEllipsis = true;
-            lblDiabloStatus.AutoSize = false;
             lblDiabloStatus.Location = new Point(14, 32);
             lblDiabloStatus.Name = "lblDiabloStatus";
             lblDiabloStatus.Size = new Size(280, 18);
@@ -351,7 +351,6 @@ namespace GoblinFarmer
             // lblAppStatus
             // 
             lblAppStatus.AutoEllipsis = true;
-            lblAppStatus.AutoSize = false;
             lblAppStatus.Location = new Point(14, 90);
             lblAppStatus.Name = "lblAppStatus";
             lblAppStatus.Size = new Size(280, 18);
@@ -405,6 +404,8 @@ namespace GoblinFarmer
             // 
             // grpHotkeys
             // 
+            grpHotkeys.Controls.Add(chkTeleportNextHotkey);
+            grpHotkeys.Controls.Add(chkExitGameHotkey);
             grpHotkeys.Controls.Add(chkBlockSkill1TeleportHotkey);
             grpHotkeys.Controls.Add(chkKeepDebugScreenshots);
             grpHotkeys.Controls.Add(chkLoot);
@@ -412,48 +413,68 @@ namespace GoblinFarmer
             grpHotkeys.Controls.Add(chkCombat);
             grpHotkeys.Location = new Point(12, 348);
             grpHotkeys.Name = "grpHotkeys";
-            grpHotkeys.Size = new Size(270, 132);
+            grpHotkeys.Size = new Size(270, 205);
             grpHotkeys.TabIndex = 10;
             grpHotkeys.TabStop = false;
             grpHotkeys.Text = "Hotkeys";
             // 
+            // chkTeleportNextHotkey
+            // 
+            chkTeleportNextHotkey.AutoSize = true;
+            chkTeleportNextHotkey.Location = new Point(15, 49);
+            chkTeleportNextHotkey.Name = "chkTeleportNextHotkey";
+            chkTeleportNextHotkey.Size = new Size(162, 19);
+            chkTeleportNextHotkey.TabIndex = 1;
+            chkTeleportNextHotkey.Text = "1 - Teleport Next Location";
+            chkTeleportNextHotkey.UseVisualStyleBackColor = true;
+            // 
+            // chkExitGameHotkey
+            // 
+            chkExitGameHotkey.AutoSize = true;
+            chkExitGameHotkey.Location = new Point(15, 74);
+            chkExitGameHotkey.Name = "chkExitGameHotkey";
+            chkExitGameHotkey.Size = new Size(95, 19);
+            chkExitGameHotkey.TabIndex = 2;
+            chkExitGameHotkey.Text = "2 - Exit Game";
+            chkExitGameHotkey.UseVisualStyleBackColor = true;
+            // 
             // chkBlockSkill1TeleportHotkey
             // 
             chkBlockSkill1TeleportHotkey.AutoSize = true;
-            chkBlockSkill1TeleportHotkey.Location = new Point(15, 99);
+            chkBlockSkill1TeleportHotkey.Location = new Point(15, 149);
             chkBlockSkill1TeleportHotkey.Name = "chkBlockSkill1TeleportHotkey";
             chkBlockSkill1TeleportHotkey.Size = new Size(214, 19);
-            chkBlockSkill1TeleportHotkey.TabIndex = 3;
+            chkBlockSkill1TeleportHotkey.TabIndex = 5;
             chkBlockSkill1TeleportHotkey.Text = "Block Skill 1 During Teleport Hotkey";
             chkBlockSkill1TeleportHotkey.UseVisualStyleBackColor = true;
             // 
             // chkKeepDebugScreenshots
             // 
             chkKeepDebugScreenshots.AutoSize = true;
-            chkKeepDebugScreenshots.Location = new Point(15, 124);
+            chkKeepDebugScreenshots.Location = new Point(15, 174);
             chkKeepDebugScreenshots.Name = "chkKeepDebugScreenshots";
             chkKeepDebugScreenshots.Size = new Size(156, 19);
-            chkKeepDebugScreenshots.TabIndex = 4;
+            chkKeepDebugScreenshots.TabIndex = 6;
             chkKeepDebugScreenshots.Text = "Keep Debug Screenshots";
             chkKeepDebugScreenshots.UseVisualStyleBackColor = true;
             // 
             // chkLoot
             // 
             chkLoot.AutoSize = true;
-            chkLoot.Location = new Point(15, 74);
+            chkLoot.Location = new Point(15, 124);
             chkLoot.Name = "chkLoot";
             chkLoot.Size = new Size(99, 19);
-            chkLoot.TabIndex = 2;
+            chkLoot.TabIndex = 4;
             chkLoot.Text = "Alt + ` to Loot";
             chkLoot.UseVisualStyleBackColor = true;
             // 
             // chkKadala
             // 
             chkKadala.AutoSize = true;
-            chkKadala.Location = new Point(15, 49);
+            chkKadala.Location = new Point(15, 99);
             chkKadala.Name = "chkKadala";
             chkKadala.Size = new Size(132, 19);
-            chkKadala.TabIndex = 1;
+            chkKadala.TabIndex = 3;
             chkKadala.Text = "Up Arrow for Kadala";
             chkKadala.UseVisualStyleBackColor = true;
             // 
@@ -528,7 +549,6 @@ namespace GoblinFarmer
             // 
             // lblEscape
             // 
-            lblEscape.AutoSize = false;
             lblEscape.Location = new Point(349, 35);
             lblEscape.Name = "lblEscape";
             lblEscape.Size = new Size(544, 20);
@@ -549,6 +569,7 @@ namespace GoblinFarmer
             Controls.Add(grpRoutes);
             Controls.Add(grpFlows);
             Icon = (Icon)resources.GetObject("$this.Icon");
+            MinimumSize = new Size(934, 649);
             Name = "frmMain";
             Text = "Goblin Farmer";
             Load += frmMain_Load;
@@ -556,7 +577,6 @@ namespace GoblinFarmer
             grpRoutes.ResumeLayout(false);
             grpRoutes.PerformLayout();
             grpStatus.ResumeLayout(false);
-            grpStatus.PerformLayout();
             grpCharacter.ResumeLayout(false);
             grpCharacter.PerformLayout();
             grpHotkeys.ResumeLayout(false);
@@ -564,7 +584,6 @@ namespace GoblinFarmer
             grpSessionStats.ResumeLayout(false);
             grpSessionStats.PerformLayout();
             ResumeLayout(false);
-            PerformLayout();
         }
 
         #endregion
@@ -607,6 +626,8 @@ namespace GoblinFarmer
         private CheckBox chkLoot;
         private CheckBox chkBlockSkill1TeleportHotkey;
         private CheckBox chkKeepDebugScreenshots;
+        private CheckBox chkTeleportNextHotkey;
+        private CheckBox chkExitGameHotkey;
         private GroupBox grpSessionStats;
         private Label lblSessionRuntime;
         private Label lblSessionFailures;

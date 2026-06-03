@@ -270,7 +270,12 @@ namespace GoblinFarmer
             try
             {
                 AddWorkflowStep("Starting Battle.net");
-                StartBattleNet();
+                if (!StartBattleNet())
+                {
+                    SetAppStatus("Battle.net Launch Failed");
+                    return false;
+                }
+
                 if (!PrepareBattleNetForDiabloLaunch())
                 {
                     SetAppStatus("Battle.net Setup Failed");
@@ -332,44 +337,92 @@ namespace GoblinFarmer
             }
         }
 
-        private void StartBattleNet()
+        private bool StartBattleNet(CancellationToken token = default)
         {
-            if (IsBattleNetRunning())
-            {
-                AppLogger.Info("Battle.net process exists");
-                IntPtr existingWindow = FindBattleNetWindow();
-                if (existingWindow != IntPtr.Zero)
-                {
-                    SetForegroundWindow(existingWindow);
-                    AppLogger.Info($"Battle.net visible window found: hwnd=0x{existingWindow.ToInt64():X}");
-                    AppLogger.Info($"Battle.net already running; focused existing window hwnd=0x{existingWindow.ToInt64():X}");
-                }
-                else
-                {
-                    AppLogger.Info("Battle.net process exists but no visible window found");
-                }
+            const int launchRetryIntervalMs = 1000;
+            const int launchStartupTimeoutMs = 5000;
 
-                return;
-            }
-
-            LaunchBattleNetExecutable();
-        }
-
-        private bool LaunchBattleNetExecutable()
-        {
-            string battleNetPath = AppSettings.ResolveRuntimePath(AppSettings.Runtime.BattleNetExecutablePath);
+            string battleNetPath = AppSettings.ResolveBattleNetExecutablePathForLaunch(
+                out string battleNetPathSource,
+                out string configuredBattleNetPath,
+                out string detectedBattleNetPath);
+            AppLogger.Info($"Battle.net executable path selected: source={battleNetPathSource}; path={PortLogField(battleNetPath)}; configuredPath={PortLogField(configuredBattleNetPath)}; detectedPath={PortLogField(detectedBattleNetPath)}");
 
             if (!File.Exists(battleNetPath))
             {
                 MessageBox.Show("Battle.net executable is not configured or could not be found. Open Settings to select Battle.net.exe.");
-                AppLogger.Info($"Battle.net launch failed: configured executable not found; configuredPath={AppSettings.Runtime.BattleNetExecutablePath}; resolvedPath={battleNetPath}");
+                AppLogger.Info($"Battle.net launch failed: executable not found; source={battleNetPathSource}; path={PortLogField(battleNetPath)}; configuredPath={PortLogField(AppSettings.Runtime.BattleNetExecutablePath)}; detectedPath={PortLogField(detectedBattleNetPath)}");
                 return false;
             }
 
-            AppLogger.Info($"launching Battle.net.exe: {battleNetPath}");
-            Process.Start(battleNetPath);
-            AppLogger.Info($"Battle.net launch requested: {battleNetPath}");
-            return true;
+            Stopwatch sw = Stopwatch.StartNew();
+            int launchAttempts = 0;
+
+            while (sw.ElapsedMilliseconds < launchStartupTimeoutMs)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    AppLogger.Info($"Battle.net launch cancelled: attempts={launchAttempts}; elapsedMs={sw.ElapsedMilliseconds}");
+                    return false;
+                }
+
+                if (TryDetectBattleNetWindowForLaunch(sw.ElapsedMilliseconds, launchAttempts, out IntPtr existingWindow))
+                {
+                    SetForegroundWindow(existingWindow);
+                    AppLogger.Info($"Battle.net launch-ready window already detected; focused existing window hwnd=0x{existingWindow.ToInt64():X}; attempts={launchAttempts}; elapsedMs={sw.ElapsedMilliseconds}");
+                    return true;
+                }
+
+                launchAttempts++;
+                if (!LaunchBattleNetExecutable(battleNetPath, launchAttempts, sw.ElapsedMilliseconds))
+                {
+                    return false;
+                }
+
+                if (TryDetectBattleNetWindowForLaunch(sw.ElapsedMilliseconds, launchAttempts, out IntPtr launchedWindow))
+                {
+                    SetForegroundWindow(launchedWindow);
+                    AppLogger.Info($"Battle.net launch-ready window detected after launch attempt: hwnd=0x{launchedWindow.ToInt64():X}; attempts={launchAttempts}; elapsedMs={sw.ElapsedMilliseconds}");
+                    return true;
+                }
+
+                int sleepMs = (int)Math.Min(launchRetryIntervalMs, Math.Max(0, launchStartupTimeoutMs - sw.ElapsedMilliseconds));
+                AppLogger.Info($"Battle.net launch retry pending: retryCount={launchAttempts}; nextRetryInMs={sleepMs}; elapsedMs={sw.ElapsedMilliseconds}");
+                if (sleepMs <= 0 || !PortSleepOrThreadSleep(token, sleepMs))
+                {
+                    break;
+                }
+            }
+
+            bool processDetected = IsBattleNetRunning();
+            IntPtr finalWindow = FindBattleNetWindow();
+            AppLogger.Info($"Battle.net launch failed: launch-ready Battle.net window not detected within {launchStartupTimeoutMs}ms; attempts={launchAttempts}; elapsedMs={sw.ElapsedMilliseconds}; processObserved={processDetected}; windowDetected={finalWindow != IntPtr.Zero}; executablePath={PortLogField(battleNetPath)}");
+            return false;
+        }
+
+        private bool LaunchBattleNetExecutable(string battleNetPath, int attempt, long elapsedMs)
+        {
+            try
+            {
+                AppLogger.Info($"Battle.net launch attempt: attempt={attempt}; elapsedMs={elapsedMs}; executablePath={PortLogField(battleNetPath)}");
+                Process.Start(battleNetPath);
+                AppLogger.Info($"Battle.net launch requested: attempt={attempt}; elapsedMs={elapsedMs}; executablePath={PortLogField(battleNetPath)}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Battle.net launch attempt failed: attempt={attempt}; elapsedMs={elapsedMs}; executablePath={PortLogField(battleNetPath)}", ex);
+                return false;
+            }
+        }
+
+        private bool TryDetectBattleNetWindowForLaunch(long elapsedMs, int launchAttempts, out IntPtr battleNetWindow)
+        {
+            bool processObserved = IsBattleNetRunning();
+            battleNetWindow = FindBattleNetWindow();
+            bool windowDetected = battleNetWindow != IntPtr.Zero;
+            AppLogger.Info($"Battle.net launch window detection check: attempts={launchAttempts}; elapsedMs={elapsedMs}; processObserved={processObserved}; windowDetected={windowDetected}; hwnd=0x{battleNetWindow.ToInt64():X}; launchReady={windowDetected}");
+            return windowDetected;
         }
 
         private bool PrepareBattleNetForDiabloLaunch(CancellationToken token = default)
@@ -377,22 +430,8 @@ namespace GoblinFarmer
             AddWorkflowStep("Focusing Battle.net");
             if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: 1500, logFoundAfterLaunch: false))
             {
-                if (IsBattleNetRunning())
-                {
-                    AppLogger.Info("Battle.net process exists but no visible window found");
-                }
-
-                if (!LaunchBattleNetExecutable())
-                {
-                    AppLogger.Info("Battle.net setup failed after retry");
-                    return false;
-                }
-
-                if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: AppSettings.Launch.BattleNetWindowFocusTimeoutMs, logFoundAfterLaunch: true))
-                {
-                    AppLogger.Info("Battle.net setup failed after retry");
-                    return false;
-                }
+                AppLogger.Info($"Battle.net setup failed: confirmed launch window could not be focused; processDetected={IsBattleNetRunning()}; windowDetected={FindBattleNetWindow() != IntPtr.Zero}");
+                return false;
             }
 
             if (token.IsCancellationRequested)
@@ -403,6 +442,7 @@ namespace GoblinFarmer
             string playButtonPath = Img("Start Game", "Battle Net Play Button.png");
 
             Stopwatch playPrecheckWait = Stopwatch.StartNew();
+            int playPrecheckAttempts = 0;
 
             while (playPrecheckWait.ElapsedMilliseconds < AppSettings.Launch.BattleNetPlayPrecheckMs)
             {
@@ -411,6 +451,8 @@ namespace GoblinFarmer
                     return false;
                 }
 
+                playPrecheckAttempts++;
+                AppLogger.Info($"Battle.net Play button pre-check attempt: attempt={playPrecheckAttempts}; elapsedMs={playPrecheckWait.ElapsedMilliseconds}");
                 if (TryFindBattleNetImage(
                     playButtonPath,
                     "BattleNetPlayButton",
@@ -422,10 +464,10 @@ namespace GoblinFarmer
                     return true;
                 }
 
-                PortSleepOrThreadSleep(token, 250);
+                PortSleepOrThreadSleep(token, 100);
             }
 
-            AppLogger.Info($"Battle.net Play button not visible after pre-check wait; falling back to Diablo III tab selection; elapsed={playPrecheckWait.ElapsedMilliseconds}ms");
+            AppLogger.Info($"Battle.net Play button not visible after pre-check wait; falling back to Diablo III tab selection; attempts={playPrecheckAttempts}; elapsed={playPrecheckWait.ElapsedMilliseconds}ms");
 
             AddWorkflowStep("Selecting Diablo III in Battle.net");
             if (!ClickBattleNetDiabloTab())
@@ -575,7 +617,7 @@ namespace GoblinFarmer
                     return;
                 }
 
-                PortSleepOrThreadSleep(token, 250);
+                PortSleepOrThreadSleep(token, 100);
             }
 
             AppLogger.Info("Diablo III page confirmation inconclusive: Battle.net Play button not visible during brief post-tab wait");
@@ -589,6 +631,7 @@ namespace GoblinFarmer
         {
             AppLogger.Info($"Play button scan started: image={Path.GetFileName(imagePath)}; timeoutMs={timeoutMs}; confidence={confidence:0.000}");
             Stopwatch sw = Stopwatch.StartNew();
+            int attempts = 0;
 
             while (sw.ElapsedMilliseconds < timeoutMs)
             {
@@ -604,6 +647,8 @@ namespace GoblinFarmer
                     return battleNetPlayClickSentByApp;
                 }
 
+                attempts++;
+                AppLogger.Info($"Battle.net Play button detection attempt: attempt={attempts}; elapsedMs={sw.ElapsedMilliseconds}; confidence={confidence:0.000}");
                 if (TryFindBattleNetImage(
                     imagePath,
                     "BattleNetPlayButton",
@@ -611,10 +656,10 @@ namespace GoblinFarmer
                     out DrawingPoint centerPoint,
                     confidence))
                 {
-                    AppLogger.Info($"Play button found: point={centerPoint.X},{centerPoint.Y}; elapsed={sw.ElapsedMilliseconds}ms");
+                    AppLogger.Info($"Play button found by current image match: attempt={attempts}; point={centerPoint.X},{centerPoint.Y}; elapsed={sw.ElapsedMilliseconds}ms; confidenceThreshold={confidence:0.000}");
                     LeftClick(centerPoint);
                     PortRecordBattleNetPlayClickByApp(centerPoint);
-                    AppLogger.Info($"Play button click sent: point={centerPoint.X},{centerPoint.Y}");
+                    AppLogger.Info($"Successful Battle.net Play button click sent: attempt={attempts}; point={centerPoint.X},{centerPoint.Y}; elapsedMs={sw.ElapsedMilliseconds}");
                     PortStartLaunchGracePeriod("Battle.net Play clicked");
                     bool accepted = WaitForBattleNetPlayClickAccepted(
                         imagePath,
@@ -630,13 +675,13 @@ namespace GoblinFarmer
                     return true;
                 }
 
-                PortSleepOrThreadSleep(token, 250);
+                PortSleepOrThreadSleep(token, 100);
             }
 
-            AppLogger.Info($"Play button not found before timeout: timeoutMs={timeoutMs}");
+            AppLogger.Info($"Play button not found before timeout: timeoutMs={timeoutMs}; attempts={attempts}; elapsedMs={sw.ElapsedMilliseconds}");
             PortCaptureFailureScreenshot("BattleNetPlayButtonNotFound", "BattleNetLaunch");
             string notClickedScreenshotPath = PortCaptureFailureScreenshot("BattleNetPlayButtonNotClickedByApp", "BattleNetLaunch");
-            AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetPlayButtonNotClickedByApp; launchSuccessful=False; battleNetPlayClickSentByApp=False; battleNetPlayClickAcceptedByBattleNet=False; battleNetPlayClickAcceptedReason=Unknown; battleNetPlayClickPoint=Unknown; battleNetPlayClickTimestamp=Unknown; battleNetPlayClickAcceptedTimestamp=Unknown; diabloLaunched=False; diabloLaunchedAfterAppPlayClick=False; diabloLaunchedWithoutAppPlayClick=False; battleNetManualPlaySuspected=False; {PortBattleNetCloseSummaryFields()}; elapsedMs={sw.ElapsedMilliseconds}; screenshotPath={PortLogField(PortDisplayLocation(notClickedScreenshotPath))}; likelyExplanation=GoblinFarmer did not find and click Battle.net Play before timeout.");
+            AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetPlayButtonNotClickedByApp; launchSuccessful=False; battleNetPlayClickSentByApp=False; battleNetPlayClickAcceptedByBattleNet=False; battleNetPlayClickAcceptedReason=Unknown; battleNetPlayClickPoint=Unknown; battleNetPlayClickTimestamp=Unknown; battleNetPlayClickAcceptedTimestamp=Unknown; diabloLaunched=False; diabloLaunchedAfterAppPlayClick=False; diabloLaunchedWithoutAppPlayClick=False; battleNetManualPlaySuspected=False; {PortBattleNetCloseSummaryFields()}; attempts={attempts}; elapsedMs={sw.ElapsedMilliseconds}; screenshotPath={PortLogField(PortDisplayLocation(notClickedScreenshotPath))}; likelyExplanation=GoblinFarmer did not find and click Battle.net Play before timeout.");
             return false;
         }
 
@@ -649,6 +694,7 @@ namespace GoblinFarmer
         {
             Stopwatch sw = Stopwatch.StartNew();
             int consecutivePlayButtonMissing = 0;
+            int attempts = 0;
             AppLogger.Info($"Battle.net Play click acceptance verification started: timeoutMs={timeoutMs}; clickElapsedMs={clickElapsedMs}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}");
 
             while (sw.ElapsedMilliseconds < timeoutMs)
@@ -672,6 +718,8 @@ namespace GoblinFarmer
                     return true;
                 }
 
+                attempts++;
+                AppLogger.Info($"Battle.net Play button post-click verification attempt: attempt={attempts}; elapsedMs={sw.ElapsedMilliseconds}; confidence={confidence:0.000}");
                 bool playButtonStillVisible = TryFindBattleNetImage(
                     imagePath,
                     "BattleNetPlayButton",
@@ -692,7 +740,7 @@ namespace GoblinFarmer
                     consecutivePlayButtonMissing = 0;
                 }
 
-                PortSleepOrThreadSleep(token, 250);
+                PortSleepOrThreadSleep(token, 100);
             }
 
             return false;
@@ -780,23 +828,25 @@ namespace GoblinFarmer
         private void PortLogBattleNetStillOpenAfterDiabloLaunch()
         {
             IntPtr battleNetWindow = FindBattleNetWindow();
-            bool battleNetStillOpen = battleNetWindow != IntPtr.Zero || IsBattleNetRunning();
-            battleNetStillOpenAfterLaunch = battleNetStillOpen;
-            if (!battleNetStillOpen)
+            bool battleNetVisibleWindowOpen = battleNetWindow != IntPtr.Zero;
+            bool battleNetBackgroundProcessObserved = IsBattleNetRunning();
+            battleNetStillOpenAfterLaunch = battleNetVisibleWindowOpen;
+            if (!battleNetVisibleWindowOpen)
             {
-                AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetClosedAfterDiabloLaunch; launchSuccessful={battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick}; battleNetStillOpenAfterLaunch=False; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; {PortBattleNetCloseSummaryFields()}; likelyExplanation=Battle.net was not visible/running after Diablo launch.");
+                AppLogger.Info($"Battle.net visible window closed after Diablo launch; backgroundProcessObserved={battleNetBackgroundProcessObserved}; backgroundProcessIsFailure=False");
+                AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetVisibleWindowClosedAfterDiabloLaunch; launchSuccessful={battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick}; battleNetStillOpenAfterLaunch=False; battleNetVisibleWindowOpenAfterLaunch=False; battleNetBackgroundProcessObserved={battleNetBackgroundProcessObserved}; battleNetBackgroundProcessIsFailure=False; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; {PortBattleNetCloseSummaryFields()}; likelyExplanation=Battle.net visible window was closed or gone after Diablo launch; background tray process state is informational.");
                 return;
             }
 
             string stillOpenScreenshotPath = PortCaptureFailureScreenshot("BattleNetStillOpenAfterDiabloLaunch", "BattleNetLaunch");
-            AppLogger.Info($"BattleNetStillOpenAfterDiabloLaunch: battleNetStillOpenAfterLaunch=True; battleNetWindow=0x{battleNetWindow.ToInt64():X}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; screenshotPath={PortLogField(PortDisplayLocation(stillOpenScreenshotPath))}; likelyExplanation=Battle.net remained open after Diablo launched. Existing close behavior will be requested again.");
-            AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetStillOpenAfterDiabloLaunch; launchSuccessful={battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick}; battleNetStillOpenAfterLaunch=True; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; {PortBattleNetCloseSummaryFields()}; screenshotPath={PortLogField(PortDisplayLocation(stillOpenScreenshotPath))}; likelyExplanation=Battle.net remained open after Diablo launch.");
+            AppLogger.Info($"BattleNetStillOpenAfterDiabloLaunch: battleNetStillOpenAfterLaunch=True; battleNetVisibleWindowOpenAfterLaunch=True; battleNetBackgroundProcessObserved={battleNetBackgroundProcessObserved}; battleNetWindow=0x{battleNetWindow.ToInt64():X}; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; screenshotPath={PortLogField(PortDisplayLocation(stillOpenScreenshotPath))}; likelyExplanation=The visible Battle.net window remained open after Diablo launched. Existing close behavior will be requested again.");
+            AppLogger.Info($"BattleNetLaunchSummary: event=BattleNetVisibleWindowStillOpenAfterDiabloLaunch; launchSuccessful={battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick}; battleNetStillOpenAfterLaunch=True; battleNetVisibleWindowOpenAfterLaunch=True; battleNetBackgroundProcessObserved={battleNetBackgroundProcessObserved}; battleNetBackgroundProcessIsFailure=False; battleNetPlayClickSentByApp={battleNetPlayClickSentByApp}; battleNetPlayClickAcceptedByBattleNet={battleNetPlayClickAcceptedByBattleNet}; battleNetPlayClickAcceptedReason={PortLogField(battleNetPlayClickAcceptedReason)}; battleNetPlayClickPoint={(battleNetPlayClickSentByApp ? $"{battleNetPlayClickPoint.X},{battleNetPlayClickPoint.Y}" : "Unknown")}; battleNetPlayClickTimestamp={(battleNetPlayClickTimestamp.HasValue ? battleNetPlayClickTimestamp.Value.ToString("O") : "Unknown")}; battleNetPlayClickAcceptedTimestamp={(battleNetPlayClickAcceptedTimestamp.HasValue ? battleNetPlayClickAcceptedTimestamp.Value.ToString("O") : "Unknown")}; diabloLaunched=True; diabloLaunchedAfterAppPlayClick={diabloLaunchedAfterAppPlayClick}; diabloLaunchedWithoutAppPlayClick={diabloLaunchedWithoutAppPlayClick}; battleNetManualPlaySuspected={battleNetManualPlaySuspected}; {PortBattleNetCloseSummaryFields()}; screenshotPath={PortLogField(PortDisplayLocation(stillOpenScreenshotPath))}; likelyExplanation=Visible Battle.net window remained open after Diablo launch.");
             CloseBattleNet();
         }
 
         private string PortBattleNetCloseSummaryFields()
         {
-            return $"battleNetCloseRequested={battleNetCloseRequested}; battleNetCloseSucceeded={battleNetCloseSucceeded}; battleNetCloseTimedOut={battleNetCloseTimedOut}; battleNetCloseProcessRemaining={battleNetCloseProcessRemaining}; battleNetCloseVisibleWindowRemaining={battleNetCloseVisibleWindowRemaining}";
+            return $"battleNetCloseRequested={battleNetCloseRequested}; battleNetCloseSucceeded={battleNetCloseSucceeded}; battleNetCloseTimedOut={battleNetCloseTimedOut}; battleNetCloseProcessRemaining={battleNetCloseProcessRemaining}; battleNetCloseProcessRemainingIsFailure=False; battleNetCloseVisibleWindowRemaining={battleNetCloseVisibleWindowRemaining}";
         }
 
         private bool TryFindBattleNetImage(
@@ -1503,7 +1553,7 @@ namespace GoblinFarmer
                 Thread.Sleep(AppSettings.Launch.BattleNetClosePollIntervalMs);
                 stillRunning = IsBattleNetRunning();
                 stillVisibleWindow = FindBattleNetWindow();
-                if (!stillRunning && stillVisibleWindow == IntPtr.Zero)
+                if (stillVisibleWindow == IntPtr.Zero)
                 {
                     break;
                 }
@@ -1512,9 +1562,9 @@ namespace GoblinFarmer
 
             battleNetCloseProcessRemaining = stillRunning;
             battleNetCloseVisibleWindowRemaining = stillVisibleWindow != IntPtr.Zero;
-            battleNetCloseTimedOut = battleNetCloseProcessRemaining || battleNetCloseVisibleWindowRemaining;
-            battleNetCloseSucceeded = battleNetCloseRequested && !battleNetCloseTimedOut;
-            AppLogger.Info($"Battle.net close result: closeRequested={closeRequested}; battleNetCloseRequested={battleNetCloseRequested}; battleNetCloseSucceeded={battleNetCloseSucceeded}; battleNetCloseTimedOut={battleNetCloseTimedOut}; battleNetCloseProcessRemaining={battleNetCloseProcessRemaining}; battleNetCloseVisibleWindowRemaining={battleNetCloseVisibleWindowRemaining}; visibleWindow=0x{stillVisibleWindow.ToInt64():X}; elapsedMs={sw.ElapsedMilliseconds}");
+            battleNetCloseTimedOut = battleNetCloseVisibleWindowRemaining;
+            battleNetCloseSucceeded = !battleNetCloseVisibleWindowRemaining;
+            AppLogger.Info($"Battle.net close result: closeRequested={closeRequested}; battleNetCloseRequested={battleNetCloseRequested}; battleNetCloseSucceeded={battleNetCloseSucceeded}; battleNetCloseTimedOut={battleNetCloseTimedOut}; battleNetCloseProcessRemaining={battleNetCloseProcessRemaining}; battleNetCloseProcessRemainingIsFailure=False; battleNetCloseVisibleWindowRemaining={battleNetCloseVisibleWindowRemaining}; visibleWindow=0x{stillVisibleWindow.ToInt64():X}; elapsedMs={sw.ElapsedMilliseconds}; likelyExplanation={(battleNetCloseVisibleWindowRemaining ? "Visible Battle.net window remained open after close request." : "Visible Battle.net window is closed/gone; background tray process state is informational.")}");
 
             if (portBattleNetLaunchFlowActive || battleNetLaunchOutcomeRecorded)
             {
