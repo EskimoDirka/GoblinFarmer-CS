@@ -14,6 +14,37 @@ GoblinFarmer includes combat helpers for Monk, Demon Hunter, and Witch Doctor pr
 - Demon Hunter: supports right-hold behavior from safe world areas and avoids sending new mouse clicks over protected UI.
 - Witch Doctor: supports held/channel behavior from safe world areas and keeps keyboard timers running while UI clicks are suppressed.
 
+## Combat Profile Skill Setup
+
+GoblinFarmer expects these exact Diablo III skills and runes to be assigned to the listed keybinds for each combat profile. Incorrect skill placement may cause combat automation to behave incorrectly.
+
+### Monk
+
+| Keybind | Skill | Rune |
+|---|---|---|
+| 1 | Epiphany | Insight |
+| 2 | Mystic Ally | Air Ally |
+| 3 | Dashing Strike | Radiance |
+
+### Demon Hunter
+
+| Keybind | Skill | Rune |
+|---|---|---|
+| Left Mouse | Hungering Arrow | Devouring Arrow |
+| Right Mouse | Strafe | Drifting Shadow |
+| 1 | Preparation | Focused Mind |
+| 2 | Companion | Bat Companion |
+| 3 | Vengeance | Seethe |
+| 4 | Smoke Screen | Displacement |
+
+### Witch Doctor
+
+| Keybind | Skill | Rune |
+|---|---|---|
+| 1 | Hex | Angry Chicken |
+| 2 | Horrify | Stalker |
+| 3 | Spirit Walk | Severance |
+
 ## Debugging
 
 Combat diagnostics are written to the normal app log and can be included in generated debug packages. Debug Mode can expose additional state for profile validation without changing the active combat profile.

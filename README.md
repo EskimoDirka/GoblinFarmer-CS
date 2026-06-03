@@ -76,6 +76,37 @@ Images/Teleport Function
 
 After combat stops, Teleport Next may have a slight intentional delay before it is available again. This lets combat/input state settle and helps avoid accidental or unsafe teleport attempts.
 
+## Combat Profile Skill Setup
+
+GoblinFarmer expects these exact Diablo III skills and runes to be assigned to the listed keybinds for each combat profile. Incorrect skill placement may cause combat automation to behave incorrectly.
+
+### Monk
+
+| Keybind | Skill | Rune |
+|---|---|---|
+| 1 | Epiphany | Insight |
+| 2 | Mystic Ally | Air Ally |
+| 3 | Dashing Strike | Radiance |
+
+### Demon Hunter
+
+| Keybind | Skill | Rune |
+|---|---|---|
+| Left Mouse | Hungering Arrow | Devouring Arrow |
+| Right Mouse | Strafe | Drifting Shadow |
+| 1 | Preparation | Focused Mind |
+| 2 | Companion | Bat Companion |
+| 3 | Vengeance | Seethe |
+| 4 | Smoke Screen | Displacement |
+
+### Witch Doctor
+
+| Keybind | Skill | Rune |
+|---|---|---|
+| 1 | Hex | Angry Chicken |
+| 2 | Horrify | Stalker |
+| 3 | Spirit Walk | Severance |
+
 ## Compatibility Notes
 
 GoblinFarmer is designed to support flexible install paths. Runtime paths for Diablo III, Battle.net, and image templates are configurable where applicable, and the app validates those paths before enabling automation.
@@ -199,6 +230,7 @@ See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a f
 
 - [CHANGELOG.md](CHANGELOG.md): user-facing release history.
 - [Docs/Release_v1.3.md](Docs/Release_v1.3.md): ready-to-copy GitHub release notes.
+- [Docs/CombatProfiles.md](Docs/CombatProfiles.md): supported combat profiles and required skill setup.
 - [Docs/Project_Status.md](Docs/Project_Status.md): detailed development status and implementation history.
 - [Docs/TODO.md](Docs/TODO.md): development and validation backlog.
 - [Docs/Release_Checklist.md](Docs/Release_Checklist.md): release validation checklist.
