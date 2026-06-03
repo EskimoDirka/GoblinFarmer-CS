@@ -383,8 +383,15 @@
     </Content>
     <Content Include="Scripts\create-debug-package.ps1">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
+
+  <Target Name="ValidateReleasePublishScripts" AfterTargets="Publish">
+    <Error
+      Condition="!Exists('$(PublishDir)Scripts\create-debug-package.ps1')"
+      Text="Published debug package script missing: $(PublishDir)Scripts\create-debug-package.ps1" />
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260528" />

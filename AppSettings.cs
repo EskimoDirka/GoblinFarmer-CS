@@ -15,8 +15,17 @@ namespace GoblinFarmer
 
         private static SettingsModel settings = SettingsModel.Default();
         private static string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "AppSettings.json");
+        private static DebugSettings persistedDebugSettings = new();
+
+        public enum DebugDefaultsProfile
+        {
+            VsDebug,
+            ReleaseUser,
+        }
 
         public static string ConfigPath => configPath;
+        public static DebugDefaultsProfile CurrentDebugDefaultsProfile { get; private set; } = ResolveDebugDefaultsProfile();
+        public static bool IsVsDebugProfile => CurrentDebugDefaultsProfile == DebugDefaultsProfile.VsDebug;
         public static RuntimeSettings Runtime => settings.Runtime;
         public static LaunchSettings Launch => settings.Launch;
         public static DebugSettings Debug => settings.Debug;
@@ -30,14 +39,19 @@ namespace GoblinFarmer
         public static void Load()
         {
             configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "AppSettings.json");
+            CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
                 if (!File.Exists(configPath))
                 {
                     settings = SettingsModel.Default();
+                    settings.Normalize();
+                    ApplyReleaseDebugPersistenceDefaults();
+                    persistedDebugSettings = settings.Debug.Clone();
                     File.WriteAllText(configPath, JsonSerializer.Serialize(settings, JsonOptions));
                     AppLogger.Info($"AppSettings created with safe defaults: {configPath}");
+                    ApplyDebugDefaultsProfile();
                 }
                 else
                 {
@@ -50,21 +64,27 @@ namespace GoblinFarmer
                     {
                         settings.Debug.EnableDebugScreenshots = DebugSettings.DefaultEnableDebugScreenshots;
                         shouldSaveLoadedSettings = true;
-                        AppLogger.Info($"AppSettings missing Debug.EnableDebugScreenshots; using build default {settings.Debug.EnableDebugScreenshots}.");
+                        AppLogger.Info($"AppSettings missing Debug.EnableDebugScreenshots; using persisted default {settings.Debug.EnableDebugScreenshots}.");
                     }
 
                     settings.Normalize();
-                    ApplyDevelopmentDebugDefaults();
+                    ApplyReleaseDebugPersistenceDefaults();
+                    persistedDebugSettings = settings.Debug.Clone();
                     if (shouldSaveLoadedSettings)
                     {
                         Save();
                     }
+
+                    ApplyDebugDefaultsProfile();
                 }
             }
             catch (Exception ex)
             {
                 settings = SettingsModel.Default();
-                ApplyDevelopmentDebugDefaults();
+                settings.Normalize();
+                ApplyReleaseDebugPersistenceDefaults();
+                persistedDebugSettings = settings.Debug.Clone();
+                ApplyDebugDefaultsProfile();
                 AppLogger.Error($"AppSettings load failed; using safe defaults from {configPath}.", ex);
             }
 
@@ -76,9 +96,21 @@ namespace GoblinFarmer
             try
             {
                 settings.Normalize();
+                ApplyReleaseDebugPersistenceDefaults();
+                SettingsModel modelToSave = settings;
+                if (IsVsDebugProfile)
+                {
+                    modelToSave = settings.WithDebugSettings(persistedDebugSettings);
+                }
+                else
+                {
+                    persistedDebugSettings = settings.Debug.Clone();
+                }
+
                 Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
-                File.WriteAllText(configPath, JsonSerializer.Serialize(settings, JsonOptions));
+                File.WriteAllText(configPath, JsonSerializer.Serialize(modelToSave, JsonOptions));
                 AppLogger.Info($"AppSettings saved: {configPath}");
+                ApplyDebugDefaultsProfile();
             }
             catch (Exception ex)
             {
@@ -107,15 +139,50 @@ namespace GoblinFarmer
             }
         }
 
-        private static void ApplyDevelopmentDebugDefaults()
+        private static DebugDefaultsProfile ResolveDebugDefaultsProfile()
         {
 #if DEBUG
-            if (System.Diagnostics.Debugger.IsAttached && !settings.Debug.EnableDebugScreenshots)
-            {
-                settings.Debug.EnableDebugScreenshots = true;
-                AppLogger.Info("Debug.EnableDebugScreenshots enabled for attached DEBUG debugger session.");
-            }
+            return DebugDefaultsProfile.VsDebug;
+#else
+            return DebugDefaultsProfile.ReleaseUser;
 #endif
+        }
+
+        public static void ApplyDebugDefaultsProfile()
+        {
+            CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
+            if (CurrentDebugDefaultsProfile != DebugDefaultsProfile.VsDebug)
+            {
+                return;
+            }
+
+            settings.Debug.DebugMode = true;
+            settings.Debug.ShowDiagnosticOverlay = true;
+            settings.Debug.ShowRouteInspector = true;
+            settings.Debug.EnableDebugScreenshots = true;
+            settings.Debug.EnableMissingAssetPrompts = true;
+            settings.Debug.EnableVerboseLogging = true;
+        }
+
+        private static void ApplyReleaseDebugPersistenceDefaults()
+        {
+            CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
+            if (CurrentDebugDefaultsProfile != DebugDefaultsProfile.ReleaseUser)
+            {
+                return;
+            }
+
+            if (settings.Debug.DebugModePreferenceSaved)
+            {
+                return;
+            }
+
+            settings.Debug.DebugMode = false;
+            settings.Debug.ShowDiagnosticOverlay = false;
+            settings.Debug.ShowRouteInspector = false;
+            settings.Debug.EnableDebugScreenshots = false;
+            settings.Debug.EnableMissingAssetPrompts = false;
+            settings.Debug.EnableVerboseLogging = false;
         }
 
         public static string ResolveRuntimePath(string path)
@@ -333,6 +400,7 @@ namespace GoblinFarmer
             AppLogger.Info(
                 "AppSettings loaded: " +
                 $"path={configPath}; " +
+                $"DebugDefaultsProfile={CurrentDebugDefaultsProfile}; " +
                 $"Runtime.DiabloExecutablePath={Runtime.DiabloExecutablePath}; " +
                 $"Runtime.BattleNetExecutablePath={Runtime.BattleNetExecutablePath}; " +
                 $"Runtime.ImagesRoot={Runtime.ImagesRoot}; " +
@@ -340,11 +408,18 @@ namespace GoblinFarmer
                 $"Launch.BattleNetWindowFocusTimeoutMs={Launch.BattleNetWindowFocusTimeoutMs}; " +
                 $"Launch.BattleNetPlayButtonTimeoutMs={Launch.BattleNetPlayButtonTimeoutMs}; " +
                 $"Launch.DiabloStartTimeoutMs={Launch.DiabloStartTimeoutMs}; " +
+                $"Debug.DebugMode={Debug.DebugMode}; " +
+                $"DebugMode={Debug.DebugMode}; " +
+                $"KeepDebugScreenshots={Debug.EnableDebugScreenshots}; " +
                 $"Debug.ShowDiagnosticOverlay={Debug.ShowDiagnosticOverlay}; " +
+                $"ShowDiagnosticOverlay={Debug.ShowDiagnosticOverlay}; " +
                 $"Debug.ShowRouteInspector={Debug.ShowRouteInspector}; " +
+                $"ShowRouteInspector={Debug.ShowRouteInspector}; " +
                 $"Debug.EnableDebugScreenshots={Debug.EnableDebugScreenshots}; " +
+                $"EnableDebugScreenshots={Debug.EnableDebugScreenshots}; " +
                 $"Debug.EnableMissingAssetPrompts={Debug.EnableMissingAssetPrompts}; " +
                 $"Debug.EnableVerboseLogging={Debug.EnableVerboseLogging}; " +
+                $"VerboseLogging={Debug.EnableVerboseLogging}; " +
                 $"UI.NotificationDurationMs={UI.NotificationDurationMs}; " +
                 $"UI.NotificationOpacity={UI.NotificationOpacity:0.00}; " +
                 $"UI.NotificationPosition={UI.NotificationPosition}; " +
@@ -384,6 +459,21 @@ namespace GoblinFarmer
                 };
                 model.Normalize();
                 return model;
+            }
+
+            public SettingsModel WithDebugSettings(DebugSettings debugSettings)
+            {
+                return new SettingsModel
+                {
+                    Runtime = Runtime,
+                    Launch = Launch,
+                    Debug = debugSettings.Clone(),
+                    UI = UI,
+                    Repair = Repair,
+                    Teleport = Teleport,
+                    Bounty = Bounty,
+                    ImageRecognition = ImageRecognition,
+                };
             }
 
             public void Normalize()
@@ -454,6 +544,7 @@ namespace GoblinFarmer
 
         internal sealed class DebugSettings
         {
+            public bool DebugModePreferenceSaved { get; set; }
             public bool DebugMode { get; set; }
             public bool ShowDiagnosticOverlay { get; set; }
             public bool ShowRouteInspector { get; set; }
@@ -461,11 +552,21 @@ namespace GoblinFarmer
             public bool EnableMissingAssetPrompts { get; set; }
             public bool EnableVerboseLogging { get; set; }
 
-#if DEBUG
-            public const bool DefaultEnableDebugScreenshots = true;
-#else
+            public DebugSettings Clone()
+            {
+                return new DebugSettings
+                {
+                    DebugModePreferenceSaved = DebugModePreferenceSaved,
+                    DebugMode = DebugMode,
+                    ShowDiagnosticOverlay = ShowDiagnosticOverlay,
+                    ShowRouteInspector = ShowRouteInspector,
+                    EnableDebugScreenshots = EnableDebugScreenshots,
+                    EnableMissingAssetPrompts = EnableMissingAssetPrompts,
+                    EnableVerboseLogging = EnableVerboseLogging,
+                };
+            }
+
             public const bool DefaultEnableDebugScreenshots = false;
-#endif
         }
 
         internal sealed class UiSettings

@@ -63,10 +63,25 @@ namespace GoblinFarmer
             };
             portDebugModeCheckBox.CheckedChanged += (_, _) =>
             {
-                AppSettings.Debug.DebugMode = portDebugModeCheckBox.Checked;
-                AppSettings.Debug.EnableMissingAssetPrompts = portDebugModeCheckBox.Checked;
-                AppSettings.Debug.ShowDiagnosticOverlay = portDebugModeCheckBox.Checked;
-                AppSettings.Debug.ShowRouteInspector = portDebugModeCheckBox.Checked;
+                if (AppSettings.IsVsDebugProfile)
+                {
+                    AppSettings.ApplyDebugDefaultsProfile();
+                    PortRefreshDebugControlsFromSettings();
+                    PortApplyDebugModeUi();
+                    return;
+                }
+
+                bool debugModeEnabled = portDebugModeCheckBox.Checked;
+                AppSettings.Debug.DebugModePreferenceSaved = true;
+                AppSettings.Debug.DebugMode = debugModeEnabled;
+                AppSettings.Debug.EnableMissingAssetPrompts = debugModeEnabled;
+                AppSettings.Debug.ShowDiagnosticOverlay = debugModeEnabled;
+                AppSettings.Debug.ShowRouteInspector = debugModeEnabled;
+                if (debugModeEnabled)
+                {
+                    AppSettings.Debug.EnableDebugScreenshots = true;
+                }
+
                 AppSettings.Save();
                 PortApplyDebugModeUi();
             };
@@ -79,9 +94,28 @@ namespace GoblinFarmer
             portSettingsGroup.Controls.Add(portImagesPathLabel);
             portSettingsGroup.Controls.Add(portSettingsButton);
             portSettingsGroup.Controls.Add(portValidateSettingsButton);
-            portSettingsGroup.Controls.Add(portDebugModeCheckBox);
+            if (!AppSettings.IsVsDebugProfile)
+            {
+                portSettingsGroup.Controls.Add(portDebugModeCheckBox);
+                PortMoveKeepDebugScreenshotsToSettingsGroup();
+            }
+
             Controls.Add(portSettingsGroup);
             PortApplyDebugModeUi();
+        }
+
+        private void PortMoveKeepDebugScreenshotsToSettingsGroup()
+        {
+            if (portSettingsGroup == null || chkKeepDebugScreenshots == null)
+            {
+                return;
+            }
+
+            grpHotkeys.Controls.Remove(chkKeepDebugScreenshots);
+            chkKeepDebugScreenshots.AutoSize = false;
+            chkKeepDebugScreenshots.Location = new DrawingPoint(258, 96);
+            chkKeepDebugScreenshots.Size = new Size(166, 24);
+            portSettingsGroup.Controls.Add(chkKeepDebugScreenshots);
         }
 
         private static Label PortCreateSettingsCaption(string text, int y)
@@ -116,9 +150,19 @@ namespace GoblinFarmer
             portDiabloPathLabel.Text = PortDisplayConfiguredPath(AppSettings.Runtime.DiabloExecutablePath);
             portBattleNetPathLabel.Text = PortDisplayConfiguredPath(AppSettings.Runtime.BattleNetExecutablePath);
             portImagesPathLabel.Text = PortDisplayConfiguredPath(AppSettings.Runtime.ImagesRoot);
+            PortRefreshDebugControlsFromSettings();
+        }
+
+        private void PortRefreshDebugControlsFromSettings()
+        {
             if (portDebugModeCheckBox != null && portDebugModeCheckBox.Checked != AppSettings.Debug.DebugMode)
             {
                 portDebugModeCheckBox.Checked = AppSettings.Debug.DebugMode;
+            }
+
+            if (chkKeepDebugScreenshots != null && chkKeepDebugScreenshots.Checked != AppSettings.Debug.EnableDebugScreenshots)
+            {
+                chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
             }
         }
 
@@ -418,7 +462,6 @@ namespace GoblinFarmer
                 chkExitGameHotkey,
                 chkKadala,
                 chkLoot,
-                chkBlockSkill1TeleportHotkey,
             })
             {
                 control.Enabled = enabled;
@@ -427,28 +470,44 @@ namespace GoblinFarmer
 
         private void PortApplyDebugModeUi()
         {
+            if (AppSettings.IsVsDebugProfile)
+            {
+                AppSettings.ApplyDebugDefaultsProfile();
+                PortRefreshDebugControlsFromSettings();
+            }
+
             bool debugMode = AppSettings.Debug.DebugMode;
+            bool debugControlsForcedVisible = AppSettings.IsVsDebugProfile;
+            if (portDebugModeCheckBox != null)
+            {
+                portDebugModeCheckBox.Visible = !debugControlsForcedVisible;
+                portDebugModeCheckBox.Enabled = !debugControlsForcedVisible;
+            }
+
             if (chkKeepDebugScreenshots != null)
             {
                 chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
-                chkKeepDebugScreenshots.Enabled = debugMode;
-                chkKeepDebugScreenshots.Visible = debugMode;
+                chkKeepDebugScreenshots.Enabled = !debugControlsForcedVisible && debugMode;
+                chkKeepDebugScreenshots.Visible = !debugControlsForcedVisible && debugMode;
             }
 
-            grpHotkeys.Size = debugMode ? new Size(270, 204) : new Size(270, 182);
+            grpHotkeys.Size = new Size(270, 157);
 
             Control? diagnostics = Controls.Find("tabDiagnostics", searchAllChildren: false).FirstOrDefault();
-            if (!debugMode && diagnostics != null)
+            if (!debugControlsForcedVisible && !debugMode)
             {
-                Controls.Remove(diagnostics);
-                diagnostics.Dispose();
-                portDiagnosticLabels.Clear();
-                portRouteInspectorLabels.Clear();
-                ClientSize = new Size(918, 610);
                 MinimumSize = new Size(934, 649);
-                AppLogger.Info("Diagnostic UI removed because Debug Mode is disabled.");
+                ClientSize = new Size(918, 610);
+                if (diagnostics != null)
+                {
+                    Controls.Remove(diagnostics);
+                    diagnostics.Dispose();
+                    portDiagnosticLabels.Clear();
+                    portRouteInspectorLabels.Clear();
+                    AppLogger.Info("Diagnostic UI removed because Debug Mode is disabled.");
+                }
             }
-            else if (debugMode && diagnostics == null)
+            else if ((debugControlsForcedVisible || debugMode) && diagnostics == null)
             {
                 PortInitializeDiagnosticOverlay();
             }

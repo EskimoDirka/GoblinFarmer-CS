@@ -27,6 +27,7 @@ namespace GoblinFarmer
         private const int PortWmSysKeyDown = 0x0104;
         private const int PortWmSysKeyUp = 0x0105;
         private const int PortDiabloMissingExitThreshold = 4;
+        private const bool PortBlockSkill1DuringTeleportHotkey = true;
         private static int PortLaunchGracePeriodMs => AppSettings.Launch.LaunchGracePeriodMs;
         private static double PortStartGameButtonConfidence => AppSettings.ImageRecognition.StartGameButtonConfidence;
         private static double PortCharacterLoadConfidence => AppSettings.ImageRecognition.CharacterLoadConfidence;
@@ -102,7 +103,6 @@ namespace GoblinFarmer
         private volatile bool portDiabloWasRunning;
         private volatile bool portTeleportNextHotkeyEnabled = true;
         private volatile bool portExitGameHotkeyEnabled = true;
-        private volatile bool portBlockSkill1TeleportHotkey = true;
         private bool portWitchDoctorLastHexReady;
         private long portLastWitchDoctorHexLogTicks;
         private long portLastLocationTemplateReloadTicks;
@@ -285,6 +285,17 @@ namespace GoblinFarmer
             chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
             chkKeepDebugScreenshots.CheckedChanged += (_, _) =>
             {
+                if (AppSettings.IsVsDebugProfile)
+                {
+                    AppSettings.ApplyDebugDefaultsProfile();
+                    if (!chkKeepDebugScreenshots.Checked)
+                    {
+                        chkKeepDebugScreenshots.Checked = true;
+                    }
+
+                    return;
+                }
+
                 if (!AppSettings.Debug.DebugMode)
                 {
                     return;
@@ -294,16 +305,26 @@ namespace GoblinFarmer
                 AppSettings.Save();
             };
             PortApplyDebugModeUi();
-            chkBlockSkill1TeleportHotkey.Checked = true;
-            portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
-            chkBlockSkill1TeleportHotkey.CheckedChanged += (_, _) => portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
-
+            PortLogDebugStartupState();
             portHotkeysRunning = true;
             portHotkeyThread = new Thread(PortHotkeyLoop) { IsBackground = true };
             portHotkeyThread.Start();
             PortInstallKeyboardHook();
             portDiabloWasRunning = IsDiabloRunning();
             PortCleanupOldDebugScreenshots(AppSettings.RetentionDays);
+        }
+
+        private void PortLogDebugStartupState()
+        {
+            AppLogger.Info(
+                "Debug startup state: " +
+                $"DebugDefaultsProfile={AppSettings.CurrentDebugDefaultsProfile}; " +
+                $"DebugMode={AppSettings.Debug.DebugMode}; " +
+                $"KeepDebugScreenshots={(chkKeepDebugScreenshots != null && chkKeepDebugScreenshots.Checked)}; " +
+                $"ShowDiagnosticOverlay={AppSettings.Debug.ShowDiagnosticOverlay}; " +
+                $"ShowRouteInspector={AppSettings.Debug.ShowRouteInspector}; " +
+                $"EnableDebugScreenshots={AppSettings.Debug.EnableDebugScreenshots}; " +
+                $"VerboseLogging={AppSettings.Debug.EnableVerboseLogging}");
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

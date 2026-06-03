@@ -23,6 +23,9 @@ GoblinFarmer v1.3 is considered a stable release focused on reliability, launch 
 - Improved logging and diagnostics.
 - Installer packaging improvements.
 - Version metadata cleanup.
+- Cleaned up Release/VS Debug options so forced debug defaults do not leak into user builds.
+- Removed the Skill 1 teleport-protection checkbox while keeping the protection always enabled internally.
+- Included the debug package script in published/installed builds.
 
 ## v1.0
 

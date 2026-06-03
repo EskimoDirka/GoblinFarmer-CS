@@ -16,6 +16,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"Route decision input: requested={location}; rawConfirmed={PortDisplayLocation(confirmedLocation)}; normalizedConfirmed={PortDisplayLocation(PortNormalizeBlockingLocation(confirmedLocation))}; buttonLocation={buttonLocation}");
+            PortLogCaldeumDetection(confirmedLocation, confirmedLocation, 0, location, confirmedLocation);
             string next = PortNextTeleportForConfirmedLocation(location, confirmedLocation);
             portLastRouteDecisionOutput = PortDisplayLocation(next);
             AppLogger.Info($"Route decision output: selectedNext={PortDisplayLocation(next)}");

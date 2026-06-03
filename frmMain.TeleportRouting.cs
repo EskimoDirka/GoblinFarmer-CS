@@ -158,7 +158,7 @@ namespace GoblinFarmer
                 key == PortLocationKey("Flooded Causeway");
         }
 
-        private void PortLogCaldeumDetection(string rawLocation, string bestMatch, double confidence)
+        private void PortLogCaldeumDetection(string rawLocation, string bestMatch, double confidence, string requestedLocation = "", string blockingLocation = "")
         {
             if (!PortIsCaldeumRouteLocation(rawLocation))
             {
@@ -166,11 +166,16 @@ namespace GoblinFarmer
             }
 
             string routeLocation = PortGetRouteLocationForDetectedLocation(rawLocation);
+            string displayLocation = PortDetectedLocationDisplayName(rawLocation);
+            string effectiveBlockingLocation = string.IsNullOrWhiteSpace(blockingLocation) ? rawLocation : blockingLocation;
+            string effectiveRequestedLocation = string.IsNullOrWhiteSpace(requestedLocation) ? "Unknown" : requestedLocation;
             AppLogger.Info(
                 $"CaldeumDetection: raw={PortLogField(PortDisplayLocation(rawLocation))}; " +
-                $"display={PortLogField(PortDisplayLocation(PortDetectedLocationDisplayName(rawLocation)))}; " +
+                $"display={PortLogField(PortDisplayLocation(displayLocation))}; " +
+                $"blocking={PortLogField(PortDisplayLocation(effectiveBlockingLocation))}; " +
+                $"requested={PortLogField(PortDisplayLocation(effectiveRequestedLocation))}; " +
                 $"normalized={PortLogField(PortDisplayLocation(PortDetectedLocationDisplayName(routeLocation)))}; " +
-                $"bestMatch={PortLogField(PortDisplayLocation(PortDetectedLocationDisplayName(bestMatch)))}; " +
+                $"bestMatch={PortLogField(PortDisplayLocation(bestMatch))}; " +
                 $"confidence={confidence:0.000}");
         }
 
@@ -207,6 +212,7 @@ namespace GoblinFarmer
                 AppLogger.Info(
                     $"Blocking location using hotkey fresh scan: raw={hotkeyRawLocation}; " +
                     $"normalized={hotkeyNormalizedLocation}; display={PortDetectedLocationDisplayName(hotkeyRawLocation)}; requested={targetLocation}");
+                PortLogCaldeumDetection(hotkeyRawLocation, hotkeyRawLocation, 0, targetLocation, hotkeyRawLocation);
 
                 (bool hotkeyBlocked, string hotkeyReason) = PortEvaluateTeleportBlock(targetLocation, hotkeyRawLocation, hotkeyNormalizedLocation, portLastTeleportSource);
                 bool hotkeyAllowed = !hotkeyBlocked;
@@ -241,6 +247,7 @@ namespace GoblinFarmer
                 AppLogger.Info(
                     $"Blocking location using latest title scan: raw={refreshedLocation}; " +
                     $"normalized={normalizedLocation}; display={PortDetectedLocationDisplayName(refreshedLocation)}");
+                PortLogCaldeumDetection(refreshedLocation, refreshedLocation, 0, targetLocation, refreshedLocation);
 
                 blockedLocation = refreshedLocation;
 
@@ -272,6 +279,7 @@ namespace GoblinFarmer
             string rawLocation = PortGetConfirmedCurrentLocation();
             blockedLocation = rawLocation;
             string normalizedRawLocation = PortNormalizeBlockingLocation(rawLocation);
+            PortLogCaldeumDetection(rawLocation, rawLocation, 0, targetLocation, rawLocation);
             (bool fallbackBlocked, string fallbackReason) = PortEvaluateTeleportBlock(targetLocation, rawLocation, normalizedRawLocation, portLastTeleportSource);
             bool fallbackAllowed = !fallbackBlocked;
             PortRecordBlockingDecision(targetLocation, rawLocation, normalizedRawLocation, fallbackBlocked, fallbackAllowed, fallbackReason);
@@ -716,7 +724,8 @@ namespace GoblinFarmer
 
             if (PortIsCaldeumRouteLocation(detectedLocation))
             {
-                return "City Of Caldeum";
+                string cityButtonLocation = PortTeleportLocationForKey(PortLocationKey("City Of Caldeum"));
+                return string.IsNullOrWhiteSpace(cityButtonLocation) ? "City of Caldeum" : cityButtonLocation;
             }
 
             if (key == PortLocationKey("Ancient Waterway"))
@@ -751,12 +760,7 @@ namespace GoblinFarmer
                 return "";
             }
 
-            if (key == PortLocationKey("City Of Caldeum") ||
-                key == PortLocationKey("Gates of Caldeum") ||
-                key == PortLocationKey("Caldeum Bazaar") ||
-                key == PortLocationKey("Sewers of Caldeum") ||
-                key == PortLocationKey("Flooded Causeway") ||
-                key == PortLocationKey("Ruined Cistern"))
+            if (PortIsCaldeumRouteLocation(detectedLocation))
             {
                 if (key == PortLocationKey("City Of Caldeum"))
                 {

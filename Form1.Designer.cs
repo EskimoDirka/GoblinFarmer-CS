@@ -65,7 +65,6 @@ namespace GoblinFarmer
             grpHotkeys = new GroupBox();
             chkTeleportNextHotkey = new CheckBox();
             chkExitGameHotkey = new CheckBox();
-            chkBlockSkill1TeleportHotkey = new CheckBox();
             chkKeepDebugScreenshots = new CheckBox();
             chkLoot = new CheckBox();
             chkKadala = new CheckBox();
@@ -406,14 +405,12 @@ namespace GoblinFarmer
             // 
             grpHotkeys.Controls.Add(chkTeleportNextHotkey);
             grpHotkeys.Controls.Add(chkExitGameHotkey);
-            grpHotkeys.Controls.Add(chkBlockSkill1TeleportHotkey);
-            grpHotkeys.Controls.Add(chkKeepDebugScreenshots);
             grpHotkeys.Controls.Add(chkLoot);
             grpHotkeys.Controls.Add(chkKadala);
             grpHotkeys.Controls.Add(chkCombat);
             grpHotkeys.Location = new Point(12, 348);
             grpHotkeys.Name = "grpHotkeys";
-            grpHotkeys.Size = new Size(270, 205);
+            grpHotkeys.Size = new Size(270, 157);
             grpHotkeys.TabIndex = 10;
             grpHotkeys.TabStop = false;
             grpHotkeys.Text = "Hotkeys";
@@ -438,23 +435,13 @@ namespace GoblinFarmer
             chkExitGameHotkey.Text = "2 - Exit Game";
             chkExitGameHotkey.UseVisualStyleBackColor = true;
             // 
-            // chkBlockSkill1TeleportHotkey
-            // 
-            chkBlockSkill1TeleportHotkey.AutoSize = true;
-            chkBlockSkill1TeleportHotkey.Location = new Point(15, 149);
-            chkBlockSkill1TeleportHotkey.Name = "chkBlockSkill1TeleportHotkey";
-            chkBlockSkill1TeleportHotkey.Size = new Size(214, 19);
-            chkBlockSkill1TeleportHotkey.TabIndex = 5;
-            chkBlockSkill1TeleportHotkey.Text = "Block Skill 1 During Teleport Hotkey";
-            chkBlockSkill1TeleportHotkey.UseVisualStyleBackColor = true;
-            // 
             // chkKeepDebugScreenshots
             // 
             chkKeepDebugScreenshots.AutoSize = true;
-            chkKeepDebugScreenshots.Location = new Point(15, 174);
+            chkKeepDebugScreenshots.Location = new Point(15, 149);
             chkKeepDebugScreenshots.Name = "chkKeepDebugScreenshots";
             chkKeepDebugScreenshots.Size = new Size(156, 19);
-            chkKeepDebugScreenshots.TabIndex = 6;
+            chkKeepDebugScreenshots.TabIndex = 5;
             chkKeepDebugScreenshots.Text = "Keep Debug Screenshots";
             chkKeepDebugScreenshots.UseVisualStyleBackColor = true;
             // 
@@ -624,7 +611,6 @@ namespace GoblinFarmer
         private CheckBox chkCombat;
         private Label lblAppStatus;
         private CheckBox chkLoot;
-        private CheckBox chkBlockSkill1TeleportHotkey;
         private CheckBox chkKeepDebugScreenshots;
         private CheckBox chkTeleportNextHotkey;
         private CheckBox chkExitGameHotkey;

@@ -19,8 +19,8 @@ namespace GoblinFarmer
 
         private void PortInitializeDiagnosticOverlay()
         {
-            bool showOverlay = AppSettings.Debug.DebugMode && AppSettings.Debug.ShowDiagnosticOverlay;
-            bool showInspector = AppSettings.Debug.DebugMode && AppSettings.Debug.ShowRouteInspector;
+            bool showOverlay = AppSettings.IsVsDebugProfile || (AppSettings.Debug.DebugMode && AppSettings.Debug.ShowDiagnosticOverlay);
+            bool showInspector = AppSettings.IsVsDebugProfile || (AppSettings.Debug.DebugMode && AppSettings.Debug.ShowRouteInspector);
             if (!showOverlay && !showInspector)
             {
                 AppLogger.Info("Diagnostic UI hidden by config: ShowDiagnosticOverlay=False; ShowRouteInspector=False");

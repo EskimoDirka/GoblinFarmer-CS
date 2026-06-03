@@ -123,11 +123,11 @@ Default visible hotkeys:
 - `Alt` + `` ` ``: Loot
 - `Up Arrow`: Kadala
 
-The Hotkeys group in the app shows the available hotkeys and includes checkboxes for the default physical hotkey paths. Combat-state safeguards can suppress hotkeys when using them would be unsafe.
+The Hotkeys group in the app shows the available hotkeys and includes checkboxes for the default physical hotkey paths. Combat-state and teleport safeguards can suppress hotkeys when using them would be unsafe; these stability protections are not user preferences.
 
 ## Debug Mode
 
-Debug Mode is off by default for normal release use. When enabled from Settings, it shows diagnostic controls and debug-only views such as the route state inspector and screenshot options.
+Debug Mode is off by default for normal release use. When enabled from Settings, it shows diagnostic controls and debug-only views such as the route state inspector and screenshot options, and it enables Keep Debug Screenshots by default until the user turns screenshot retention off. Visual Studio Debug runs force debug evidence internally, so those settings are not shown as editable options there.
 
 Debug tooling includes:
 
@@ -155,7 +155,7 @@ Highlights:
 - Added Start Game recovery handling.
 - Improved Make New Game workflow protection.
 - Improved teleport routing and location handling.
-- Preserved specific Caldeum sublocation names while allowing Cave Of The Moon Clan Level 2 to continue the route to Northern Highlands.
+- Preserved matched current-location names for hotkey blocked-location notifications while keeping route buttons grouped.
 - Added dynamic application version display.
 - Installer version now synchronized with application version.
 
@@ -207,7 +207,7 @@ Then publish the self-contained Windows build. You can publish from Visual Studi
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1
 ```
 
-The script publishes to `artifacts\publish\GoblinFarmer`, verifies executable version metadata, icon, config, and Images output, then compiles `Installer\GoblinFarmer.iss` if Inno Setup is installed. The installer reads the version from the published executable, so the app must be published before compiling the `.iss` file.
+The script publishes to `artifacts\publish\GoblinFarmer`, verifies executable version metadata, icon, config, Images output, and `Scripts\create-debug-package.ps1`, then compiles `Installer\GoblinFarmer.iss` if Inno Setup is installed. The installer reads the version from the published executable, so the app must be published before compiling the `.iss` file.
 
 `artifacts\` is generated output and is intentionally ignored by Git. Do not commit published app folders or installer binaries.
 

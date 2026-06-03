@@ -217,7 +217,10 @@ namespace GoblinFarmer
                         BeginInvoke(new Action(PortRunQueuedTeleportHotkey));
                     }
 
-                    return new IntPtr(1);
+                    if (PortBlockSkill1DuringTeleportHotkey)
+                    {
+                        return new IntPtr(1);
+                    }
                 }
 
                 if (isSkill2 && keyDown && PortShouldHandleExitGameHotkey())

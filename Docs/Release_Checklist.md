@@ -12,7 +12,7 @@ Use this before publishing a final Windows release.
 - [ ] Run `dotnet build GoblinFarmer.csproj`.
 - [ ] Publish from Visual Studio with the `GoblinFarmerRelease` profile or run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1`.
 - [ ] Confirm the generated publish folder exists at `artifacts\publish\GoblinFarmer`.
-- [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, and `Images\`.
+- [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, `Images\`, and `Scripts\create-debug-package.ps1`.
 - [ ] Compile `Installer\GoblinFarmer.iss` only after `artifacts\publish\GoblinFarmer\GoblinFarmer.exe` exists.
 - [ ] If Inno Setup is installed, confirm `artifacts\installer\GoblinFarmerSetup-1.3.0.exe` is created for v1.3.
 - [ ] Confirm the app title bar shows the expected version, for example `GoblinFarmer v1.3.0`.
@@ -41,7 +41,11 @@ Use this before publishing a final Windows release.
 ## Runtime
 
 - [ ] Confirm Debug Mode is off by default and diagnostic panes are hidden.
+- [ ] Confirm `Block Skill 1 During Teleport Hotkey` is not visible in Release or VS Debug.
 - [ ] Enable Debug Mode and confirm diagnostic/debug screenshot controls appear.
+- [ ] Confirm enabling Debug Mode auto-checks `Keep Debug Screenshots`, and disabling Debug Mode hides it.
+- [ ] Confirm disabling Debug Mode shrinks the form back to compact width with no unused right-side space.
+- [ ] Confirm VS Debug shows the diagnostic overlay and route inspector on startup without editable Debug Mode or Keep Debug Screenshots checkboxes.
 - [ ] Run a focused Make New Game flow on a machine with valid paths.
 - [ ] Confirm Battle.net launch uses the configured executable path.
 - [ ] Confirm logs clearly report invalid or missing paths.
