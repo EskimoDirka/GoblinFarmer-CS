@@ -5,13 +5,16 @@ param(
     [string]$Branch,
     [string]$Runtime = "win-x64",
     [string]$UserInstallDir = "E:\GoblinFarmer",
+    [string]$GitHubUploadDir = "GitHub Upload",
     [switch]$SkipUserExeRefresh,
+    [switch]$SkipGitHubExeUpload,
     [switch]$CreateGitHubRelease,
     [switch]$SkipInstaller
 )
 
 # Routine GitHub sync helper. It assumes docs/source edits are already made,
-# then verifies, publishes, refreshes the user executable, commits, and pushes.
+# then verifies, publishes, refreshes the user executable, stages the latest
+# published EXE for GitHub, commits, and pushes.
 # GitHub Releases are intentionally opt-in for larger app milestones.
 
 $ErrorActionPreference = "Stop"
@@ -177,6 +180,21 @@ function Sync-UserExecutable {
     Copy-Item -Path (Join-Path $sourceFull "*") -Destination $destinationFull -Recurse -Force
 }
 
+function Sync-GitHubExecutable {
+    param(
+        [string]$SourceExe,
+        [string]$DestinationDir
+    )
+
+    $destinationFull = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $DestinationDir))
+    if (!(Test-IsPathInside -ChildPath $destinationFull -ParentPath $repoRoot)) {
+        Stop-Release "Refusing to stage GitHub executable outside the repository: $destinationFull"
+    }
+
+    New-Item -ItemType Directory -Force -Path $destinationFull | Out-Null
+    Copy-Item -LiteralPath $SourceExe -Destination (Join-Path $destinationFull "GoblinFarmer.exe") -Force
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $projectPath = Join-Path $repoRoot "GoblinFarmer.csproj"
 $publishScript = Join-Path $PSScriptRoot "publish-release.ps1"
@@ -219,6 +237,7 @@ Write-Host "Project:    $projectVersion"
 Write-Host "Branch:     $Branch"
 Write-Host "Runtime:    $Runtime"
 Write-Host "User exe:   $UserInstallDir"
+Write-Host "GitHub exe: $GitHubUploadDir\GoblinFarmer.exe"
 
 Invoke-ReleaseStep "dotnet build" {
     dotnet build $projectPath
@@ -240,6 +259,7 @@ Invoke-ReleaseStep "publish Release output" {
 }
 
 $publishDir = Join-Path $repoRoot "artifacts\publish\GoblinFarmer"
+$publishedExe = Join-Path $publishDir "GoblinFarmer.exe"
 $portableZip = Join-Path $repoRoot "artifacts\GoblinFarmer-$projectVersion-$Runtime-portable.zip"
 if (Test-Path -LiteralPath $portableZip) {
     Remove-Item -LiteralPath $portableZip -Force
@@ -255,6 +275,15 @@ if ($SkipUserExeRefresh) {
 else {
     Invoke-ReleaseStep "refresh user executable" {
         Sync-UserExecutable -SourceDir $publishDir -DestinationDir $UserInstallDir
+    }
+}
+
+if ($SkipGitHubExeUpload) {
+    Write-Warning "Skipping tracked GitHub executable update because -SkipGitHubExeUpload was supplied."
+}
+else {
+    Invoke-ReleaseStep "stage latest exe for GitHub" {
+        Sync-GitHubExecutable -SourceExe $publishedExe -DestinationDir $GitHubUploadDir
     }
 }
 
@@ -363,6 +392,9 @@ Write-Host "Commit:       $(git rev-parse --short HEAD)"
 Write-Host "Publish dir:  $publishDir"
 if (!$SkipUserExeRefresh) {
     Write-Host "User exe:     $UserInstallDir"
+}
+if (!$SkipGitHubExeUpload) {
+    Write-Host "GitHub exe:   $(Join-Path $repoRoot (Join-Path $GitHubUploadDir 'GoblinFarmer.exe'))"
 }
 Write-Host "Portable zip: $portableZip"
 if ($null -ne $installerPath) {

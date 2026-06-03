@@ -10,7 +10,7 @@ Use this before publishing a final Windows release.
 ## Build
 
 - [ ] Run `dotnet build GoblinFarmer.csproj`.
-- [ ] Publish from Visual Studio with the `GoblinFarmerRelease` profile, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1`, or run `Scripts\GitHub Sync.bat` for the routine build/publish/user-exe/commit/push flow.
+- [ ] Publish from Visual Studio with the `GoblinFarmerRelease` profile, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1`, or run `Scripts\GitHub Sync.bat` for the routine build/publish/user-exe/GitHub-exe/commit/push flow.
 - [ ] Confirm the generated publish folder exists at `artifacts\publish\GoblinFarmer`.
 - [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, `Images\`, and `Scripts\create-debug-package.ps1`.
 - [ ] Compile `Installer\GoblinFarmer.iss` only after `artifacts\publish\GoblinFarmer\GoblinFarmer.exe` exists.

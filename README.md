@@ -217,7 +217,7 @@ For the routine GitHub sync flow, including build, publish, user executable refr
 "Scripts\GitHub Sync.bat"
 ```
 
-`Scripts\GitHub Sync.bat` calls `Scripts\GitHub Sync.ps1`. The PowerShell helper uses the version from `GoblinFarmer.csproj`, refreshes `E:\GoblinFarmer` from the newly published output while preserving runtime config/log/debug folders, creates `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`, and pushes tracked source/docs changes to GitHub. It does not create a tag or GitHub Release unless `-CreateGitHubRelease` is passed to the PowerShell script for a larger app milestone. Documentation updates still need to be made before running it because the script cannot infer what changed.
+`Scripts\GitHub Sync.bat` calls `Scripts\GitHub Sync.ps1`. The PowerShell helper uses the version from `GoblinFarmer.csproj`, refreshes `E:\GoblinFarmer` from the newly published output while preserving runtime config/log/debug folders, copies the newly published executable to `GitHub Upload\GoblinFarmer.exe`, creates `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`, and pushes tracked source/docs changes to GitHub. It does not create a tag or GitHub Release unless `-CreateGitHubRelease` is passed to the PowerShell script for a larger app milestone. Documentation updates still need to be made before running it because the script cannot infer what changed.
 
 If Inno Setup is installed separately, compile the installer after publishing:
 
