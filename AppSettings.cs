@@ -58,7 +58,7 @@ namespace GoblinFarmer
                 {
                     string json = File.ReadAllText(configPath);
                     bool hasSavedDebugScreenshotsPreference = HasSavedDebugScreenshotsPreference(json);
-                    bool hasSavedUserCombatProfilePreference = HasSavedUserCombatProfilePreference(json);
+                    bool hasSavedUserPreferences = HasSavedUserPreferences(json);
                     SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(json, JsonOptions);
                     settings = loaded ?? SettingsModel.Default();
                     bool shouldSaveLoadedSettings = loaded == null;
@@ -69,10 +69,10 @@ namespace GoblinFarmer
                         AppLogger.Info($"AppSettings missing Debug.EnableDebugScreenshots; using persisted default {settings.Debug.EnableDebugScreenshots}.");
                     }
 
-                    if (!hasSavedUserCombatProfilePreference)
+                    if (!hasSavedUserPreferences)
                     {
                         shouldSaveLoadedSettings = true;
-                        AppLogger.Info($"AppSettings missing User.CombatProfile; using default {settings.User.CombatProfile}.");
+                        AppLogger.Info("AppSettings missing one or more User preferences; using defaults for missing values.");
                     }
 
                     settings.Normalize();
@@ -147,7 +147,7 @@ namespace GoblinFarmer
             }
         }
 
-        private static bool HasSavedUserCombatProfilePreference(string json)
+        private static bool HasSavedUserPreferences(string json)
         {
             try
             {
@@ -159,11 +159,16 @@ namespace GoblinFarmer
 
                 return document.RootElement.TryGetProperty("User", out JsonElement userElement) &&
                     userElement.ValueKind == JsonValueKind.Object &&
-                    userElement.TryGetProperty("CombatProfile", out _);
+                    userElement.TryGetProperty("CombatProfile", out _) &&
+                    userElement.TryGetProperty("CombatHotkeyEnabled", out _) &&
+                    userElement.TryGetProperty("TeleportNextHotkeyEnabled", out _) &&
+                    userElement.TryGetProperty("ExitGameHotkeyEnabled", out _) &&
+                    userElement.TryGetProperty("KadalaHotkeyEnabled", out _) &&
+                    userElement.TryGetProperty("LootHotkeyEnabled", out _);
             }
             catch (Exception ex)
             {
-                AppLogger.Error("Failed to inspect AppSettings User.CombatProfile preference.", ex);
+                AppLogger.Error("Failed to inspect AppSettings User preferences.", ex);
                 return false;
             }
         }
@@ -460,7 +465,12 @@ namespace GoblinFarmer
                 $"Bounty.EscapeCooldownMs={Bounty.EscapeCooldownMs}; " +
                 $"ImageRecognition.StartGameButtonConfidence={ImageRecognition.StartGameButtonConfidence:0.000}; " +
                 $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}; " +
-                $"User.CombatProfile={User.CombatProfile}");
+                $"User.CombatProfile={User.CombatProfile}; " +
+                $"User.CombatHotkeyEnabled={User.CombatHotkeyEnabled}; " +
+                $"User.TeleportNextHotkeyEnabled={User.TeleportNextHotkeyEnabled}; " +
+                $"User.ExitGameHotkeyEnabled={User.ExitGameHotkeyEnabled}; " +
+                $"User.KadalaHotkeyEnabled={User.KadalaHotkeyEnabled}; " +
+                $"User.LootHotkeyEnabled={User.LootHotkeyEnabled}");
         }
 
         internal sealed class SettingsModel
@@ -536,6 +546,11 @@ namespace GoblinFarmer
             private static readonly string[] ValidCombatProfiles = ["monk", "demon_hunter", "witch_doctor"];
 
             public string CombatProfile { get; set; } = "monk";
+            public bool CombatHotkeyEnabled { get; set; } = true;
+            public bool TeleportNextHotkeyEnabled { get; set; } = true;
+            public bool ExitGameHotkeyEnabled { get; set; } = true;
+            public bool KadalaHotkeyEnabled { get; set; } = true;
+            public bool LootHotkeyEnabled { get; set; } = true;
 
             public void Normalize()
             {

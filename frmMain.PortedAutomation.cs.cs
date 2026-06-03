@@ -270,16 +270,8 @@ namespace GoblinFarmer
             PortWireButtons();
             PortApplyCombatProfilePreference();
             PortWireCombatProfilePreference();
-
-            chkCombat.Checked = true;
-            chkTeleportNextHotkey.Checked = true;
-            portTeleportNextHotkeyEnabled = chkTeleportNextHotkey.Checked;
-            chkTeleportNextHotkey.CheckedChanged += (_, _) => portTeleportNextHotkeyEnabled = chkTeleportNextHotkey.Checked;
-            chkExitGameHotkey.Checked = true;
-            portExitGameHotkeyEnabled = chkExitGameHotkey.Checked;
-            chkExitGameHotkey.CheckedChanged += (_, _) => portExitGameHotkeyEnabled = chkExitGameHotkey.Checked;
-            chkKadala.Checked = true;
-            chkLoot.Checked = true;
+            PortApplyHotkeyPreferences();
+            PortWireHotkeyPreferences();
             chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
             chkKeepDebugScreenshots.CheckedChanged += (_, _) =>
             {
@@ -347,6 +339,58 @@ namespace GoblinFarmer
             AppSettings.User.CombatProfile = combatProfile;
             AppSettings.Save();
             AppLogger.Info($"Combat profile preference saved: {combatProfile}");
+        }
+
+        private void PortApplyHotkeyPreferences()
+        {
+            chkCombat.Checked = AppSettings.User.CombatHotkeyEnabled;
+            chkTeleportNextHotkey.Checked = AppSettings.User.TeleportNextHotkeyEnabled;
+            chkExitGameHotkey.Checked = AppSettings.User.ExitGameHotkeyEnabled;
+            chkKadala.Checked = AppSettings.User.KadalaHotkeyEnabled;
+            chkLoot.Checked = AppSettings.User.LootHotkeyEnabled;
+            portTeleportNextHotkeyEnabled = chkTeleportNextHotkey.Checked;
+            portExitGameHotkeyEnabled = chkExitGameHotkey.Checked;
+            AppLogger.Info(
+                "Hotkey preferences applied: " +
+                $"combat={chkCombat.Checked}; " +
+                $"teleportNext={chkTeleportNextHotkey.Checked}; " +
+                $"exitGame={chkExitGameHotkey.Checked}; " +
+                $"kadala={chkKadala.Checked}; " +
+                $"loot={chkLoot.Checked}");
+        }
+
+        private void PortWireHotkeyPreferences()
+        {
+            chkCombat.CheckedChanged += (_, _) => PortSaveHotkeyPreferences();
+            chkTeleportNextHotkey.CheckedChanged += (_, _) =>
+            {
+                portTeleportNextHotkeyEnabled = chkTeleportNextHotkey.Checked;
+                PortSaveHotkeyPreferences();
+            };
+            chkExitGameHotkey.CheckedChanged += (_, _) =>
+            {
+                portExitGameHotkeyEnabled = chkExitGameHotkey.Checked;
+                PortSaveHotkeyPreferences();
+            };
+            chkKadala.CheckedChanged += (_, _) => PortSaveHotkeyPreferences();
+            chkLoot.CheckedChanged += (_, _) => PortSaveHotkeyPreferences();
+        }
+
+        private void PortSaveHotkeyPreferences()
+        {
+            AppSettings.User.CombatHotkeyEnabled = chkCombat.Checked;
+            AppSettings.User.TeleportNextHotkeyEnabled = chkTeleportNextHotkey.Checked;
+            AppSettings.User.ExitGameHotkeyEnabled = chkExitGameHotkey.Checked;
+            AppSettings.User.KadalaHotkeyEnabled = chkKadala.Checked;
+            AppSettings.User.LootHotkeyEnabled = chkLoot.Checked;
+            AppSettings.Save();
+            AppLogger.Info(
+                "Hotkey preferences saved: " +
+                $"combat={AppSettings.User.CombatHotkeyEnabled}; " +
+                $"teleportNext={AppSettings.User.TeleportNextHotkeyEnabled}; " +
+                $"exitGame={AppSettings.User.ExitGameHotkeyEnabled}; " +
+                $"kadala={AppSettings.User.KadalaHotkeyEnabled}; " +
+                $"loot={AppSettings.User.LootHotkeyEnabled}");
         }
 
         private void PortLogDebugStartupState()

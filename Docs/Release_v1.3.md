@@ -20,7 +20,7 @@
 * Installer packaging improvements
 * Version metadata cleanup
 * Cleaned up Debug/Release options so debug defaults stay internal to debug builds
-* Added `User.CombatProfile` to `Config\AppSettings.json`
+* Added form user preferences under `User` in `Config\AppSettings.json`, including combat profile and Hotkeys checkbox states
 * Demon Hunter protected UI regions now suppress unsafe injected mouse clicks without stopping key rotation
 * Included the debug package script in published and installed builds
 * Added the routine GitHub sync helper for build, publish, executable refresh, portable zip creation, commit, and push
