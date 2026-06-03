@@ -107,7 +107,8 @@ namespace GoblinFarmer
         private long portLastWitchDoctorHexLogTicks;
         private long portLastLocationTemplateReloadTicks;
         private long portLastTeleportNextHotkeyTicks;
-        private long portIgnoreTeleportNextUntilTicks;
+        private long portIgnoreAutomationNumberHotkeysUntilTicks;
+        private long portLastAutomationNumberHotkeyGuardLogTicks;
         private long portLaunchGraceUntilTicks;
         private long portLastLaunchGraceMissingLogTicks;
         private long portLastLaunchFlowMissingLogTicks;
@@ -1398,9 +1399,19 @@ namespace GoblinFarmer
 
         private void PortPressKey(int vk)
         {
+            PortMarkAutomationNumberKeyInjection(vk);
             keybd_event((byte)vk, 0, 0, UIntPtr.Zero);
             Thread.Sleep(10);
+            PortMarkAutomationNumberKeyInjection(vk);
             keybd_event((byte)vk, 0, PortKeyUp, UIntPtr.Zero);
+        }
+
+        private void PortMarkAutomationNumberKeyInjection(int vk)
+        {
+            if (vk is >= PortVk1 and <= 0x39)
+            {
+                Interlocked.Exchange(ref portIgnoreAutomationNumberHotkeysUntilTicks, DateTime.UtcNow.AddMilliseconds(125).Ticks);
+            }
         }
 
         private void PortRuntimeMouseDown(uint buttonDown)

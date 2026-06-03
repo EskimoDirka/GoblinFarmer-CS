@@ -74,7 +74,7 @@ Images/Teleport Function
 5. Use route buttons or the Teleport Next hotkey for route progression.
 6. Use Exit Game when the current run should return to the menu.
 
-After combat stops, Teleport Next may have a slight intentional delay before it is available again. This lets combat/input state settle and helps avoid accidental or unsafe teleport attempts.
+After combat stops, Teleport Next is available as soon as combat is marked stopped. Cleanup still releases tracked mouse and Shift inputs before the queued teleport flow runs, Witch Doctor cleanup uses only a short best-effort Hex/chicken exit, and only user `1` presses trigger Teleport Next.
 
 ## Combat Profile Skill Setup
 

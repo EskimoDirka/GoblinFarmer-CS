@@ -78,6 +78,19 @@ namespace GoblinFarmer
                 return false;
             }
 
+            string expectedNextFromConfirmed = PortNextTeleportForConfirmedLocation("", portLastConfirmedLocation);
+            if (PortLocationMatchesForArrival(expectedNextFromConfirmed, queuedTarget))
+            {
+                AppLogger.Info(
+                    $"AlreadyAtQueuedDestinationAdvanceSkipped: source=Hotkey; " +
+                    $"freshRawLocation={PortDisplayLocation(freshRawLocation)}; " +
+                    $"queuedTarget={PortDisplayLocation(queuedTarget)}; " +
+                    $"lastConfirmed={PortDisplayLocation(portLastConfirmedLocation)}; " +
+                    $"expectedNextFromConfirmed={PortDisplayLocation(expectedNextFromConfirmed)}; " +
+                    $"reason=queued target is the normal next route step; preserving route order");
+                return false;
+            }
+
             string buttonLocation = PortGetButtonLocationForDetectedLocation(freshRawLocation);
             if (string.IsNullOrWhiteSpace(buttonLocation))
             {

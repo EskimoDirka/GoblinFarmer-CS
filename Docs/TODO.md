@@ -533,7 +533,7 @@ Future possibility:
 * [ ] Add "Already Here" notification.
 * [ ] Standardize notification duration.
 * [ ] Standardize notification styling.
-* [x] Document that Teleport Next may intentionally be delayed briefly after combat stops while combat/input state settles.
+* [x] Remove the intentional post-combat Teleport Next delay and document the snappier stop-then-teleport behavior.
 
 ---
 

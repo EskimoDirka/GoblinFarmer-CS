@@ -59,7 +59,6 @@ namespace GoblinFarmer
                 return false;
             }
 
-            Interlocked.Exchange(ref portIgnoreTeleportNextUntilTicks, DateTime.UtcNow.AddMilliseconds(900).Ticks);
             string stoppedClass = portCombatClass;
             CancellationTokenSource? cts = portCombatCts;
             portCombatStopping = true;
@@ -109,36 +108,34 @@ namespace GoblinFarmer
             }
 
             bool ready = PortWitchDoctorHexReady();
-            if (!ready)
+            if (ready)
             {
-                AppLogger.Info("Witch Doctor Hex not ready during stop cleanup; pressing 1 once to exit chicken mode");
-                AddWorkflowStep("Exiting Witch Doctor chicken mode");
-                PortPressKey(PortVk1);
-                ForceReleaseAllRuntimeInputs("Witch Doctor chicken exit press");
-                Thread.Sleep(250);
+                AppLogger.Info("Witch Doctor stop cleanup complete: Hex already ready");
+                AddWorkflowStep("Witch Doctor stop cleanup complete");
+                return;
             }
 
-            Stopwatch sw = Stopwatch.StartNew();
-            while (sw.ElapsedMilliseconds < 3000)
+            AppLogger.Info("Witch Doctor Hex not ready during stop cleanup; pressing 1 once to exit chicken mode");
+            AddWorkflowStep("Exiting Witch Doctor chicken mode");
+            PortPressKey(PortVk1);
+            ForceReleaseAllRuntimeInputs("Witch Doctor chicken exit press");
+            Thread.Sleep(100);
+
+            if (!PortDiabloIsActive())
             {
-                if (!PortDiabloIsActive())
-                {
-                    AppLogger.Info("Witch Doctor stop cleanup ended: Diablo inactive");
-                    return;
-                }
-
-                if (PortWitchDoctorHexReady())
-                {
-                    AppLogger.Info($"Witch Doctor stop cleanup complete: Hex ready after {sw.ElapsedMilliseconds}ms");
-                    AddWorkflowStep("Witch Doctor stop cleanup complete");
-                    return;
-                }
-
-                Thread.Sleep(150);
+                AppLogger.Info("Witch Doctor stop cleanup ended after chicken exit press: Diablo inactive");
+                return;
             }
 
-            AppLogger.Info("Witch Doctor stop cleanup timeout: Hex not ready");
-            AddWorkflowStep("Witch Doctor stop cleanup timed out");
+            if (PortWitchDoctorHexReady())
+            {
+                AppLogger.Info("Witch Doctor stop cleanup complete: Hex ready after best-effort chicken exit press");
+                AddWorkflowStep("Witch Doctor stop cleanup complete");
+                return;
+            }
+
+            AppLogger.Info("Witch Doctor stop cleanup best-effort complete: Hex not confirmed ready; continuing without blocking Teleport Next");
+            AddWorkflowStep("Witch Doctor stop cleanup best-effort complete");
         }
 
         private void PortRunCombatTask(string name, Action work)
@@ -170,21 +167,15 @@ namespace GoblinFarmer
                     return;
                 }
 
-                keybd_event((byte)'1', 0, 0, UIntPtr.Zero);
-                Thread.Sleep(10);
-                keybd_event((byte)'1', 0, PortKeyUp, UIntPtr.Zero);
+                PortPressKey(PortVk1);
 
                 Thread.Sleep(10);
 
-                keybd_event((byte)'2', 0, 0, UIntPtr.Zero);
-                Thread.Sleep(10);
-                keybd_event((byte)'2', 0, PortKeyUp, UIntPtr.Zero);
+                PortPressKey(PortVk2);
 
                 Thread.Sleep(10);
 
-                keybd_event((byte)'3', 0, 0, UIntPtr.Zero);
-                Thread.Sleep(10);
-                keybd_event((byte)'3', 0, PortKeyUp, UIntPtr.Zero);
+                PortPressKey(0x33);
 
                 Thread.Sleep(10);
             }

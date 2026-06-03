@@ -37,6 +37,7 @@ namespace GoblinFarmer
 
                     if (chkCombat.Checked && backtickDown && !backtickWasDown && !altDown)
                     {
+                        AppLogger.Info($"Combat hotkey accepted: key=backtick; automationRunning={isAutomationRunning}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; diabloActive={diabloActive}");
                         BeginInvoke(new Action(PortToggleCombat));
                     }
 
@@ -170,6 +171,12 @@ namespace GoblinFarmer
                     return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
                 }
 
+                if (isAutomationNumberHotkey && DateTime.UtcNow.Ticks < Interlocked.Read(ref portIgnoreAutomationNumberHotkeysUntilTicks))
+                {
+                    PortLogAutomationNumberHotkeyGuard(vkCode, keyDown, keyUp);
+                    return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+                }
+
                 if (isSkill2 && (portCombatRunning || portCombatStopping))
                 {
                     if (keyDown && !portSkill2CombatHandled)
@@ -189,15 +196,13 @@ namespace GoblinFarmer
                     return new IntPtr(1);
                 }
 
-                if (isSkill1 && (portCombatRunning || portCombatStopping))
+                if (isSkill1 && portCombatRunning)
                 {
                     if (keyDown && !portSkill1TeleportHandled)
                     {
                         portSkill1TeleportHandled = true;
                         portSuppressSkill1KeyUp = true;
-                        AppLogger.Info(portCombatStopping
-                            ? "Teleport hotkey ignored because combat stop cleanup is active; injected=false; automationHotkey=1; injected combat keys are allowed"
-                            : "Teleport hotkey ignored because combat is active; injected=false; automationHotkey=1; injected combat keys are allowed");
+                        AppLogger.Info("Teleport hotkey ignored because combat is active; injected=false; automationHotkey=1; injected combat keys are allowed");
                     }
                     else if (keyUp)
                     {
@@ -214,6 +219,7 @@ namespace GoblinFarmer
                     {
                         portSkill1TeleportHandled = true;
                         portSuppressSkill1KeyUp = true;
+                        AppLogger.Info($"Teleport Next hotkey accepted: injected=false; automationHotkey=1; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
                         BeginInvoke(new Action(PortRunQueuedTeleportHotkey));
                     }
 
@@ -263,6 +269,20 @@ namespace GoblinFarmer
             return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
         }
 
+        private void PortLogAutomationNumberHotkeyGuard(int vkCode, bool keyDown, bool keyUp)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastAutomationNumberHotkeyGuardLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromMilliseconds(500).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastAutomationNumberHotkeyGuardLogTicks, nowTicks);
+            string phase = keyDown ? "down" : keyUp ? "up" : "other";
+            AppLogger.Info($"Automation number hotkey ignored by self-injection guard: vk={vkCode}; phase={phase}; injectedFlag=false; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+        }
+
         private void PortLogInjectedEscapeIgnoredByStopWatcher(string watcher, string reason)
         {
             long nowTicks = DateTime.UtcNow.Ticks;
@@ -279,8 +299,7 @@ namespace GoblinFarmer
 
         private bool PortShouldHandleTeleportNextHotkey()
         {
-            long ignoreUntil = Interlocked.Read(ref portIgnoreTeleportNextUntilTicks);
-            return portTeleportNextHotkeyEnabled && DateTime.UtcNow.Ticks >= ignoreUntil && !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
+            return portTeleportNextHotkeyEnabled && !portCombatRunning && PortDiabloIsActive();
         }
 
         private bool PortShouldHandleExitGameHotkey()
@@ -312,7 +331,7 @@ namespace GoblinFarmer
         /// </summary>
         private void PortRunQueuedTeleportHotkey()
         {
-            if (portCombatRunning || portCombatStopping || !PortDiabloIsActive())
+            if (portCombatRunning || !PortDiabloIsActive())
             {
                 return;
             }
@@ -348,7 +367,10 @@ namespace GoblinFarmer
                 target = advancedTarget;
             }
 
-            string freshTarget = routeAdvancedFromFreshScan ? "" : PortNextTeleportForConfirmedLocation("", freshRawLocation);
+            bool freshScanMatchesQueuedTarget = PortLocationMatchesForArrival(freshRawLocation, queuedBefore);
+            string freshTarget = routeAdvancedFromFreshScan || freshScanMatchesQueuedTarget
+                ? ""
+                : PortNextTeleportForConfirmedLocation("", freshRawLocation);
             if (!string.IsNullOrWhiteSpace(freshTarget))
             {
                 target = freshTarget;
