@@ -4,7 +4,7 @@ param(
     [string]$Remote = "origin",
     [string]$Branch,
     [string]$Runtime = "win-x64",
-    [string]$UserInstallDir = "E:\GoblinFarmer",
+    [string]$UserInstallDir = "",
     [string]$GitHubUploadDir = "GitHub Upload",
     [switch]$SkipUserExeRefresh,
     [switch]$SkipGitHubExeUpload,
@@ -93,6 +93,15 @@ function Get-GitHubCliPath {
     return $null
 }
 
+function Get-DefaultUserInstallDir {
+    $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+    if ([string]::IsNullOrWhiteSpace($localAppData)) {
+        $localAppData = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) "AppData\Local"
+    }
+
+    return Join-Path $localAppData "GoblinFarmer"
+}
+
 function Test-IsPathInside {
     param(
         [string]$ChildPath,
@@ -134,8 +143,8 @@ function Sync-UserExecutable {
     $destinationFull = [System.IO.Path]::GetFullPath($DestinationDir)
     $driveRoot = [System.IO.Path]::GetPathRoot($destinationFull)
 
-    if (!$destinationFull.StartsWith("E:\", [System.StringComparison]::OrdinalIgnoreCase)) {
-        Stop-Release "Refusing to refresh user executable outside E:\. Destination was: $destinationFull"
+    if ([string]::IsNullOrWhiteSpace($destinationFull)) {
+        Stop-Release "User executable destination is empty."
     }
 
     if ($destinationFull.TrimEnd('\').Equals($driveRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -196,6 +205,7 @@ function Sync-GitHubExecutable {
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$UserInstallDir = if ([string]::IsNullOrWhiteSpace($UserInstallDir)) { Get-DefaultUserInstallDir } else { $UserInstallDir }
 $projectPath = Join-Path $repoRoot "GoblinFarmer.csproj"
 $publishScript = Join-Path $PSScriptRoot "publish-release.ps1"
 $releaseNotesPath = Join-Path $repoRoot "Docs\Release_v1.3.md"

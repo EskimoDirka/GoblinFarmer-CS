@@ -14,7 +14,7 @@ namespace GoblinFarmer
         };
 
         private static SettingsModel settings = SettingsModel.Default();
-        private static string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "AppSettings.json");
+        private static string configPath = ResolveAppSettingsConfigPath();
         private static DebugSettings persistedDebugSettings = new();
 
         public enum DebugDefaultsProfile
@@ -39,7 +39,7 @@ namespace GoblinFarmer
 
         public static void Load()
         {
-            configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "AppSettings.json");
+            configPath = ResolveAppSettingsConfigPath();
             CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
             try
             {
@@ -97,6 +97,37 @@ namespace GoblinFarmer
             }
 
             LogLoadedValues(configPath);
+        }
+
+        private static string ResolveAppSettingsConfigPath()
+        {
+#if DEBUG
+            string? projectConfigPath = TryResolveProjectAppSettingsPath();
+            if (!string.IsNullOrWhiteSpace(projectConfigPath))
+            {
+                return projectConfigPath;
+            }
+#endif
+
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "AppSettings.json");
+        }
+
+        private static string? TryResolveProjectAppSettingsPath()
+        {
+            DirectoryInfo? directory = new(AppDomain.CurrentDomain.BaseDirectory);
+            while (directory != null)
+            {
+                string projectFilePath = Path.Combine(directory.FullName, "GoblinFarmer.csproj");
+                string projectConfigPath = Path.Combine(directory.FullName, "Config", "AppSettings.json");
+                if (File.Exists(projectFilePath) && File.Exists(projectConfigPath))
+                {
+                    return projectConfigPath;
+                }
+
+                directory = directory.Parent;
+            }
+
+            return null;
         }
 
         public static void Save()
@@ -366,7 +397,6 @@ namespace GoblinFarmer
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Diablo III"),
                 @"C:\Program Files\Diablo III",
                 @"C:\Program Files (x86)\Diablo III",
-                @"D:\Diablo III",
             ];
 
             return FindFirstExecutableCandidate(candidates, ["Diablo III64.exe", "Diablo III.exe"]);
@@ -388,7 +418,6 @@ namespace GoblinFarmer
                 Path.Combine(localAppData, "Programs", "Battle.net"),
                 @"C:\Program Files (x86)\Battle.net",
                 @"C:\Program Files\Battle.net",
-                @"D:\Battle.net",
             ];
 
             return FindFirstExecutableCandidate(candidates, ["Battle.net.exe"]);

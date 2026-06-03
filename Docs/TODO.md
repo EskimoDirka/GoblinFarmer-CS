@@ -48,7 +48,7 @@
 * [x] Fix Start Game stable detection so repeated in-tolerance matches are accepted by consecutive scan count or stable duration instead of being reset as unstable.
 * [x] Add manual Start Game recovery: if loaded-game state appears while waiting for Start Game, continue the Make New Game flow and log manual click suspicion.
 * [x] Add `WorkflowAlreadyActive` status/logging when Make New Game is clicked while another workflow is active.
-* [x] Validate Make New Game from already-in-game succeeded in `GoblinFarmer_Debug_20260602_213950.zip`.
+* [x] Validate Make New Game from already-in-game succeeded in a debug package.
 * [ ] Continue broad post-release monitoring of Make New Game / Start Game consistency across unusual display and cursor conditions.
 
 ### Repair And Salvage Reliability
@@ -62,10 +62,10 @@
 * [x] Log time until repair menu is opened.
 * [x] Log total repair workflow duration.
 * [x] Validate optimized repair station flow in a live Exit Game / Make New Game prep run.
-* [x] Reduce post-New-Tristram repair settle from 150ms to 75ms after reviewing `GoblinFarmer_Debug_20260602_204323.zip` timings.
+* [x] Reduce post-New-Tristram repair settle from 150ms to 75ms after reviewing debug package timings.
 * [x] Add config-controlled repair settle and polling interval settings.
-* [x] Reduce default post-New-Tristram repair settle to 50ms after reviewing `GoblinFarmer_Debug_20260602_210617.zip` timings.
-* [x] Accept latest repair timing as good enough after `GoblinFarmer_Debug_20260602_213950.zip`; preserve reliability over further speed changes.
+* [x] Reduce default post-New-Tristram repair settle to 50ms after reviewing debug package timings.
+* [x] Accept latest repair timing as good enough after reviewing a debug package; preserve reliability over further speed changes.
 
 ### Testing
 
@@ -119,7 +119,7 @@
 * [x] Complete Exit Game workflow testing.
 * [x] Confirm Exit Game no longer causes a post-Diablo desktop right-click or app close.
 * [x] Complete Repair workflow testing.
-* [x] Validate optimized repair station timing after New Tristram arrival remained reliable in `GoblinFarmer_Debug_20260602_213950.zip`.
+* [x] Validate optimized repair station timing after New Tristram arrival remained reliable in a debug package.
 * [x] Confirm repair logs include `waitAfterArrivalMs`, `timeUntilRepairStationDetectedMs`, `timeUntilRepairMenuOpenedMs`, and `totalRepairWorkflowDurationMs`.
 * [x] Complete Salvage workflow testing.
 * [x] Add bounty menu diagnostics for `BountyMenuDetected` and `BountyMenuEscapeSent`.
@@ -173,6 +173,33 @@
 ---
 
 ## Debugging Improvements
+
+### Debug Surface Parity
+
+Goal: keep Visual Studio Debug runs, published `.exe` runs, and installed `.exe` runs producing comparable diagnostic evidence.
+
+Requirements:
+
+* [x] VS Debug resolves `Config\AppSettings.json` from the project root so form/debug preferences survive rebuilds.
+* [ ] When adding or changing debug settings, update both the project config and the published/installed app-local config path behavior.
+* [ ] When adding diagnostic fields, summaries, screenshots, or package attachments, verify they appear in VS Debug logs and generated debug packages from `.exe` runs.
+* [ ] Keep forced VS Debug evidence settings in memory only unless the setting is a real user/app preference.
+* [ ] Keep debug package scripts aligned with runtime log names, summary event names, screenshot folders, and any new diagnostic artifacts.
+* [ ] Document new debug toggles and package artifacts in this section before treating them as validated.
+
+### Debug Manager Candidate
+
+Future direction: consider a lightweight `DebugManager` or `DiagnosticsManager` similar in spirit to `PortScanRegionManager`, but limited to low-overhead wrappers and passive state snapshots.
+
+Useful responsibilities:
+
+* [ ] Centralize throttled diagnostic logging for repeated state decisions such as combat safe/unsafe transitions, route blocks, and launch polling.
+* [ ] Centralize named diagnostic event summaries such as `CombatStallSummary`, `RouteFailureSummary`, and launch/start-game summaries.
+* [ ] Provide a single helper for paired app/Diablo screenshot capture with consistent outcome/workflow/action names.
+* [ ] Provide passive state snapshot helpers for combat input, route state, launch state, and foreground/window state.
+* [ ] Provide package-friendly artifact registration so future debug outputs are automatically considered by `create-debug-package.ps1`.
+* [ ] Keep expensive work opt-in, throttled, or tied to existing events; do not add timer-driven image scans just for diagnostics.
+* [ ] Keep wrappers allocation-light in hot loops and prefer state-change logging over per-tick logging.
 
 ### Diagnostic Overlay
 
@@ -395,6 +422,7 @@ Status: Implemented and validated with Exit Game.
 * [x] Add Demon Hunter-only `DemonHunterRightHeldNoClickSuppressionActive` logging for shared cursor-loop left-click suppression while right mouse remains held.
 * [x] Add Witch Doctor-only safe-start held/channel behavior so held input stays active through no-click regions without sending new mouse clicks.
 * [x] Show Demon Hunter right-held state in diagnostics so combat does not appear stopped while right-hold is active.
+* [x] Match the Python shared combat cursor loop more closely by sending extra left clicks only when the cursor handle changes from the combat-start cursor and the 120ms click gap has elapsed.
 * [x] Match old Python keyboard-hook behavior for combat-relevant number keys by suppressing physical `1`/`2` during combat while allowing injected automation key events.
 * [x] Add physical `2` Exit Game hotkey path for non-combat use while preserving combat precedence.
 * [x] Log combat input mode and click send method for allowed/suppressed combat clicks.
@@ -437,6 +465,20 @@ Implemented behavior:
 * [x] Create `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`.
 * [x] Commit and push tracked changes when changes exist.
 * [x] Keep tag/GitHub Release creation opt-in through `-CreateGitHubRelease`.
+
+### Exe Updater Script
+
+Script:
+
+`Scripts\Exe Updater.ps1`
+
+Implemented behavior:
+
+* [x] Publish a fresh self-contained Release payload for quick local test refreshes.
+* [x] Replace project-level `GoblinFarmer.exe` handoff copies.
+* [x] Refresh the local user app folder from the publish payload.
+* [x] Preserve existing runtime config, logs, screenshots, debug packages, and scan/session metadata.
+* [x] Provide `Scripts\Exe Updater.bat` as the double-click launcher.
 
 ### Asset Validation Tool
 
@@ -494,7 +536,7 @@ Benefits:
 Future cleanup task:
 
 Current:
-D:\D3\Projects\GoblinFarmer\GoblinFarmer\GoblinFarmer
+Nested project folder.
 
 Goal:
 Simplify repository structure after debugging phase is complete.

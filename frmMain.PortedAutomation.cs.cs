@@ -131,13 +131,16 @@ namespace GoblinFarmer
         private bool battleNetCloseVisibleWindowRemaining;
         private readonly Dictionary<string, DateTime> portDebugScreenshotLastCaptured = new(StringComparer.OrdinalIgnoreCase);
         private readonly object portDebugScreenshotLock = new();
+        private readonly object portRuntimeInputLock = new();
         private int portDebugScreenshotCountThisRun;
         private int portConsecutiveDiabloMissingChecks;
         private bool portLaunchGraceStableLogged;
         private volatile bool portBattleNetLaunchFlowActive;
         private long portLastCombatCursorDecisionLogTicks;
+        private long portLastCombatCursorClickTicks;
         private long portLastDemonHunterDecisionLogTicks;
         private long portLastDemonHunterRightHeldNoClickLogTicks;
+        private long portLastDemonHunterSuppressionEvidenceTicks;
         private long portLastWitchDoctorHeldInputNoClickLogTicks;
         private long portLastWitchDoctorScrollSuppressedNoClickLogTicks;
         private long portLastLootSpamDecisionLogTicks;
@@ -145,6 +148,7 @@ namespace GoblinFarmer
         private bool? portLastCombatCursorDecisionAllowed;
         private bool? portLastDemonHunterDecisionAllowed;
         private bool? portLastLootSpamDecisionAllowed;
+        private int portDemonHunterConsecutiveSuppressedDecisionLogs;
         private Form? portSplashForm;
         private Label? portSplashLabel;
         private System.Windows.Forms.Timer? portSplashTimer;
@@ -1396,78 +1400,81 @@ namespace GoblinFarmer
 
         private void ForceReleaseAllRuntimeInputs(string reason)
         {
-            IntPtr diabloWindow = FindDiabloWindow();
-            RECT diabloRect = default;
-            bool hasDiabloRect = diabloWindow != IntPtr.Zero && GetWindowRect(diabloWindow, out diabloRect) && diabloRect.Right > diabloRect.Left && diabloRect.Bottom > diabloRect.Top;
-            string windowText = diabloWindow == IntPtr.Zero ? "0x0" : $"0x{diabloWindow.ToInt64():X}";
-            string rectText = hasDiabloRect
-                ? $"{diabloRect.Left},{diabloRect.Top},{diabloRect.Right - diabloRect.Left}x{diabloRect.Bottom - diabloRect.Top}"
-                : "unavailable";
-            bool heldLeft = portRuntimeLeftMouseHeld;
-            bool heldRight = portRuntimeRightMouseHeld;
-            bool heldShift = portRuntimeShiftHeld;
-            bool hadLootSpam = portLootSpamLeftClickDown;
+            lock (portRuntimeInputLock)
+            {
+                IntPtr diabloWindow = FindDiabloWindow();
+                RECT diabloRect = default;
+                bool hasDiabloRect = diabloWindow != IntPtr.Zero && GetWindowRect(diabloWindow, out diabloRect) && diabloRect.Right > diabloRect.Left && diabloRect.Bottom > diabloRect.Top;
+                string windowText = diabloWindow == IntPtr.Zero ? "0x0" : $"0x{diabloWindow.ToInt64():X}";
+                string rectText = hasDiabloRect
+                    ? $"{diabloRect.Left},{diabloRect.Top},{diabloRect.Right - diabloRect.Left}x{diabloRect.Bottom - diabloRect.Top}"
+                    : "unavailable";
+                bool heldLeft = portRuntimeLeftMouseHeld;
+                bool heldRight = portRuntimeRightMouseHeld;
+                bool heldShift = portRuntimeShiftHeld;
+                bool hadLootSpam = portLootSpamLeftClickDown;
 
-            AppLogger.Info($"ForceReleaseAllRuntimeInputs called: reason={reason}; heldLeft={heldLeft}; heldRight={heldRight}; heldShift={heldShift}; lootSpamActive={hadLootSpam}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
-            portLootSpamLeftClickDown = false;
-            if (hadLootSpam)
-            {
-                AppLogger.Info($"Loot spam force cleanup; {PortCombatInputContext()}");
-            }
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs called: reason={reason}; heldLeft={heldLeft}; heldRight={heldRight}; heldShift={heldShift}; lootSpamActive={hadLootSpam}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+                portLootSpamLeftClickDown = false;
+                if (hadLootSpam)
+                {
+                    AppLogger.Info($"Loot spam force cleanup; {PortCombatInputContext()}");
+                }
 
-            if (!hasDiabloRect)
-            {
-                portRuntimeLeftMouseHeld = false;
-                portRuntimeRightMouseHeld = false;
-                portRuntimeShiftHeld = false;
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=left; held={heldLeft}; sent=false; Diablo window unavailable; state cleared");
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=right; held={heldRight}; sent=false; Diablo window unavailable; state cleared");
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held={heldShift}; sent=false; Diablo window unavailable; state cleared");
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft=false; sentRight=false; sentShift=false; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
-                return;
-            }
+                if (!hasDiabloRect)
+                {
+                    portRuntimeLeftMouseHeld = false;
+                    portRuntimeRightMouseHeld = false;
+                    portRuntimeShiftHeld = false;
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=left; held={heldLeft}; sent=false; Diablo window unavailable; state cleared");
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=right; held={heldRight}; sent=false; Diablo window unavailable; state cleared");
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held={heldShift}; sent=false; Diablo window unavailable; state cleared");
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft=false; sentRight=false; sentShift=false; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+                    return;
+                }
 
-            bool sentLeft = false;
-            bool sentRight = false;
-            bool sentShift = false;
+                bool sentLeft = false;
+                bool sentRight = false;
+                bool sentShift = false;
 
-            if (heldLeft)
-            {
-                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                portRuntimeLeftMouseHeld = false;
-                sentLeft = true;
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=left; held=true; diabloWindow={windowText}; diabloRect={rectText}");
-            }
-            else
-            {
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=left; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
-            }
+                if (heldLeft)
+                {
+                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                    portRuntimeLeftMouseHeld = false;
+                    sentLeft = true;
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=left; held=true; diabloWindow={windowText}; diabloRect={rectText}");
+                }
+                else
+                {
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=left; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
+                }
 
-            if (heldRight)
-            {
-                mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
-                portRuntimeRightMouseHeld = false;
-                sentRight = true;
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=right; held=true; diabloWindow={windowText}; diabloRect={rectText}");
-            }
-            else
-            {
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=right; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
-            }
+                if (heldRight)
+                {
+                    mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                    portRuntimeRightMouseHeld = false;
+                    sentRight = true;
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=right; held=true; diabloWindow={windowText}; diabloRect={rectText}");
+                }
+                else
+                {
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=right; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
+                }
 
-            if (heldShift)
-            {
-                keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
-                portRuntimeShiftHeld = false;
-                sentShift = true;
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=shift; held=true; diabloWindow={windowText}; diabloRect={rectText}");
-            }
-            else
-            {
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
-            }
+                if (heldShift)
+                {
+                    keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
+                    portRuntimeShiftHeld = false;
+                    sentShift = true;
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release sent: reason={reason}; input=shift; held=true; diabloWindow={windowText}; diabloRect={rectText}");
+                }
+                else
+                {
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
+                }
 
-            AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft={sentLeft}; sentRight={sentRight}; sentShift={sentShift}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft={sentLeft}; sentRight={sentRight}; sentShift={sentShift}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+            }
         }
 
         private void PortReleaseInputs(string reason = "cleanup")
@@ -1494,42 +1501,54 @@ namespace GoblinFarmer
 
         private void PortRuntimeMouseDown(uint buttonDown)
         {
-            if (buttonDown == MOUSEEVENTF_LEFTDOWN)
+            lock (portRuntimeInputLock)
             {
-                portRuntimeLeftMouseHeld = true;
-            }
-            else if (buttonDown == MOUSEEVENTF_RIGHTDOWN)
-            {
-                portRuntimeRightMouseHeld = true;
-            }
+                if (buttonDown == MOUSEEVENTF_LEFTDOWN)
+                {
+                    portRuntimeLeftMouseHeld = true;
+                }
+                else if (buttonDown == MOUSEEVENTF_RIGHTDOWN)
+                {
+                    portRuntimeRightMouseHeld = true;
+                }
 
-            mouse_event(buttonDown, 0, 0, 0, UIntPtr.Zero);
+                mouse_event(buttonDown, 0, 0, 0, UIntPtr.Zero);
+            }
         }
 
         private void PortRuntimeMouseUp(uint buttonUp)
         {
-            mouse_event(buttonUp, 0, 0, 0, UIntPtr.Zero);
+            lock (portRuntimeInputLock)
+            {
+                mouse_event(buttonUp, 0, 0, 0, UIntPtr.Zero);
 
-            if (buttonUp == MOUSEEVENTF_LEFTUP)
-            {
-                portRuntimeLeftMouseHeld = false;
-            }
-            else if (buttonUp == MOUSEEVENTF_RIGHTUP)
-            {
-                portRuntimeRightMouseHeld = false;
+                if (buttonUp == MOUSEEVENTF_LEFTUP)
+                {
+                    portRuntimeLeftMouseHeld = false;
+                }
+                else if (buttonUp == MOUSEEVENTF_RIGHTUP)
+                {
+                    portRuntimeRightMouseHeld = false;
+                }
             }
         }
 
         private void PortRuntimeShiftDown()
         {
-            portRuntimeShiftHeld = true;
-            keybd_event(PortVkShift, 0, 0, UIntPtr.Zero);
+            lock (portRuntimeInputLock)
+            {
+                portRuntimeShiftHeld = true;
+                keybd_event(PortVkShift, 0, 0, UIntPtr.Zero);
+            }
         }
 
         private void PortRuntimeShiftUp()
         {
-            keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
-            portRuntimeShiftHeld = false;
+            lock (portRuntimeInputLock)
+            {
+                keybd_event(PortVkShift, 0, PortKeyUp, UIntPtr.Zero);
+                portRuntimeShiftHeld = false;
+            }
         }
 
         private void PortPressEscapeForAutomation(string reason = "Automation")

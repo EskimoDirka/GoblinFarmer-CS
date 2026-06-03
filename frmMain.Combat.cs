@@ -29,9 +29,11 @@ namespace GoblinFarmer
             portCombatCts = new CancellationTokenSource();
             portCombatRunning = true;
             portCombatClass = radWD.Checked ? "witch_doctor" : radDH.Checked ? "demon_hunter" : "monk";
+            portOriginalCursorHandle = PortCurrentCursorHandle();
+            Interlocked.Exchange(ref portLastCombatCursorClickTicks, 0);
             SetCombatStatus($"{radWD.Checked switch { true => "Witch Doctor", false when radDH.Checked => "Demon Hunter", _ => "Monk" }} Running");
             AddWorkflowStep("Combat started");
-            AppLogger.Info($"Combat started: class={portCombatClass}; {PortCombatInputContext()}");
+            AppLogger.Info($"Combat started: class={portCombatClass}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; {PortCombatInputContext()}");
             PortLockCursorToDiablo();
             CancellationToken combatToken = portCombatCts.Token;
             PortStartCombatMenuWatcher(combatToken);
@@ -346,18 +348,23 @@ namespace GoblinFarmer
                 return false;
             }
 
-            PortRuntimeShiftDown();
-            try
+            lock (portRuntimeInputLock)
             {
-                Thread.Sleep(30);
+                bool rightHeldDuringShiftClick = portRuntimeRightMouseHeld;
+                AppLogger.Info($"Demon Hunter Shift+Left Click sending serialized input; rightMouseHeld={rightHeldDuringShiftClick}; {PortCombatInputContext()}");
+                PortRuntimeShiftDown();
+                try
+                {
+                    Thread.Sleep(30);
 
-                PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
-                Thread.Sleep(30);
-                PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
-            }
-            finally
-            {
-                PortRuntimeShiftUp();
+                    PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+                    Thread.Sleep(30);
+                    PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                }
+                finally
+                {
+                    PortRuntimeShiftUp();
+                }
             }
 
             return true;
@@ -532,12 +539,19 @@ namespace GoblinFarmer
                     }
                     else
                     {
-                        PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
-                        Thread.Sleep(10);
-                        PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                        if (PortCombatCursorShouldSendLeftClick(out string skipReason))
+                        {
+                            PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+                            Thread.Sleep(10);
+                            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                        }
+                        else
+                        {
+                            PortLogCombatCursorClickSkipped(skipReason);
+                        }
                     }
 
-                    PortSleep(token, 50);
+                    PortSleep(token, 90);
                 }
             }
             finally
@@ -553,6 +567,54 @@ namespace GoblinFarmer
                     portWitchDoctorHeldInputFromSafeRegion = false;
                 }
             }
+        }
+
+        private bool PortCombatCursorShouldSendLeftClick(out string skipReason)
+        {
+            skipReason = "";
+            IntPtr cursorHandle = PortCurrentCursorHandle();
+            if (portOriginalCursorHandle == IntPtr.Zero)
+            {
+                skipReason = "original cursor handle unavailable";
+                return false;
+            }
+
+            if (cursorHandle == IntPtr.Zero)
+            {
+                skipReason = "current cursor handle unavailable";
+                return false;
+            }
+
+            if (cursorHandle == portOriginalCursorHandle)
+            {
+                skipReason = "cursor handle unchanged";
+                return false;
+            }
+
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastClickTicks = Interlocked.Read(ref portLastCombatCursorClickTicks);
+            if (nowTicks - lastClickTicks < TimeSpan.FromMilliseconds(120).Ticks)
+            {
+                skipReason = "cursor click gap active";
+                return false;
+            }
+
+            Interlocked.Exchange(ref portLastCombatCursorClickTicks, nowTicks);
+            return true;
+        }
+
+        private void PortLogCombatCursorClickSkipped(string reason)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastCombatCursorDecisionLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromSeconds(1).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastCombatCursorDecisionLogTicks, nowTicks);
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            AppLogger.Info($"Combat cursor loop: left click skipped; combatInputMode=PhysicalCursor; clickSendMethod=skipped; skipReason={PortLogField(reason)}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; currentCursorHandle=0x{diagnostics.CursorHandle.ToInt64():X}; blocked=False; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; {PortCombatInputContext()}");
         }
 
         private void PortHandleWitchDoctorCursorInput(bool clickSafe)
@@ -841,12 +903,55 @@ namespace GoblinFarmer
             if (!string.IsNullOrWhiteSpace(blockReason))
             {
                 AppLogger.Info($"{source}: {button} click suppressed; combatInputMode=PhysicalCursorNoClickSuppression; clickSendMethod=suppressed; blockReason={blockReason}; noClickRegionName={diagnostics.NoClickRegionName}; mouse={intendedClickPoint}; intendedClickPoint={intendedClickPoint}; diabloRect={diabloRect}; regionRect={regionRectangle}; combatActive={portCombatRunning}; blocked=true; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; {PortCombatInputContext()}");
+                PortMaybeLogDemonHunterSuppressionEvidence(source, button, diagnostics, intendedClickPoint, diabloRect, regionRectangle);
                 return;
+            }
+
+            if (allowed && portCombatClass == "demon_hunter")
+            {
+                int previousSuppressedCount = Interlocked.Exchange(ref portDemonHunterConsecutiveSuppressedDecisionLogs, 0);
+                if (previousSuppressedCount > 0)
+                {
+                    AppLogger.Info($"DemonHunterClickSafeRecovery: source={PortLogField(source)}; button={PortLogField(button)}; previousSuppressedDecisionLogs={previousSuppressedCount}; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; {PortCombatInputContext()}");
+                }
             }
 
             string inputMode = allowed ? "PhysicalCursor" : "PhysicalCursorNoClickSuppression";
             string clickSendMethod = allowed ? "mouse_event" : "suppressed";
             AppLogger.Info($"{source}: {button} click {(allowed ? "allowed" : "blocked")}; combatInputMode={inputMode}; clickSendMethod={clickSendMethod}; blocked={!allowed}; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; {PortCombatInputContext()}");
+        }
+
+        private void PortMaybeLogDemonHunterSuppressionEvidence(
+            string source,
+            string button,
+            PortCombatClickDiagnostics diagnostics,
+            string intendedClickPoint,
+            string diabloRect,
+            string regionRectangle)
+        {
+            if (portCombatClass != "demon_hunter" || !portCombatRunning)
+            {
+                return;
+            }
+
+            int suppressedCount = Interlocked.Increment(ref portDemonHunterConsecutiveSuppressedDecisionLogs);
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastEvidenceTicks = Interlocked.Read(ref portLastDemonHunterSuppressionEvidenceTicks);
+            if (suppressedCount < 3 || nowTicks - lastEvidenceTicks < TimeSpan.FromSeconds(15).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastDemonHunterSuppressionEvidenceTicks, nowTicks);
+            PortScreenshotPair pair = PortCaptureCombatDiagnosticScreenshot("DemonHunterNoClickSuppressionStall");
+            string screenshotPath = !string.IsNullOrWhiteSpace(pair.DiabloPath) ? pair.DiabloPath : pair.AppPath;
+            if (string.IsNullOrWhiteSpace(screenshotPath))
+            {
+                screenshotPath = "None";
+            }
+
+            string summary = $"CombatStallSummary: event=DemonHunterNoClickSuppressionStall; workflow=Combat; result=Blocked; class=demon_hunter; source={PortLogField(source)}; button={PortLogField(button)}; consecutiveSuppressedDecisionLogs={suppressedCount}; blockReason={PortLogField(diagnostics.NoClickRegionName)}; noClickRegionName={PortLogField(diagnostics.NoClickRegionName)}; noClickRegionIndex={diagnostics.NoClickRegionIndex}; intendedClickPoint={PortLogField(intendedClickPoint)}; diabloRect={PortLogField(diabloRect)}; regionRect={PortLogField(regionRectangle)}; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; screenshotPath={PortLogField(PortDisplayLocation(screenshotPath))}; likelyExplanation=Demon Hunter combat remained active while repeated combat clicks were suppressed because the cursor stayed in no-click UI regions.";
+            AppLogger.Info(summary);
         }
 
         private sealed record PortCombatClickDiagnostics(

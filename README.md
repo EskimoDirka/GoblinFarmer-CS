@@ -51,7 +51,7 @@ On first launch, GoblinFarmer attempts to discover the required runtime paths. I
 
 Automation stays disabled until the required paths and template folders validate successfully. Paths can also be reviewed and changed later from the Settings area in the app.
 
-The selected combat profile and Hotkeys checkbox states are saved in `Config\AppSettings.json` under `User` and restored when GoblinFarmer starts.
+The selected combat profile and Hotkeys checkbox states are saved in `Config\AppSettings.json` under `User` and restored when GoblinFarmer starts. Visual Studio Debug runs use the project-level `Config\AppSettings.json` directly so form changes survive rebuilds; release and installed runs use the app-local copy beside the executable.
 
 After install, use the built-in `Verify Paths` button to confirm the Diablo III, Battle.net, and Images paths for the current machine.
 
@@ -213,13 +213,21 @@ The script publishes to `artifacts\publish\GoblinFarmer`, verifies executable ve
 
 `artifacts\` is generated output and is intentionally ignored by Git. Do not commit published app folders or installer binaries.
 
+For quick local executable refreshes during testing, run:
+
+```bat
+"Scripts\Exe Updater.bat"
+```
+
+`Scripts\Exe Updater.bat` calls `Scripts\Exe Updater.ps1`. The helper publishes a fresh self-contained Windows payload to `artifacts\exe-updater\GoblinFarmer`, replaces the project-level `GoblinFarmer.exe` handoff copies, and refreshes the local user app folder with the files required by the newest executable while preserving existing runtime config, logs, screenshots, debug packages, and scan/session metadata. Pass `-UserInstallDir "X:\Path\To\GoblinFarmer"` to refresh a different local test folder.
+
 For the routine GitHub sync flow, including build, publish, user executable refresh, portable zip creation, commit, and push, run:
 
 ```bat
 "Scripts\GitHub Sync.bat"
 ```
 
-`Scripts\GitHub Sync.bat` calls `Scripts\GitHub Sync.ps1`. The PowerShell helper uses the version from `GoblinFarmer.csproj`, refreshes `E:\GoblinFarmer` from the newly published output while preserving runtime config/log/debug folders, copies the newly published executable to `GitHub Upload\GoblinFarmer.exe`, creates `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`, and pushes tracked source/docs changes to GitHub. It does not create a tag or GitHub Release unless `-CreateGitHubRelease` is passed to the PowerShell script for a larger app milestone. Documentation updates still need to be made before running it because the script cannot infer what changed.
+`Scripts\GitHub Sync.bat` calls `Scripts\GitHub Sync.ps1`. The PowerShell helper uses the version from `GoblinFarmer.csproj`, refreshes the local user app folder from the newly published output while preserving runtime config/log/debug folders, copies the newly published executable to `GitHub Upload\GoblinFarmer.exe`, creates `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`, and pushes tracked source/docs changes to GitHub. It does not create a tag or GitHub Release unless `-CreateGitHubRelease` is passed to the PowerShell script for a larger app milestone. Documentation updates still need to be made before running it because the script cannot infer what changed.
 
 If Inno Setup is installed separately, compile the installer after publishing:
 

@@ -175,6 +175,7 @@ function Get-ScreenshotFailureType {
         "BattleNetPlayClickAccepted",
         "BattleNetManualPlaySuspected",
         "BattleNetStillOpenAfterDiabloLaunch",
+        "DemonHunterNoClickSuppressionStall",
         "DiabloTabNotFound",
         "RepairStationNotFound",
         "RepairFailed",
@@ -411,6 +412,40 @@ function Get-LogValue {
     return $Fallback
 }
 
+function Get-DebugScreenshotSkipInfo {
+    param([System.IO.FileInfo]$LogFile)
+
+    $info = [ordered]@{
+        SkippedByConfigCount = 0
+        DiagnosticSkippedByAppSettingsCount = 0
+        DiagnosticSkippedByKeepSettingCount = 0
+        AppSettingsDebugScreenshots = "Unknown"
+        AppSettingsKeepDebugScreenshots = "Unknown"
+    }
+
+    if ($null -eq $LogFile -or -not (Test-Path -LiteralPath $LogFile.FullName -PathType Leaf)) {
+        return [pscustomobject]$info
+    }
+
+    foreach ($line in Get-Content -LiteralPath $LogFile.FullName) {
+        if ($line -match "DebugScreenshotSkipped: .*skipReason=disabled by config") {
+            $info.SkippedByConfigCount++
+        }
+        if ($line -match "Diagnostic screenshot pair skipped: disabled by AppSettings") {
+            $info.DiagnosticSkippedByAppSettingsCount++
+        }
+        if ($line -match "Diagnostic screenshot pair skipped: disabled by Keep Debug Screenshots setting") {
+            $info.DiagnosticSkippedByKeepSettingCount++
+        }
+        if ($line -match "AppSettings loaded: .*Debug\.EnableDebugScreenshots=(?<enabled>True|False).*KeepDebugScreenshots=(?<keep>True|False)") {
+            $info.AppSettingsDebugScreenshots = $matches.enabled
+            $info.AppSettingsKeepDebugScreenshots = $matches.keep
+        }
+    }
+
+    return [pscustomobject]$info
+}
+
 function Get-RouteResultFromEvent {
     param([string]$Event)
 
@@ -518,6 +553,50 @@ function New-WorkflowSummaryBlock {
         "  Battle.net close timed out: $BattleNetCloseTimedOut",
         "  Battle.net process remaining: $BattleNetCloseProcessRemaining",
         "  Battle.net visible window remaining: $BattleNetCloseVisibleWindowRemaining",
+        "  screenshot references: $ScreenshotPath",
+        "  likely explanation: $LikelyExplanation",
+        ""
+    )
+}
+
+function New-CombatSummaryBlock {
+    param(
+        [string]$Timestamp,
+        [string]$Event,
+        [string]$Workflow,
+        [string]$Result,
+        [string]$Class,
+        [string]$Source,
+        [string]$Button,
+        [string]$ConsecutiveSuppressedDecisionLogs,
+        [string]$BlockReason,
+        [string]$NoClickRegionName,
+        [string]$NoClickRegionIndex,
+        [string]$IntendedClickPoint,
+        [string]$DiabloRect,
+        [string]$RegionRect,
+        [string]$RightMouseHeld,
+        [string]$RightHeldFromSafeRegion,
+        [string]$ScreenshotPath,
+        [string]$LikelyExplanation
+    )
+
+    @(
+        "[$Timestamp] $Event",
+        "  workflow: $Workflow",
+        "  result: $Result",
+        "  class: $Class",
+        "  source: $Source",
+        "  button: $Button",
+        "  consecutive suppressed decisions: $ConsecutiveSuppressedDecisionLogs",
+        "  blocking reason: $BlockReason",
+        "  no-click region: $NoClickRegionName",
+        "  no-click region index: $NoClickRegionIndex",
+        "  intended click point: $IntendedClickPoint",
+        "  Diablo rect: $DiabloRect",
+        "  region rect: $RegionRect",
+        "  right mouse held: $RightMouseHeld",
+        "  right held from safe region: $RightHeldFromSafeRegion",
         "  screenshot references: $ScreenshotPath",
         "  likely explanation: $LikelyExplanation",
         ""
@@ -654,6 +733,32 @@ function New-RouteFailureSummary {
                 -BlockingReason (Get-LogValue $values "blockingReason") `
                 -ScreenshotPath (Get-LogValue $values "screenshotPath") `
                 -LikelyExplanation (Get-LogValue $values "likelyExplanation" "Review the log event.")
+            $linesOut.AddRange([string[]]$block)
+            $added++
+            continue
+        }
+
+        if ($message -match "^CombatStallSummary: (?<kv>.*)$") {
+            $values = Convert-LogKeyValueText $matches.kv
+            $block = New-CombatSummaryBlock `
+                -Timestamp $timestamp `
+                -Event (Get-LogValue $values "event" "CombatStallSummary") `
+                -Workflow (Get-LogValue $values "workflow" "Combat") `
+                -Result (Get-LogValue $values "result" "Blocked") `
+                -Class (Get-LogValue $values "class") `
+                -Source (Get-LogValue $values "source") `
+                -Button (Get-LogValue $values "button") `
+                -ConsecutiveSuppressedDecisionLogs (Get-LogValue $values "consecutiveSuppressedDecisionLogs") `
+                -BlockReason (Get-LogValue $values "blockReason") `
+                -NoClickRegionName (Get-LogValue $values "noClickRegionName") `
+                -NoClickRegionIndex (Get-LogValue $values "noClickRegionIndex") `
+                -IntendedClickPoint (Get-LogValue $values "intendedClickPoint") `
+                -DiabloRect (Get-LogValue $values "diabloRect") `
+                -RegionRect (Get-LogValue $values "regionRect") `
+                -RightMouseHeld (Get-LogValue $values "rightMouseHeld") `
+                -RightHeldFromSafeRegion (Get-LogValue $values "rightHeldFromSafeRegion") `
+                -ScreenshotPath (Get-LogValue $values "screenshotPath") `
+                -LikelyExplanation (Get-LogValue $values "likelyExplanation" "Review Demon Hunter no-click suppression logs and screenshots.")
             $linesOut.AddRange([string[]]$block)
             $added++
             continue
@@ -869,6 +974,15 @@ try {
         Write-Host "Included latest log: $($latestLog.Name)"
     }
 
+    $debugSkipInfo = Get-DebugScreenshotSkipInfo $latestLog
+    Write-Host "Debug screenshots setting from log: $($debugSkipInfo.AppSettingsDebugScreenshots)"
+    Write-Host "Keep debug screenshots setting from log: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"
+    if ($debugSkipInfo.SkippedByConfigCount -gt 0 -or
+        $debugSkipInfo.DiagnosticSkippedByAppSettingsCount -gt 0 -or
+        $debugSkipInfo.DiagnosticSkippedByKeepSettingCount -gt 0) {
+        Write-Warning "Latest log contains skipped screenshot captures: DebugScreenshotSkipped=$($debugSkipInfo.SkippedByConfigCount); DiagnosticAppSettings=$($debugSkipInfo.DiagnosticSkippedByAppSettingsCount); DiagnosticKeepSetting=$($debugSkipInfo.DiagnosticSkippedByKeepSettingCount)."
+    }
+
     $sessionInfo = Get-CurrentSessionInfo $repoRoot $latestLog
     $sessionStart = [DateTime]$sessionInfo.Start
     $sessionDuration = (Get-Date) - $sessionStart
@@ -1043,6 +1157,11 @@ try {
             "- All discovered screenshots: $($allScreenshots.Count)",
             "- Current-session screenshots: $($sessionScreenshots.Count)",
             "- Excluded stale screenshots: $excludedStaleScreenshots",
+            "- Debug screenshots setting from latest log: $($debugSkipInfo.AppSettingsDebugScreenshots)",
+            "- Keep debug screenshots setting from latest log: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)",
+            "- DebugScreenshotSkipped disabled-by-config entries: $($debugSkipInfo.SkippedByConfigCount)",
+            "- Diagnostic screenshot pair skipped by AppSettings entries: $($debugSkipInfo.DiagnosticSkippedByAppSettingsCount)",
+            "- Diagnostic screenshot pair skipped by Keep Debug Screenshots entries: $($debugSkipInfo.DiagnosticSkippedByKeepSettingCount)",
             "- Latest failure screenshot type: $latestFailureType",
             "- Latest failure screenshot: $(if ($null -ne $latestFailureScreenshot) { $latestFailureScreenshot.FullName } else { 'none' })",
             "",
@@ -1088,6 +1207,9 @@ Write-Host "Success screenshots: $($successScreenshots.Count)"
 Write-Host "Normal screenshots:  $($normalScreenshots.Count)"
 Write-Host "Debug screenshots:   $debugScreenshotCount"
 Write-Host "Stale screenshots:   $excludedStaleScreenshots excluded"
+Write-Host "Debug screenshots on:$($debugSkipInfo.AppSettingsDebugScreenshots)"
+Write-Host "Keep screenshots on: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"
+Write-Host "Skipped screenshots: DebugScreenshotSkipped=$($debugSkipInfo.SkippedByConfigCount); DiagnosticAppSettings=$($debugSkipInfo.DiagnosticSkippedByAppSettingsCount); DiagnosticKeepSetting=$($debugSkipInfo.DiagnosticSkippedByKeepSettingCount)"
 Write-Host "Latest failure type: $latestFailureType"
 Write-Host "Git status captured: $gitStatusCaptured"
 Write-Host "Git log captured:    $gitLogCaptured"

@@ -116,6 +116,11 @@ namespace GoblinFarmer
             return PortCaptureDiagnosticScreenshotPair("Success", workflow, action);
         }
 
+        private PortScreenshotPair PortCaptureCombatDiagnosticScreenshot(string action)
+        {
+            return PortCaptureDiagnosticScreenshotPair("Failure", "Combat", action);
+        }
+
         private string PortCaptureDebugScreenshot(string reason)
         {
             try
