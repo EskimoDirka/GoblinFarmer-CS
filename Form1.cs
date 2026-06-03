@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using OpenCvSharp;
 using DrawingPoint = System.Drawing.Point;
 using CvPoint = OpenCvSharp.Point;
+using System.Reflection;
 
 namespace GoblinFarmer
 {
@@ -26,6 +27,8 @@ namespace GoblinFarmer
         public frmMain()
         {
             InitializeComponent();
+            //  Dynamic App Version
+            this.Text = "GoblinFarmer v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
         }
 
         private void frmMain_Load(object sender, EventArgs e)
