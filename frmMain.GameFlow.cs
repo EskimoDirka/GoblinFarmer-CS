@@ -329,14 +329,10 @@ namespace GoblinFarmer
                     return false;
                 }
 
-                if (FindImageInDiabloWindow(
-                    Img("Start Game", "Start Game Button.png"),
-                    out DrawingPoint centerPoint,
-                    confidence: PortStartGameButtonConfidence,
-                    matchMode: ImageMatchMode.Color))
+                if (PortTryFindStableStartGameButton(token, out DrawingPoint centerPoint, out long stableElapsedMs))
                 {
                     attempts++;
-                    AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts}: clicking center at {centerPoint.X},{centerPoint.Y}");
+                    AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts}: clicking stable center at {centerPoint.X},{centerPoint.Y}; stableElapsedMs={stableElapsedMs}");
                     AddWorkflowStep($"Clicking Start Game (attempt {attempts})");
                     LeftClick(centerPoint);
                     PortSleep(token, 1200);
@@ -361,6 +357,63 @@ namespace GoblinFarmer
             PortSetAppStatus("Start Game Not Found");
             AppLogger.Info($"Start Game failed: attempts={attempts}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; loaded={PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible()}");
             PortCaptureFailureScreenshot("StartGameButtonNotFound", "StartGame");
+            return false;
+        }
+
+        private bool PortTryFindStableStartGameButton(CancellationToken token, out DrawingPoint centerPoint, out long stableElapsedMs)
+        {
+            centerPoint = DrawingPoint.Empty;
+            stableElapsedMs = 0;
+            string imagePath = Img("Start Game", "Start Game Button.png");
+            Stopwatch sw = Stopwatch.StartNew();
+            DrawingPoint? firstPoint = null;
+            long firstSeenAt = 0;
+
+            while (sw.ElapsedMilliseconds < 2500)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                bool visible = FindImageInDiabloWindow(
+                    imagePath,
+                    out DrawingPoint foundPoint,
+                    confidence: PortStartGameButtonConfidence,
+                    matchMode: ImageMatchMode.Color);
+                if (!visible)
+                {
+                    firstPoint = null;
+                    firstSeenAt = 0;
+                    PortSleep(token, 100);
+                    continue;
+                }
+
+                if (!firstPoint.HasValue)
+                {
+                    firstPoint = foundPoint;
+                    firstSeenAt = sw.ElapsedMilliseconds;
+                    PortSleep(token, 250);
+                    continue;
+                }
+
+                int dx = Math.Abs(foundPoint.X - firstPoint.Value.X);
+                int dy = Math.Abs(foundPoint.Y - firstPoint.Value.Y);
+                if (dx <= 8 && dy <= 8 && sw.ElapsedMilliseconds - firstSeenAt >= 250)
+                {
+                    centerPoint = foundPoint;
+                    stableElapsedMs = sw.ElapsedMilliseconds;
+                    AppLogger.Info($"StartGameButtonStable: center={centerPoint.X},{centerPoint.Y}; stableElapsedMs={stableElapsedMs}; dx={dx}; dy={dy}");
+                    return true;
+                }
+
+                AppLogger.Info($"StartGameButtonUnstable: first={firstPoint.Value.X},{firstPoint.Value.Y}; current={foundPoint.X},{foundPoint.Y}; dx={dx}; dy={dy}; elapsed={sw.ElapsedMilliseconds}ms");
+                firstPoint = foundPoint;
+                firstSeenAt = sw.ElapsedMilliseconds;
+                PortSleep(token, 150);
+            }
+
+            AppLogger.Info($"StartGameButtonStableNotFound: elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}");
             return false;
         }
 
@@ -521,8 +574,13 @@ namespace GoblinFarmer
                 startButtonChecks++;
                 if (PortStartGameButtonVisible())
                 {
-                    AppLogger.Info($"PERF Leave game confirmation: Start Game detected after {startButtonChecks} checks in {perf.ElapsedMilliseconds}ms");
-                    return true;
+                    if (PortTryFindStableStartGameButton(token, out DrawingPoint stableStartGamePoint, out long stableElapsedMs))
+                    {
+                        AppLogger.Info($"PERF Leave game confirmation: stable Start Game detected after {startButtonChecks} checks in {perf.ElapsedMilliseconds}ms; point={stableStartGamePoint.X},{stableStartGamePoint.Y}; stableElapsedMs={stableElapsedMs}");
+                        return true;
+                    }
+
+                    AppLogger.Info($"PERF Leave game confirmation: Start Game visible but not stable after {startButtonChecks} checks in {perf.ElapsedMilliseconds}ms");
                 }
 
                 if (!fallbackUsed && sw.ElapsedMilliseconds >= 12000)

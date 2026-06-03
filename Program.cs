@@ -11,6 +11,7 @@ namespace GoblinFarmer
             // To customize application configuration such as set high DPI settings or default font,
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
+            AppSettings.Load();
             AppLogger.CleanupOldLogs(AppSettings.RetentionDays);
             Application.Run(new frmMain());
         }

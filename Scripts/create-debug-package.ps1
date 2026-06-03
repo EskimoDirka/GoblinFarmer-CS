@@ -406,11 +406,31 @@ function Get-LogValue {
     return $Fallback
 }
 
+function Get-RouteResultFromEvent {
+    param([string]$Event)
+
+    if ($Event -like "*Allowed*") {
+        return "Allowed"
+    }
+    if ($Event -like "*Blocked*") {
+        return "Blocked"
+    }
+    if ($Event -like "*Cancelled*" -or $Event -like "*Interrupted*") {
+        return "Cancelled"
+    }
+    if ($Event -like "*Failed*" -or $Event -like "*Timeout*") {
+        return "Failed"
+    }
+
+    return "Unknown"
+}
+
 function New-RouteSummaryBlock {
     param(
         [string]$Timestamp,
         [string]$Event,
         [string]$Workflow,
+        [string]$Result,
         [string]$RequestedTarget,
         [string]$Source,
         [string]$RawLocation,
@@ -428,6 +448,7 @@ function New-RouteSummaryBlock {
     @(
         "[$Timestamp] $Event",
         "  workflow: $Workflow",
+        "  result: $Result",
         "  requested target: $RequestedTarget",
         "  source: $Source",
         "  raw location: $RawLocation",
@@ -610,10 +631,12 @@ function New-RouteFailureSummary {
                 }
             }
 
+            $result = Get-LogValue $values "result" (Get-RouteResultFromEvent $event)
             $block = New-RouteSummaryBlock `
                 -Timestamp $timestamp `
                 -Event $event `
                 -Workflow $workflow `
+                -Result $result `
                 -RequestedTarget (Get-LogValue $values "requestedTarget") `
                 -Source (Get-LogValue $values "source") `
                 -RawLocation (Get-LogValue $values "rawLocation") `
@@ -637,6 +660,7 @@ function New-RouteFailureSummary {
                 -Timestamp $timestamp `
                 -Event "StartGameVerificationFailed" `
                 -Workflow "StartGame" `
+                -Result "Failed" `
                 -RequestedTarget "Start Game" `
                 -Source "Workflow" `
                 -RawLocation "Unknown" `
@@ -689,6 +713,7 @@ function New-RouteFailureSummary {
                 -Timestamp $timestamp `
                 -Event "StartGameVerificationFailed" `
                 -Workflow "StartGame" `
+                -Result "Failed" `
                 -RequestedTarget "Start Game" `
                 -Source "Workflow" `
                 -RawLocation "Unknown" `
@@ -717,11 +742,12 @@ function New-RouteFailureSummary {
                 -Timestamp $timestamp `
                 -Event "TeleportBlocked" `
                 -Workflow "Teleport" `
+                -Result (Get-LogValue $lastBlocking "result" "Blocked") `
                 -RequestedTarget $target `
                 -Source (Get-LogValue $blocked "source" (Get-LogValue $currentRun "source")) `
                 -RawLocation $raw `
                 -NormalizedLocation $normalized `
-                -DisplayLocation (Get-LogValue $lastButtons "DisplayLocation") `
+                -DisplayLocation (Get-LogValue $lastBlocking "display" (Get-LogValue $lastButtons "DisplayLocation")) `
                 -BlockingLocation $raw `
                 -CurrentButton (Get-LogValue $lastButtons "ButtonCurrent" (Get-LogValue $currentRun "displayBefore")) `
                 -NextButton (Get-LogValue $lastButtons "ButtonNext" (Get-LogValue $currentRun "queuedBefore")) `
@@ -750,6 +776,7 @@ function New-RouteFailureSummary {
                     -Timestamp $timestamp `
                     -Event $(if ($cancelled -eq "True") { "TeleportCancelled" } else { "TeleportFailed" }) `
                     -Workflow "Teleport" `
+                    -Result $(if ($cancelled -eq "True") { "Cancelled" } else { "Failed" }) `
                     -RequestedTarget $target `
                     -Source (Get-LogValue $failed "source" (Get-LogValue $currentRun "source")) `
                     -RawLocation (Get-LogValue $failed "confirmedAfter") `

@@ -164,13 +164,15 @@ namespace GoblinFarmer
                     if (keyDown && !portSkill2CombatHandled)
                     {
                         portSkill2CombatHandled = true;
+                        portSuppressSkill2KeyUp = true;
                         AppLogger.Info(portCombatStopping
-                            ? "Physical Skill2 key suppressed because combat stop cleanup is active; injected=false; automationHotkey=2; injected combat keys are allowed"
-                            : "Physical Skill2 key suppressed because combat is active; injected=false; automationHotkey=2; injected combat keys are allowed");
+                            ? "Exit Game hotkey suppressed because combat stop cleanup is active; injected=false; automationHotkey=2; injected combat keys are allowed; exitGameHotkeySuppressed=True"
+                            : "Exit Game hotkey suppressed because combat is active; injected=false; automationHotkey=2; injected combat keys are allowed; exitGameHotkeySuppressed=True");
                     }
                     else if (keyUp)
                     {
                         portSkill2CombatHandled = false;
+                        portSuppressSkill2KeyUp = false;
                     }
 
                     return new IntPtr(1);
@@ -207,6 +209,26 @@ namespace GoblinFarmer
                     return new IntPtr(1);
                 }
 
+                if (isSkill2 && keyDown && PortShouldHandleExitGameHotkey())
+                {
+                    if (!portSkill2CombatHandled)
+                    {
+                        portSkill2CombatHandled = true;
+                        portSuppressSkill2KeyUp = true;
+                        AppLogger.Info("Exit Game hotkey accepted: injected=false; automationHotkey=2; combatActive=False; combatStopping=False");
+                        BeginInvoke(new Action(PortRunExitGameHotkey));
+                    }
+
+                    return new IntPtr(1);
+                }
+
+                if (isSkill2 && keyUp && portSuppressSkill2KeyUp)
+                {
+                    portSuppressSkill2KeyUp = false;
+                    portSkill2CombatHandled = false;
+                    return new IntPtr(1);
+                }
+
                 if (isSkill1 && keyUp && portSuppressSkill1KeyUp)
                 {
                     portSuppressSkill1KeyUp = false;
@@ -231,6 +253,30 @@ namespace GoblinFarmer
         {
             long ignoreUntil = Interlocked.Read(ref portIgnoreTeleportNextUntilTicks);
             return DateTime.UtcNow.Ticks >= ignoreUntil && !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
+        }
+
+        private bool PortShouldHandleExitGameHotkey()
+        {
+            return !portCombatRunning && !portCombatStopping && PortDiabloIsActive();
+        }
+
+        private void PortRunExitGameHotkey()
+        {
+            if (portCombatRunning || portCombatStopping)
+            {
+                AppLogger.Info($"Exit Game hotkey ignored after dispatch because combat is active/stopping; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; exitGameHotkeySuppressed=True");
+                return;
+            }
+
+            if (!PortDiabloIsActive())
+            {
+                AppLogger.Info("Exit Game hotkey ignored: Diablo is not active/focused");
+                return;
+            }
+
+            AppLogger.Info($"Exit Game hotkey starting flow: automationRunning={isAutomationRunning}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; source=Hotkey2");
+            AddWorkflowStep("Exit Game hotkey: starting flow");
+            _ = PortRunAutomationAsync(PortExitGameFlow);
         }
 
         /// <summary>
@@ -259,7 +305,27 @@ namespace GoblinFarmer
                 ForceReleaseAllRuntimeInputs("teleport hotkey preempted automation");
             }
 
-            string target = PortTeleportLocationForKey(portQueuedTeleportKey);
+            string queuedBefore = PortTeleportLocationForKey(portQueuedTeleportKey);
+            portHotkeyFreshRawLocation = "";
+            string freshRawLocation = PortFreshHotkeyRouteLocationScan(queuedBefore);
+            if (!string.IsNullOrWhiteSpace(freshRawLocation))
+            {
+                portHotkeyFreshRawLocation = freshRawLocation;
+            }
+
+            string target = queuedBefore;
+            bool routeAdvancedFromFreshScan = PortTryAdvanceQueuedTeleportFromFreshHotkeyScan(freshRawLocation, queuedBefore, out string advancedTarget);
+            if (routeAdvancedFromFreshScan)
+            {
+                target = advancedTarget;
+            }
+
+            string freshTarget = routeAdvancedFromFreshScan ? "" : PortNextTeleportForConfirmedLocation("", freshRawLocation);
+            if (!string.IsNullOrWhiteSpace(freshTarget))
+            {
+                target = freshTarget;
+            }
+
             if (string.IsNullOrWhiteSpace(target) &&
                 portRouteNextTeleports.TryGetValue(PortTeleportLocationForKey(portLastTeleportKey), out string? nextLocation))
             {
@@ -281,9 +347,21 @@ namespace GoblinFarmer
                 return;
             }
 
-            AppLogger.Info($"Teleport Next hotkey queued/next teleport: {target}");
+            AppLogger.Info($"Teleport Next hotkey queued/next teleport: {target}; freshRawLocation={PortDisplayLocation(freshRawLocation)}; freshDisplay={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(freshRawLocation))}; queuedBefore={PortDisplayLocation(queuedBefore)}; routeAdvancedFromFreshScan={routeAdvancedFromFreshScan}");
             AddWorkflowStep($"Teleport Next: {target}");
-            _ = PortRunAutomationAsync(token => PortRunTeleportButton(target, token, ignoreBlocking: false, source: "Hotkey"));
+            bool teleportStarted = !isAutomationRunning && !portCombatRunning && IsDiabloRunning();
+            if (routeAdvancedFromFreshScan)
+            {
+                AppLogger.Info(
+                    $"AlreadyAtQueuedDestinationTeleportStart: skippedDestination={PortDisplayLocation(queuedBefore)}; " +
+                    $"newRequestedTarget={PortDisplayLocation(target)}; teleportStarted={teleportStarted}; " +
+                    $"source=Hotkey; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; diabloRunning={IsDiabloRunning()}");
+            }
+
+            if (teleportStarted)
+            {
+                _ = PortRunAutomationAsync(token => PortRunTeleportButton(target, token, ignoreBlocking: false, source: "Hotkey"));
+            }
         }
     }
 }

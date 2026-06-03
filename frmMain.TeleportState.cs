@@ -61,6 +61,47 @@ namespace GoblinFarmer
             PortApplyTeleportButtonColors();
         }
 
+        private bool PortTryAdvanceQueuedTeleportFromFreshHotkeyScan(string freshRawLocation, string queuedTarget, out string nextTarget)
+        {
+            nextTarget = "";
+            bool matchesQueuedDestination = PortLocationMatchesForArrival(freshRawLocation, queuedTarget);
+            AppLogger.Info(
+                $"AlreadyAtQueuedDestinationCheck: source=Hotkey; freshRawLocation={PortDisplayLocation(freshRawLocation)}; " +
+                $"freshDisplayLocation={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(freshRawLocation))}; " +
+                $"queuedTarget={PortDisplayLocation(queuedTarget)}; matchesQueuedDestination={matchesQueuedDestination}");
+
+            if (string.IsNullOrWhiteSpace(freshRawLocation) ||
+                string.IsNullOrWhiteSpace(queuedTarget) ||
+                !matchesQueuedDestination)
+            {
+                return false;
+            }
+
+            string buttonLocation = PortGetButtonLocationForDetectedLocation(freshRawLocation);
+            if (string.IsNullOrWhiteSpace(buttonLocation))
+            {
+                buttonLocation = queuedTarget;
+            }
+
+            nextTarget = PortNextTeleportForConfirmedLocation(queuedTarget, freshRawLocation);
+            portLastConfirmedLocation = freshRawLocation;
+            portLastTeleportKey = PortLocationKey(buttonLocation);
+            portQueuedTeleportKey = PortLocationKey(nextTarget);
+            portLastRouteDecisionOutput = PortDisplayLocation(nextTarget);
+
+            AppLogger.Info(
+                $"AlreadyAtQueuedDestinationDetected: teleportSkipped=True; source=Hotkey; " +
+                $"freshRawLocation={PortDisplayLocation(freshRawLocation)}; " +
+                $"freshNormalizedLocation={PortDisplayLocation(PortNormalizeBlockingLocation(freshRawLocation))}; " +
+                $"freshDisplayLocation={PortDisplayLocation(buttonLocation)}; " +
+                $"skippedDestination={PortDisplayLocation(queuedTarget)}; " +
+                $"newRequestedTarget={PortDisplayLocation(nextTarget)}; " +
+                $"reason=fresh current-location scan already matches queued route destination");
+            PortClearPreservedTeleportRetry("hotkey route advancement from fresh current-location scan");
+            PortApplyTeleportButtonColors();
+            return true;
+        }
+
         private void PortPreserveTeleportRetry(string intendedLocation, string preservedCurrentKey, string preservedQueuedKey, string reason)
         {
             if (InvokeRequired)

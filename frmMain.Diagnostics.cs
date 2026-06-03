@@ -19,6 +19,14 @@ namespace GoblinFarmer
 
         private void PortInitializeDiagnosticOverlay()
         {
+            bool showOverlay = AppSettings.Debug.ShowDiagnosticOverlay;
+            bool showInspector = AppSettings.Debug.ShowRouteInspector;
+            if (!showOverlay && !showInspector)
+            {
+                AppLogger.Info("Diagnostic UI hidden by config: ShowDiagnosticOverlay=False; ShowRouteInspector=False");
+                return;
+            }
+
             if (portDiagnosticLabels.Count > 0 || portRouteInspectorLabels.Count > 0)
             {
                 return;
@@ -53,8 +61,16 @@ namespace GoblinFarmer
 
             compactTab.Controls.Add(table);
             inspectorTab.Controls.Add(inspectorTable);
-            tabs.TabPages.Add(compactTab);
-            tabs.TabPages.Add(inspectorTab);
+            if (showOverlay)
+            {
+                tabs.TabPages.Add(compactTab);
+            }
+
+            if (showInspector)
+            {
+                tabs.TabPages.Add(inspectorTab);
+            }
+
             Controls.Add(tabs);
 
             PortAddDiagnosticRow(table, portDiagnosticLabels, "Raw Location", "RawLocation");

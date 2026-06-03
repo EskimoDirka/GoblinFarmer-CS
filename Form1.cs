@@ -10,6 +10,9 @@ namespace GoblinFarmer
     {
         // State variable to prevent overlapping automation runs
         private bool isAutomationRunning = false;
+        private readonly object portMissingAssetPromptLock = new();
+        private readonly HashSet<string> portMissingAssetPromptHandled = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> portMissingAssetPromptActive = new(StringComparer.OrdinalIgnoreCase);
 
         private enum ImageMatchMode
         {
@@ -44,6 +47,9 @@ namespace GoblinFarmer
 
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -90,6 +96,7 @@ namespace GoblinFarmer
 
             SetDiabloStatus(diabloRunning ? "Running" : "Not Running");
             PortUpdateDiabloRuntimeMonitor(diabloRunning);
+            PortUpdateBountyMenuAutoClose(diabloRunning);
             PortUpdateSessionStats();
             PortUpdateDiagnosticOverlay(diabloRunning);
         }
@@ -499,6 +506,12 @@ namespace GoblinFarmer
             if (!foundTemplate)
             {
                 AppLogger.Info("Diablo III tab image not found in Images/Start Game");
+                PortOfferMissingAssetCapture(
+                    Img("Start Game", "Battle Net Diablo III Tab.png"),
+                    "BattleNet",
+                    "Diablo III tab",
+                    scanRegionKey: "BattleNetD3Tab",
+                    captureInstruction: "Capture the Battle.net Diablo III tab or icon while it is visible.");
             }
             else
             {
@@ -799,6 +812,21 @@ namespace GoblinFarmer
             if (!File.Exists(imagePath))
             {
                 AppLogger.Info($"{label} image missing: {imagePath}");
+                Rectangle? missingAssetRegion = null;
+                Rectangle? missingAssetReferenceRegion = PortScanRegions.GetRegion(scanRegionKey, imagePath);
+                if (missingAssetReferenceRegion.HasValue &&
+                    TryResolveBattleNetWindowRelativeScanRegion(missingAssetReferenceRegion.Value, label, out Rectangle missingAssetScreenRegion, out _))
+                {
+                    missingAssetRegion = missingAssetScreenRegion;
+                }
+
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "BattleNet",
+                    label,
+                    missingAssetRegion,
+                    scanRegionKey,
+                    $"Capture the missing Battle.net template for {label}. Make sure the expected Battle.net UI element is visible inside the known scan area.");
                 CaptureDebugScreenshot("BattleNet", $"{label} image missing");
                 return false;
             }
@@ -957,6 +985,17 @@ namespace GoblinFarmer
                 return false;
             }
 
+            if (!File.Exists(imagePath))
+            {
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "ScreenRegionImageSearch",
+                    Path.GetFileName(imagePath),
+                    screenRegion,
+                    captureInstruction: "Capture the missing template from the known screen scan region.");
+                return false;
+            }
+
             using Bitmap screenshot = new(screenRegion.Width, screenRegion.Height);
             using (Graphics graphics = Graphics.FromImage(screenshot))
             {
@@ -988,6 +1027,12 @@ namespace GoblinFarmer
                 ? Rectangle.Intersect(SystemInformation.VirtualScreen, region.Value)
                 : SystemInformation.VirtualScreen;
             string regionText = region.HasValue ? FormatRectangle(region.Value) : "full-screen";
+
+            if (!AppSettings.Debug.EnableDebugScreenshots)
+            {
+                AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=disabled by config");
+                return "";
+            }
 
             if (captureRegion.Width <= 0 || captureRegion.Height <= 0)
             {
@@ -1052,6 +1097,265 @@ namespace GoblinFarmer
                 AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=capture failed: {PortLogField(ex.Message)}");
                 return "";
             }
+        }
+
+        private void PortOfferMissingAssetCapture(
+            string imagePath,
+            string callingFlow,
+            string missingAssetName = "",
+            Rectangle? knownScreenRegion = null,
+            string scanRegionKey = "",
+            string captureInstruction = "")
+        {
+            missingAssetName = string.IsNullOrWhiteSpace(missingAssetName)
+                ? Path.GetFileName(imagePath)
+                : missingAssetName.Trim();
+            callingFlow = string.IsNullOrWhiteSpace(callingFlow) ? "Unknown" : callingFlow.Trim();
+            string normalizedImagePath = string.IsNullOrWhiteSpace(imagePath) ? "" : imagePath.Trim();
+            string promptKey = string.IsNullOrWhiteSpace(normalizedImagePath)
+                ? $"{callingFlow}|{missingAssetName}|{scanRegionKey}"
+                : normalizedImagePath;
+            string knownRegionText = knownScreenRegion.HasValue ? FormatRectangle(knownScreenRegion.Value) : "Unknown";
+            string state = PortMissingAssetStateFields();
+
+            AppLogger.Info($"MissingAssetDetected: asset={PortLogField(missingAssetName)}; path={PortLogField(normalizedImagePath)}; flow={PortLogField(callingFlow)}; scanRegionKey={PortLogField(scanRegionKey)}; knownScreenRegion={PortLogField(knownRegionText)}; {state}");
+
+            if (!AppSettings.Debug.EnableMissingAssetPrompts)
+            {
+                AppLogger.Info($"MissingAssetPromptSkipped: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; reason=disabled by config");
+                return;
+            }
+
+            if (portCombatRunning || portCombatStopping)
+            {
+                AppLogger.Info($"MissingAssetPromptSkipped: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; reason=combat active; combatRunning={portCombatRunning}; combatStopping={portCombatStopping}");
+                return;
+            }
+
+            lock (portMissingAssetPromptLock)
+            {
+                if (portMissingAssetPromptHandled.Contains(promptKey) || portMissingAssetPromptActive.Contains(promptKey))
+                {
+                    AppLogger.Info($"MissingAssetPromptSkipped: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; reason=already prompted this session");
+                    return;
+                }
+
+                portMissingAssetPromptActive.Add(promptKey);
+            }
+
+            void ShowPrompt()
+            {
+                if (portCombatRunning || portCombatStopping)
+                {
+                    AppLogger.Info($"MissingAssetPromptSkipped: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; reason=combat became active before prompt");
+                    PortCompleteMissingAssetPrompt(promptKey);
+                    return;
+                }
+
+                string targetFolder = string.IsNullOrWhiteSpace(normalizedImagePath)
+                    ? ""
+                    : Path.GetDirectoryName(normalizedImagePath) ?? "";
+                string targetText = string.IsNullOrWhiteSpace(targetFolder)
+                    ? "The target image folder is unknown, so a timestamped capture will be saved under Images."
+                    : $"The capture will be saved in:\r\n{targetFolder}";
+                string instruction = string.IsNullOrWhiteSpace(captureInstruction)
+                    ? "Capture the current Diablo window or the known scan region showing the missing UI/template as clearly as possible."
+                    : captureInstruction;
+
+                Form prompt = new()
+                {
+                    Text = "Missing Screenshot/Template Asset",
+                    StartPosition = FormStartPosition.CenterScreen,
+                    Size = new System.Drawing.Size(560, 300),
+                    TopMost = true,
+                    ShowInTaskbar = false,
+                    FormBorderStyle = FormBorderStyle.FixedDialog,
+                    MaximizeBox = false,
+                    MinimizeBox = false,
+                };
+
+                Label label = new()
+                {
+                    AutoSize = false,
+                    Location = new DrawingPoint(18, 18),
+                    Size = new System.Drawing.Size(520, 165),
+                    Text = $"Missing asset:\r\n{missingAssetName}\r\n\r\nFlow: {callingFlow}\r\nScan region: {knownRegionText}\r\n\r\n{instruction}\r\n\r\n{targetText}",
+                };
+
+                Button captureButton = new()
+                {
+                    Text = "Capture Now",
+                    Location = new DrawingPoint(300, 210),
+                    Size = new System.Drawing.Size(110, 32),
+                };
+
+                Button skipButton = new()
+                {
+                    Text = "Skip",
+                    Location = new DrawingPoint(420, 210),
+                    Size = new System.Drawing.Size(90, 32),
+                };
+
+                captureButton.Click += (_, _) =>
+                {
+                    try
+                    {
+                        if (portCombatRunning || portCombatStopping)
+                        {
+                            AppLogger.Info($"MissingAssetManualCaptureSkipped: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; reason=combat active at capture time; combatRunning={portCombatRunning}; combatStopping={portCombatStopping}");
+                            return;
+                        }
+
+                        string savedPath = PortCaptureMissingAssetTemplate(normalizedImagePath, missingAssetName, callingFlow, knownScreenRegion);
+                        AppLogger.Info($"MissingAssetManualCaptureAccepted: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; savedPath={PortLogField(PortDisplayLocation(savedPath))}; scanRegion={PortLogField(knownRegionText)}");
+                    }
+                    finally
+                    {
+                        PortCompleteMissingAssetPrompt(promptKey);
+                        prompt.Close();
+                    }
+                };
+
+                skipButton.Click += (_, _) =>
+                {
+                    AppLogger.Info($"MissingAssetManualCaptureSkipped: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; reason=user declined");
+                    PortCompleteMissingAssetPrompt(promptKey);
+                    prompt.Close();
+                };
+
+                prompt.FormClosed += (_, _) => PortCompleteMissingAssetPrompt(promptKey);
+                prompt.Controls.Add(label);
+                prompt.Controls.Add(captureButton);
+                prompt.Controls.Add(skipButton);
+                prompt.Show(this);
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(ShowPrompt));
+            }
+            else
+            {
+                ShowPrompt();
+            }
+        }
+
+        private void PortCompleteMissingAssetPrompt(string promptKey)
+        {
+            lock (portMissingAssetPromptLock)
+            {
+                portMissingAssetPromptActive.Remove(promptKey);
+                portMissingAssetPromptHandled.Add(promptKey);
+            }
+        }
+
+        private string PortCaptureMissingAssetTemplate(string imagePath, string missingAssetName, string callingFlow, Rectangle? knownScreenRegion)
+        {
+            Rectangle captureRegion = PortMissingAssetCaptureRegion(imagePath, knownScreenRegion);
+            if (captureRegion.Width <= 0 || captureRegion.Height <= 0)
+            {
+                AppLogger.Info($"MissingAssetManualCaptureFailed: asset={PortLogField(missingAssetName)}; flow={PortLogField(callingFlow)}; reason=empty capture region");
+                return "";
+            }
+
+            string directory = PortMissingAssetTargetDirectory(imagePath);
+            Directory.CreateDirectory(directory);
+
+            string fileName = PortMissingAssetTargetFileName(imagePath, missingAssetName, callingFlow);
+            string path = Path.Combine(directory, fileName);
+            if (File.Exists(path))
+            {
+                string extension = Path.GetExtension(path);
+                string withoutExtension = Path.GetFileNameWithoutExtension(path);
+                path = Path.Combine(directory, $"{withoutExtension}_{DateTime.Now:yyyyMMdd_HHmmss_fff}{extension}");
+            }
+
+            using Bitmap screenshot = new(captureRegion.Width, captureRegion.Height);
+            using (Graphics graphics = Graphics.FromImage(screenshot))
+            {
+                graphics.CopyFromScreen(captureRegion.Left, captureRegion.Top, 0, 0, screenshot.Size);
+            }
+
+            screenshot.Save(path, PortImageFormatForPath(path));
+            return path;
+        }
+
+        private Rectangle PortMissingAssetCaptureRegion(string imagePath, Rectangle? knownScreenRegion)
+        {
+            if (knownScreenRegion.HasValue)
+            {
+                Rectangle known = Rectangle.Intersect(SystemInformation.VirtualScreen, knownScreenRegion.Value);
+                if (known.Width > 0 && known.Height > 0)
+                {
+                    return known;
+                }
+            }
+
+            IntPtr diabloWindow = FindDiabloWindow();
+            if (diabloWindow != IntPtr.Zero && GetWindowRect(diabloWindow, out RECT rect))
+            {
+                Rectangle? referenceRegion = string.IsNullOrWhiteSpace(imagePath) ? null : PortScanRegionForImage(imagePath);
+                Rectangle region = referenceRegion.HasValue
+                    ? PortScaleReferenceRectangle(referenceRegion.Value, rect)
+                    : new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                region = Rectangle.Intersect(SystemInformation.VirtualScreen, region);
+                if (region.Width > 0 && region.Height > 0)
+                {
+                    return region;
+                }
+            }
+
+            return SystemInformation.VirtualScreen;
+        }
+
+        private string PortMissingAssetTargetDirectory(string imagePath)
+        {
+            if (!string.IsNullOrWhiteSpace(imagePath))
+            {
+                string? directory = Path.GetDirectoryName(imagePath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    return directory;
+                }
+            }
+
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "Manual Captures");
+        }
+
+        private string PortMissingAssetTargetFileName(string imagePath, string missingAssetName, string callingFlow)
+        {
+            string requestedName = string.IsNullOrWhiteSpace(imagePath) ? "" : Path.GetFileName(imagePath);
+            if (!string.IsNullOrWhiteSpace(requestedName))
+            {
+                string extension = Path.GetExtension(requestedName);
+                return string.IsNullOrWhiteSpace(extension)
+                    ? $"{PortSafeFileName(requestedName)}.png"
+                    : requestedName;
+            }
+
+            return $"{DateTime.Now:yyyyMMdd_HHmmss_fff}_{PortSafeFileName(callingFlow)}_{PortSafeFileName(missingAssetName)}.png";
+        }
+
+        private static System.Drawing.Imaging.ImageFormat PortImageFormatForPath(string path)
+        {
+            string extension = Path.GetExtension(path);
+            if (extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase))
+            {
+                return System.Drawing.Imaging.ImageFormat.Jpeg;
+            }
+
+            if (extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase))
+            {
+                return System.Drawing.Imaging.ImageFormat.Bmp;
+            }
+
+            return System.Drawing.Imaging.ImageFormat.Png;
+        }
+
+        private string PortMissingAssetStateFields()
+        {
+            return $"automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; combatStopping={portCombatStopping}; workflow={PortLogField(PortDisplayLocation(portLastWorkflowStep))}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; foregroundWindow={PortLogField(PortForegroundWindowTitle())}; lastConfirmedLocation={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; lastTeleportSource={PortLogField(PortDisplayLocation(portLastTeleportSource))}";
         }
 
         private static string PortDebugScreenshotCategory(string actionName)
@@ -1355,7 +1659,7 @@ namespace GoblinFarmer
         {
             if (!File.Exists(imagePath))
             {
-                MessageBox.Show($"Image not found:\n{imagePath}");
+                PortOfferMissingAssetCapture(imagePath, "FullScreenImageExists", Path.GetFileName(imagePath), captureInstruction: "Capture the missing fullscreen template while the expected UI element is visible.");
                 return false;
             }
 
@@ -1386,7 +1690,7 @@ namespace GoblinFarmer
 
             if (!File.Exists(imagePath))
             {
-                MessageBox.Show($"Image not found:\n{imagePath}");
+                PortOfferMissingAssetCapture(imagePath, "FullScreenImageSearch", Path.GetFileName(imagePath), captureInstruction: "Capture the missing fullscreen template while the expected UI element is visible.");
                 return false;
             }
 
@@ -1464,6 +1768,16 @@ namespace GoblinFarmer
             Stopwatch perf = Stopwatch.StartNew();
             centerPoint = DrawingPoint.Empty;
             string imageName = Path.GetFileName(imagePath);
+
+            if (!File.Exists(imagePath))
+            {
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "DiabloWindowImageSearch",
+                    imageName,
+                    captureInstruction: "Capture the missing Diablo template while the expected in-game UI element is visible.");
+                return false;
+            }
 
             IntPtr diabloWindow = FindDiabloWindow();
 
@@ -1545,7 +1859,7 @@ namespace GoblinFarmer
 
             if (!File.Exists(imagePath))
             {
-                MessageBox.Show($"Image not found:\n{imagePath}");
+                PortOfferMissingAssetCapture(imagePath, "BitmapImageSearch", Path.GetFileName(imagePath), captureInstruction: "Capture the missing template for this bitmap/image search.");
                 return false;
             }
 

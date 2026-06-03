@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Debug package quality and full-run reconstruction, with paired success/failure screenshots and manifests for future route validation.
+Release-readiness configuration, focused route-hotkey reliability, bounty menu auto-close evidence, and Start Game retry monitoring using current-session debug package evidence.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -19,6 +19,8 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 - Rakkis Crossing: next Pandemonium Fortress Level 1; no block.
 - Pandemonium Fortress Level 1: next Pandemonium Fortress Level 2; no block.
 - Pandemonium Fortress Level 2: next Make New Game flow; no block.
+- WhimsyDale is not part of the farming route; if the fresh Teleport Next hotkey current-location scan detects WhimsyDale, Teleport Next is blocked and the notification uses WhimsyDale as the displayed location.
+- Cave Of The Moon Clan Level 1 is not part of the farming route; if the fresh Teleport Next hotkey current-location scan detects Cave Of The Moon Clan Level 1, Teleport Next is blocked and the notification uses Cave Of The Moon Clan Level 1 as the displayed location.
 
 ## Known Stable Systems
 - Images are project-relative and copied into the build output.
@@ -30,8 +32,11 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 - Route state preserves the previous confirmed location when teleport confirmation fails or is blocked.
 - Interrupted teleport fail-safes preserve route and button state.
 - Manual teleport buttons preserve failed/interrupted intended targets as retry state.
+- Manual teleport buttons are intentionally allowed and bypass route blocking; Teleport Next hotkey routing uses the route-blocking current-location scan.
 - Manual button retries bypass teleport blocking like the original manual button request.
 - Manual same-button clicks while a teleport is waiting for arrival confirmation are ignored and logged to avoid overlapping waypoint workflows.
+- Teleport Next uses the fresh hotkey current-location scan to advance route state when the player is already at the queued destination, skipping the redundant teleport attempt without incrementing completed teleports; the latest implementation also scans queued-target templates so non-blocking route destinations can be detected instead of returning `Unknown`.
+- Teleport Next already-at-queued-destination advancement logs `AlreadyAtQueuedDestinationCheck`, `AlreadyAtQueuedDestinationDetected`, `skippedDestination`, `newRequestedTarget`, and whether the following teleport was actually started.
 - In-game notifications use a no-activate overlay so blocked/already-here messages should not steal Diablo focus.
 - Gates of Caldeum normalizes to City Of Caldeum for blocking output.
 - Waterway sub-regions keep their raw identity for blocking decisions.
@@ -42,10 +47,12 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 - Stinging Winds blocks Battlefields unless the current detected sub-region is Black Canyon Mines.
 - Ancient Waterway self-click blocks before opening the map and preserves current/next button state.
 - Repair flow waits for New Tristram/vendor readiness and logs repair-station click timing before using the repair-station coordinate fallback.
+- Repair flow logs New Tristram readiness, minimal post-arrival settle timing, repair-station click attempts, elapsed time, whether clicks were sent, blacksmith/repair menu detection, and total repair workflow duration while preserving the repair plus salvage sequence.
 - Combat automation is stable enough for current route work; do not change combat logic unless explicitly requested.
 - Combat click safety blocks existing UI no-click regions and now includes the extended lower-right hover menu area without moving the cursor or stopping combat.
 - Combat no-click suppression keeps non-mouse combat actions running where safe; Demon Hunter key rotation continues while mouse clicks are suppressed over UI regions.
 - Combat keyboard-hook filtering matches the old Python app's injected-key behavior for combat-relevant number keys: physical `1`/`2` are suppressed during combat, while injected automation key events pass through.
+- Physical `2` starts Exit Game when Diablo is focused and combat is inactive; combat and combat-stop cleanup suppress it before the Exit Game hotkey path can run.
 - Demon Hunter right mouse now follows the old Python app's pattern: start holding right mouse only in a safe region, then keep the hold active through hover/no-click regions without sending new click events.
 - Demon Hunter sustained combat now treats shared cursor-loop left-click suppression as active right-held combat when right mouse is already held from a safe region.
 - Witch Doctor held/channel mouse input starts only from a safe world region, remains held through combat no-click regions without sending new clicks, and continues keyboard/Hex timers while UI clicks are suppressed.
@@ -58,6 +65,10 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 - Debug packages include `debug-screenshot-manifest.txt`, which pairs selected success/failure Diablo and GoblinFarmer app screenshots by timestamp, workflow, action, and surface.
 - Debug package screenshot collection is session-only: screenshots older than the current GoblinFarmer session start are excluded from the package while existing screenshot retention remains unchanged.
 - Debug package console output and `debug-package-manifest.txt` report total/success/failure/normal screenshot counts, excluded stale screenshot count, package size, session start, and session duration.
+- Missing screenshot/template assets are logged with asset name, calling flow, scan-region context when known, and current app/game state; when combat is inactive, a modeless debug prompt can optionally capture the current Diablo window or known scan region into the expected Images folder.
+- Passive bounty menu auto-close logs `BountyMenuScanResult`, `BountyMenuDetected`, `BountyMenuEscapeSent`, and `BountyMenuEscapeSkipped` with scan image path, scan region asset path, reference/screen region, confidence, threshold, detection source, combat state, `automationCancelled=false`, and skip reasons including inactive Diablo, missing image data, low confidence, and throttle.
+- Passive bounty menu auto-close sends automation-safe injected Escape through the same ignore-window helper used by internal automation Escape presses, including while combat is active, so user/manual Escape can still stop automation but bounty-menu Escape should not.
+- `Config\AppSettings.json` centralizes release/debug configuration, auto-creates when missing, logs loaded values, and currently controls diagnostic panes, debug screenshots, missing-asset prompts, notification display, repair timing, and teleport confirmation timeout.
 - Exit Game workflow no longer generates desktop right-clicks after Diablo exits.
 - Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
 - Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region is `16,1256,292,75`, recalibrated from fallback diagnostics.
@@ -65,12 +76,17 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 ## Under Active Improvement
 - Full route validation from Southern Highlands through Pandemonium Fortress Level 2, with route-failure-summary evidence checked after each run.
 - Fresh run validation that success and failure screenshot pairs are generated for major workflow milestones and appear in `debug-screenshot-manifest.txt`.
+- Missing-asset prompt validation should confirm missing templates log state, show a non-blocking capture/skip prompt outside combat, save accepted captures to the expected Images folder, and suppress prompts during combat.
 - Battle.net launch validation should confirm the debug package distinguishes app Play click, suspected manual Play click, Diablo launch without app click, successful Diablo launch after app click, and post-launch Battle.net close failures/timeouts.
 - Ancient Waterway/channel retest: manual Ancient Waterway from channel levels must not advance route state until exact Ancient Waterway arrival is confirmed.
 - Caldeum to Ancient Waterway and Stinging Winds to Battlefields validation should prove the allowing raw locations (`Ruined Cistern`, `Black Canyon Mines`) in the summary/logs.
 - Start Game image recognition reliability, especially possible cursor interference with detection/click verification.
 - Battle.net tab/Play detection across fullscreen, windowed, moved-window, and multi-monitor setups.
-- Repair/salvage timing validation after route and launch changes.
+- Repair/salvage monitoring after route and launch changes; current repair timing is acceptable and should prioritize reliability over further speed changes.
+- Teleport Next WhimsyDale validation should confirm the fresh current-location scan detects WhimsyDale, blocks routing, and shows WhimsyDale in the notification/logs.
+- Teleport Next Cave Of The Moon Clan Level 1 validation should confirm the fresh current-location scan detects Cave Of The Moon Clan Level 1, blocks routing, and shows Cave Of The Moon Clan Level 1 in the notification/logs.
+- Teleport Next route advancement validation should confirm that when the player is already at the queued destination, the hotkey logs `teleportSkipped=True`, advances the route, and sends the next valid destination instead.
+- Release configuration validation should confirm diagnostic overlay/route inspector are hidden by default, reappear when enabled in config, and debug screenshot/missing-asset prompt settings behave as configured.
 - Publish/release folder validation to confirm Images are included.
 
 ## Known Issues
@@ -82,15 +98,18 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 - Need manual validation of the new `BattleNetManualPlaySuspected`, `BattleNetPlayButtonNotClickedByApp`, `BattleNetStillOpenAfterDiabloLaunch`, and `BattleNetPostLaunchCloseSummary` diagnostics during a run where the user manually clicks Play or Battle.net remains open.
 - If BattleNetPlayButton still falls back, inspect the new fallback region diagnostic log for fallback point, expected region center, delta, distance, fallback-inside-region state, and suggested same-size cached region.
 - Need to manually validate Battle.net tab/Play button detection with Battle.net fullscreen, windowed, moved, and on another monitor.
-- Need to test full teleport route from Southern Highlands through Pandemonium Fortress Level 2 after the Ancient Waterway exact-arrival fix.
 - Need manual validation that Ancient Waterway requested from Western/Eastern Channel levels preserves correct Waterway state and next target until exact arrival confirmation.
 - Need to validate `route-failure-summary.txt` on the next generated package from a fresh run with new `RouteFailureSummary`, `RouteDebugSummary`, and `StartGameVerificationFailureSummary` log lines.
 - Need to validate fresh runtime paired success screenshots for Battle.net Play clicked, Diablo process detected, Start Game clicked, teleport confirmed, repair complete, salvage complete/skipped, and Exit Game complete.
 - Need to validate fresh runtime paired failure screenshots for workflow failures and verify `debug-screenshot-manifest.txt` pairs Diablo/App evidence correctly.
+- Need live validation of the optional missing-asset capture prompt for a deliberately missing template, including accept, skip, and combat-suppressed paths.
 - Need to validate `session-info.txt` session-start metadata on the next app launch so package screenshot filtering uses explicit app startup time instead of latest-log fallback.
 - Need to test interrupted teleport recovery.
 - Need to manually confirm repeated failed/interrupted button retry from Cathedral Level 1 to Royal Crypts preserves current=Cathedral, next/retry=Royal Crypts, bypasses manual-button blocking, and does not advance until arrival is confirmed.
-- Need to verify repair + salvage flow.
+- Need live validation that the new 50ms repair station settle remains responsive after New Tristram arrival without missing the blacksmith click/menu.
+- Need to validate WhimsyDale Teleport Next blocking in a live run.
+- Need to validate bounty menu auto-close diagnostics after the template refresh and combat-close change: the configured `Images\Combat\Bounty Menu Scan Region.png` region should log `BountyMenuScanResult`, detect the menu, and send injected Escape while Diablo is foreground even if `combatActive=True`.
+- Need release-style validation of `Config\AppSettings.json` defaults and toggles.
 - Need to validate publish/release folder includes Images.
 - Need waypoint coordinates before routing Northern Highlands directly to Leoric's Passage.
 - Start Game button detection/click verification is still inconsistent, suspected cursor interference with image recognition.
@@ -98,6 +117,30 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Reviewed `GoblinFarmer_Debug_20260602_220408.zip`: Teleport Next already-at-queued-destination worked live with `AlreadyAtQueuedDestinationDetected` and `AlreadyAtQueuedDestinationTeleportStart` / `teleportStarted=True`; Cathedral blocked the hotkey to Royal Crypts while the manual Royal Crypts button remained allowed with `source=Button` and `ignoreBlocking=True`; bounty menu scanning used `Bounty Menu Title.png`, `Bounty Menu Scan Region.png`, `referenceRegion=997,977,564,286`, and captured low-confidence region screenshots, but combat-active detections were skipped until combat stopped.
+- Refreshed `Images\Combat\Bounty Menu Title.png` from the latest live Bounty Complete popup asset. The old gray template scored about `0.777` against the marked scan-region asset; the refreshed gold-title template scores `1.000` against `Images\Combat\Bounty Menu Scan Region.png`.
+- Changed Bounty Complete auto-close so detected popups send automation-safe injected Escape even while combat is active. The send log now includes `automationCancelled=false`, `injectedEscape=true`, `combatActive`, `detectionSource`, confidence/threshold, template path, and scan-region path.
+- Reviewed `GoblinFarmer_Debug_20260602_213950.zip`: Exit Game / repair / salvage completed, repair timing was acceptable at `waitAfterArrivalMs=60` and `totalRepairWorkflowDurationMs=3259`, Make New Game / Start Game succeeded in this run, Teleport Next already-at-queued-destination still did not dispatch the following target, and bounty menu scanning repeatedly used `Bounty Menu Title.png` plus the `BountyMenuTitle` scan region `997,977,564,286` from `Bounty Menu Scan Region.png` but stayed below the `0.780` threshold.
+- Fixed the Teleport Next already-at-queued-destination miss by adding queued-target templates to the hotkey fresh current-location scan, logging `AlreadyAtQueuedDestinationCheck`, and preserving the explicit `AlreadyAtQueuedDestinationDetected` / `AlreadyAtQueuedDestinationTeleportStart` dispatch proof when the fresh scan matches the queued target.
+- Tightened bounty menu scan diagnostics and behavior: the scanner logs `BountyMenuScanResult` with `imagePath`, `scanRegionImagePath=Images\Combat\Bounty Menu Scan Region.png`, reference/screen region, best confidence, threshold, near-match threshold, and detection source; low-confidence scans capture the configured scan region; narrow near matches just below threshold can close with `detectionSource=RegionNearMatch`.
+- Reviewed `GoblinFarmer_Debug_20260602_210617.zip`: Cave Of The Moon Clan Level 1 blocked Teleport Next correctly with raw/display notification text, repair/salvage/Exit Game completed, repair timing showed `waitAfterArrivalMs` around `77-81` and `totalRepairWorkflowDurationMs` around `3337-3341`, Start Game retry failed once then succeeded, and no useful bounty detected/escape evidence appeared beyond scan-region loading.
+- Fixed Teleport Next already-at-queued-destination advancement logging and start behavior: the hotkey now logs `AlreadyAtQueuedDestinationDetected`, advances route state, logs `AlreadyAtQueuedDestinationTeleportStart`, and only reports `teleportStarted=True` when the following route teleport is actually dispatched.
+- Changed bounty menu auto-close to use automation-safe injected Escape with `injectedEscape=true` logging; below-threshold, inactive-Diablo, missing-image, and throttle paths log `BountyMenuEscapeSkipped` with `injectedEscape=false`.
+- Added stable Start Game button confirmation before clicking and before treating Leave Game as fully back at the main menu, with `StartGameButtonStable`, `StartGameButtonUnstable`, and `StartGameButtonStableNotFound` diagnostics.
+- Added centralized `Config\AppSettings.json`, startup auto-create, config value logging, release UI gating for diagnostic panes, config gates for debug screenshots/missing-asset prompts, notification display settings, repair timing settings, and teleport confirmation timeout support.
+- Reduced the repair post-New-Tristram settle default to 50ms while keeping blacksmith menu polling visual and retry-based because the latest logs show the menu appears near the existing 1.5s wait window.
+- Reviewed `GoblinFarmer_Debug_20260602_204323.zip`: session completed with Games Created `1`, Teleports Completed `15`, Failures `0`, Blocked Teleports `0`; route-failure-summary confirmed Ruined Cistern, Black Canyon Mines, Western Channel Level 2, Eastern Channel Level 2, Rakkis Crossing, and Pandemonium Fortress route decisions; success screenshots covered Ancient Waterway, Stinging Winds, Battlefields, Pandemonium Fortress Level 1/2, New Tristram, Repair Complete, Salvage skipped/completed path, and Exit Game Complete.
+- Added Cave Of The Moon Clan Level 1 to Teleport Next hotkey blocking with the raw detected location name used in logs, route-failure-summary explanation, and blocked notification text.
+- Added Teleport Next route advancement from the fresh hotkey current-location scan so an already-at-queued-destination state skips a redundant waypoint click and advances toward the next route target.
+- Reduced the repair post-New-Tristram settle from 150ms to 75ms after the latest package showed `waitAfterArrivalMs=164`, `timeUntilRepairStationDetectedMs=1705`, `timeUntilRepairMenuOpenedMs=1878`, and `totalRepairWorkflowDurationMs=3313`; menu-open latency was the remaining bottleneck, not the arrival settle.
+- Expanded bounty menu auto-close diagnostics with active Diablo/combat state, throttle remaining time, and richer `BountyMenuDetected` / `BountyMenuEscapeSent` / `BountyMenuEscapeSkipped` context.
+- Expanded the generic debug screenshot support with an optional missing-asset capture prompt for missing screenshot/template files, including asset/flow/region/state logging, combat suppression, accept/skip logging, and saving accepted captures into the expected Images folder.
+- Optimized repair station timing by reducing the fixed New Tristram post-arrival settle to a short input settle and replacing the fixed post-click delay with visual polling for the blacksmith menu before retrying.
+- Added repair workflow timing logs for wait after arrival, time until repair station/blacksmith menu detection, time until repair menu opened, blacksmith click attempts, and total repair workflow duration.
+- Added WhimsyDale to Teleport Next hotkey route-blocking detection and normalized the `Whimsydale.png` template name to display as WhimsyDale.
+- Added physical `2` as an Exit Game hotkey when Diablo is focused and combat is inactive, with combat-active suppression logs that preserve injected combat key events.
+- Kept normal manual teleport buttons intentionally allowed with `ignoreBlocking=true`, matching the corrected button behavior.
+- Expanded repair-station and repair-menu timing logs with click attempt, elapsed time, click-sent result, and blacksmith/repair menu visibility while preserving repair plus salvage integration.
 - Split Battle.net launch success from post-launch Battle.net close status: when Diablo launches after an app Play click, launch is successful even if Battle.net remains open, and the close result is reported separately as requested/succeeded/failed/timed out.
 - Added a one-shot Battle.net launch outcome guard and one-shot post-launch close evaluation so the route/workflow summary no longer emits conflicting success/failure interpretations for the same launch event.
 - Updated the debug package workflow summary parser to consume `BattleNetLaunchSummary` and `BattleNetPostLaunchCloseSummary` entries with the explicit `appClickedBattleNetPlay`, `diabloLaunchedAfterAppClick`, `battleNetStillOpenAfterLaunch`, `battleNetCloseRequested`, and `battleNetCloseSucceeded` fields.
@@ -146,10 +189,20 @@ Debug package quality and full-run reconstruction, with paired success/failure s
 
 ## Next Recommended Task
 
-Validate full-route reliability and route-failure summaries.
+Validate release config toggles, Whimsy hotkey blocking, Teleport Next already-at-queued-destination advancement, 50ms repair settle, Start Game stable retry behavior, and bounty menu auto-close diagnostics in the next live run.
 
 Validation:
-- Run the full route from Southern Highlands through Pandemonium Fortress Level 2.
+- Confirm Teleport Next blocks from WhimsyDale with raw/display notification text `WhimsyDale`.
+- Confirm Teleport Next route advancement logs `AlreadyAtQueuedDestinationDetected`, `skippedDestination`, `newRequestedTarget`, and `AlreadyAtQueuedDestinationTeleportStart` with `teleportStarted=True`.
+- Confirm manual teleport buttons remain allowed and show `source=Button`, `ignoreBlocking=True`, and blocking skipped because `ignoreBlocking=true`.
+- Confirm internal workflow teleports like Make New Game / Exit Game still bypass blocking where intentionally required.
+- Confirm repair logs show New Tristram confirmation, the configured 50ms settle, blacksmith click attempts, elapsed time, menu detection, and successful repair/salvage integration.
+- Confirm optimized repair logs include `waitAfterArrivalMs`, `timeUntilRepairStationDetectedMs`, `timeUntilRepairMenuOpenedMs`, and `totalRepairWorkflowDurationMs`.
+- Confirm bounty menu logs show `BountyMenuDetected`, `BountyMenuEscapeSent`, and `BountyMenuEscapeSkipped` with skip reasons for below threshold, inactive Diablo, missing image data, and throttle, while detected combat-active popups send injected Escape.
+- Confirm bounty menu Escape logs `injectedEscape=true` and does not cancel active automation, while manual user Escape can still stop automation.
+- Confirm Start Game retry after Leave Game logs stable Start Game button evidence and does not fail from stale main-menu state.
+- Confirm default config hides diagnostic panes, and enabling `Debug.ShowDiagnosticOverlay` / `Debug.ShowRouteInspector` restores them.
+- Confirm a deliberately missing template logs `MissingAssetDetected`, shows the modeless capture prompt outside combat, saves an accepted capture into the expected Images folder, logs `MissingAssetManualCaptureSkipped` when declined, and logs prompt suppression while combat is active.
 - Confirm manual Ancient Waterway from Western/Eastern Channel levels does not count as successful unless raw confirmed location becomes exact Ancient Waterway.
 - Confirm Caldeum/Gates/Sewers/Flooded Causeway blocks explain that `Ruined Cistern` is required, and that a later allowed Ancient Waterway decision shows raw/normalized `Ruined Cistern`.
 - Confirm Stinging Winds failures include map act, target act, destination reference/click point, post-click location confirmation, screenshot, and cancellation/timeout explanation.
@@ -159,6 +212,54 @@ Validation:
 - Inspect `debug-screenshot-manifest.txt` and verify every new success/failure milestone has matching Diablo/App screenshots when the workflow reaches that milestone.
 - Confirm the package excludes screenshots from previous app sessions and reports stale screenshot exclusions in the manifest/console.
 - Confirm Battle.net launch summary entries distinguish fully automated launch from suspected manual Play intervention.
+
+### Route Rule Config Design Review
+Do not migrate live route rules yet. Recommended future JSON shape:
+
+```json
+{
+  "Locations": {
+    "City Of Caldeum": {
+      "displayName": "City Of Caldeum",
+      "aliases": ["Gates of Caldeum", "Caldeum Bazaar", "Sewers of Caldeum", "Flooded Causeway", "Ruined Cistern"],
+      "arrivalRequiresExactMatch": false
+    },
+    "Ancient Waterway": {
+      "displayName": "Ancient Waterway",
+      "aliases": ["Western Channel Level 1", "Western Channel Level 2", "Eastern Channel Level 1", "Eastern Channel Level 2"],
+      "arrivalRequiresExactMatch": true
+    }
+  },
+  "Route": [
+    { "from": "Southern Highlands", "to": "Northern Highlands" },
+    { "from": "Stinging Winds", "to": "Battlefields" }
+  ],
+  "BlockingRules": [
+    {
+      "target": "Battlefields",
+      "blockedWhen": ["Stinging Winds"],
+      "allowedWhen": ["Black Canyon Mines"],
+      "notification": "Clear {location} before teleporting next.",
+      "summaryReason": "Stinging Winds blocks Battlefields; Black Canyon Mines is required."
+    }
+  ],
+  "HotkeyBlockLocations": [
+    "WhimsyDale",
+    "Cave Of The Moon Clan Level 1"
+  ],
+  "DisplayNames": {
+    "whimsydale": "WhimsyDale",
+    "the battlefields": "Battlefields"
+  }
+}
+```
+
+Migration plan:
+- Keep current hardcoded route dictionaries as the source of truth until the next reliability cycle is complete.
+- Add a parser and validator that loads a proposed route config, reports unknown templates/coordinates, and compares generated route decisions against current hardcoded decisions without changing behavior.
+- Move display-name normalization first because it is low risk and directly improves logs/notifications.
+- Move aliases and exact-arrival requirements second, with tests for Ancient Waterway/channel and Pandemonium exact-match behavior.
+- Move block/allow rules last, with route-failure-summary golden examples for Cathedral, Leoric's Passage, Gates/Caldeum, WhimsyDale, Cave Of The Moon Clan Level 1, Ancient Waterway channels, Stinging Winds, and Black Canyon Mines.
 
 ## System Notes
 
@@ -235,6 +336,16 @@ Validation:
 - Package manifest and console summary report package size, session start, session duration, total screenshots, success screenshots, failure screenshots, normal screenshots, and stale screenshot exclusions.
 
 ## Last Validation
+- Built after reviewing `GoblinFarmer_Debug_20260602_210617.zip`, adding the AppSettings config foundation, fixing already-at-queued-destination teleport start logging/dispatch, changing bounty menu Escape to automation-safe injected Escape, adding Start Game stable-button diagnostics, and reducing repair settle to the config default 50ms; build succeeded with 0 warnings and 0 errors.
+- Built after reviewing `GoblinFarmer_Debug_20260602_204323.zip` and adding Cave Of The Moon Clan Level 1 blocking, Teleport Next fresh-scan route advancement, 75ms repair settle, and expanded bounty menu skip diagnostics; build succeeded with 0 warnings and 0 errors.
+- Inspected `GoblinFarmer_Debug_20260602_204323.zip`: session summary reported Games Created `1`, Teleports Completed `15`, Blocked Teleports `0`, Failures `0`.
+- Inspected `route-failure-summary.txt` from `GoblinFarmer_Debug_20260602_204323.zip`: Ruined Cistern allowed Ancient Waterway, Western Channel Level 2 allowed Ancient Waterway, Eastern Channel Level 2 allowed Stinging Winds, Black Canyon Mines allowed Battlefields, and Rakkis/Pandemonium progression reached Pandemonium Fortress Level 2.
+- Inspected `debug-screenshot-manifest.txt` from `GoblinFarmer_Debug_20260602_204323.zip`: current-session success screenshot pairs existed for Ancient Waterway, Stinging Winds, Battlefields, Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, New Tristram, Repair Complete, Salvage skipped, and Exit Game Complete.
+- Reviewed repair timing in the latest package: `waitAfterArrivalMs=164`, `timeUntilRepairStationDetectedMs=1705`, `timeUntilRepairMenuOpenedMs=1878`, and `totalRepairWorkflowDurationMs=3313`; the post-arrival settle was shortened from 150ms to 75ms while keeping visual menu polling and retry behavior.
+- Built after adding the optional missing-asset capture prompt and wiring common missing-template paths into it; build succeeded with 0 warnings and 0 errors.
+- Built after optimizing repair station timing and adding workflow duration logs; build succeeded with 0 warnings and 0 errors.
+- Built after adding WhimsyDale Teleport Next blocking, physical `2` Exit Game hotkey handling, corrected manual-button allowed behavior, and expanded repair timing logs; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed normal manual teleport buttons still pass `ignoreBlocking=true`, `source=Button`/`source=ButtonRetry` remain non-blocking by design, internal workflow teleports still pass `bypassFailsafe=true`, and injected combat key events still pass through the keyboard hook before physical hotkey handling.
 - Built after adding Battle.net launch intervention diagnostics and workflow summary parsing; build succeeded with 0 warnings and 0 errors.
 - Static review confirmed the changes preserve existing Battle.net scan fallback and tab-selection behavior, and only add launch state tracking, logs, screenshots, close-result diagnostics, and package summary parsing.
 - Built after adding session-only screenshot package filtering and package size/session reporting; build succeeded with 0 warnings and 0 errors.

@@ -120,6 +120,12 @@ namespace GoblinFarmer
         {
             try
             {
+                if (!AppSettings.Debug.EnableDebugScreenshots)
+                {
+                    AppLogger.Info($"Debug screenshot skipped: disabled by AppSettings; reason={reason}");
+                    return "";
+                }
+
                 if (chkKeepDebugScreenshots != null && !chkKeepDebugScreenshots.Checked)
                 {
                     AppLogger.Info($"Debug screenshot skipped: disabled by Keep Debug Screenshots setting; reason={reason}");
@@ -187,6 +193,12 @@ namespace GoblinFarmer
         {
             try
             {
+                if (!AppSettings.Debug.EnableDebugScreenshots)
+                {
+                    AppLogger.Info($"Diagnostic screenshot pair skipped: disabled by AppSettings; outcome={outcome}; workflow={workflow}; action={action}");
+                    return new PortScreenshotPair("", "");
+                }
+
                 if (chkKeepDebugScreenshots != null && !chkKeepDebugScreenshots.Checked)
                 {
                     AppLogger.Info($"Diagnostic screenshot pair skipped: disabled by Keep Debug Screenshots setting; outcome={outcome}; workflow={workflow}; action={action}");
@@ -256,6 +268,12 @@ namespace GoblinFarmer
             }
 
             Rectangle bounds = Bounds;
+            IntPtr appHandle = Handle;
+            IntPtr foregroundWindow = GetForegroundWindow();
+            bool visible = Visible && IsWindowVisible(appHandle);
+            bool minimized = WindowState == FormWindowState.Minimized || IsIconic(appHandle);
+            bool foreground = foregroundWindow == appHandle;
+            bool possiblyOccluded = visible && !minimized && !foreground;
             RECT rect = new()
             {
                 Left = bounds.Left,
@@ -264,7 +282,12 @@ namespace GoblinFarmer
                 Bottom = bounds.Bottom,
             };
 
-            AppLogger.Info($"Diagnostic screenshot capturing app window: reason={reason}; bounds={bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height}");
+            AppLogger.Info($"Diagnostic screenshot capturing app window: reason={reason}; visible={visible}; minimized={minimized}; foreground={foreground}; possiblyOccluded={possiblyOccluded}; bounds={bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height}; foregroundWindow=0x{foregroundWindow.ToInt64():X}; appWindow=0x{appHandle.ToInt64():X}");
+            if (!visible || minimized || possiblyOccluded)
+            {
+                AppLogger.Info($"Diagnostic screenshot app window warning: reason={reason}; mayCaptureAnotherWindow=true; visible={visible}; minimized={minimized}; possiblyOccluded={possiblyOccluded}; bounds={bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height}");
+            }
+
             return PortCaptureScreenRectangleToFile(rect, path, reason);
         }
 

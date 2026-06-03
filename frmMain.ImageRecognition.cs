@@ -24,7 +24,7 @@ namespace GoblinFarmer
                     return true;
                 }
 
-                PortSleep(token, 100);
+                PortSleep(token, AppSettings.Repair.RepairMenuPollingIntervalMs);
             }
 
             return false;
@@ -54,7 +54,26 @@ namespace GoblinFarmer
         private bool PortCharacterLoadConfirmationVisible()
         {
             string imagePath = Img("Start Game", "Character Load Confirmation.png");
-            return File.Exists(imagePath) && PortImageVisibleInDiabloRegion(imagePath, PortScanRegion("CharacterLoad", imagePath), PortCharacterLoadConfidence);
+            Rectangle referenceRegion = PortScanRegion("CharacterLoad", imagePath);
+            if (!File.Exists(imagePath))
+            {
+                Rectangle? screenRegion = null;
+                if (PortTryGetDiabloRect(out RECT rect))
+                {
+                    screenRegion = PortScaleReferenceRectangle(referenceRegion, rect);
+                }
+
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "StartGame",
+                    "Character Load Confirmation.png",
+                    screenRegion,
+                    "CharacterLoad",
+                    "Capture the character load confirmation template after the game begins loading.");
+                return false;
+            }
+
+            return PortImageVisibleInDiabloRegion(imagePath, referenceRegion, PortCharacterLoadConfidence);
         }
 
         private bool PortPlayerIsInGame()
@@ -330,6 +349,7 @@ namespace GoblinFarmer
                 "Ancient Waterway",
                 "Black Canyon Mines",
                 "Caldeum Bazaar",
+                "Cave Of The Moon Clan Level 1",
                 "Cathedral",
                 "Cathedral Level 1",
                 "Cathedral Level 2",
@@ -344,6 +364,7 @@ namespace GoblinFarmer
                 "Stinging Winds",
                 "Western Channel Level 1",
                 "Western Channel Level 2",
+                "WhimsyDale",
             };
             Dictionary<string, string> blockedTemplates = PortCurrentLocationTemplatesForNames(blockedTemplatesToScan);
             return PortDetectCurrentLocationFromTemplatesDetailed(blockedTemplates, "blocked teleport location detection", logPerf: true, PortBlockedLocationConfidence).Detected;
@@ -523,10 +544,15 @@ namespace GoblinFarmer
                 key == PortLocationKey("Pandemonium Fortress Level 2");
         }
 
-        private static double PortBestTemplateConfidenceInMat(Mat screenMat, string imagePath)
+        private double PortBestTemplateConfidenceInMat(Mat screenMat, string imagePath)
         {
             if (!File.Exists(imagePath))
             {
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "CurrentLocationTemplateScan",
+                    Path.GetFileName(imagePath),
+                    captureInstruction: "Capture the missing current-location/template asset while the expected in-game title or UI element is visible.");
                 return 0;
             }
 
@@ -542,10 +568,15 @@ namespace GoblinFarmer
             return maxVal;
         }
 
-        private static double PortBestPandemoniumTemplateConfidenceInMat(Mat screenMat, string imagePath)
+        private double PortBestPandemoniumTemplateConfidenceInMat(Mat screenMat, string imagePath)
         {
             if (!File.Exists(imagePath))
             {
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "CurrentLocationTemplateScan",
+                    Path.GetFileName(imagePath),
+                    captureInstruction: "Capture the missing Pandemonium/current-location template while the expected in-game title is visible.");
                 return 0;
             }
 
@@ -579,7 +610,18 @@ namespace GoblinFarmer
         {
             Stopwatch perf = Stopwatch.StartNew();
             IntPtr diabloWindow = FindDiabloWindow();
-            if (diabloWindow == IntPtr.Zero || !File.Exists(imagePath))
+            if (!File.Exists(imagePath))
+            {
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "DiabloTemplateConfidence",
+                    Path.GetFileName(imagePath),
+                    captureInstruction: "Capture the missing Diablo template while the expected in-game UI element is visible.");
+                AppLogger.Info($"PERF PortBestTemplateConfidenceInDiablo {Path.GetFileName(imagePath)}: missing asset in {perf.ElapsedMilliseconds}ms");
+                return 0;
+            }
+
+            if (diabloWindow == IntPtr.Zero)
             {
                 AppLogger.Info($"PERF PortBestTemplateConfidenceInDiablo {Path.GetFileName(imagePath)}: unavailable in {perf.ElapsedMilliseconds}ms");
                 return 0;
@@ -640,7 +682,24 @@ namespace GoblinFarmer
 
         private double PortBestTemplateConfidenceInDiabloRegion(string imagePath, Rectangle referenceRegion)
         {
-            if (!PortTryGetDiabloRect(out RECT rect) || !File.Exists(imagePath))
+            if (!File.Exists(imagePath))
+            {
+                Rectangle? missingAssetScreenRegion = null;
+                if (PortTryGetDiabloRect(out RECT missingRect))
+                {
+                    missingAssetScreenRegion = PortScaleReferenceRectangle(referenceRegion, missingRect);
+                }
+
+                PortOfferMissingAssetCapture(
+                    imagePath,
+                    "DiabloRegionTemplateConfidence",
+                    Path.GetFileName(imagePath),
+                    missingAssetScreenRegion,
+                    captureInstruction: "Capture the missing Diablo template from the known scan region.");
+                return 0;
+            }
+
+            if (!PortTryGetDiabloRect(out RECT rect))
             {
                 return 0;
             }
@@ -687,6 +746,15 @@ namespace GoblinFarmer
             int slotWidth = grid.Width / columns;
             int slotHeight = grid.Height / rows;
             string blankPath = Img("Salvage", "Blank Inventory Tile.png");
+            if (!File.Exists(blankPath))
+            {
+                PortOfferMissingAssetCapture(
+                    blankPath,
+                    "Salvage",
+                    "Blank Inventory Tile.png",
+                    grid,
+                    captureInstruction: "Capture an empty inventory tile for salvage blank-slot detection.");
+            }
 
             using Bitmap screenshot = new(grid.Width, grid.Height);
             using (Graphics graphics = Graphics.FromImage(screenshot))

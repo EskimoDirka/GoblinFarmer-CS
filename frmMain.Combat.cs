@@ -2,6 +2,7 @@ using OpenCvSharp;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
@@ -577,6 +578,97 @@ namespace GoblinFarmer
             }
 
             return confidence >= 0.75;
+        }
+
+        private void PortUpdateBountyMenuAutoClose(bool diabloRunning)
+        {
+            if (!diabloRunning)
+            {
+                return;
+            }
+
+            string imagePath = Img("Combat", "Bounty Menu Title.png");
+            string scanRegionImagePath = Img("Combat", "Bounty Menu Scan Region.png");
+            if (!File.Exists(imagePath))
+            {
+                PortLogBountyMenuEscapeSkipped("image data missing", $"image={Path.GetFileName(imagePath)}; injectedEscape=false");
+                return;
+            }
+
+            Rectangle? referenceRegion = PortScanRegionForImage(imagePath);
+            if (!referenceRegion.HasValue)
+            {
+                PortLogBountyMenuEscapeSkipped("image data missing", $"scanRegion=missing; scanRegionImagePath={scanRegionImagePath}; scanRegionImageExists={File.Exists(scanRegionImagePath)}; imagePath={imagePath}; image={Path.GetFileName(imagePath)}; injectedEscape=false");
+                return;
+            }
+
+            string screenRegion = "unavailable";
+            Rectangle? scaledScreenRegion = null;
+            if (PortTryGetDiabloRect(out RECT rect))
+            {
+                Rectangle scaled = PortScaleReferenceRectangle(referenceRegion.Value, rect);
+                scaledScreenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, scaled);
+                screenRegion = FormatRectangle(scaledScreenRegion.Value);
+            }
+
+            double confidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion.Value);
+            double nearMatchThreshold = Math.Max(0.0, PortBountyMenuConfidence - 0.04);
+            bool regionDetected = confidence >= PortBountyMenuConfidence;
+            bool nearMatchDetected = !regionDetected && confidence >= nearMatchThreshold;
+            string detectionSource = regionDetected ? "ConfiguredRegion" : nearMatchDetected ? "RegionNearMatch" : "None";
+            string imageName = Path.GetFileName(imagePath);
+            AppLogger.Info($"BountyMenuScanResult: imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; scanRegionImageExists={File.Exists(scanRegionImagePath)}; referenceRegion={FormatRectangle(referenceRegion.Value)}; screenRegion={screenRegion}; bestConfidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; nearMatchThreshold={nearMatchThreshold:0.000}; detectionSource={detectionSource}");
+
+            if (!regionDetected && !nearMatchDetected)
+            {
+                if (scaledScreenRegion.HasValue)
+                {
+                    string screenshotPath = CaptureDebugScreenshot("BountyMenu", "LowConfidenceScanRegion", scaledScreenRegion.Value);
+                    string screenshotDetail = string.IsNullOrWhiteSpace(screenshotPath) ? "debugScreenshot=not captured" : $"debugScreenshot={screenshotPath}";
+                    PortLogBountyMenuEscapeSkipped("not detected", $"confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; referenceRegion={FormatRectangle(referenceRegion.Value)}; screenRegion={screenRegion}; {screenshotDetail}; injectedEscape=false");
+                }
+                else
+                {
+                    PortLogBountyMenuEscapeSkipped("not detected", $"confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; referenceRegion={FormatRectangle(referenceRegion.Value)}; screenRegion={screenRegion}; debugScreenshot=not captured; injectedEscape=false");
+                }
+
+                return;
+            }
+
+            bool diabloActive = PortDiabloIsActive();
+            AppLogger.Info($"BountyMenuDetected: confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource={detectionSource}; region={screenRegion}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; diabloActive={diabloActive}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false");
+
+            if (!diabloActive)
+            {
+                PortLogBountyMenuEscapeSkipped("Diablo not active", $"confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource={detectionSource}; region={screenRegion}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=false");
+                return;
+            }
+
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastEscapeTicks = Interlocked.Read(ref portLastBountyMenuEscapeTicks);
+            if (nowTicks - lastEscapeTicks < TimeSpan.FromSeconds(2).Ticks)
+            {
+                long throttleRemainingMs = (long)TimeSpan.FromSeconds(2).TotalMilliseconds - (long)TimeSpan.FromTicks(nowTicks - lastEscapeTicks).TotalMilliseconds;
+                PortLogBountyMenuEscapeSkipped("throttle active", $"confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource={detectionSource}; region={screenRegion}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; throttleRemainingMs={Math.Max(0, throttleRemainingMs)}; diabloActive={diabloActive}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=false");
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastBountyMenuEscapeTicks, nowTicks);
+            PortPressEscapeForAutomation();
+            AppLogger.Info($"BountyMenuEscapeSent: confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource={detectionSource}; region={screenRegion}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; diabloActive={diabloActive}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=true");
+        }
+
+        private void PortLogBountyMenuEscapeSkipped(string reason, string details)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastBountyMenuSkipLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromSeconds(2).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastBountyMenuSkipLogTicks, nowTicks);
+            AppLogger.Info($"BountyMenuEscapeSkipped: reason={reason}; skipReason={reason}; {details}");
         }
 
         private bool PortCombatClickIsSafe()

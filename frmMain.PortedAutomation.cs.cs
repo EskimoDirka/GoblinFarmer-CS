@@ -28,12 +28,12 @@ namespace GoblinFarmer
         private const int PortWmSysKeyUp = 0x0105;
         private const int PortLaunchGracePeriodMs = 45000;
         private const int PortDiabloMissingExitThreshold = 4;
-        private const int PortArrivalConfirmationTimeoutMs = 18000;
         private const double PortStartGameButtonConfidence = 0.85;
         private const double PortCharacterLoadConfidence = 0.82;
         private const double PortGameMenuConfidence = 0.80;
         private const double PortVendorUiConfidence = 0.80;
         private const double PortBlankInventoryTileConfidence = 0.78;
+        private const double PortBountyMenuConfidence = 0.78;
         private const double PortCurrentLocationConfidence = 0.82;
         private const double PortBlockedLocationConfidence = 0.68;
         private const double PortMapActHeaderConfidence = 0.92;
@@ -77,12 +77,17 @@ namespace GoblinFarmer
         private string portLastConfirmedLocation = "";
         private string portQueuedRetryTeleportKey = "";
         private string portLastRequestedTeleportKey = "";
+        private string portLastBlockingRawLocation = "";
+        private string portLastBlockingNormalizedLocation = "";
+        private string portLastBlockingDisplayLocation = "";
+        private string portHotkeyFreshRawLocation = "";
         private string portTeleportWaitingConfirmationKey = "";
         private volatile bool portTeleportRetryFailedOrInterrupted;
         private volatile bool portTeleportAlreadyHereNotified;
         private volatile bool portTeleportWaitingForConfirmation;
         private volatile bool portAutomationBlockedByTeleportFailsafe;
         private volatile bool portSuppressSkill1KeyUp;
+        private volatile bool portSuppressSkill2KeyUp;
         private volatile bool portSkill1TeleportHandled;
         private volatile bool portSkill2CombatHandled;
         private volatile bool portLootSpamLeftClickDown;
@@ -130,6 +135,8 @@ namespace GoblinFarmer
         private long portLastWitchDoctorHeldInputNoClickLogTicks;
         private long portLastWitchDoctorScrollSuppressedNoClickLogTicks;
         private long portLastLootSpamDecisionLogTicks;
+        private long portLastBountyMenuEscapeTicks;
+        private long portLastBountyMenuSkipLogTicks;
         private bool? portLastCombatCursorDecisionAllowed;
         private bool? portLastDemonHunterDecisionAllowed;
         private bool? portLastLootSpamDecisionAllowed;
@@ -242,7 +249,9 @@ namespace GoblinFarmer
             chkCombat.Checked = true;
             chkKadala.Checked = true;
             chkLoot.Checked = true;
-            chkKeepDebugScreenshots.Checked = true;
+            chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
+            chkKeepDebugScreenshots.Enabled = AppSettings.Debug.EnableDebugScreenshots;
+            chkKeepDebugScreenshots.Visible = AppSettings.Debug.EnableDebugScreenshots || AppSettings.Debug.EnableVerboseLogging;
             chkBlockSkill1TeleportHotkey.Checked = true;
             portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
             chkBlockSkill1TeleportHotkey.CheckedChanged += (_, _) => portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
@@ -308,7 +317,19 @@ namespace GoblinFarmer
             portTeleportAlreadyHereNotified = false;
             portLastRequestedTeleportKey = PortLocationKey(location);
             AppLogger.Info($"Teleport run start: requested={PortDisplayLocation(location)}; source={source}; ignoreBlocking={ignoreBlocking}; confirmedBefore={PortDisplayLocation(previousConfirmedLocation)}; displayBefore={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(previousConfirmedLocation))}; queuedBefore={PortDisplayLocation(PortTeleportLocationForKey(previousQueuedTeleportKey))}; retryQueuedBefore={PortDisplayLocation(PortTeleportLocationForKey(previousRetryTeleportKey))}; failedOrInterrupted={portTeleportRetryFailedOrInterrupted}");
-            bool arrived = PortTeleportToLocation(location, token, verifyArrival: true, bypassFailsafe: ignoreBlocking, source: source);
+            bool arrived;
+            try
+            {
+                arrived = PortTeleportToLocation(location, token, verifyArrival: true, bypassFailsafe: ignoreBlocking, source: source);
+            }
+            finally
+            {
+                if (source.Equals("Hotkey", StringComparison.OrdinalIgnoreCase))
+                {
+                    portHotkeyFreshRawLocation = "";
+                }
+            }
+
             if (arrived)
             {
                 PortRecordTeleport(location, portLastConfirmedLocation);
@@ -337,15 +358,16 @@ namespace GoblinFarmer
 
                 PortLogRouteFailureSummary(
                     token.IsCancellationRequested ? "TeleportCancelled" : portAutomationBlockedByTeleportFailsafe ? "TeleportBlockedStatePreserved" : "TeleportFailed",
+                    portAutomationBlockedByTeleportFailsafe ? "Blocked" : "Failed",
                     location,
                     source,
-                    portLastConfirmedLocation,
-                    PortNormalizeBlockingLocation(portLastConfirmedLocation),
-                    PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation),
-                    portLastConfirmedLocation,
+                    portAutomationBlockedByTeleportFailsafe ? portLastBlockingRawLocation : portLastConfirmedLocation,
+                    portAutomationBlockedByTeleportFailsafe ? portLastBlockingNormalizedLocation : PortNormalizeBlockingLocation(portLastConfirmedLocation),
+                    portAutomationBlockedByTeleportFailsafe ? portLastBlockingDisplayLocation : PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation),
+                    portAutomationBlockedByTeleportFailsafe ? portLastBlockingRawLocation : portLastConfirmedLocation,
                     portAutomationBlockedByTeleportFailsafe ? portLastBlockingReason : token.IsCancellationRequested ? "cancelled during teleport or arrival confirmation" : "arrival confirmation did not complete",
                     "",
-                    PortLikelyRouteExplanation(location, portLastConfirmedLocation, portLastBlockingReason, token.IsCancellationRequested));
+                    PortLikelyRouteExplanation(location, portAutomationBlockedByTeleportFailsafe ? portLastBlockingRawLocation : portLastConfirmedLocation, portLastBlockingReason, token.IsCancellationRequested));
 
                 if (!string.Equals(portLastConfirmedLocation, previousConfirmedLocation, StringComparison.OrdinalIgnoreCase))
                 {
@@ -506,14 +528,21 @@ namespace GoblinFarmer
             bool isManualButtonSource =
                 source.Equals("Button", StringComparison.OrdinalIgnoreCase) ||
                 source.Equals("ButtonRetry", StringComparison.OrdinalIgnoreCase);
-            bool shouldCheckBlocking = !bypassFailsafe && source.Equals("Hotkey", StringComparison.OrdinalIgnoreCase);
-            bool blockingSkippedForManualSource = isManualButtonSource && !shouldCheckBlocking;
-            AppLogger.Info($"Teleport target location: {displayName}; source={source}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}; blockingSkippedForManualSource={blockingSkippedForManualSource}");
-            if (blockingSkippedForManualSource)
+            bool shouldCheckBlocking = !bypassFailsafe && !isManualButtonSource;
+            bool blockingSkipped = !shouldCheckBlocking;
+            string blockingSkipReason = bypassFailsafe
+                ? "ignoreBlocking=true"
+                : isManualButtonSource
+                    ? $"source={source}"
+                    : "";
+            AppLogger.Info($"Teleport target location: {displayName}; source={source}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}; blockingSkipped={blockingSkipped}; blockingSkipReason={PortDisplayLocation(blockingSkipReason)}");
+            if (blockingSkipped)
             {
                 portLastBlockingDecision = $"Skipped; Source={source}; Requested={PortDisplayLocation(displayName)}; IgnoreBlocking={bypassFailsafe}; BlockingChecked={shouldCheckBlocking}";
-                portLastBlockingReason = "Manual button source skips teleport blocking";
-                AppLogger.Info($"Teleport blocking skipped because source is {source}: requested={displayName}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}");
+                portLastBlockingReason = string.IsNullOrWhiteSpace(blockingSkipReason)
+                    ? "Teleport blocking intentionally bypassed"
+                    : $"Teleport blocking intentionally bypassed by {blockingSkipReason}";
+                AppLogger.Info($"Teleport blocking skipped: requested={displayName}; source={source}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}; reason={portLastBlockingReason}");
             }
             PortSetAppStatus($"Teleporting To {displayName}");
             if (token.IsCancellationRequested)
@@ -533,7 +562,7 @@ namespace GoblinFarmer
             }
 
             string currentLocation = PortDetectSpecificLocation(displayName);
-            AppLogger.Info($"Teleport detected current location before teleport: raw={PortDisplayLocation(currentLocation)}; normalized={PortDisplayLocation(PortNormalizeBlockingLocation(currentLocation))}; button={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(currentLocation))}; requested={displayName}; previousConfirmed={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}");
+            AppLogger.Info($"Fresh current-location scan before teleport: source={source}; requested={displayName}; raw={PortDisplayLocation(currentLocation)}; normalized={PortDisplayLocation(PortNormalizeBlockingLocation(currentLocation))}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(currentLocation))}; previousConfirmed={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; blockingChecked={shouldCheckBlocking}; ignoreBlocking={bypassFailsafe}");
             AddWorkflowStep($"Current location detected: {PortDisplayLocation(currentLocation)}");
             if (source.Equals("Button", StringComparison.OrdinalIgnoreCase) &&
                 PortLocationKey(displayName) == PortLocationKey("Ancient Waterway"))
@@ -641,7 +670,7 @@ namespace GoblinFarmer
                 portTeleportWaitingConfirmationKey = PortLocationKey(displayName);
                 try
                 {
-                    arrived = PortWaitForSpecificLocation(displayName, token, PortArrivalConfirmationTimeoutMs, out confirmedAfter);
+                    arrived = PortWaitForSpecificLocation(displayName, token, AppSettings.Teleport.TeleportConfirmationTimeoutMs, out confirmedAfter);
                 }
                 finally
                 {
@@ -665,6 +694,7 @@ namespace GoblinFarmer
                 string screenshotPath = PortCaptureFailureScreenshot(token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout", "Teleport");
                 PortLogRouteFailureSummary(
                     token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout",
+                    token.IsCancellationRequested ? "Cancelled" : "Failed",
                     displayName,
                     source,
                     confirmedAfter,
@@ -886,7 +916,7 @@ namespace GoblinFarmer
                             ShowInTaskbar = false,
                             TopMost = true,
                             BackColor = Color.FromArgb(33, 7, 7),
-                            Opacity = 0.90,
+                            Opacity = AppSettings.UI.NotificationOpacity,
                             Width = 520,
                             Height = 92,
                         };
@@ -910,7 +940,10 @@ namespace GoblinFarmer
                     }
 
                     portSplashTimer.Stop();
-                    portSplashTimer.Interval = Math.Max(500, durationMs);
+                    int configuredDuration = AppSettings.UI.NotificationDurationMs > 0
+                        ? AppSettings.UI.NotificationDurationMs
+                        : durationMs;
+                    portSplashTimer.Interval = Math.Max(500, configuredDuration);
                     if (portSplashLabel != null)
                     {
                         portSplashLabel.Text = message;
@@ -935,16 +968,25 @@ namespace GoblinFarmer
                 return;
             }
 
+            string position = AppSettings.UI.NotificationPosition.Trim();
             if (PortTryGetDiabloRect(out RECT rect))
             {
                 portSplashForm.Left = rect.Left + ((rect.Right - rect.Left) - portSplashForm.Width) / 2;
-                portSplashForm.Top = rect.Top + ((rect.Bottom - rect.Top) - portSplashForm.Height) / 2;
+                portSplashForm.Top = position.Equals("TopCenter", StringComparison.OrdinalIgnoreCase)
+                    ? rect.Top + 96
+                    : position.Equals("BottomCenter", StringComparison.OrdinalIgnoreCase)
+                        ? rect.Bottom - portSplashForm.Height - 96
+                        : rect.Top + ((rect.Bottom - rect.Top) - portSplashForm.Height) / 2;
                 return;
             }
 
             Rectangle screen = Screen.PrimaryScreen?.WorkingArea ?? SystemInformation.VirtualScreen;
             portSplashForm.Left = screen.Left + (screen.Width - portSplashForm.Width) / 2;
-            portSplashForm.Top = screen.Top + (screen.Height - portSplashForm.Height) / 2;
+            portSplashForm.Top = position.Equals("TopCenter", StringComparison.OrdinalIgnoreCase)
+                ? screen.Top + 96
+                : position.Equals("BottomCenter", StringComparison.OrdinalIgnoreCase)
+                    ? screen.Bottom - portSplashForm.Height - 96
+                    : screen.Top + (screen.Height - portSplashForm.Height) / 2;
         }
 
         private void PortHideSplash()
@@ -1011,6 +1053,8 @@ namespace GoblinFarmer
                 "Eastern Channel Level 2",
                 "Western Channel Level 1",
                 "Western Channel Level 2",
+                "WhimsyDale",
+                "Cave Of The Moon Clan Level 1",
             })
             {
                 if (portCurrentLocationTemplates.ContainsKey(PortNormalizeLocation(requiredLocationTemplate)))
