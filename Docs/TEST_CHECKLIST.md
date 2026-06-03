@@ -4,23 +4,26 @@
 - Battle.net launches/focuses
 - Diablo III tab selected
 - Play clicked
-- Paired success screenshots captured for Battle.net Play clicked
+- Paired success screenshots captured for Battle.net Play click accepted
 - Diablo launches
 - Paired success screenshots captured for Diablo process detected
 - Start Game clicked
-- Paired success screenshots captured for Start Game verified
+- Paired success screenshots captured for Start Game click accepted
 - Southern Highlands loaded
 - Paired success screenshots captured for Southern Highlands teleport confirmation
 
 ## Teleport Route
 - Southern Highlands -> Northern Highlands
 - Northern Highlands -> Weeping Hollow
+- Weeping Hollow -> Festering Woods
 - Festering Woods -> Cathedral
 - Cathedral Level 1 blocks Royal Crypts
 - Cathedral Level 3 allows Royal Crypts
 - City of Caldeum only allows Ancient Waterway from Ruined Cistern
 - Stinging Winds blocks Battlefields
 - Black Canyon Mines allows Battlefields
+- Caverns of Frost Level 1 blocks Teleport Next
+- Caverns of Frost Level 2 allows Rakkis Crossing
 - Each successful teleport confirmation captures paired Diablo/App success screenshots
 - Route blocks/failures capture paired Diablo/App failure screenshots
 

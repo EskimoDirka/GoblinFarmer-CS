@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-v1.3 release-blocking validation follow-up: debug/options UI cleanup is in progress, hotkey blocked-location notifications must use the fresh current-location PNG match, and installed builds must include the debug-package script. Reliability work around Battle.net launch, Diablo launch detection, Start Game stability/recovery, Make New Game workflow protection, teleport routing accuracy, and synchronized app/installer versioning remains stable.
+v1.3 is in post-release validation and documentation sync. The debug/options UI cleanup is implemented, hotkey blocked-location notifications use the fresh current-location PNG match, and published/installed builds include `Scripts\create-debug-package.ps1`. Reliability work around Battle.net launch, Diablo launch detection, Start Game stability/recovery, Make New Game workflow protection, teleport routing accuracy, combat safety, town workflows, and synchronized app/installer versioning remains stable. Remaining work is live validation and future hardening, not blocking implementation.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -107,13 +107,11 @@ v1.3 release-blocking validation follow-up: debug/options UI cleanup is in progr
 - Teleport Next Cave Of The Moon Clan Level 1 validation should confirm the fresh current-location scan detects Cave Of The Moon Clan Level 1, blocks routing, and shows Cave Of The Moon Clan Level 1 in the notification/logs.
 - Teleport Next Cave Of The Moon Clan Level 2 validation should confirm the fresh current-location scan detects Cave Of The Moon Clan Level 2, allows routing, and continues to Northern Highlands.
 - Teleport Next Caverns of Frost validation should confirm Caverns of Frost Level 1 blocks with the raw/display location in logs and notification, while Caverns of Frost Level 2 allows Rakkis Crossing.
-- Teleport Next route advancement validation should confirm that when the player is already at the queued destination, the hotkey logs `teleportSkipped=True`, advances the route, and sends the next valid destination instead.
+- Teleport Next route advancement validation should confirm that when the player is genuinely already at a queued destination that should advance, the hotkey logs `AlreadyAtQueuedDestinationDetected`, `skippedDestination`, `newRequestedTarget`, and `AlreadyAtQueuedDestinationTeleportStart` with `teleportStarted=True`.
 - Release configuration validation should confirm diagnostic overlay/route inspector are hidden by default, reappear when enabled in config, and debug screenshot/missing-asset prompt settings behave as configured.
-- Debug/options UI validation should confirm the Skill 1 teleport protection checkbox is absent in Debug and Release builds, VS Debug keeps Debug Mode and Keep Debug Screenshots checked by default, and checking Debug Mode in a Release/user executable auto-checks Keep Debug Screenshots.
-- Publish/release folder validation to confirm Images and `Scripts\create-debug-package.ps1` are included.
 
 ## Open Follow-Up Validation
-The current release-blocking fixes require fresh publish/installer validation and a live hotkey blocked-location notification check. The items below are manual validation or future hardening notes beyond those release checks.
+The items below are manual validation or future hardening notes that still make sense after the current code audit.
 - Need manual combat validation that hovering over the extended lower-right menu blocks combat clicks with `blockReason=ExtendedRightMenuNoClickRegion`, while combat continues and normal clicks resume after moving away.
 - Need manual validation that Demon Hunter right-hold continues through no-click hover regions without clicking UI, while left/Shift-left clicks remain suppressed in protected regions.
 - Need manual validation that logs show `DemonHunterRightHeldNoClickSuppressionActive` while right-hold remains active and shared cursor-loop left clicks are suppressed in no-click regions.
@@ -128,7 +126,7 @@ The current release-blocking fixes require fresh publish/installer validation an
 - Need to manually validate Battle.net tab/Play button detection with Battle.net fullscreen, windowed, moved, and on another monitor.
 - Need manual validation that Ancient Waterway requested from Western/Eastern Channel levels preserves correct Waterway state and next target until exact arrival confirmation.
 - Need to validate `route-failure-summary.txt` on the next generated package from a fresh run with new `RouteFailureSummary`, `RouteDebugSummary`, and `StartGameVerificationFailureSummary` log lines.
-- Need to validate fresh runtime paired success screenshots for Battle.net Play clicked, Diablo process detected, Start Game clicked, teleport confirmed, repair complete, salvage complete/skipped, and Exit Game complete.
+- Need to validate fresh runtime paired success screenshots for Battle.net Play click accepted, Diablo process detected, Start Game click accepted, teleport confirmed, repair complete, salvage complete/skipped, and Exit Game complete.
 - Need to validate fresh runtime paired failure screenshots for workflow failures and verify `debug-screenshot-manifest.txt` pairs Diablo/App evidence correctly.
 - Need live validation of the optional missing-asset capture prompt for a deliberately missing template, including accept, skip, and combat-suppressed paths.
 - Need to validate `session-info.txt` session-start metadata on the next app launch so package screenshot filtering uses explicit app startup time instead of latest-log fallback.
@@ -138,8 +136,7 @@ The current release-blocking fixes require fresh publish/installer validation an
 - Need to validate WhimsyDale Teleport Next blocking in a live run.
 - Need to validate Caverns of Frost Level 1 Teleport Next blocking and Caverns of Frost Level 2 allowance to Rakkis Crossing in a live run.
 - Need to validate bounty menu auto-close diagnostics after the Python-style combat watcher port: the configured `Images\Combat\Bounty Complete Scan Region.png` region should drive `CombatMenuWatcherStarted`, detect with `BountyMenuDetected`, send `BountyMenuEscapeSent`, and log `InjectedEscapeIgnoredByStopWatcher` while combat continues.
-- Need release-style validation of `Config\AppSettings.json` defaults and toggles.
-- Need to validate publish/release folder includes Images.
+- Need direct config-file validation of diagnostic toggles: Debug Mode must be enabled before `ShowDiagnosticOverlay` or `ShowRouteInspector` can show the diagnostic tabs in Release builds.
 - Need waypoint coordinates before routing Northern Highlands directly to Leoric's Passage.
 - Battle.net can launch windowed/not full-window; eventually maximize/focus Battle.net after launching.
 - Nested project folder structure remains messy and should be cleaned up later.
@@ -227,7 +224,7 @@ The current release-blocking fixes require fresh publish/installer validation an
 - Improved route-failure summary blocks with explicit workflow and screenshot reference fields so route incidents read more like standalone debugging notes.
 - Added paired diagnostic screenshot capture for major workflow milestones. Success and failure captures now write Diablo and GoblinFarmer app screenshots with matching timestamps/action names into the existing runtime `Screenshots` folder.
 - Upgraded failure screenshot capture so existing failure categories continue to be captured while adding a GoblinFarmer app screenshot beside the Diablo evidence.
-- Added milestone success screenshots for Battle.net Play clicked, Diablo process detected, Start Game verified, teleport confirmed, repair complete, salvage complete/skipped, Leave Game main menu confirmed, and Exit Game complete.
+- Added milestone success screenshots for Battle.net Play click accepted, Diablo process detected, Start Game click accepted, teleport confirmed, repair complete, salvage complete/skipped, Leave Game main menu confirmed, and Exit Game complete.
 - Updated the debug package generator to include success screenshots, paired failure screenshots, and `debug-screenshot-manifest.txt` while keeping screenshot selection bounded by package limits.
 - Confirmed success screenshots participate in the existing screenshot retention cleanup because they are stored in the same runtime `Screenshots` directory and matched by the existing `*.png` cleanup.
 - Reviewed `GoblinFarmer_Debug_20260602_063044.zip` and identified route/debuggability issues in Ancient Waterway channel confirmation, Caldeum-to-Waterway blocking explanation, Stinging Winds arrival diagnostics, Black Canyon Mines/Battlefields proof, and Start Game verification failure explanation.
@@ -262,11 +259,11 @@ The current release-blocking fixes require fresh publish/installer validation an
 
 ## Next Recommended Task
 
-Validate release config toggles, Whimsy hotkey blocking, Teleport Next already-at-queued-destination advancement, 50ms repair settle, Start Game stable retry behavior, and bounty menu auto-close diagnostics in the next live run.
+Validate Whimsy hotkey blocking, the tightened Teleport Next already-at-queued-destination shortcut, 50ms repair settle, Start Game stable retry behavior, Battle.net Play acceptance diagnostics, and bounty menu auto-close diagnostics in the next live run.
 
 Validation:
 - Confirm Teleport Next blocks from WhimsyDale with raw/display notification text `WhimsyDale`.
-- Confirm Teleport Next route advancement logs `AlreadyAtQueuedDestinationDetected`, `skippedDestination`, `newRequestedTarget`, and `AlreadyAtQueuedDestinationTeleportStart` with `teleportStarted=True`.
+- Confirm Teleport Next does not skip the normal queued next route stop from a borderline fresh scan, and still logs `AlreadyAtQueuedDestinationDetected`, `skippedDestination`, `newRequestedTarget`, and `AlreadyAtQueuedDestinationTeleportStart` with `teleportStarted=True` when the player is genuinely already at a queued destination that should advance.
 - Confirm manual teleport buttons remain allowed and show `source=Button`, `ignoreBlocking=True`, and blocking skipped because `ignoreBlocking=true`.
 - Confirm internal workflow teleports like Make New Game / Exit Game still bypass blocking where intentionally required.
 - Confirm repair logs show New Tristram confirmation, the configured 50ms settle, blacksmith click attempts, elapsed time, menu detection, and successful repair/salvage integration.
@@ -274,7 +271,7 @@ Validation:
 - Confirm bounty menu logs show `CombatMenuWatcherStarted`, `BountyMenuDetected`, `BountyMenuEscapeSent`, and `InjectedEscapeIgnoredByStopWatcher`.
 - Confirm combat-active bounty close keeps combat loops running before/during/after the injected Escape, while manual user Escape can still stop automation.
 - Confirm Start Game retry after Leave Game logs stable Start Game button evidence and does not fail from stale main-menu state.
-- Confirm default config hides diagnostic panes, and enabling `Debug.ShowDiagnosticOverlay` / `Debug.ShowRouteInspector` restores them.
+- Confirm default config hides diagnostic panes, and enabling Debug Mode plus `Debug.ShowDiagnosticOverlay` / `Debug.ShowRouteInspector` restores them in Release builds.
 - Confirm a deliberately missing template logs `MissingAssetDetected`, shows the modeless capture prompt outside combat, saves an accepted capture into the expected Images folder, logs `MissingAssetManualCaptureSkipped` when declined, and logs prompt suppression while combat is active.
 - Confirm manual Ancient Waterway from Western/Eastern Channel levels does not count as successful unless raw confirmed location becomes exact Ancient Waterway.
 - Confirm Caldeum/Gates/Sewers/Flooded Causeway blocks explain that `Ruined Cistern` is required, and that a later allowed Ancient Waterway decision shows raw/normalized `Ruined Cistern`.
@@ -395,7 +392,7 @@ Migration plan:
 ### Success Screenshot Capture
 - Built on the same diagnostic screenshot infrastructure and controlled by the existing `Keep Debug Screenshots` checkbox.
 - Captures paired Diablo/App screenshots for sparse workflow milestones only, not combat loops or polling loops.
-- Current success milestones: Battle.net Play clicked, Diablo process detected, Start Game verified, teleport confirmed, repair complete, salvage complete/skipped, Leave Game main menu confirmed, and Exit Game complete.
+- Current success milestones: Battle.net Play click accepted, Diablo process detected, Start Game click accepted, teleport confirmed, repair complete, salvage complete/skipped, Leave Game main menu confirmed, and Exit Game complete.
 - Success screenshots use the same runtime `Screenshots` folder as failure/debug screenshots, so existing retention cleanup controls storage growth.
 
 ### Session-Only Screenshot Packaging

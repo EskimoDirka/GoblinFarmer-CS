@@ -91,10 +91,10 @@
 * [x] Retry Battle.net launch requests every 1s for up to 5s using the configured executable path first and installation discovery as fallback.
 * [x] Poll Battle.net Play button detection every 100ms and click only from a current confidence-passing image match.
 * [ ] Validate Battle.net launch diagnostics distinguish app Play click sent, Battle.net Play click accepted, Diablo launched because of the accepted app click, and manual Play suspected.
-* [ ] Validate Battle.net Play click waits for 1500ms stable Play detection at a same/similar point while Battle.net remains foreground before clicking.
-* [ ] Validate Battle.net Play click waits 500ms after stable detection, immediately reconfirms Play exists, then sends the click.
-* [ ] Validate `BattleNetPlayClickInputSequence` logs the click point, 100ms move settle, and 75ms mouse down-to-up timing.
-* [ ] Validate `BattleNetPlayClickRetry` retries up to two more times with 1500ms delay when Play remains visible and Diablo has not started after an unaccepted app click.
+* [ ] Future hardening: add and validate 1500ms stable Play detection at a same/similar point while Battle.net remains foreground before clicking.
+* [ ] Future hardening: add and validate a final Play-button reconfirmation immediately before sending the click.
+* [ ] Future hardening: add `BattleNetPlayClickInputSequence` logging if click timing becomes an issue.
+* [ ] Future hardening: add limited Battle.net Play click retry handling if Play remains visible and Diablo has not started after an unaccepted app click.
 * [ ] Validate `BattleNetPlayClickSentByApp` appears immediately after the app sends the mouse click and is not treated as a successful launch by itself.
 * [ ] Validate `BattleNetPlayClickAccepted` appears only after Battle.net UI transition, Battle.net window/process transition, or Diablo process start confirms the app Play click was accepted.
 * [ ] Validate `BattleNetManualPlaySuspected` appears if Diablo launches without `battleNetPlayClickAcceptedByBattleNet=True`, including when the app sent a click but acceptance was not verified.
@@ -164,8 +164,8 @@
 * [x] Polish public README for v1.3 release.
 * [x] Add v1.3 changelog and GitHub release draft notes.
 * [x] Document expected v1.3 installer artifact name as `GoblinFarmerSetup-1.3.0.exe`.
-* [ ] Validate a fresh release-style run with diagnostic overlay and route inspector hidden by default.
-* [ ] Validate enabling `ShowDiagnosticOverlay` and `ShowRouteInspector` restores the diagnostic tabs.
+* [x] Validate a fresh release-style run with diagnostic overlay and route inspector hidden by default.
+* [x] Validate enabling Debug Mode restores the diagnostic tabs and debug screenshot controls in Release builds.
 * [ ] Validate disabling `EnableDebugScreenshots` suppresses success/failure/debug screenshot capture.
 * [ ] Validate disabling `EnableMissingAssetPrompts` logs missing assets but suppresses manual prompts.
 
@@ -315,9 +315,9 @@ DebugPackages/
 
 Status: Implemented for sparse workflow milestones; needs manual validation during a fresh run.
 
-* [x] Capture paired Diablo/App screenshots for Battle.net Play clicked.
+* [x] Capture paired Diablo/App screenshots for Battle.net Play click accepted.
 * [x] Capture paired Diablo/App screenshots for Diablo process detected.
-* [x] Capture paired Diablo/App screenshots for Start Game verified.
+* [x] Capture paired Diablo/App screenshots for Start Game click accepted.
 * [x] Capture paired Diablo/App screenshots for teleport confirmed.
 * [x] Capture paired Diablo/App screenshots for repair complete.
 * [x] Capture paired Diablo/App screenshots for salvage complete or skipped.
@@ -357,7 +357,7 @@ Failure screenshot types:
 
 ### Runtime Input Cleanup
 
-Status: Implemented; needs manual Exit Game validation.
+Status: Implemented and validated with Exit Game.
 
 * [x] Track runtime-held left mouse, right mouse, and Shift state.
 * [x] Release only tracked held inputs during cleanup while Diablo is available.
@@ -368,7 +368,7 @@ Status: Implemented; needs manual Exit Game validation.
 * [x] Avoid duplicate cleanup calls generating extra mouse events.
 * [x] Preserve combat input cleanup behavior while Diablo is running.
 * [x] Preserve repair-station coordinate-based clicks.
-* [ ] Validate with a real Exit Game run and confirm no desktop right-click/app close after Diablo exits.
+* [x] Validate with a real Exit Game run and confirm no desktop right-click/app close after Diablo exits.
 
 ### Diagnostic Tools
 
@@ -420,21 +420,22 @@ Requirements:
 * [x] Display publish summary.
 * [x] Compile Inno Setup installer when `ISCC.exe` is installed.
 
-### Git Helper Script
+### GitHub Sync Script
 
-Create:
+Script:
 
-scripts/git-sync.ps1
+`Scripts\GitHub Sync.ps1`
 
-Requirements:
+Implemented behavior:
 
-* git status
-* git pull
-* dotnet build
-* stop on build failure
-* git add
-* git commit
-* git push
+* [x] Read the release version from `GoblinFarmer.csproj`.
+* [x] Run `dotnet build`.
+* [x] Run the publish script.
+* [x] Refresh the user executable from the published output while preserving runtime folders.
+* [x] Copy the latest published executable to `GitHub Upload\GoblinFarmer.exe`.
+* [x] Create `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`.
+* [x] Commit and push tracked changes when changes exist.
+* [x] Keep tag/GitHub Release creation opt-in through `-CreateGitHubRelease`.
 
 ### Asset Validation Tool
 
