@@ -3,6 +3,10 @@ param(
     [string]$Message
 )
 
+# Optional git/GitHub helper only. It does not publish binaries, build the Inno
+# installer, or upload release assets. Use Docs/Release_Checklist.md for the
+# full v1.3 release flow.
+
 $ErrorActionPreference = "Stop"
 
 function Stop-Release {
@@ -27,11 +31,11 @@ function Invoke-ReleaseStep {
 }
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
-    Stop-Release "Version is required. Example: .\Scripts\release.ps1 -Version `"v1.2`" -Message `"Add session stats and debug screenshots`""
+    Stop-Release "Version is required. Example: .\Scripts\release.ps1 -Version `"v1.3`" -Message `"Release v1.3`""
 }
 
 if ([string]::IsNullOrWhiteSpace($Message)) {
-    Stop-Release "Message is required. Example: .\Scripts\release.ps1 -Version `"v1.2`" -Message `"Add session stats and debug screenshots`""
+    Stop-Release "Message is required. Example: .\Scripts\release.ps1 -Version `"v1.3`" -Message `"Release v1.3`""
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")

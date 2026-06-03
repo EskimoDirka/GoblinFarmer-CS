@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Final release preparation: single-source release versioning from `GoblinFarmer.csproj`, Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, Hotkeys visibility polish, Debug screenshot defaults, startup form sizing, Battle.net visible-window launch/close semantics, final Caverns of Frost Level 1 hotkey blocking validation, and cautious health/performance review while preserving current automation behavior.
+v1.3 GitHub release polish: public README cleanup, release notes, changelog, release checklist, and post-release validation tracking. GoblinFarmer v1.3 is considered stable for release, with completed reliability work around Battle.net launch, Diablo launch detection, Start Game stability/recovery, Make New Game workflow protection, teleport routing accuracy, and synchronized app/installer versioning.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -28,7 +28,7 @@ Final release preparation: single-source release versioning from `GoblinFarmer.c
 - Release versioning is owned by `GoblinFarmer.csproj`; the app title reads `AssemblyInformationalVersion`, the published EXE carries the project file/product versions, and Inno Setup derives installer naming from the published executable.
 - Battle.net can relaunch/focus if the process exists but no visible window exists.
 - Diablo launch grace period prevents false cancellation while Diablo starts.
-- Start Game has verified successfully in prior runs, though reliability work remains open.
+- Start Game uses practical stable-button verification, 100ms polling, state-based click acceptance, manual-click recovery, and `WorkflowAlreadyActive` protection for Make New Game overlap.
 - Make New Game flow has created a game and completed the first teleport to Southern Highlands in prior validation.
 - Teleport routing preserves raw detected location, normalized app location, display location, and blocking location as separate concepts.
 - Route state preserves the previous confirmed location when teleport confirmation fails or is blocked.
@@ -89,16 +89,14 @@ Final release preparation: single-source release versioning from `GoblinFarmer.c
 - Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
 - Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region is `16,1256,292,75`, recalibrated from fallback diagnostics.
 
-## Under Active Improvement
+## Post-Release Validation Backlog
 - Full route validation from Southern Highlands through Pandemonium Fortress Level 2, with route-failure-summary evidence checked after each run.
 - Fresh run validation that success and failure screenshot pairs are generated for major workflow milestones and appear in `debug-screenshot-manifest.txt`.
 - Missing-asset prompt validation should confirm missing templates log state, show a non-blocking capture/skip prompt outside combat, save accepted captures to the expected Images folder, and suppress prompts during combat.
 - Battle.net launch validation should confirm window-based startup detection, configured-path-first launch selection, installation-discovery fallback when no valid configured path exists, 1s launch retries up to 5s, 100ms Play polling, app Play click, suspected manual Play click, Diablo launch without app click, successful Diablo launch after app click, and post-launch visible-window close warnings without treating background/tray Battle.net processes as failures.
 - Ancient Waterway/channel retest: manual Ancient Waterway from channel levels must not advance route state until exact Ancient Waterway arrival is confirmed.
 - Caldeum to Ancient Waterway and Stinging Winds to Battlefields validation should prove the allowing raw locations (`Ruined Cistern`, `Black Canyon Mines`) in the summary/logs.
-- Start Game image recognition reliability, especially possible cursor interference with detection/click verification.
-- Start Game live validation should confirm the new detection attempts, `StartGameButtonStableAccepted`, click sent, click accepted, and acceptance-reason logs appear without changing successful Make New Game behavior.
-- Start Game manual-click recovery validation should confirm loaded-game evidence logs `StartGameAcceptedByLoadedGameState` and continues to game-load/map flow.
+- Optional broader Start Game validation can continue across unusual cursor, display, and monitor conditions; the v1.3 stable-detection deadlock and Make New Game stuck state are fixed.
 - Battle.net tab/Play detection across fullscreen, windowed, moved-window, and multi-monitor setups.
 - Repair/salvage monitoring after route and launch changes; current repair timing is acceptable and should prioritize reliability over further speed changes.
 - Teleport Next WhimsyDale validation should confirm the fresh current-location scan detects WhimsyDale, blocks routing, and shows WhimsyDale in the notification/logs.
@@ -108,7 +106,8 @@ Final release preparation: single-source release versioning from `GoblinFarmer.c
 - Release configuration validation should confirm diagnostic overlay/route inspector are hidden by default, reappear when enabled in config, and debug screenshot/missing-asset prompt settings behave as configured.
 - Publish/release folder validation to confirm Images are included.
 
-## Known Issues
+## Open Follow-Up Validation
+No v1.3 release-blocking issues are currently documented. The items below are manual validation or future hardening notes, not indicators that the v1.3 launch, Start Game, Make New Game, installer versioning, or route-blocking fixes are still broken.
 - Need manual combat validation that hovering over the extended lower-right menu blocks combat clicks with `blockReason=ExtendedRightMenuNoClickRegion`, while combat continues and normal clicks resume after moving away.
 - Need manual validation that Demon Hunter right-hold continues through no-click hover regions without clicking UI, while left/Shift-left clicks remain suppressed in protected regions.
 - Need manual validation that logs show `DemonHunterRightHeldNoClickSuppressionActive` while right-hold remains active and shared cursor-loop left clicks are suppressed in no-click regions.
@@ -136,10 +135,6 @@ Final release preparation: single-source release versioning from `GoblinFarmer.c
 - Need release-style validation of `Config\AppSettings.json` defaults and toggles.
 - Need to validate publish/release folder includes Images.
 - Need waypoint coordinates before routing Northern Highlands directly to Leoric's Passage.
-- Start Game button detection/click verification is still inconsistent, suspected cursor interference with image recognition.
-- Need live validation that Start Game click acceptance uses state evidence rather than timing-only waits and records the acceptance reason.
-- Need live validation that repeated visible Start Game button points within 5-8px tolerance no longer produce misleading `StartGameButtonUnstable` loops.
-- Need live validation that Make New Game clicked during an active Start Game wait logs/shows `WorkflowAlreadyActive`.
 - Battle.net can launch windowed/not full-window; eventually maximize/focus Battle.net after launching.
 - Nested project folder structure remains messy and should be cleaned up later.
 

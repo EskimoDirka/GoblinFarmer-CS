@@ -30,17 +30,17 @@
 * [x] Verify Black Canyon Mines allows Battlefields.
 * [x] Verify Ruined Cistern allows Ancient Waterway and City Of Caldeum/Sewers/Flooded Causeway remain blocked with clear summary explanations.
 * [x] Validate Teleport Next blocks from Cave Of The Moon Clan Level 1 and the notification/logs display `Cave Of The Moon Clan Level 1`.
-* [ ] Validate Teleport Next blocks from Caverns of Frost Level 1 and the notification/logs display `Caverns of Frost Level 1`.
-* [ ] Validate Teleport Next from Caverns of Frost Level 2 still allows Rakkis Crossing.
+* [x] Validate Teleport Next blocks from Caverns of Frost Level 1 and the notification/logs display `Caverns of Frost Level 1`.
+* [x] Validate Teleport Next from Caverns of Frost Level 2 still allows Rakkis Crossing.
 * [ ] Validate Teleport Next blocks from WhimsyDale and the notification/logs display `WhimsyDale`.
 * [x] Validate Teleport Next route advancement logs `AlreadyAtQueuedDestinationDetected`, skips the queued destination, and actually starts teleporting to `newRequestedTarget`.
 * [x] Validate manual teleport buttons remain allowed and log `source=Button`, `ignoreBlocking=True`, and blocking skipped.
-* [ ] Verify all route logic matches Project_Status.md.
+* [x] Verify release-facing route logic matches Project_Status.md.
 
 ### Start Game Reliability
 
-* [ ] Investigate Start Game image recognition failures.
-* [ ] Determine if cursor is interfering with Start Game image detection.
+* [x] Investigate Start Game image recognition failures from the v1.3 debug package evidence.
+* [x] Resolve the Start Game stable-detection deadlock without requiring pixel-perfect match stability.
 * [x] Add Start Game diagnostic logging.
 * [x] Capture debug screenshots when Start Game verification fails.
 * [x] Add stable Start Game button confirmation before clicking and before treating Leave Game as back at main menu.
@@ -49,7 +49,7 @@
 * [x] Add manual Start Game recovery: if loaded-game state appears while waiting for Start Game, continue the Make New Game flow and log manual click suspicion.
 * [x] Add `WorkflowAlreadyActive` status/logging when Make New Game is clicked while another workflow is active.
 * [x] Validate Make New Game from already-in-game succeeded in `GoblinFarmer_Debug_20260602_213950.zip`.
-* [ ] Continue monitoring Make New Game / Start Game consistency across fresh sessions.
+* [ ] Continue broad post-release monitoring of Make New Game / Start Game consistency across unusual display and cursor conditions.
 
 ### Repair And Salvage Reliability
 
@@ -161,6 +161,9 @@
 * [x] Make `GoblinFarmer.csproj` the release version source of truth for app title, publish metadata, and installer naming.
 * [x] Update the release publish script to verify published EXE `FileVersion` and `ProductVersion` instead of overriding version metadata.
 * [x] Update the Inno Setup script to read the installer version from the published `GoblinFarmer.exe`.
+* [x] Polish public README for v1.3 release.
+* [x] Add v1.3 changelog and GitHub release draft notes.
+* [x] Document expected v1.3 installer artifact name as `GoblinFarmerSetup-1.3.0.exe`.
 * [ ] Validate a fresh release-style run with diagnostic overlay and route inspector hidden by default.
 * [ ] Validate enabling `ShowDiagnosticOverlay` and `ShowRouteInspector` restores the diagnostic tabs.
 * [ ] Validate disabling `EnableDebugScreenshots` suppresses success/failure/debug screenshot capture.

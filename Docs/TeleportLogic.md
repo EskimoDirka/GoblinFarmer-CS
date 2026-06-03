@@ -1,3 +1,20 @@
 # Teleport Logic
 
-Documentation for teleport routing, location verification, and teleport blocking.
+GoblinFarmer uses image recognition and route state to decide when Teleport Next is safe and what destination should be selected next.
+
+## Route Behavior
+
+- Route state tracks the current location, next target, queued retry target, and last requested target.
+- Current-location detection keeps raw, normalized, display, and blocking locations separate so logs and user messages stay accurate.
+- Manual teleport buttons are intentionally allowed to bypass hotkey route blocking.
+- Teleport Next uses route-blocking rules to prevent known unsafe or incorrect transitions.
+
+## v1.3 Reliability Notes
+
+- Cathedral, Caldeum, Ancient Waterway/channel, Stinging Winds, Caverns of Frost, Cave Of The Moon Clan, and WhimsyDale edge cases are represented in the route-blocking model.
+- Caverns of Frost Level 1 blocks Teleport Next routing, while Caverns of Frost Level 2 remains allowed for the Rakkis Crossing path.
+- After combat stops, Teleport Next may have a short intentional delay while input state settles.
+
+## Diagnostics
+
+Teleport decisions are logged with route state, detected location, requested target, source, blocking reason, and screenshot evidence when enabled.
