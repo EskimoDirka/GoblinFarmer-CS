@@ -154,7 +154,7 @@ namespace GoblinFarmer
             (bool blocked, string reason) = PortEvaluateTeleportBlock("", rawLocation, normalizedBlockedLocation, portLastTeleportSource);
             bool allowed = !blocked;
             PortRecordBlockingDecision("Unknown", rawLocation, normalizedBlockedLocation, blocked, allowed, reason);
-            AppLogger.Info($"Teleport blocking decision: requested=Unknown; source={PortDisplayLocation(portLastTeleportSource)}; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(normalizedBlockedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(rawLocation))}; blocked={blocked}; allowed={allowed}; result={(allowed ? "Allowed" : "Blocked")}; reason={reason}");
+            AppLogger.Info($"Teleport blocking decision: requested=Unknown; source={PortDisplayLocation(portLastTeleportSource)}; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(normalizedBlockedLocation)}; display={PortDisplayLocation(PortDetectedLocationDisplayName(rawLocation))}; blocked={blocked}; allowed={allowed}; result={(allowed ? "Allowed" : "Blocked")}; reason={reason}");
 
             return allowed;
         }
@@ -170,14 +170,14 @@ namespace GoblinFarmer
 
                 AppLogger.Info(
                     $"Blocking location using hotkey fresh scan: raw={hotkeyRawLocation}; " +
-                    $"normalized={hotkeyNormalizedLocation}; displayGroup={PortGetButtonLocationForDetectedLocation(hotkeyRawLocation)}; requested={targetLocation}");
+                    $"normalized={hotkeyNormalizedLocation}; display={PortDetectedLocationDisplayName(hotkeyRawLocation)}; requested={targetLocation}");
 
                 (bool hotkeyBlocked, string hotkeyReason) = PortEvaluateTeleportBlock(targetLocation, hotkeyRawLocation, hotkeyNormalizedLocation, portLastTeleportSource);
                 bool hotkeyAllowed = !hotkeyBlocked;
                 PortRecordBlockingDecision(targetLocation, hotkeyRawLocation, hotkeyNormalizedLocation, hotkeyBlocked, hotkeyAllowed, hotkeyReason);
 
                 AppLogger.Info(
-                    $"Teleport blocking decision: requested={targetLocation}; source={PortDisplayLocation(portLastTeleportSource)}; raw={hotkeyRawLocation}; normalized={hotkeyNormalizedLocation}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(hotkeyRawLocation))}; blocked={hotkeyBlocked}; allowed={hotkeyAllowed}; result={(hotkeyAllowed ? "Allowed" : "Blocked")}; reason={hotkeyReason}");
+                    $"Teleport blocking decision: requested={targetLocation}; source={PortDisplayLocation(portLastTeleportSource)}; raw={hotkeyRawLocation}; normalized={hotkeyNormalizedLocation}; display={PortDisplayLocation(PortDetectedLocationDisplayName(hotkeyRawLocation))}; blocked={hotkeyBlocked}; allowed={hotkeyAllowed}; result={(hotkeyAllowed ? "Allowed" : "Blocked")}; reason={hotkeyReason}");
                 if (hotkeyAllowed)
                 {
                     PortLogWesternChannelLevel2AllowsAncientWaterway(targetLocation, portLastTeleportSource, hotkeyRawLocation, hotkeyNormalizedLocation, hotkeyReason);
@@ -188,7 +188,7 @@ namespace GoblinFarmer
                         portLastTeleportSource,
                         hotkeyRawLocation,
                         hotkeyNormalizedLocation,
-                        PortGetButtonLocationForDetectedLocation(hotkeyRawLocation),
+                        PortDetectedLocationDisplayName(hotkeyRawLocation),
                         hotkeyRawLocation,
                         hotkeyReason,
                         PortLikelyRouteExplanation(targetLocation, hotkeyRawLocation, hotkeyReason, false));
@@ -204,7 +204,7 @@ namespace GoblinFarmer
                 string normalizedLocation = PortNormalizeBlockingLocation(refreshedLocation);
                 AppLogger.Info(
                     $"Blocking location using latest title scan: raw={refreshedLocation}; " +
-                    $"normalized={normalizedLocation}; displayGroup={PortGetButtonLocationForDetectedLocation(refreshedLocation)}");
+                    $"normalized={normalizedLocation}; display={PortDetectedLocationDisplayName(refreshedLocation)}");
 
                 blockedLocation = refreshedLocation;
 
@@ -213,7 +213,7 @@ namespace GoblinFarmer
                 PortRecordBlockingDecision(targetLocation, refreshedLocation, normalizedLocation, blocked, allowed, reason);
 
                 AppLogger.Info(
-                    $"Teleport blocking decision: requested={targetLocation}; source={PortDisplayLocation(portLastTeleportSource)}; raw={refreshedLocation}; normalized={normalizedLocation}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(refreshedLocation))}; blocked={blocked}; allowed={allowed}; result={(allowed ? "Allowed" : "Blocked")}; reason={reason}");
+                    $"Teleport blocking decision: requested={targetLocation}; source={PortDisplayLocation(portLastTeleportSource)}; raw={refreshedLocation}; normalized={normalizedLocation}; display={PortDisplayLocation(PortDetectedLocationDisplayName(refreshedLocation))}; blocked={blocked}; allowed={allowed}; result={(allowed ? "Allowed" : "Blocked")}; reason={reason}");
                 if (allowed)
                 {
                     PortLogWesternChannelLevel2AllowsAncientWaterway(targetLocation, portLastTeleportSource, refreshedLocation, normalizedLocation, reason);
@@ -224,7 +224,7 @@ namespace GoblinFarmer
                         portLastTeleportSource,
                         refreshedLocation,
                         normalizedLocation,
-                        PortGetButtonLocationForDetectedLocation(refreshedLocation),
+                        PortDetectedLocationDisplayName(refreshedLocation),
                         refreshedLocation,
                         reason,
                         PortLikelyRouteExplanation(targetLocation, refreshedLocation, reason, false));
@@ -239,7 +239,7 @@ namespace GoblinFarmer
             (bool fallbackBlocked, string fallbackReason) = PortEvaluateTeleportBlock(targetLocation, rawLocation, normalizedRawLocation, portLastTeleportSource);
             bool fallbackAllowed = !fallbackBlocked;
             PortRecordBlockingDecision(targetLocation, rawLocation, normalizedRawLocation, fallbackBlocked, fallbackAllowed, fallbackReason);
-            AppLogger.Info($"Teleport blocking decision: requested={targetLocation}; source={PortDisplayLocation(portLastTeleportSource)}; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(normalizedRawLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(rawLocation))}; blocked={fallbackBlocked}; allowed={fallbackAllowed}; result={(fallbackAllowed ? "Allowed" : "Blocked")}; reason={fallbackReason}");
+            AppLogger.Info($"Teleport blocking decision: requested={targetLocation}; source={PortDisplayLocation(portLastTeleportSource)}; raw={PortDisplayLocation(rawLocation)}; normalized={PortDisplayLocation(normalizedRawLocation)}; display={PortDisplayLocation(PortDetectedLocationDisplayName(rawLocation))}; blocked={fallbackBlocked}; allowed={fallbackAllowed}; result={(fallbackAllowed ? "Allowed" : "Blocked")}; reason={fallbackReason}");
             if (fallbackAllowed)
             {
                 PortLogWesternChannelLevel2AllowsAncientWaterway(targetLocation, portLastTeleportSource, rawLocation, normalizedRawLocation, fallbackReason);
@@ -250,7 +250,7 @@ namespace GoblinFarmer
                     portLastTeleportSource,
                     rawLocation,
                     normalizedRawLocation,
-                    PortGetButtonLocationForDetectedLocation(rawLocation),
+                    PortDetectedLocationDisplayName(rawLocation),
                     rawLocation,
                     fallbackReason,
                     PortLikelyRouteExplanation(targetLocation, rawLocation, fallbackReason, false));
@@ -264,7 +264,7 @@ namespace GoblinFarmer
             portLastBlockingReason = PortDisplayLocation(reason);
             portLastBlockingRawLocation = PortDisplayLocation(rawLocation);
             portLastBlockingNormalizedLocation = PortDisplayLocation(blockingLocation);
-            portLastBlockingDisplayLocation = PortDisplayLocation(PortGetButtonLocationForDetectedLocation(rawLocation));
+            portLastBlockingDisplayLocation = PortDisplayLocation(PortDetectedLocationDisplayName(rawLocation));
         }
 
         private string PortRouteStateFields(
@@ -331,7 +331,7 @@ namespace GoblinFarmer
             AppLogger.Info(
                 $"WesternChannelLevel2AllowsAncientWaterway: rawLocation={PortLogField(PortDisplayLocation(rawLocation))}; " +
                 $"normalizedLocation={PortLogField(PortDisplayLocation(normalizedLocation))}; " +
-                $"displayLocation={PortLogField(PortDisplayLocation(PortGetButtonLocationForDetectedLocation(rawLocation)))}; " +
+                $"displayLocation={PortLogField(PortDisplayLocation(PortDetectedLocationDisplayName(rawLocation)))}; " +
                 $"blockingLocation={PortLogField(PortDisplayLocation(rawLocation))}; " +
                 $"requestedTarget={PortLogField(PortDisplayLocation(requestedTarget))}; " +
                 $"source={PortLogField(PortDisplayLocation(source))}; allowed=True; reason={PortLogField(PortDisplayLocation(reason))}");
@@ -479,15 +479,7 @@ namespace GoblinFarmer
 
         private string PortNormalizeBlockingLocation(string detectedLocation)
         {
-            string normalized = PortNormalizeLocation(detectedLocation);
-            string key = PortLocationKey(normalized);
-
-            if (key == PortLocationKey("Gates of Caldeum"))
-            {
-                return "City Of Caldeum";
-            }
-
-            return normalized;
+            return PortNormalizeLocation(detectedLocation);
         }
 
         private void PortNotifyTeleportBlocked(string blockedLocation, string targetLocation, string source)
@@ -509,7 +501,7 @@ namespace GoblinFarmer
                 source,
                 blockedLocation,
                 normalizedBlockedLocation,
-                PortGetButtonLocationForDetectedLocation(blockedLocation),
+                PortDetectedLocationDisplayName(blockedLocation),
                 blockedLocation,
                 portLastBlockingReason,
                 screenshotPath,
@@ -616,7 +608,7 @@ namespace GoblinFarmer
             PortLocationDetectionResult result = PortDetectCurrentLocationFromTemplatesDetailed(refreshTemplates, "hotkey current-location scan", logPerf: true, PortBlockedLocationConfidence);
             if (!string.IsNullOrWhiteSpace(result.Detected))
             {
-                AppLogger.Info($"Hotkey fresh current-location scan: raw={result.Detected}; normalized={PortNormalizeBlockingLocation(result.Detected)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(result.Detected))}; confidence={result.BestConfidence:0.000}; previousConfirmed={PortDisplayLocation(portLastConfirmedLocation)}; queuedTarget={PortDisplayLocation(queuedTarget)}; templatesScanned={result.TemplateCount}");
+                AppLogger.Info($"Hotkey fresh current-location scan: raw={result.Detected}; normalized={PortNormalizeBlockingLocation(result.Detected)}; display={PortDisplayLocation(PortDetectedLocationDisplayName(result.Detected))}; confidence={result.BestConfidence:0.000}; previousConfirmed={PortDisplayLocation(portLastConfirmedLocation)}; queuedTarget={PortDisplayLocation(queuedTarget)}; templatesScanned={result.TemplateCount}");
                 return result.Detected;
             }
 
@@ -662,6 +654,7 @@ namespace GoblinFarmer
                 "Highlands Cave",
                 "WhimsyDale",
                 "Cave Of The Moon Clan Level 1",
+                "Cave Of The Moon Clan Level 2",
                 "Caverns of Frost Level 1",
                 "Caverns of Frost Level 2",
             };
@@ -705,12 +698,38 @@ namespace GoblinFarmer
                 return "Stinging Winds";
             }
 
+            if (key == PortLocationKey("Cave Of The Moon Clan Level 2"))
+            {
+                return "Southern Highlands";
+            }
+
             return PortGetMappedLocationForDetectedLocation(detectedLocation);
         }
 
         private string PortGetButtonLocationForDetectedLocation(string detectedLocation)
         {
             return PortGetMappedLocationForDetectedLocation(detectedLocation);
+        }
+
+        private string PortDetectedLocationDisplayName(string detectedLocation)
+        {
+            string key = PortLocationKey(detectedLocation);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return "";
+            }
+
+            if (key == PortLocationKey("City Of Caldeum") ||
+                key == PortLocationKey("Gates of Caldeum") ||
+                key == PortLocationKey("Caldeum Bazaar") ||
+                key == PortLocationKey("Sewers of Caldeum") ||
+                key == PortLocationKey("Flooded Causeway") ||
+                key == PortLocationKey("Ruined Cistern"))
+            {
+                return PortNormalizeLocation(detectedLocation);
+            }
+
+            return PortGetButtonLocationForDetectedLocation(detectedLocation);
         }
 
         private string PortGetMappedLocationForDetectedLocation(string detectedLocation)
@@ -751,6 +770,11 @@ namespace GoblinFarmer
                 return "Ancient Waterway";
             }
 
+            if (key == PortLocationKey("Cave Of The Moon Clan Level 2"))
+            {
+                return "Southern Highlands";
+            }
+
             foreach (string routeLocation in portRouteNextTeleports.Keys)
             {
                 if (key == PortLocationKey(routeLocation))
@@ -774,12 +798,6 @@ namespace GoblinFarmer
             if (PortLocationKey(mappedBlockedLocation) == PortLocationKey("Ancient Waterway"))
             {
                 return "Ancient Waterway";
-            }
-
-            if (PortLocationKey(blockedLocation) == PortLocationKey("Gates of Caldeum") &&
-                portLastTeleportKey == PortLocationKey("City Of Caldeum"))
-            {
-                return "City of Caldeum";
             }
 
             return blockedLocation;

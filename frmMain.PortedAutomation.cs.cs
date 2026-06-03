@@ -405,7 +405,7 @@ namespace GoblinFarmer
                     source,
                     portAutomationBlockedByTeleportFailsafe ? portLastBlockingRawLocation : portLastConfirmedLocation,
                     portAutomationBlockedByTeleportFailsafe ? portLastBlockingNormalizedLocation : PortNormalizeBlockingLocation(portLastConfirmedLocation),
-                    portAutomationBlockedByTeleportFailsafe ? portLastBlockingDisplayLocation : PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation),
+                    portAutomationBlockedByTeleportFailsafe ? portLastBlockingDisplayLocation : PortDetectedLocationDisplayName(portLastConfirmedLocation),
                     portAutomationBlockedByTeleportFailsafe ? portLastBlockingRawLocation : portLastConfirmedLocation,
                     portAutomationBlockedByTeleportFailsafe ? portLastBlockingReason : token.IsCancellationRequested ? "cancelled during teleport or arrival confirmation" : "arrival confirmation did not complete",
                     "",
@@ -628,7 +628,7 @@ namespace GoblinFarmer
             }
 
             string currentLocation = PortDetectSpecificLocation(displayName);
-            AppLogger.Info($"Fresh current-location scan before teleport: source={source}; requested={displayName}; raw={PortDisplayLocation(currentLocation)}; normalized={PortDisplayLocation(PortNormalizeBlockingLocation(currentLocation))}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(currentLocation))}; previousConfirmed={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; blockingChecked={shouldCheckBlocking}; ignoreBlocking={bypassFailsafe}");
+            AppLogger.Info($"Fresh current-location scan before teleport: source={source}; requested={displayName}; raw={PortDisplayLocation(currentLocation)}; normalized={PortDisplayLocation(PortNormalizeBlockingLocation(currentLocation))}; display={PortDisplayLocation(PortDetectedLocationDisplayName(currentLocation))}; previousConfirmed={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; blockingChecked={shouldCheckBlocking}; ignoreBlocking={bypassFailsafe}");
             AddWorkflowStep($"Current location detected: {PortDisplayLocation(currentLocation)}");
             if (source.Equals("Button", StringComparison.OrdinalIgnoreCase) &&
                 PortLocationKey(displayName) == PortLocationKey("Ancient Waterway"))
@@ -765,7 +765,7 @@ namespace GoblinFarmer
                     source,
                     confirmedAfter,
                     PortNormalizeBlockingLocation(confirmedAfter),
-                    PortGetButtonLocationForDetectedLocation(confirmedAfter),
+                    PortDetectedLocationDisplayName(confirmedAfter),
                     portLastConfirmedLocation,
                     token.IsCancellationRequested ? "cancelled during arrival confirmation" : "arrival confirmation timed out",
                     screenshotPath,
@@ -1121,6 +1121,7 @@ namespace GoblinFarmer
                 "Western Channel Level 2",
                 "WhimsyDale",
                 "Cave Of The Moon Clan Level 1",
+                "Cave Of The Moon Clan Level 2",
             })
             {
                 if (portCurrentLocationTemplates.ContainsKey(PortNormalizeLocation(requiredLocationTemplate)))

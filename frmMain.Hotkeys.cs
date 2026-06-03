@@ -372,7 +372,7 @@ namespace GoblinFarmer
                 return;
             }
 
-            AppLogger.Info($"Teleport Next hotkey queued/next teleport: {target}; freshRawLocation={PortDisplayLocation(freshRawLocation)}; freshDisplay={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(freshRawLocation))}; queuedBefore={PortDisplayLocation(queuedBefore)}; routeAdvancedFromFreshScan={routeAdvancedFromFreshScan}");
+            AppLogger.Info($"Teleport Next hotkey queued/next teleport: {target}; freshRawLocation={PortDisplayLocation(freshRawLocation)}; freshDisplay={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; queuedBefore={PortDisplayLocation(queuedBefore)}; routeAdvancedFromFreshScan={routeAdvancedFromFreshScan}");
             AddWorkflowStep($"Teleport Next: {target}");
             bool teleportStarted = !isAutomationRunning && !portCombatRunning && IsDiabloRunning();
             if (routeAdvancedFromFreshScan)

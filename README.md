@@ -155,6 +155,7 @@ Highlights:
 - Added Start Game recovery handling.
 - Improved Make New Game workflow protection.
 - Improved teleport routing and location handling.
+- Preserved specific Caldeum sublocation names while allowing Cave Of The Moon Clan Level 2 to continue the route to Northern Highlands.
 - Added dynamic application version display.
 - Installer version now synchronized with application version.
 

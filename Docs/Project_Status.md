@@ -21,6 +21,7 @@ v1.3 GitHub release polish: public README cleanup, release notes, changelog, rel
 - Pandemonium Fortress Level 2: next Make New Game flow; no block.
 - WhimsyDale is not part of the farming route; if the fresh Teleport Next hotkey current-location scan detects WhimsyDale, Teleport Next is blocked and the notification uses WhimsyDale as the displayed location.
 - Cave Of The Moon Clan Level 1 is not part of the farming route; if the fresh Teleport Next hotkey current-location scan detects Cave Of The Moon Clan Level 1, Teleport Next is blocked and the notification uses Cave Of The Moon Clan Level 1 as the displayed location.
+- Cave Of The Moon Clan Level 2 is an allowed Southern Highlands route sublocation; if the fresh Teleport Next hotkey current-location scan detects Cave Of The Moon Clan Level 2 while Northern Highlands is queued, Teleport Next should continue to Northern Highlands.
 - Caverns of Frost Level 1 blocks Teleport Next hotkey routing and uses Caverns of Frost Level 1 as the displayed location; Caverns of Frost Level 2 remains allowed and can continue to Rakkis Crossing.
 
 ## Known Stable Systems
@@ -41,13 +42,14 @@ v1.3 GitHub release polish: public README cleanup, release notes, changelog, rel
 - Teleport Next already-at-queued-destination advancement logs `AlreadyAtQueuedDestinationCheck`, `AlreadyAtQueuedDestinationDetected`, `skippedDestination`, `newRequestedTarget`, and whether the following teleport was actually started.
 - Teleport Next may remain unavailable for a brief intentional delay after combat stops so combat/input state can settle before route hotkeys resume.
 - In-game notifications use a no-activate overlay so blocked/already-here messages should not steal Diablo focus.
-- Gates of Caldeum normalizes to City Of Caldeum for blocking output.
+- Gates of Caldeum and City Of Caldeum remain distinct detected/blocking strings in logs and notifications; route button state still groups Gates and other Caldeum sublocations under the City Of Caldeum route checkpoint.
 - Waterway sub-regions keep their raw identity for blocking decisions.
 - Ancient Waterway waypoint arrival confirmation requires the exact Ancient Waterway title; channel child locations still participate in route and blocking decisions but no longer complete an Ancient Waterway waypoint click by alias.
 - Cathedral blocks Royal Crypts unless the raw detected location is Cathedral Level 3.
 - City Of Caldeum blocks Ancient Waterway unless the raw detected location is Ruined Cistern.
 - Western Channel Level 2 selects Ancient Waterway as the next target; Eastern Channel Level 2 selects Stinging Winds.
 - Stinging Winds blocks Battlefields unless the current detected sub-region is Black Canyon Mines.
+- Cave Of The Moon Clan Level 2 remains allowed and maps back to the Southern Highlands checkpoint so the next target stays Northern Highlands; Cave Of The Moon Clan Level 1 remains the only Moon Clan cave level that blocks Teleport Next hotkey routing.
 - Caverns of Frost Level 1 blocks Teleport Next hotkey routing before it can route as the Battlefields group; Caverns of Frost Level 2 remains an allowed Battlefields alias that can continue to Rakkis Crossing.
 - Ancient Waterway self-click blocks before opening the map and preserves current/next button state.
 - Repair flow waits for New Tristram/vendor readiness and logs repair-station click timing before using the repair-station coordinate fallback.
@@ -101,6 +103,7 @@ v1.3 GitHub release polish: public README cleanup, release notes, changelog, rel
 - Repair/salvage monitoring after route and launch changes; current repair timing is acceptable and should prioritize reliability over further speed changes.
 - Teleport Next WhimsyDale validation should confirm the fresh current-location scan detects WhimsyDale, blocks routing, and shows WhimsyDale in the notification/logs.
 - Teleport Next Cave Of The Moon Clan Level 1 validation should confirm the fresh current-location scan detects Cave Of The Moon Clan Level 1, blocks routing, and shows Cave Of The Moon Clan Level 1 in the notification/logs.
+- Teleport Next Cave Of The Moon Clan Level 2 validation should confirm the fresh current-location scan detects Cave Of The Moon Clan Level 2, allows routing, and continues to Northern Highlands.
 - Teleport Next Caverns of Frost validation should confirm Caverns of Frost Level 1 blocks with the raw/display location in logs and notification, while Caverns of Frost Level 2 allows Rakkis Crossing.
 - Teleport Next route advancement validation should confirm that when the player is already at the queued destination, the hotkey logs `teleportSkipped=True`, advances the route, and sends the next valid destination instead.
 - Release configuration validation should confirm diagnostic overlay/route inspector are hidden by default, reappear when enabled in config, and debug screenshot/missing-asset prompt settings behave as configured.
@@ -394,6 +397,9 @@ Migration plan:
 - Package manifest and console summary report package size, session start, session duration, total screenshots, success screenshots, failure screenshots, normal screenshots, and stale screenshot exclusions.
 
 ## Last Validation
+- Built after adding Cave Of The Moon Clan Level 2 to Teleport Next hotkey route scans, mapping it back to the Southern Highlands checkpoint so the next route target remains Northern Highlands, and preserving specific Caldeum detected/display strings for Gates/City sublocations; build succeeded with 0 warnings and 0 errors.
+- Reviewed `E:\GoblinFarmer\Logs\GoblinFarmer_20260603_105145.log`: the blocked 11:04 attempts showed the hotkey scan only considered Moon Clan Level 1 and blocked Northern Highlands from a false Level 1 detection; the 11:11-11:12 Caldeum entries showed Gates of Caldeum was being normalized/displayed as City Of Caldeum in diagnostic fields, so Caldeum detection now preserves the specific Gates/City/Bazaar/Sewers/Causeway/Cistern string while retaining City route grouping.
+- Static review confirmed Cave Of The Moon Clan Level 1 remains the only Moon Clan cave level blocked by the hotkey route rule; Level 2 is scanned separately and allowed to continue to Northern Highlands.
 - Built after fixing the Start Game stable-detection deadlock, manual-click loaded-state recovery, and Make New Game active-workflow guard; build succeeded with 0 warnings and 0 errors.
 - Static review confirmed Battle.net launch, teleport/route logic, combat, Exit Game, bounty, repair, and salvage behavior were not changed.
 - Built after adding Start Game detection attempt logging, 100ms stable-scan polling, and state-based click acceptance reasons; build succeeded with 0 warnings and 0 errors.

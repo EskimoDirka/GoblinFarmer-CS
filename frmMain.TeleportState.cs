@@ -67,7 +67,7 @@ namespace GoblinFarmer
             bool matchesQueuedDestination = PortLocationMatchesForArrival(freshRawLocation, queuedTarget);
             AppLogger.Info(
                 $"AlreadyAtQueuedDestinationCheck: source=Hotkey; freshRawLocation={PortDisplayLocation(freshRawLocation)}; " +
-                $"freshDisplayLocation={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(freshRawLocation))}; " +
+                $"freshDisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; " +
                 $"queuedTarget={PortDisplayLocation(queuedTarget)}; matchesQueuedDestination={matchesQueuedDestination}");
 
             if (string.IsNullOrWhiteSpace(freshRawLocation) ||
@@ -93,7 +93,7 @@ namespace GoblinFarmer
                 $"AlreadyAtQueuedDestinationDetected: teleportSkipped=True; source=Hotkey; " +
                 $"freshRawLocation={PortDisplayLocation(freshRawLocation)}; " +
                 $"freshNormalizedLocation={PortDisplayLocation(PortNormalizeBlockingLocation(freshRawLocation))}; " +
-                $"freshDisplayLocation={PortDisplayLocation(buttonLocation)}; " +
+                $"freshDisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; " +
                 $"skippedDestination={PortDisplayLocation(queuedTarget)}; " +
                 $"newRequestedTarget={PortDisplayLocation(nextTarget)}; " +
                 $"reason=fresh current-location scan already matches queued route destination");
