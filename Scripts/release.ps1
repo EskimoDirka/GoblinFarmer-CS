@@ -4,13 +4,13 @@ param(
     [string]$Remote = "origin",
     [string]$Branch,
     [string]$Runtime = "win-x64",
-    [switch]$SkipGitHubRelease,
+    [switch]$CreateGitHubRelease,
     [switch]$SkipInstaller
 )
 
-# Full local release helper. It assumes docs/source edits are already made, then
-# verifies, publishes, commits/pushes, tags, and uploads GitHub release assets
-# when the GitHub CLI is installed and authenticated.
+# Routine local publish helper. It assumes docs/source edits are already made,
+# then verifies, publishes, creates local artifacts, commits, and pushes.
+# GitHub Releases are intentionally opt-in for larger app milestones.
 
 $ErrorActionPreference = "Stop"
 
@@ -111,7 +111,7 @@ if ($Version -notmatch "^v") {
 }
 
 if ([string]::IsNullOrWhiteSpace($Message)) {
-    $Message = "Release $Version"
+    $Message = "Update GoblinFarmer"
 }
 
 Set-Location $repoRoot
@@ -123,7 +123,7 @@ if ([string]::IsNullOrWhiteSpace($Branch)) {
     }
 }
 
-Write-Host "GoblinFarmer release"
+Write-Host "GoblinFarmer publish/push"
 Write-Host "Repository: $repoRoot"
 Write-Host "Version:    $Version"
 Write-Host "Project:    $projectVersion"
@@ -190,20 +190,6 @@ Invoke-ReleaseStep "git push $Remote $Branch" {
     git push $Remote $Branch
 }
 
-$existingTag = git tag --list $Version
-if ([string]::IsNullOrWhiteSpace($existingTag)) {
-    Invoke-ReleaseStep "git tag $Version" {
-        git tag $Version
-    }
-}
-else {
-    Write-Host "Tag $Version already exists locally; keeping it."
-}
-
-Invoke-ReleaseStep "git push $Remote $Version" {
-    git push $Remote $Version
-}
-
 $installerPath = Get-ReleaseAssetPath -Root $repoRoot -ProjectVersion $projectVersion
 $releaseAssets = @()
 if ($null -ne $installerPath) {
@@ -211,10 +197,21 @@ if ($null -ne $installerPath) {
 }
 $releaseAssets += $portableZip
 
-if ($SkipGitHubRelease) {
-    Write-Warning "Skipping GitHub release upload because -SkipGitHubRelease was supplied."
-}
-else {
+if ($CreateGitHubRelease) {
+    $existingTag = git tag --list $Version
+    if ([string]::IsNullOrWhiteSpace($existingTag)) {
+        Invoke-ReleaseStep "git tag $Version" {
+            git tag $Version
+        }
+    }
+    else {
+        Write-Host "Tag $Version already exists locally; keeping it."
+    }
+
+    Invoke-ReleaseStep "git push $Remote $Version" {
+        git push $Remote $Version
+    }
+
     $ghPath = Get-GitHubCliPath
     if ($null -eq $ghPath) {
         Stop-Release "GitHub CLI is not installed or discoverable. Install it with 'winget install GitHub.cli', run 'gh auth login', then rerun this script to upload release assets."
@@ -256,11 +253,14 @@ else {
         }
     }
 }
+else {
+    Write-Host ""
+    Write-Host "Skipping GitHub Release/tag creation. Use -CreateGitHubRelease only for larger app milestones."
+}
 
 Write-Host ""
-Write-Host "========== Release Summary =========="
+Write-Host "========== Publish Summary =========="
 Write-Host "Commit:       $(git rev-parse --short HEAD)"
-Write-Host "Tag:          $Version"
 Write-Host "Publish dir:  $publishDir"
 Write-Host "Portable zip: $portableZip"
 if ($null -ne $installerPath) {
@@ -269,4 +269,7 @@ if ($null -ne $installerPath) {
 else {
     Write-Warning "Installer was not found. Publish output and portable zip were created."
 }
-Write-Host "Release flow complete."
+if ($CreateGitHubRelease) {
+    Write-Host "GitHub rel:   $Version"
+}
+Write-Host "Publish/push flow complete."

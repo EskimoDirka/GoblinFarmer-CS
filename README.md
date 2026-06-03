@@ -211,13 +211,13 @@ The script publishes to `artifacts\publish\GoblinFarmer`, verifies executable ve
 
 `artifacts\` is generated output and is intentionally ignored by Git. Do not commit published app folders or installer binaries.
 
-For the full local release flow, including build, publish, portable zip creation, commit, push, tag creation, and GitHub Release asset upload, run:
+For the routine local publish/push flow, including build, publish, portable zip creation, commit, and push, run:
 
 ```bat
 Scripts\release.bat
 ```
 
-`Scripts\release.bat` calls `Scripts\release.ps1`. The PowerShell helper uses the version from `GoblinFarmer.csproj`, creates `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`, uploads the installer and portable zip with GitHub CLI, and can find `gh.exe` from the standard install location even when GitHub CLI is not on `PATH`. Documentation updates still need to be made before running it because the script cannot infer what changed.
+`Scripts\release.bat` calls `Scripts\release.ps1`. The PowerShell helper uses the version from `GoblinFarmer.csproj`, creates `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`, and pushes tracked source/docs changes to GitHub. It does not create a tag or GitHub Release unless `-CreateGitHubRelease` is passed to the PowerShell script for a larger app milestone. Documentation updates still need to be made before running it because the script cannot infer what changed.
 
 If Inno Setup is installed separately, compile the installer after publishing:
 
@@ -229,9 +229,9 @@ Manual release flow:
 
 1. Update version metadata in `GoblinFarmer.csproj`.
 2. Update `Docs\Project_Status.md`, `README.md`, and release notes/checklists for the changes being shipped.
-3. Run `Scripts\release.bat` for the automated local release flow, or publish from Visual Studio and upload assets manually.
+3. Run `Scripts\release.bat` for the routine local publish/push flow, or publish from Visual Studio and upload assets manually.
 4. Confirm the installer name and version, such as `GoblinFarmerSetup-1.3.0.exe`.
-5. Confirm the GitHub Release uses the notes from `Docs/Release_v1.3.md` and includes the installer asset.
+5. For major app milestones only, create a GitHub Release manually or run `Scripts\release.ps1 -CreateGitHubRelease`, then confirm the release uses the notes from `Docs/Release_v1.3.md` and includes the installer asset.
 
 See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a final build.
 
