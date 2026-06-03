@@ -84,7 +84,7 @@ v1.3 GitHub release polish: public README cleanup, release notes, changelog, rel
 - `Debug.EnableDebugScreenshots` defaults to enabled in Debug builds and disabled in Release builds only when no saved preference exists. Existing saved preferences are honored, and the Debug Mode toggle no longer overwrites the screenshot preference.
 - Normal UI mode keeps diagnostic panes and debug screenshot controls hidden unless Debug Mode is enabled from the Settings panel.
 - The startup form client size is tall enough to show the full Settings group and Debug Mode checkbox without manual resizing while preserving the compact layout.
-- Release publishing uses `Scripts\publish-release.ps1` for a self-contained `win-x64` folder and `Installer\GoblinFarmer.iss` for an Inno Setup installer targeting `%LOCALAPPDATA%\Programs\GoblinFarmer`.
+- Release publishing uses `Scripts\publish-release.ps1` for a self-contained `win-x64` folder and `Installer\GoblinFarmer.iss` for an Inno Setup installer targeting `%LOCALAPPDATA%\Programs\GoblinFarmer`; the installer shows the directory page, shows the selected path on the ready page, and starts from the default app-local path instead of silently reusing a previous custom install directory.
 - Exit Game workflow no longer generates desktop right-clicks after Diablo exits.
 - Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
 - Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region is `16,1256,292,75`, recalibrated from fallback diagnostics.
@@ -144,6 +144,7 @@ No v1.3 release-blocking issues are currently documented. The items below are ma
 - Updated the app title to display `GoblinFarmer v1.3.0` from `AssemblyInformationalVersion` instead of relying on a hard-coded designer title or publish-time overrides.
 - Updated `Scripts\publish-release.ps1` to stop overriding MSBuild version properties, verify the published EXE `FileVersion` / `ProductVersion`, and pass only the publish folder to Inno Setup.
 - Updated `Installer\GoblinFarmer.iss` to read the published executable version with `GetFileVersion(...)` and generate a versioned installer filename from that published EXE.
+- Updated installer install-path behavior so setup displays the install directory page, shows the selected directory on the ready page, and avoids silently reusing a previous custom install path.
 - Fixed Start Game stable-detection deadlock from `GoblinFarmer_Debug_20260603_072805.zip` / `Logs\GoblinFarmer_20260603_072517.log`: the log showed repeated Start Game matches around `316,688` / `320,691`, but the old stable gate kept emitting `StartGameButtonUnstable` and timed out with `clickAttempts=0`.
 - Replaced fragile Start Game stability reset behavior with practical in-tolerance acceptance by consecutive visible scans or stable duration, with detailed timeout logs for first/latest point, dx/dy, tolerance, visible count, stable duration, and required thresholds.
 - Added `StartGameAcceptedByLoadedGameState` recovery so manual Start Game clicks detected by character-load, loaded-location, or in-game evidence continue the Make New Game flow.

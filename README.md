@@ -41,7 +41,9 @@ The installer places GoblinFarmer under:
 %LOCALAPPDATA%\Programs\GoblinFarmer
 ```
 
-It also creates a Start Menu shortcut and can optionally create a desktop shortcut. No source checkout or .NET SDK is required for the installed self-contained release.
+Setup shows the install directory during installation so users can review or change it before files are copied. The default path is user-local and does not require administrator rights, but custom install locations are supported.
+
+The installer also creates a Start Menu shortcut and can optionally create a desktop shortcut. No source checkout or .NET SDK is required for the installed self-contained release.
 
 If using the publish folder directly, run `GoblinFarmer.exe` from the published `GoblinFarmer` folder.
 
@@ -54,6 +56,8 @@ On first launch, GoblinFarmer attempts to discover the required runtime paths. I
 - Images template folder: usually the bundled `Images` folder beside the app
 
 Automation stays disabled until the required paths and template folders validate successfully. Paths can also be reviewed and changed later from the Settings area in the app.
+
+After install, use the built-in `Verify Paths` button to confirm the Diablo III, Battle.net, and Images paths for the current machine.
 
 Required template folders:
 
@@ -77,6 +81,12 @@ Images/Teleport Function
 6. Use Exit Game when the current run should return to the menu.
 
 After combat stops, Teleport Next may have a slight intentional delay before it is available again. This lets combat/input state settle and helps avoid accidental or unsafe teleport attempts.
+
+## Compatibility Notes
+
+GoblinFarmer is designed to support flexible install paths. Runtime paths for Diablo III, Battle.net, and image templates are configurable where applicable, and the app validates those paths before enabling automation.
+
+GoblinFarmer is also designed to be resolution-scalable through image recognition regions and configurable path handling. Users should still verify paths with the built-in `Verify Paths` button after install and expect to validate image-recognition behavior on unusual display, DPI, or multi-monitor setups.
 
 ## Hotkeys
 

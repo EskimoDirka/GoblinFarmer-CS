@@ -18,7 +18,10 @@ Use this before publishing a final Windows release.
 
 ## Install
 
-- [ ] Install to `%LOCALAPPDATA%\Programs\GoblinFarmer`.
+- [ ] Confirm the installer shows the install directory page.
+- [ ] Confirm the default install path is `%LOCALAPPDATA%\Programs\GoblinFarmer`.
+- [ ] Confirm the ready page displays the selected install directory before install.
+- [ ] If testing an upgrade after a previous custom install path, confirm setup does not silently reuse the old path without showing the directory choice.
 - [ ] Confirm the Start Menu shortcut launches the app.
 - [ ] Confirm optional desktop shortcut uses the GoblinFarmer icon.
 - [ ] Confirm uninstall removes installed files but does not require source code.
@@ -30,6 +33,7 @@ Use this before publishing a final Windows release.
 - [ ] If discovery fails, browse to `Diablo III64.exe` or `Diablo III.exe`.
 - [ ] Browse to `Battle.net.exe`.
 - [ ] Verify the `Images` template folder and required subfolders.
+- [ ] Use `Verify Paths` after install to confirm Diablo III, Battle.net, and Images paths.
 - [ ] Confirm automation controls remain disabled until settings validate.
 
 ## Runtime
@@ -39,6 +43,7 @@ Use this before publishing a final Windows release.
 - [ ] Run a focused Make New Game flow on a machine with valid paths.
 - [ ] Confirm Battle.net launch uses the configured executable path.
 - [ ] Confirm logs clearly report invalid or missing paths.
+- [ ] On any unusual display, DPI, or multi-monitor setup, validate image-recognition scan regions before broad runtime testing.
 
 ## Package
 
