@@ -181,7 +181,15 @@ Then publish the self-contained Windows build. You can publish from Visual Studi
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1
 ```
 
-The script runs a self-contained `win-x64` Release publish, verifies executable version metadata, icon, config, and Images output, then compiles `Installer/GoblinFarmer.iss` if Inno Setup is installed. The installer reads the version from the published executable.
+The script publishes to `artifacts\publish\GoblinFarmer`, verifies executable version metadata, icon, config, and Images output, then compiles `Installer\GoblinFarmer.iss` if Inno Setup is installed. The installer reads the version from the published executable, so the app must be published before compiling the `.iss` file.
+
+`artifacts\` is generated output and is intentionally ignored by Git. Do not commit published app folders or installer binaries.
+
+If Inno Setup is installed separately, compile the installer after publishing:
+
+```powershell
+ISCC.exe "/DSourceDir=artifacts\publish\GoblinFarmer" "Installer\GoblinFarmer.iss"
+```
 
 Final release flow:
 

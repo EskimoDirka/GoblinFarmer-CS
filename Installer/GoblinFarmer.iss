@@ -2,8 +2,14 @@
 #ifndef SourceDir
 #define SourceDir "..\artifacts\publish\GoblinFarmer"
 #endif
-#define SourceExe SourceDir + "\GoblinFarmer.exe"
+#define SourceExe AddBackslash(SourceDir) + "GoblinFarmer.exe"
+#if !FileExists(SourceExe)
+#error "Published GoblinFarmer.exe was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
+#endif
 #define MyAppFileVersion GetFileVersion(SourceExe)
+#if MyAppFileVersion == ""
+#error "Unable to read GoblinFarmer.exe file version from the published executable."
+#endif
 #if Copy(MyAppFileVersion, Len(MyAppFileVersion) - 1, 2) == ".0"
 #define MyAppVersion Copy(MyAppFileVersion, 1, Len(MyAppFileVersion) - 2)
 #else

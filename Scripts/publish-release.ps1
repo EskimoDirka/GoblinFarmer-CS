@@ -27,6 +27,28 @@ function Invoke-Step {
     }
 }
 
+function Get-InnoSetupCompiler {
+    $iscc = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($null -ne $iscc) {
+        return $iscc.Source
+    }
+
+    $candidatePaths = @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 5\ISCC.exe",
+        "$env:ProgramFiles\Inno Setup 5\ISCC.exe"
+    )
+
+    foreach ($candidatePath in $candidatePaths) {
+        if (![string]::IsNullOrWhiteSpace($candidatePath) -and (Test-Path -LiteralPath $candidatePath)) {
+            return $candidatePath
+        }
+    }
+
+    return $null
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $projectPath = Join-Path $repoRoot "GoblinFarmer.csproj"
 $artifactsRoot = Join-Path $repoRoot "artifacts"
@@ -128,15 +150,17 @@ if ($exeVersionInfo.ProductVersion -ne $projectInformationalVersion) {
     Stop-Publish "Published executable ProductVersion is $($exeVersionInfo.ProductVersion), expected $projectInformationalVersion."
 }
 
-$iscc = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
-if (!$SkipInstaller -and $null -ne $iscc -and (Test-Path $installerScript)) {
+$isccPath = Get-InnoSetupCompiler
+if (!$SkipInstaller -and $null -ne $isccPath -and (Test-Path $installerScript)) {
     Invoke-Step "compile Inno Setup installer" {
         $sourceDirDefine = "/DSourceDir=`"$publishDir`""
-        & $iscc.Source $sourceDirDefine $installerScript
+        & $isccPath $sourceDirDefine $installerScript
     }
 }
-elseif (!$SkipInstaller -and $null -eq $iscc) {
+elseif (!$SkipInstaller -and $null -eq $isccPath) {
     Write-Warning "Inno Setup compiler (ISCC.exe) was not found. The self-contained publish folder is ready; install Inno Setup to build the installer."
+    Write-Host "After installing Inno Setup, compile with:"
+    Write-Host "ISCC.exe `"/DSourceDir=$publishDir`" `"$installerScript`""
 }
 elseif (!$SkipInstaller -and !(Test-Path $installerScript)) {
     Write-Warning "Installer script not found: $installerScript"
