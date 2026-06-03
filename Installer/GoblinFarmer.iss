@@ -1,6 +1,6 @@
 #define MyAppName "GoblinFarmer"
 #ifndef MyAppVersion
-#define MyAppVersion "1.3.0"
+#define MyAppVersion GetFileVersion("D:\D3\Projects\GoblinFarmer\GoblinFarmer\GoblinFarmer\artifacts\installer}\GoblinFarmer.exe")
 #endif
 #ifndef SourceDir
 #define SourceDir "..\artifacts\publish\GoblinFarmer"
