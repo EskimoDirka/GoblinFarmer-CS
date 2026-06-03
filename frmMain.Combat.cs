@@ -290,7 +290,9 @@ namespace GoblinFarmer
 
             AddWorkflowStep("Demon Hunter sustained combat started");
 
-            PortRunCombatTask("Demon Hunter loop", () => PortDemonHunterLoop(token));
+            PortRunCombatTask("Demon Hunter key loop", () => PortDemonHunterKeyLoop(token));
+            PortRunCombatTask("Demon Hunter right mouse loop", () => PortDemonHunterRightMouseLoop(token));
+            PortRunCombatTask("Demon Hunter shift click loop", () => PortDemonHunterShiftClickLoop(token));
             PortRunCombatTask("Combat cursor loop", () => PortCombatCursorLoop(token));
         }
 
@@ -317,16 +319,16 @@ namespace GoblinFarmer
                     return;
                 }
 
-                PortDemonHunterShiftLeftClick();
+                PortDemonHunterShiftLeftClick(token);
                 Thread.Sleep(150);
             }
 
             AddWorkflowStep("Demon Hunter momentum build finished or timed out");
         }
 
-        private void PortDemonHunterShiftLeftClick()
+        private bool PortDemonHunterShiftLeftClick(CancellationToken token, bool stopCombatWhenUnsafe = false)
         {
-            bool clickSafe = PortCombatClickIsSafe();
+            bool clickSafe = PortDemonHunterWaitForCombatMouseClickSafe(token);
             PortLogCombatClickDecision(
                 "Demon Hunter Shift+Left Click",
                 clickSafe,
@@ -336,68 +338,109 @@ namespace GoblinFarmer
             if (!clickSafe)
             {
                 AppLogger.Info($"Demon Hunter Shift+Left Click blocked by combat safety; no click sent; {PortCombatInputContext()}");
-                return;
+                if (stopCombatWhenUnsafe && !token.IsCancellationRequested && portCombatRunning && portCombatClass == "demon_hunter")
+                {
+                    BeginInvoke(new Action(() => PortStopCombat("Demon Hunter Shift+Left Click could not find safe region")));
+                }
+
+                return false;
             }
 
             PortRuntimeShiftDown();
-            Thread.Sleep(30);
+            try
+            {
+                Thread.Sleep(30);
 
-            PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
-            Thread.Sleep(30);
-            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+                Thread.Sleep(30);
+                PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+            }
+            finally
+            {
+                PortRuntimeShiftUp();
+            }
 
-            PortRuntimeShiftUp();
+            return true;
         }
 
-        private void PortDemonHunterLoop(CancellationToken token)
+        private bool PortDemonHunterWaitForCombatMouseClickSafe(CancellationToken token, int timeoutMilliseconds = 2000)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            while (!token.IsCancellationRequested &&
+                   portCombatRunning &&
+                   portCombatClass == "demon_hunter" &&
+                   sw.ElapsedMilliseconds <= timeoutMilliseconds)
+            {
+                if (!PortDiabloIsActive())
+                {
+                    BeginInvoke(new Action(() => PortStopCombat("Diablo inactive while waiting for Demon Hunter safe click")));
+                    return false;
+                }
+
+                if (PortCombatClickIsSafe())
+                {
+                    return true;
+                }
+
+                PortSleep(token, 90);
+            }
+
+            return false;
+        }
+
+        private void PortDemonHunterKeyLoop(CancellationToken token)
         {
             int[] sequence = [0x31, 0x32, 0x33, 0x34];
             int index = 0;
+
+            while (!token.IsCancellationRequested && portCombatRunning && portCombatClass == "demon_hunter")
+            {
+                if (!PortDiabloIsActive())
+                {
+                    BeginInvoke(new Action(() => PortStopCombat("Diablo inactive in Demon Hunter key loop")));
+                    return;
+                }
+
+                PortPressKey(sequence[index]);
+                index = (index + 1) % sequence.Length;
+                PortSleep(token, 100);
+            }
+        }
+
+        private void PortDemonHunterRightMouseLoop(CancellationToken token)
+        {
             bool rightDown = false;
 
             try
             {
+                bool clickSafe = PortDemonHunterWaitForCombatMouseClickSafe(token);
+                PortLogCombatClickDecision(
+                    "Demon Hunter right hold",
+                    clickSafe,
+                    "right",
+                    ref portLastDemonHunterDecisionLogTicks,
+                    ref portLastDemonHunterDecisionAllowed);
+
+                if (!clickSafe)
+                {
+                    BeginInvoke(new Action(() => PortStopCombat("Demon Hunter right mouse could not start in safe region")));
+                    return;
+                }
+
+                AppLogger.Info($"Combat right click allowed: sending RIGHTDOWN; {PortCombatInputContext()}");
+                PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN);
+                portDemonHunterRightHeldFromSafeRegion = true;
+                rightDown = true;
+
                 while (!token.IsCancellationRequested && portCombatRunning && portCombatClass == "demon_hunter")
                 {
-                    bool clickSafe = PortCombatClickIsSafe();
-                    PortLogCombatClickDecision(
-                        "Demon Hunter right hold",
-                        clickSafe,
-                        "right",
-                        ref portLastDemonHunterDecisionLogTicks,
-                        ref portLastDemonHunterDecisionAllowed);
-
-                    if (!clickSafe)
+                    if (!PortDiabloIsActive())
                     {
-                        if (rightDown)
-                        {
-                            AppLogger.Info($"Combat right click suppressed while held: combatInputMode=PhysicalCursorHeldFromSafeRegion; clickSendMethod=held-right-no-new-click; rightDown=true; no release sent; {PortCombatInputContext()}");
-                        }
-                    }
-                    else if (!rightDown)
-                    {
-                        AppLogger.Info($"Combat right click allowed: sending RIGHTDOWN; {PortCombatInputContext()}");
-                        PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN);
-                        portDemonHunterRightHeldFromSafeRegion = true;
-                        rightDown = true;
+                        BeginInvoke(new Action(() => PortStopCombat("Diablo inactive in Demon Hunter right mouse loop")));
+                        return;
                     }
 
-                    PortPressKey(sequence[index]);
-                    index = (index + 1) % sequence.Length;
-
-                    // Image recognition is the source of truth for Momentum.
-                    if (!PortDemonHunterMomentumReady())
-                    {
-                        AddWorkflowStep("Demon Hunter momentum not detected; sending Shift+Left Click");
-
-                        PortDemonHunterShiftLeftClick();
-
-                        PortSleep(token, 100);
-                    }
-                    else
-                    {
-                        PortSleep(token, 75);
-                    }
+                    PortSleep(token, 90);
                 }
             }
             finally
@@ -418,6 +461,34 @@ namespace GoblinFarmer
                 {
                     PortRuntimeShiftUp();
                 }
+            }
+        }
+
+        private void PortDemonHunterShiftClickLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested && portCombatRunning && portCombatClass == "demon_hunter")
+            {
+                if (!PortDiabloIsActive())
+                {
+                    BeginInvoke(new Action(() => PortStopCombat("Diablo inactive in Demon Hunter momentum maintenance loop")));
+                    return;
+                }
+
+                // Image recognition is the source of truth for Momentum.
+                if (PortDemonHunterMomentumReady())
+                {
+                    PortSleep(token, 50);
+                    continue;
+                }
+
+                AddWorkflowStep("Demon Hunter momentum not detected; sending Shift+Left Click");
+
+                if (!PortDemonHunterShiftLeftClick(token, stopCombatWhenUnsafe: true))
+                {
+                    return;
+                }
+
+                PortSleep(token, 350);
             }
         }
 

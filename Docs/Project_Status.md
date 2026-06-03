@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-v1.3 is in post-release validation and documentation sync. The debug/options UI cleanup is implemented, hotkey blocked-location notifications use the fresh current-location PNG match, and published/installed builds include `Scripts\create-debug-package.ps1`. Reliability work around Battle.net launch, Diablo launch detection, Start Game stability/recovery, Make New Game workflow protection, teleport routing accuracy, combat safety, town workflows, and synchronized app/installer versioning remains stable. Remaining work is live validation and future hardening, not blocking implementation.
+v1.3 is in post-release validation and documentation sync. The debug/options UI cleanup is implemented, hotkey blocked-location notifications use the fresh current-location PNG match, and published/installed builds include `Scripts\create-debug-package.ps1` plus the `Scripts\create-debug-package.bat` launcher. Reliability work around Battle.net launch, Diablo launch detection, Start Game stability/recovery, Make New Game workflow protection, teleport routing accuracy, combat safety, town workflows, and synchronized app/installer versioning remains stable. Remaining work is live validation and future hardening, not blocking implementation.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -60,7 +60,8 @@ v1.3 is in post-release validation and documentation sync. The debug/options UI 
 - Combat keyboard-hook filtering matches the old Python app's injected-key behavior for combat-relevant number keys: physical `1`/`2` are suppressed during combat, while injected automation key events pass through.
 - The Hotkeys group now shows default-on entries for physical `1 - Teleport Next Location` and `2 - Exit Game` beside the existing hotkey controls; unchecking either opt-out disables only that physical hotkey path.
 - Physical `2` starts Exit Game when Diablo is focused and combat is inactive; combat and combat-stop cleanup suppress it before the Exit Game hotkey path can run.
-- Demon Hunter right mouse now follows the old Python app's pattern: start holding right mouse only in a safe region, then keep the hold active through hover/no-click regions without sending new click events.
+- Demon Hunter right mouse now follows the old Python app's pattern: start holding right mouse only after a safe-cursor wait, then keep the hold active through hover/no-click regions without sending new right-click events.
+- Demon Hunter sustained combat now uses separate key-rotation, right-hold, Shift-left maintenance, and shared cursor-click loops like the old Python app, so no-click suppression cannot stall `1/2/3/4` rotation.
 - Demon Hunter sustained combat now treats shared cursor-loop left-click suppression as active right-held combat when right mouse is already held from a safe region.
 - Witch Doctor held/channel mouse input starts only from a safe world region, remains held through combat no-click regions without sending new clicks, and continues keyboard/Hex timers while UI clicks are suppressed.
 - Battle.net tab and Play button image searches use Battle.net-window-local cached scan regions plus the current Battle.net window left/top, with full-screen search as fallback.
@@ -142,6 +143,9 @@ The items below are manual validation or future hardening notes that still make 
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Reviewed `E:\GoblinFarmer\Logs\GoblinFarmer_20260603_163432.log`: Demon Hunter was repeatedly blocked in `ResourceGlobeNoClickRegion` / `BottomRightButtonsNoClickRegion` while right mouse was already held from a safe region, and Momentum maintenance kept trying Shift-left from unsafe cursor positions.
+- Split C# Demon Hunter sustained combat into Python-style key, right-hold, Shift-left maintenance, and cursor loops. Right-hold now starts only after waiting for a safe cursor, remains held through no-click hover regions without new right-click events, and Shift-left waits up to 2s for a safe cursor before stopping sustained maintenance like the Python app.
+- Added `Scripts\create-debug-package.bat` to build/publish content, publish validation, and Inno preflight validation. The current installed folder now contains both `E:\GoblinFarmer\Scripts\create-debug-package.ps1` and `E:\GoblinFarmer\Scripts\create-debug-package.bat`.
 - Fixed release versioning drift for v1.3 by keeping `<Version>1.3.0</Version>`, `<AssemblyVersion>1.3.0.0</AssemblyVersion>`, `<FileVersion>1.3.0.0</FileVersion>`, and `<InformationalVersion>1.3.0</InformationalVersion>` in `GoblinFarmer.csproj` as the release source of truth.
 - Disabled SDK source-revision decoration for informational version metadata so Windows `ProductVersion` stays `1.3.0` instead of `1.3.0+<commit>`.
 - Updated the app title to display `GoblinFarmer v1.3.0` from `AssemblyInformationalVersion` instead of relying on a hard-coded designer title or publish-time overrides.
