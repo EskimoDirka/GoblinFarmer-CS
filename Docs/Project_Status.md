@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Final release preparation: Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, Hotkeys visibility polish, Debug screenshot defaults, startup form sizing, Battle.net visible-window launch/close semantics, and cautious health/performance review while preserving current automation behavior.
+Final release preparation: Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, Hotkeys visibility polish, Debug screenshot defaults, startup form sizing, Battle.net visible-window launch/close semantics, final Caverns of Frost Level 1 hotkey blocking validation, and cautious health/performance review while preserving current automation behavior.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -15,12 +15,13 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - City Of Caldeum: next Ancient Waterway; block all City Of Caldeum sublocations except Ruined Cistern.
 - Ancient Waterway: next Stinging Winds; Western Channel Level 1 blocks; Western Channel Level 2 allows teleport back to Ancient Waterway; Eastern Channel Level 1 blocks; Eastern Channel Level 2 allows Stinging Winds; manual Ancient Waterway button click while already inside Ancient Waterway blocks.
 - Stinging Winds: next Battlefields; Stinging Winds blocks; Black Canyon Mines allows Battlefields.
-- Battlefields: next Rakkis Crossing; no block.
+- Battlefields: next Rakkis Crossing; Caverns of Frost Level 1 blocks Teleport Next hotkey routing; Caverns of Frost Level 2 allows Teleport Next to Rakkis Crossing.
 - Rakkis Crossing: next Pandemonium Fortress Level 1; no block.
 - Pandemonium Fortress Level 1: next Pandemonium Fortress Level 2; no block.
 - Pandemonium Fortress Level 2: next Make New Game flow; no block.
 - WhimsyDale is not part of the farming route; if the fresh Teleport Next hotkey current-location scan detects WhimsyDale, Teleport Next is blocked and the notification uses WhimsyDale as the displayed location.
 - Cave Of The Moon Clan Level 1 is not part of the farming route; if the fresh Teleport Next hotkey current-location scan detects Cave Of The Moon Clan Level 1, Teleport Next is blocked and the notification uses Cave Of The Moon Clan Level 1 as the displayed location.
+- Caverns of Frost Level 1 blocks Teleport Next hotkey routing and uses Caverns of Frost Level 1 as the displayed location; Caverns of Frost Level 2 remains allowed and can continue to Rakkis Crossing.
 
 ## Known Stable Systems
 - Images are project-relative and copied into the build output.
@@ -37,6 +38,7 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Manual same-button clicks while a teleport is waiting for arrival confirmation are ignored and logged to avoid overlapping waypoint workflows.
 - Teleport Next uses the fresh hotkey current-location scan to advance route state when the player is already at the queued destination, skipping the redundant teleport attempt without incrementing completed teleports; the latest implementation also scans queued-target templates so non-blocking route destinations can be detected instead of returning `Unknown`.
 - Teleport Next already-at-queued-destination advancement logs `AlreadyAtQueuedDestinationCheck`, `AlreadyAtQueuedDestinationDetected`, `skippedDestination`, `newRequestedTarget`, and whether the following teleport was actually started.
+- Teleport Next may remain unavailable for a brief intentional delay after combat stops so combat/input state can settle before route hotkeys resume.
 - In-game notifications use a no-activate overlay so blocked/already-here messages should not steal Diablo focus.
 - Gates of Caldeum normalizes to City Of Caldeum for blocking output.
 - Waterway sub-regions keep their raw identity for blocking decisions.
@@ -45,6 +47,7 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - City Of Caldeum blocks Ancient Waterway unless the raw detected location is Ruined Cistern.
 - Western Channel Level 2 selects Ancient Waterway as the next target; Eastern Channel Level 2 selects Stinging Winds.
 - Stinging Winds blocks Battlefields unless the current detected sub-region is Black Canyon Mines.
+- Caverns of Frost Level 1 blocks Teleport Next hotkey routing before it can route as the Battlefields group; Caverns of Frost Level 2 remains an allowed Battlefields alias that can continue to Rakkis Crossing.
 - Ancient Waterway self-click blocks before opening the map and preserves current/next button state.
 - Repair flow waits for New Tristram/vendor readiness and logs repair-station click timing before using the repair-station coordinate fallback.
 - Repair flow logs New Tristram readiness, minimal post-arrival settle timing, repair-station click attempts, elapsed time, whether clicks were sent, blacksmith/repair menu detection, and total repair workflow duration while preserving the repair plus salvage sequence.
@@ -61,6 +64,10 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Battle.net startup uses the configured executable path first and falls back to installation discovery when the configured path is unavailable, then retries launch requests every 1s for up to 5s until a visible Battle.net window exists. Background `Battle.net.exe` process status is logged for diagnostics only and does not count as launch-ready.
 - Battle.net Play button detection polls every 100ms and clicks only from a current image match that passes the configured confidence threshold.
 - Battle.net launch diagnostics explicitly track whether GoblinFarmer sent the Play click, the click point/timestamp, whether Diablo launched after that app click, whether Diablo launched without an app click, whether Battle.net remained open after Diablo launch, and whether the post-launch Battle.net close was requested, succeeded, failed, or timed out.
+- Start Game detection preserves the existing stable-button image verification, now logs each detection/stable-scan attempt, polls the stable scan at about 100ms, clicks only from the current stable image match, and accepts stability by repeated in-tolerance scans or stable duration.
+- Start Game click acceptance logs the exact confirmation reason: character load confirmation, loaded location title, player in-game state, or Start Game button disappearance.
+- If the user manually clicks Start Game while the app is waiting, loaded-game evidence is treated as `StartGameAcceptedByLoadedGameState` so the Make New Game flow can continue instead of waiting for a button that is gone.
+- Make New Game clicks during an active workflow now show/log `WorkflowAlreadyActive` instead of silently doing nothing.
 - Runtime input cleanup releases only tracked held left/right/Shift inputs while Diablo is available and clears tracked state without mouse events after Diablo closes.
 - Diagnostic Overlay, Route State Inspector, Screenshot-On-Failure, Success Screenshot Capture, and Debug Package Generator are implemented.
 - Major workflow success/failure milestones can capture paired Diablo/App screenshots using matching timestamps and action names, controlled by the existing `Keep Debug Screenshots` setting.
@@ -89,10 +96,13 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Ancient Waterway/channel retest: manual Ancient Waterway from channel levels must not advance route state until exact Ancient Waterway arrival is confirmed.
 - Caldeum to Ancient Waterway and Stinging Winds to Battlefields validation should prove the allowing raw locations (`Ruined Cistern`, `Black Canyon Mines`) in the summary/logs.
 - Start Game image recognition reliability, especially possible cursor interference with detection/click verification.
+- Start Game live validation should confirm the new detection attempts, `StartGameButtonStableAccepted`, click sent, click accepted, and acceptance-reason logs appear without changing successful Make New Game behavior.
+- Start Game manual-click recovery validation should confirm loaded-game evidence logs `StartGameAcceptedByLoadedGameState` and continues to game-load/map flow.
 - Battle.net tab/Play detection across fullscreen, windowed, moved-window, and multi-monitor setups.
 - Repair/salvage monitoring after route and launch changes; current repair timing is acceptable and should prioritize reliability over further speed changes.
 - Teleport Next WhimsyDale validation should confirm the fresh current-location scan detects WhimsyDale, blocks routing, and shows WhimsyDale in the notification/logs.
 - Teleport Next Cave Of The Moon Clan Level 1 validation should confirm the fresh current-location scan detects Cave Of The Moon Clan Level 1, blocks routing, and shows Cave Of The Moon Clan Level 1 in the notification/logs.
+- Teleport Next Caverns of Frost validation should confirm Caverns of Frost Level 1 blocks with the raw/display location in logs and notification, while Caverns of Frost Level 2 allows Rakkis Crossing.
 - Teleport Next route advancement validation should confirm that when the player is already at the queued destination, the hotkey logs `teleportSkipped=True`, advances the route, and sends the next valid destination instead.
 - Release configuration validation should confirm diagnostic overlay/route inspector are hidden by default, reappear when enabled in config, and debug screenshot/missing-asset prompt settings behave as configured.
 - Publish/release folder validation to confirm Images are included.
@@ -120,15 +130,28 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Need to manually confirm repeated failed/interrupted button retry from Cathedral Level 1 to Royal Crypts preserves current=Cathedral, next/retry=Royal Crypts, bypasses manual-button blocking, and does not advance until arrival is confirmed.
 - Need live validation that the new 50ms repair station settle remains responsive after New Tristram arrival without missing the blacksmith click/menu.
 - Need to validate WhimsyDale Teleport Next blocking in a live run.
+- Need to validate Caverns of Frost Level 1 Teleport Next blocking and Caverns of Frost Level 2 allowance to Rakkis Crossing in a live run.
 - Need to validate bounty menu auto-close diagnostics after the Python-style combat watcher port: the configured `Images\Combat\Bounty Complete Scan Region.png` region should drive `CombatMenuWatcherStarted`, detect with `BountyMenuDetected`, send `BountyMenuEscapeSent`, and log `InjectedEscapeIgnoredByStopWatcher` while combat continues.
 - Need release-style validation of `Config\AppSettings.json` defaults and toggles.
 - Need to validate publish/release folder includes Images.
 - Need waypoint coordinates before routing Northern Highlands directly to Leoric's Passage.
 - Start Game button detection/click verification is still inconsistent, suspected cursor interference with image recognition.
+- Need live validation that Start Game click acceptance uses state evidence rather than timing-only waits and records the acceptance reason.
+- Need live validation that repeated visible Start Game button points within 5-8px tolerance no longer produce misleading `StartGameButtonUnstable` loops.
+- Need live validation that Make New Game clicked during an active Start Game wait logs/shows `WorkflowAlreadyActive`.
 - Battle.net can launch windowed/not full-window; eventually maximize/focus Battle.net after launching.
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Fixed Start Game stable-detection deadlock from `GoblinFarmer_Debug_20260603_072805.zip` / `Logs\GoblinFarmer_20260603_072517.log`: the log showed repeated Start Game matches around `316,688` / `320,691`, but the old stable gate kept emitting `StartGameButtonUnstable` and timed out with `clickAttempts=0`.
+- Replaced fragile Start Game stability reset behavior with practical in-tolerance acceptance by consecutive visible scans or stable duration, with detailed timeout logs for first/latest point, dx/dy, tolerance, visible count, stable duration, and required thresholds.
+- Added `StartGameAcceptedByLoadedGameState` recovery so manual Start Game clicks detected by character-load, loaded-location, or in-game evidence continue the Make New Game flow.
+- Added visible/logged `WorkflowAlreadyActive` handling when Make New Game is clicked while another Make New Game / Start Game workflow is active.
+- Added Battle.net-style resilience logging to Start Game detection while preserving the existing image asset, confidence threshold, stable-button verification, loading checks, and game-load logic.
+- Replaced the fixed post-click Start Game wait with state-based acceptance polling that succeeds when the button disappears steadily, character load confirmation appears, a loaded location title appears, or the existing in-game evidence check succeeds.
+- Added Caverns of Frost Level 1 to raw Teleport Next hotkey blocking while preserving Caverns of Frost Level 2 as an allowed Battlefields alias for routing to Rakkis Crossing.
+- Updated the README with a user-facing note that Teleport Next may have a short intentional delay after combat stops while combat/input state settles.
+- Latest test context confirmed Cathedral Level 1, Leoric's Passage, Caldeum-style blocking, Ancient Waterway/Western/Eastern Channel rules, Stinging Winds blocking, teleport interruption state preservation, Battle.net launch, and Exit Game flow are working; the remaining route edge fixed here was Caverns of Frost Level 1.
 - Added Debug/Release build defaults for `EnableDebugScreenshots` when no saved preference exists, while honoring existing saved preferences and avoiding routine config rewrites on startup.
 - Prevented the Debug Mode checkbox from overwriting `EnableDebugScreenshots`; the Keep Debug Screenshots checkbox remains the source of truth for that setting.
 - Increased the normal startup client size/minimum size so the Settings group and Debug Mode checkbox are visible without manual resizing.
@@ -272,7 +295,8 @@ Do not migrate live route rules yet. Recommended future JSON shape:
   ],
   "HotkeyBlockLocations": [
     "WhimsyDale",
-    "Cave Of The Moon Clan Level 1"
+    "Cave Of The Moon Clan Level 1",
+    "Caverns of Frost Level 1"
   ],
   "DisplayNames": {
     "whimsydale": "WhimsyDale",
@@ -367,6 +391,12 @@ Migration plan:
 - Package manifest and console summary report package size, session start, session duration, total screenshots, success screenshots, failure screenshots, normal screenshots, and stale screenshot exclusions.
 
 ## Last Validation
+- Built after fixing the Start Game stable-detection deadlock, manual-click loaded-state recovery, and Make New Game active-workflow guard; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed Battle.net launch, teleport/route logic, combat, Exit Game, bounty, repair, and salvage behavior were not changed.
+- Built after adding Start Game detection attempt logging, 100ms stable-scan polling, and state-based click acceptance reasons; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed Start Game image assets/confidence thresholds, existing stable-button logic, existing loading/game-load checks, Battle.net launch behavior, teleport/route logic, combat, Exit Game, and bounty behavior were not changed.
+- Built after adding Caverns of Frost Level 1 Teleport Next hotkey blocking and the README combat-settle hotkey-delay note; build succeeded with 0 warnings and 0 errors.
+- Static review confirmed Caverns of Frost Level 2 remains an allowed Battlefields alias and that normal workflow/button teleports still bypass route blocking where intended.
 - Built after Debug screenshot defaulting, startup form sizing, and Battle.net visible-window close/status polish; build succeeded with 0 warnings and 0 errors.
 - Static review confirmed no changes were made to Battle.net launch retry behavior, Play button detection/click behavior, Diablo launch verification, combat, teleport, route, bounty, repair, or salvage logic.
 - Built after adding Hotkeys visibility entries and Battle.net window-based startup retry/100ms Play polling; build succeeded with 0 warnings and 0 errors.

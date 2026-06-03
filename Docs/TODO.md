@@ -22,6 +22,7 @@
 * [x] Log and ignore same-button clicks while waiting for teleport arrival confirmation.
 * [x] Add WhimsyDale to Teleport Next hotkey blocking with WhimsyDale display wording.
 * [x] Add Cave Of The Moon Clan Level 1 to Teleport Next hotkey blocking with the raw location name in logs/notifications.
+* [x] Add Caverns of Frost Level 1 to Teleport Next hotkey blocking while keeping Caverns of Frost Level 2 allowed to Rakkis Crossing.
 * [x] Add Teleport Next route advancement when the fresh hotkey scan already matches the queued route destination.
 * [x] Fix Teleport Next already-at-queued-destination path so it starts the following route teleport instead of only updating button colors.
 * [x] Include queued-target templates in the Teleport Next fresh hotkey scan so already-at-queued detection does not return `Unknown` for normal route destinations.
@@ -29,6 +30,8 @@
 * [x] Verify Black Canyon Mines allows Battlefields.
 * [x] Verify Ruined Cistern allows Ancient Waterway and City Of Caldeum/Sewers/Flooded Causeway remain blocked with clear summary explanations.
 * [x] Validate Teleport Next blocks from Cave Of The Moon Clan Level 1 and the notification/logs display `Cave Of The Moon Clan Level 1`.
+* [ ] Validate Teleport Next blocks from Caverns of Frost Level 1 and the notification/logs display `Caverns of Frost Level 1`.
+* [ ] Validate Teleport Next from Caverns of Frost Level 2 still allows Rakkis Crossing.
 * [ ] Validate Teleport Next blocks from WhimsyDale and the notification/logs display `WhimsyDale`.
 * [x] Validate Teleport Next route advancement logs `AlreadyAtQueuedDestinationDetected`, skips the queued destination, and actually starts teleporting to `newRequestedTarget`.
 * [x] Validate manual teleport buttons remain allowed and log `source=Button`, `ignoreBlocking=True`, and blocking skipped.
@@ -41,6 +44,10 @@
 * [x] Add Start Game diagnostic logging.
 * [x] Capture debug screenshots when Start Game verification fails.
 * [x] Add stable Start Game button confirmation before clicking and before treating Leave Game as back at main menu.
+* [x] Add Battle.net-style Start Game detection attempt logging, 100ms stable-scan polling, and state-based click acceptance reasons.
+* [x] Fix Start Game stable detection so repeated in-tolerance matches are accepted by consecutive scan count or stable duration instead of being reset as unstable.
+* [x] Add manual Start Game recovery: if loaded-game state appears while waiting for Start Game, continue the Make New Game flow and log manual click suspicion.
+* [x] Add `WorkflowAlreadyActive` status/logging when Make New Game is clicked while another workflow is active.
 * [x] Validate Make New Game from already-in-game succeeded in `GoblinFarmer_Debug_20260602_213950.zip`.
 * [ ] Continue monitoring Make New Game / Start Game consistency across fresh sessions.
 
@@ -96,6 +103,9 @@
 * [ ] Validate `BattleNetPostLaunchCloseSummary` marks Diablo launch successful only after an accepted app Play click while reporting Battle.net close requested/succeeded/failed/timed out separately.
 * [ ] Validate debug package workflow output reports app play click sent, app play click accepted, manual play suspected, Diablo launched, and Battle.net still open after launch as separate fields.
 * [ ] Validate route-failure-summary/debug workflow output has one Battle.net launch verdict and one post-launch close verdict, with no conflicting duplicate entries for the same event.
+* [ ] Validate Start Game logs show detection attempts, stable match confirmation, click sent, click accepted, and the exact acceptance reason.
+* [ ] Validate Start Game stable detection accepts repeated points such as `316,688` / `320,691` and logs `StartGameButtonStableAccepted`.
+* [ ] Validate manual Start Game click recovery logs `StartGameAcceptedByLoadedGameState` and continues to game-load/map flow.
 * [ ] Validate `CaptureDebugScreenshot(actionName, reason, region)` saves failed/suspicious detection captures under `debug-screenshots/<category>` with timestamp, action, reason, and optional region in the filename.
 * [ ] Validate debug screenshot logs include `DebugScreenshotCaptured` metadata with action, reason, path, region, and window title.
 * [ ] Validate debug screenshot throttling logs `DebugScreenshotSkipped` and does not capture the same action/reason more than once every 10 seconds or more than 50 screenshots per app run.
@@ -517,6 +527,7 @@ Future possibility:
 * [ ] Add "Already Here" notification.
 * [ ] Standardize notification duration.
 * [ ] Standardize notification styling.
+* [x] Document that Teleport Next may intentionally be delayed briefly after combat stops while combat/input state settles.
 
 ---
 

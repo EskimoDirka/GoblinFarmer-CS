@@ -326,7 +326,9 @@ namespace GoblinFarmer
 
             Stopwatch sw = Stopwatch.StartNew();
             int attempts = 0;
+            int detectionAttempts = 0;
             const int maxAttempts = 3;
+            bool manualStartAccepted = false;
             while (sw.ElapsedMilliseconds < 60000 && attempts < maxAttempts)
             {
                 if (token.IsCancellationRequested)
@@ -334,15 +336,26 @@ namespace GoblinFarmer
                     return false;
                 }
 
-                if (PortTryFindStableStartGameButton(token, out DrawingPoint centerPoint, out long stableElapsedMs))
+                if (PortStartGameLoadedStateVisible(out string loadedReason))
+                {
+                    manualStartAccepted = true;
+                    AppLogger.Info($"StartGameAcceptedByLoadedGameState: appClicked=False; manualClickSuspected=True; reason={PortLogField(loadedReason)}; clickAttempts={attempts}; detectionAttempts={detectionAttempts}; elapsedMs={sw.ElapsedMilliseconds}");
+                    PortSetAppStatus("Start Game Clicked");
+                    return true;
+                }
+
+                detectionAttempts++;
+                AppLogger.Info($"Start Game button detection attempt: attempt={detectionAttempts}; clickAttempts={attempts}/{maxAttempts}; elapsedMs={sw.ElapsedMilliseconds}; confidence={PortStartGameButtonConfidence:0.000}");
+                if (PortTryFindStableStartGameButton(token, out DrawingPoint centerPoint, out long stableElapsedMs, detectionAttempts))
                 {
                     attempts++;
-                    AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts}: clicking stable center at {centerPoint.X},{centerPoint.Y}; stableElapsedMs={stableElapsedMs}");
+                    AppLogger.Info($"Start Game stable match confirmed: detectionAttempt={detectionAttempts}; clickAttempt={attempts}/{maxAttempts}; point={centerPoint.X},{centerPoint.Y}; stableElapsedMs={stableElapsedMs}");
                     AddWorkflowStep($"Clicking Start Game (attempt {attempts})");
                     LeftClick(centerPoint);
-                    PortSleep(token, 1200);
-                    if (PortVerifyStartGameClick(token))
+                    AppLogger.Info($"Start Game click sent: attempt={attempts}/{maxAttempts}; point={centerPoint.X},{centerPoint.Y}; elapsedMs={sw.ElapsedMilliseconds}");
+                    if (PortVerifyStartGameClick(token, out string acceptanceReason))
                     {
+                        AppLogger.Info($"Start Game click accepted: attempt={attempts}/{maxAttempts}; reason={PortLogField(acceptanceReason)}; elapsedMs={sw.ElapsedMilliseconds}");
                         PortSetAppStatus("Start Game Clicked");
                         PortCaptureSuccessScreenshot("StartGame", "StartGameClicked");
                         return true;
@@ -350,22 +363,29 @@ namespace GoblinFarmer
 
                     string screenshotPath = PortCaptureFailureScreenshot("StartGameVerificationFailed", "StartGame");
                     PortLogStartGameVerificationFailure(attempts, maxAttempts, centerPoint, screenshotPath);
-                    AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts} not verified; retrying after transition wait");
+                    AppLogger.Info($"Start Game click attempt {attempts}/{maxAttempts} not verified; retrying after transition wait; acceptanceReason=Timeout");
                     AddWorkflowStep("Start Game click not verified; retrying");
                     PortSleep(token, 900);
                 }
 
-                PortSleep(token, 150);
+                PortSleep(token, 100);
+            }
+
+            if (!manualStartAccepted && PortStartGameLoadedStateVisible(out string finalLoadedReason))
+            {
+                AppLogger.Info($"StartGameAcceptedByLoadedGameState: appClicked=False; manualClickSuspected=True; reason={PortLogField(finalLoadedReason)}; clickAttempts={attempts}; detectionAttempts={detectionAttempts}; elapsedMs={sw.ElapsedMilliseconds}");
+                PortSetAppStatus("Start Game Clicked");
+                return true;
             }
 
             MessageBox.Show("Could not find Diablo Start Game button.");
             PortSetAppStatus("Start Game Not Found");
-            AppLogger.Info($"Start Game failed: attempts={attempts}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; loaded={PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible()}");
+            AppLogger.Info($"Start Game failed: clickAttempts={attempts}; detectionAttempts={detectionAttempts}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; loaded={PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible()}; reason={(attempts >= maxAttempts ? "max click attempts reached" : "timeout waiting for stable Start Game button")}");
             PortCaptureFailureScreenshot("StartGameButtonNotFound", "StartGame");
             return false;
         }
 
-        private bool PortTryFindStableStartGameButton(CancellationToken token, out DrawingPoint centerPoint, out long stableElapsedMs)
+        private bool PortTryFindStableStartGameButton(CancellationToken token, out DrawingPoint centerPoint, out long stableElapsedMs, int detectionAttempt = 0)
         {
             centerPoint = DrawingPoint.Empty;
             stableElapsedMs = 0;
@@ -373,6 +393,15 @@ namespace GoblinFarmer
             Stopwatch sw = Stopwatch.StartNew();
             DrawingPoint? firstPoint = null;
             long firstSeenAt = 0;
+            DrawingPoint latestPoint = DrawingPoint.Empty;
+            int latestDx = 0;
+            int latestDy = 0;
+            int scans = 0;
+            int visibleCount = 0;
+            int consecutiveStableCount = 0;
+            const int tolerancePx = 8;
+            const int requiredConsecutiveStableScans = 3;
+            const int requiredStableDurationMs = 250;
 
             while (sw.ElapsedMilliseconds < 2500)
             {
@@ -381,44 +410,71 @@ namespace GoblinFarmer
                     return false;
                 }
 
+                scans++;
                 bool visible = FindImageInDiabloWindow(
                     imagePath,
                     out DrawingPoint foundPoint,
                     confidence: PortStartGameButtonConfidence,
                     matchMode: ImageMatchMode.Color);
+                AppLogger.Info($"Start Game stable scan: detectionAttempt={detectionAttempt}; scan={scans}; elapsedMs={sw.ElapsedMilliseconds}; visible={visible}; point={(visible ? $"{foundPoint.X},{foundPoint.Y}" : "unavailable")}; confidence={PortStartGameButtonConfidence:0.000}");
                 if (!visible)
                 {
                     firstPoint = null;
                     firstSeenAt = 0;
+                    visibleCount = 0;
+                    consecutiveStableCount = 0;
                     PortSleep(token, 100);
                     continue;
                 }
 
+                visibleCount++;
+                latestPoint = foundPoint;
                 if (!firstPoint.HasValue)
                 {
                     firstPoint = foundPoint;
                     firstSeenAt = sw.ElapsedMilliseconds;
-                    PortSleep(token, 250);
+                    latestDx = 0;
+                    latestDy = 0;
+                    consecutiveStableCount = 1;
+                    AppLogger.Info($"Start Game stable candidate acquired: detectionAttempt={detectionAttempt}; scan={scans}; point={foundPoint.X},{foundPoint.Y}; elapsedMs={sw.ElapsedMilliseconds}");
+                    PortSleep(token, 100);
                     continue;
                 }
 
-                int dx = Math.Abs(foundPoint.X - firstPoint.Value.X);
-                int dy = Math.Abs(foundPoint.Y - firstPoint.Value.Y);
-                if (dx <= 8 && dy <= 8 && sw.ElapsedMilliseconds - firstSeenAt >= 250)
+                latestDx = Math.Abs(foundPoint.X - firstPoint.Value.X);
+                latestDy = Math.Abs(foundPoint.Y - firstPoint.Value.Y);
+                bool withinTolerance = latestDx <= tolerancePx && latestDy <= tolerancePx;
+                long stableDurationMs = sw.ElapsedMilliseconds - firstSeenAt;
+                if (withinTolerance)
+                {
+                    consecutiveStableCount++;
+                    AppLogger.Info($"StartGameButtonStableCandidate: detectionAttempt={detectionAttempt}; scan={scans}; first={firstPoint.Value.X},{firstPoint.Value.Y}; current={foundPoint.X},{foundPoint.Y}; dx={latestDx}; dy={latestDy}; tolerance={tolerancePx}; visibleCount={visibleCount}; consecutiveStableCount={consecutiveStableCount}; stableDurationMs={stableDurationMs}");
+                }
+                else
+                {
+                    AppLogger.Info($"StartGameButtonUnstable: detectionAttempt={detectionAttempt}; scan={scans}; first={firstPoint.Value.X},{firstPoint.Value.Y}; current={foundPoint.X},{foundPoint.Y}; dx={latestDx}; dy={latestDy}; tolerance={tolerancePx}; visibleCount={visibleCount}; consecutiveStableCount={consecutiveStableCount}; stableDurationMs={stableDurationMs}; reason=outside tolerance");
+                    firstPoint = foundPoint;
+                    firstSeenAt = sw.ElapsedMilliseconds;
+                    consecutiveStableCount = 1;
+                    PortSleep(token, 100);
+                    continue;
+                }
+
+                if (consecutiveStableCount >= requiredConsecutiveStableScans || stableDurationMs >= requiredStableDurationMs)
                 {
                     centerPoint = foundPoint;
                     stableElapsedMs = sw.ElapsedMilliseconds;
-                    AppLogger.Info($"StartGameButtonStable: center={centerPoint.X},{centerPoint.Y}; stableElapsedMs={stableElapsedMs}; dx={dx}; dy={dy}");
+                    AppLogger.Info($"StartGameButtonStableAccepted: detectionAttempt={detectionAttempt}; scans={scans}; center={centerPoint.X},{centerPoint.Y}; firstPoint={firstPoint.Value.X},{firstPoint.Value.Y}; latestPoint={foundPoint.X},{foundPoint.Y}; stableElapsedMs={stableElapsedMs}; stableDurationMs={stableDurationMs}; dx={latestDx}; dy={latestDy}; tolerance={tolerancePx}; visibleCount={visibleCount}; consecutiveStableCount={consecutiveStableCount}; requiredStableDurationMs={requiredStableDurationMs}; requiredConsecutiveStableScans={requiredConsecutiveStableScans}");
                     return true;
                 }
 
-                AppLogger.Info($"StartGameButtonUnstable: first={firstPoint.Value.X},{firstPoint.Value.Y}; current={foundPoint.X},{foundPoint.Y}; dx={dx}; dy={dy}; elapsed={sw.ElapsedMilliseconds}ms");
-                firstPoint = foundPoint;
-                firstSeenAt = sw.ElapsedMilliseconds;
-                PortSleep(token, 150);
+                PortSleep(token, 100);
             }
 
-            AppLogger.Info($"StartGameButtonStableNotFound: elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}");
+            string firstPointText = firstPoint.HasValue ? $"{firstPoint.Value.X},{firstPoint.Value.Y}" : "unavailable";
+            string latestPointText = visibleCount > 0 ? $"{latestPoint.X},{latestPoint.Y}" : "unavailable";
+            long finalStableDurationMs = firstSeenAt > 0 ? sw.ElapsedMilliseconds - firstSeenAt : 0;
+            AppLogger.Info($"StartGameButtonStableNotFound: detectionAttempt={detectionAttempt}; scans={scans}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; firstPoint={firstPointText}; latestPoint={latestPointText}; dx={latestDx}; dy={latestDy}; tolerance={tolerancePx}; visibleCount={visibleCount}; consecutiveStableCount={consecutiveStableCount}; stableDurationMs={finalStableDurationMs}; requiredStableDurationMs={requiredStableDurationMs}; requiredConsecutiveStableScans={requiredConsecutiveStableScans}; reason=stable acceptance conditions not met before detection window timeout");
             return false;
         }
 
@@ -446,21 +502,26 @@ namespace GoblinFarmer
             AppLogger.Info($"StartGameVerificationFailureSummary: attempt={attempt}/{maxAttempts}; clickPoint={clickPoint.X},{clickPoint.Y}; cursor={(cursorAvailable ? $"{cursor.X},{cursor.Y}" : "unavailable")}; scanRegionReference={FormatRectangle(referenceRegion)}; scanRegionScreen={screenRegion}; buttonVisible={buttonVisible}; visibleButtonCenter={(buttonVisible ? $"{visibleCenter.X},{visibleCenter.Y}" : "unavailable")}; loaded={loaded}; screenshotReason=StartGameVerificationFailed; screenshotPath={PortLogField(PortDisplayLocation(screenshotPath))}; likelyExplanation={PortLogField(likelyExplanation)}");
         }
 
-        private bool PortVerifyStartGameClick(CancellationToken token)
+        private bool PortVerifyStartGameClick(CancellationToken token, out string acceptanceReason)
         {
+            acceptanceReason = "Timeout";
             Stopwatch sw = Stopwatch.StartNew();
             long buttonMissingSince = -1;
+            int attempts = 0;
             while (sw.ElapsedMilliseconds < 5000)
             {
                 if (token.IsCancellationRequested)
                 {
+                    acceptanceReason = "Cancelled";
                     return false;
                 }
 
+                attempts++;
                 bool startVisible = PortStartGameButtonVisible();
-                bool loadingOrLoaded = PortCharacterLoadConfirmationVisible() ||
-                    PortGameLoadedLocationTitleVisible() ||
-                    PortPlayerIsInGame();
+                bool loadingOrLoaded = PortStartGameLoadedStateVisible(out string loadedReason);
+                bool characterLoadVisible = loadedReason == "Character load confirmation detected";
+                bool gameLoadedLocationVisible = loadedReason == "Game loaded location title detected";
+                bool playerInGame = loadedReason == "Player in-game state detected";
                 if (!startVisible)
                 {
                     buttonMissingSince = buttonMissingSince < 0 ? sw.ElapsedMilliseconds : buttonMissingSince;
@@ -471,15 +532,63 @@ namespace GoblinFarmer
                 }
 
                 bool buttonGoneSteady = buttonMissingSince >= 0 && sw.ElapsedMilliseconds - buttonMissingSince >= 1000;
-                if (loadingOrLoaded || buttonGoneSteady)
+                AppLogger.Info($"Start Game click acceptance attempt: attempt={attempts}; elapsedMs={sw.ElapsedMilliseconds}; startVisible={startVisible}; characterLoadVisible={characterLoadVisible}; gameLoadedLocationVisible={gameLoadedLocationVisible}; playerInGame={playerInGame}; buttonGoneSteady={buttonGoneSteady}");
+                if (characterLoadVisible)
                 {
-                    AppLogger.Info($"Start Game click verified in {sw.ElapsedMilliseconds}ms; startVisible={startVisible}; loadingOrLoaded={loadingOrLoaded}; buttonGoneSteady={buttonGoneSteady}");
+                    acceptanceReason = loadedReason;
+                    AppLogger.Info($"Start Game click accepted: reason={PortLogField(acceptanceReason)}; attempts={attempts}; elapsedMs={sw.ElapsedMilliseconds}");
                     return true;
                 }
 
-                PortSleep(token, 250);
+                if (gameLoadedLocationVisible)
+                {
+                    acceptanceReason = loadedReason;
+                    AppLogger.Info($"Start Game click accepted: reason={PortLogField(acceptanceReason)}; attempts={attempts}; elapsedMs={sw.ElapsedMilliseconds}");
+                    return true;
+                }
+
+                if (playerInGame)
+                {
+                    acceptanceReason = loadedReason;
+                    AppLogger.Info($"Start Game click accepted: reason={PortLogField(acceptanceReason)}; attempts={attempts}; elapsedMs={sw.ElapsedMilliseconds}");
+                    return true;
+                }
+
+                if (buttonGoneSteady)
+                {
+                    acceptanceReason = "Start Game button disappeared";
+                    AppLogger.Info($"Start Game click accepted: reason={PortLogField(acceptanceReason)}; attempts={attempts}; elapsedMs={sw.ElapsedMilliseconds}; startVisible={startVisible}; loadingOrLoaded={loadingOrLoaded}; buttonGoneSteady={buttonGoneSteady}");
+                    return true;
+                }
+
+                PortSleep(token, 100);
             }
 
+            AppLogger.Info($"Start Game click acceptance timeout: attempts={attempts}; elapsedMs={sw.ElapsedMilliseconds}; reason={PortLogField(acceptanceReason)}");
+            return false;
+        }
+
+        private bool PortStartGameLoadedStateVisible(out string reason)
+        {
+            if (PortCharacterLoadConfirmationVisible())
+            {
+                reason = "Character load confirmation detected";
+                return true;
+            }
+
+            if (PortGameLoadedLocationTitleVisible())
+            {
+                reason = "Game loaded location title detected";
+                return true;
+            }
+
+            if (PortPlayerIsInGame())
+            {
+                reason = "Player in-game state detected";
+                return true;
+            }
+
+            reason = "";
             return false;
         }
 

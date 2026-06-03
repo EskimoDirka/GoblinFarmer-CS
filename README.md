@@ -13,9 +13,10 @@ The latest reviewed package, `GoblinFarmer_Debug_20260602_221905.zip`, showed Bo
 ## Stable Systems
 
 - Teleport Routing tracks the configured farming route and preserves raw, normalized, display, and blocking locations separately.
-- Teleport Blocking prevents known bad Teleport Next route transitions, such as blocked Cathedral, City of Caldeum, Ancient Waterway, Stinging Winds, WhimsyDale, and Cave Of The Moon Clan Level 1 cases.
+- Teleport Blocking prevents known bad Teleport Next route transitions, such as blocked Cathedral, City of Caldeum, Ancient Waterway, Stinging Winds, Caverns of Frost Level 1, WhimsyDale, and Cave Of The Moon Clan Level 1 cases.
 - Manual teleport buttons are intentionally allowed and bypass route blocking.
 - Teleport Next can advance route state from a fresh current-location scan when the player is already at the queued destination, skipping redundant waypoint clicks and starting the following route teleport.
+- After combat stops, Teleport Next may have a slight intentional delay before it is available again. This lets combat/input state settle and helps avoid accidental or unsafe teleport attempts.
 - Teleport Retry Logic preserves failed or interrupted manual and hotkey teleport state until arrival confirmation succeeds or the user explicitly changes course.
 - Ancient Waterway arrival confirmation requires the exact Ancient Waterway title, while channel child locations remain available for route and blocking decisions.
 - Combat Automation includes current Monk, Demon Hunter, and Witch Doctor support.

@@ -375,6 +375,11 @@ namespace GoblinFarmer
                 {
                     return (true, "Cave Of The Moon Clan Level 1 blocks hotkey teleport routing.");
                 }
+
+                if (rawKey == PortLocationKey("Caverns of Frost Level 1"))
+                {
+                    return (true, "Caverns of Frost Level 1 blocks hotkey teleport routing.");
+                }
             }
 
             if (targetKey == PortLocationKey("Royal Crypts"))
@@ -549,6 +554,11 @@ namespace GoblinFarmer
                 return "Cave Of The Moon Clan Level 1 is not part of the farming route and blocks Teleport Next hotkey routing.";
             }
 
+            if (rawKey == PortLocationKey("Caverns of Frost Level 1"))
+            {
+                return "Caverns of Frost Level 1 blocks Teleport Next hotkey routing; Caverns of Frost Level 2 may continue to Rakkis Crossing.";
+            }
+
             if (!string.IsNullOrWhiteSpace(reason))
             {
                 return reason;
@@ -652,6 +662,8 @@ namespace GoblinFarmer
                 "Highlands Cave",
                 "WhimsyDale",
                 "Cave Of The Moon Clan Level 1",
+                "Caverns of Frost Level 1",
+                "Caverns of Frost Level 2",
             };
         }
 

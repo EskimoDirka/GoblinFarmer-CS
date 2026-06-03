@@ -329,7 +329,7 @@ namespace GoblinFarmer
 
         private void PortWireButtons()
         {
-            btnMakeNewGame.Click += (_, _) => _ = PortRunAutomationAsync(PortMakeNewGameFlow);
+            btnMakeNewGame.Click += (_, _) => PortQueueMakeNewGameClick();
             btnExitGame.Click += (_, _) => _ = PortRunAutomationAsync(PortExitGameFlow);
 
             PortWireTeleportButton(btnNewTristram, "New Tristram");
@@ -448,6 +448,7 @@ namespace GoblinFarmer
         {
             if (isAutomationRunning || portCombatRunning)
             {
+                AppLogger.Info($"WorkflowAlreadyActive: requested={PortLogField(work.Method.Name)}; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; currentWorkflow={PortLogField(PortDisplayLocation(portLastWorkflowStep))}");
                 return;
             }
 
@@ -536,6 +537,19 @@ namespace GoblinFarmer
 
                 PortSetEscapeStatus("Press Esc to stop");
             }
+        }
+
+        private void PortQueueMakeNewGameClick()
+        {
+            if (isAutomationRunning || portCombatRunning)
+            {
+                PortSetAppStatus("Workflow Already Active");
+                AddWorkflowStep("Make New Game ignored: workflow already active");
+                AppLogger.Info($"WorkflowAlreadyActive: requested=Make New Game; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; currentWorkflow={PortLogField(PortDisplayLocation(portLastWorkflowStep))}");
+                return;
+            }
+
+            _ = PortRunAutomationAsync(PortMakeNewGameFlow);
         }
 
         private bool PortBounceNewTristramThroughHiddenCamp(CancellationToken token)
