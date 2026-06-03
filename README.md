@@ -6,13 +6,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 
 ## Screenshot
 
-This section is reserved for the v1.3 main-window screenshot.
-
-Suggested path:
-
-```text
-Docs/Goblin Farmer v1.3.0.png
-```
+![GoblinFarmer v1.3 main window](Docs/Goblin%20Farmer%20v1.3.0.png)
 
 ## Features
 
