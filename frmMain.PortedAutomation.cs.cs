@@ -1122,6 +1122,7 @@ namespace GoblinFarmer
                 "WhimsyDale",
                 "Cave Of The Moon Clan Level 1",
                 "Cave Of The Moon Clan Level 2",
+                "City Of Caldeum",
             })
             {
                 if (portCurrentLocationTemplates.ContainsKey(PortNormalizeLocation(requiredLocationTemplate)))

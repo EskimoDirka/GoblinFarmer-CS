@@ -182,7 +182,7 @@ namespace GoblinFarmer
 
             string rawLocation = PortDisplayLocation(portLastConfirmedLocation);
             string normalizedLocation = PortDisplayLocation(PortNormalizeBlockingLocation(portLastConfirmedLocation));
-            string displayLocation = PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation));
+            string displayLocation = PortDisplayLocation(PortDetectedLocationDisplayName(portLastConfirmedLocation));
             string blockingLocation = PortDisplayLocation(PortGetConfirmedCurrentLocation());
             string currentTeleportTarget = PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey));
             string nextTeleportTarget = PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey));

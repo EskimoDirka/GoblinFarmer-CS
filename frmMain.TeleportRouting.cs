@@ -138,6 +138,26 @@ namespace GoblinFarmer
             return PortLocationMatches(currentLocation, targetLocation);
         }
 
+        private bool PortIsCaldeumRouteLocation(string location)
+        {
+            string key = PortLocationKey(location);
+            return key == PortLocationKey("City Of Caldeum") ||
+                key == PortLocationKey("Gates of Caldeum") ||
+                key == PortLocationKey("Caldeum Bazaar") ||
+                key == PortLocationKey("Sewers of Caldeum") ||
+                key == PortLocationKey("Flooded Causeway") ||
+                key == PortLocationKey("Ruined Cistern");
+        }
+
+        private bool PortIsCityOfCaldeumTitleAlias(string location)
+        {
+            string key = PortLocationKey(location);
+            return key == PortLocationKey("Gates of Caldeum") ||
+                key == PortLocationKey("Caldeum Bazaar") ||
+                key == PortLocationKey("Sewers of Caldeum") ||
+                key == PortLocationKey("Flooded Causeway");
+        }
+
         private static string PortDisplayLocation(string location)
         {
             return string.IsNullOrWhiteSpace(location) ? "Unknown" : location;
@@ -490,7 +510,7 @@ namespace GoblinFarmer
 
             string exactBlockedLocation = string.IsNullOrWhiteSpace(blockedLocation)
                 ? "Unknown"
-                : blockedLocation.Trim();
+                : PortDetectedLocationDisplayName(blockedLocation).Trim();
             string normalizedBlockedLocation = PortNormalizeBlockingLocation(blockedLocation).Trim();
 
             AppLogger.Info($"Teleport blocked location: raw={PortDisplayLocation(blockedLocation)}; normalized={PortDisplayLocation(normalizedBlockedLocation)}; notificationDisplay={exactBlockedLocation}; target={targetLocation}; source={source}");
@@ -678,11 +698,7 @@ namespace GoblinFarmer
                 return "";
             }
 
-            if (key == PortLocationKey("City Of Caldeum") ||
-                key == PortLocationKey("Gates of Caldeum") ||
-                key == PortLocationKey("Ruined Cistern") ||
-                key == PortLocationKey("Sewers of Caldeum") ||
-                key == PortLocationKey("Flooded Causeway"))
+            if (PortIsCaldeumRouteLocation(detectedLocation))
             {
                 return "City Of Caldeum";
             }
@@ -726,6 +742,11 @@ namespace GoblinFarmer
                 key == PortLocationKey("Flooded Causeway") ||
                 key == PortLocationKey("Ruined Cistern"))
             {
+                if (key == PortLocationKey("City Of Caldeum"))
+                {
+                    return "City of Caldeum";
+                }
+
                 return PortNormalizeLocation(detectedLocation);
             }
 
@@ -752,11 +773,7 @@ namespace GoblinFarmer
                 return "Cathedral";
             }
 
-            if (key == PortLocationKey("City Of Caldeum") ||
-                key == PortLocationKey("Gates of Caldeum") ||
-                key == PortLocationKey("Ruined Cistern") ||
-                key == PortLocationKey("Sewers of Caldeum") ||
-                key == PortLocationKey("Flooded Causeway"))
+            if (PortIsCaldeumRouteLocation(detectedLocation))
             {
                 return "City Of Caldeum";
             }

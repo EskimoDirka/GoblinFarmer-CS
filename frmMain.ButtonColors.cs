@@ -41,7 +41,7 @@ namespace GoblinFarmer
                 requestedKey == portQueuedRetryTeleportKey)
             {
                 AppLogger.Info($"Button retry detected: requested={PortDisplayLocation(location)}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
-                AppLogger.Info($"Button retry using preserved state: confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; blocking={PortDisplayLocation(PortGetConfirmedCurrentLocation())}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
+                AppLogger.Info($"Button retry using preserved state: confirmed={PortDisplayLocation(portLastConfirmedLocation)}; display={PortDisplayLocation(PortDetectedLocationDisplayName(portLastConfirmedLocation))}; buttonLocation={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; blocking={PortDisplayLocation(PortGetConfirmedCurrentLocation())}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
                 return PortRunTeleportButton(location, token, ignoreBlocking: true, source: "ButtonRetry");
             }
 
@@ -117,7 +117,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"Teleport button state update: current={PortDisplayLocation(current)}, next={PortDisplayLocation(next)}, currentKey={portLastTeleportKey}, nextKey={portQueuedTeleportKey}");
-            AppLogger.Info($"ButtonCurrent={PortDisplayLocation(current)}; ButtonNext={PortDisplayLocation(next)}; ConfirmedLocationRaw={PortDisplayLocation(portLastConfirmedLocation)}; ConfirmedLocationNormalized={PortDisplayLocation(PortNormalizeBlockingLocation(portLastConfirmedLocation))}; DisplayLocation={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; BlockingLocation={PortDisplayLocation(PortGetConfirmedCurrentLocation())}");
+            AppLogger.Info($"ButtonCurrent={PortDisplayLocation(current)}; ButtonNext={PortDisplayLocation(next)}; ConfirmedLocationRaw={PortDisplayLocation(portLastConfirmedLocation)}; ConfirmedLocationNormalized={PortDisplayLocation(PortNormalizeBlockingLocation(portLastConfirmedLocation))}; DisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(portLastConfirmedLocation))}; ButtonLocation={PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation))}; BlockingLocation={PortDisplayLocation(PortGetConfirmedCurrentLocation())}");
         }
     }
 }

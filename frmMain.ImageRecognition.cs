@@ -518,6 +518,16 @@ namespace GoblinFarmer
                 return "";
             }
 
+            if (PortIsCityOfCaldeumTitleAlias(bestName) &&
+                PortIsCityOfCaldeumTitleAlias(secondName) &&
+                bestKey != secondKey &&
+                bestConfidence < 0.80 &&
+                bestConfidence - secondConfidence < 0.025)
+            {
+                AppLogger.Info($"City of Caldeum title detection ambiguous: best={bestName} {bestConfidence:0.000}, second={secondName} {secondConfidence:0.000}; preserving City of Caldeum display while route state remains grouped");
+                return "City Of Caldeum";
+            }
+
             return PortNormalizeLocation(bestName);
         }
 

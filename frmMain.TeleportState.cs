@@ -27,7 +27,7 @@ namespace GoblinFarmer
             }
 
             portLastTeleportKey = PortLocationKey(buttonLocation);
-            AppLogger.Info($"ConfirmedLocation={PortDisplayLocation(confirmedLocation)}; NormalizedAppLocation={PortDisplayLocation(PortNormalizeBlockingLocation(confirmedLocation))}; DisplayLocation={PortDisplayLocation(buttonLocation)}");
+            AppLogger.Info($"ConfirmedLocation={PortDisplayLocation(confirmedLocation)}; NormalizedAppLocation={PortDisplayLocation(PortNormalizeBlockingLocation(confirmedLocation))}; DisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(confirmedLocation))}; ButtonLocation={PortDisplayLocation(buttonLocation)}");
             if (PortLocationKey(buttonLocation) == PortLocationKey("Ancient Waterway"))
             {
                 AppLogger.Info($"Successful Ancient Waterway button state update: confirmed={PortDisplayLocation(confirmedLocation)}; current={buttonLocation}");
