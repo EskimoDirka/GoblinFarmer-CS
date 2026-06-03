@@ -224,8 +224,17 @@ else {
         & $ghPath auth status
     }
 
-    $releaseView = & $ghPath release view $Version 2>$null
-    if ($LASTEXITCODE -eq 0) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $ghPath release view $Version *> $null
+        $releaseExists = $LASTEXITCODE -eq 0
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($releaseExists) {
         foreach ($assetPath in $releaseAssets) {
             Invoke-ReleaseStep "upload $(Split-Path -Leaf $assetPath)" {
                 & $ghPath release upload $Version $assetPath --clobber
