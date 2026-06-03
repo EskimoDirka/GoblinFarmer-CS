@@ -10,7 +10,7 @@ Use this before publishing a final Windows release.
 ## Build
 
 - [ ] Run `dotnet build GoblinFarmer.csproj`.
-- [ ] Publish from Visual Studio with the `GoblinFarmerRelease` profile or run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1`.
+- [ ] Publish from Visual Studio with the `GoblinFarmerRelease` profile, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1`, or run `Scripts\release.bat` for the full build/publish/git/GitHub flow.
 - [ ] Confirm the generated publish folder exists at `artifacts\publish\GoblinFarmer`.
 - [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, `Images\`, and `Scripts\create-debug-package.ps1`.
 - [ ] Compile `Installer\GoblinFarmer.iss` only after `artifacts\publish\GoblinFarmer\GoblinFarmer.exe` exists.
@@ -62,5 +62,5 @@ Use this before publishing a final Windows release.
 
 - [ ] Create or update the GitHub Release for `v1.3`.
 - [ ] Use `Docs/Release_v1.3.md` as the release body.
-- [ ] Upload `GoblinFarmerSetup-1.3.0.exe`.
+- [ ] Upload `GoblinFarmerSetup-1.3.0.exe` and the portable `GoblinFarmer-1.3.0-win-x64-portable.zip`; `Scripts\release.bat` does this automatically when GitHub CLI is installed and authenticated.
 - [ ] Confirm the release page links to the installer asset and shows the expected release notes.

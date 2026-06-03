@@ -201,7 +201,7 @@ Release versioning starts in `GoblinFarmer.csproj`. Before publishing a new rele
 <InformationalVersion>1.3.0</InformationalVersion>
 ```
 
-Then publish the self-contained Windows build. You can publish from Visual Studio using the `GoblinFarmerRelease` publish profile, or run the release script from the project root:
+Then publish the self-contained Windows build. You can publish from Visual Studio using the `GoblinFarmerRelease` publish profile, or run the publish script from the project root:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1
@@ -211,19 +211,27 @@ The script publishes to `artifacts\publish\GoblinFarmer`, verifies executable ve
 
 `artifacts\` is generated output and is intentionally ignored by Git. Do not commit published app folders or installer binaries.
 
+For the full local release flow, including build, publish, portable zip creation, commit, push, tag creation, and GitHub Release asset upload, run:
+
+```bat
+Scripts\release.bat
+```
+
+`Scripts\release.bat` calls `Scripts\release.ps1`. The PowerShell helper uses the version from `GoblinFarmer.csproj`, creates `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`, uploads the installer and portable zip with GitHub CLI, and can find `gh.exe` from the standard install location even when GitHub CLI is not on `PATH`. Documentation updates still need to be made before running it because the script cannot infer what changed.
+
 If Inno Setup is installed separately, compile the installer after publishing:
 
 ```powershell
 ISCC.exe "/DSourceDir=artifacts\publish\GoblinFarmer" "Installer\GoblinFarmer.iss"
 ```
 
-Final release flow:
+Manual release flow:
 
 1. Update version metadata in `GoblinFarmer.csproj`.
-2. Publish from Visual Studio or run `Scripts\publish-release.ps1`.
-3. Build the Inno Setup installer from `Installer\GoblinFarmer.iss`.
+2. Update `Docs\Project_Status.md`, `README.md`, and release notes/checklists for the changes being shipped.
+3. Run `Scripts\release.bat` for the automated local release flow, or publish from Visual Studio and upload assets manually.
 4. Confirm the installer name and version, such as `GoblinFarmerSetup-1.3.0.exe`.
-5. Upload the installer to the GitHub Release with the notes from `Docs/Release_v1.3.md`.
+5. Confirm the GitHub Release uses the notes from `Docs/Release_v1.3.md` and includes the installer asset.
 
 See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a final build.
 
