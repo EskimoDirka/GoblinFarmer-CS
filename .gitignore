@@ -434,6 +434,12 @@ DebugPackages/
 Sessions/
 debug-screenshots/
 
+# Keep the sanitized release publish profile, but continue ignoring per-user
+# publish profile data and ad hoc local profiles.
+!Properties/
+!Properties/PublishProfiles/
+!Properties/PublishProfiles/GoblinFarmerRelease.pubxml
+
 # Generated diagnostics
 session-info.txt
 route-failure-summary.txt

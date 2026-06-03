@@ -165,7 +165,7 @@ Release versioning starts in `GoblinFarmer.csproj`. Before publishing a new rele
 <InformationalVersion>1.3.0</InformationalVersion>
 ```
 
-Then publish the self-contained Windows build. You can publish from Visual Studio using the project release profile/settings, or run the release script from the project root:
+Then publish the self-contained Windows build. You can publish from Visual Studio using the `GoblinFarmerRelease` publish profile, or run the release script from the project root:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1
@@ -190,3 +190,7 @@ See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a f
 - [Docs/Project_Status.md](Docs/Project_Status.md): detailed development status and implementation history.
 - [Docs/TODO.md](Docs/TODO.md): development and validation backlog.
 - [Docs/Release_Checklist.md](Docs/Release_Checklist.md): release validation checklist.
+
+## License
+
+GoblinFarmer is released under the [MIT License](LICENSE).

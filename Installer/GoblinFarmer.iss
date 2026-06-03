@@ -14,7 +14,7 @@
 AppId={{A48D8A29-3E74-4C0F-A13A-A2FC6E08448C}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher=GoblinFarmer
+AppPublisher=Eskimo Dirka
 DefaultDirName={localappdata}\Programs\GoblinFarmer
 DefaultGroupName=GoblinFarmer
 DisableProgramGroupPage=yes
