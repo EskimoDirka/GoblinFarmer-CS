@@ -54,6 +54,7 @@ namespace GoblinFarmer
                     }
 
                     settings.Normalize();
+                    ApplyDevelopmentDebugDefaults();
                     if (shouldSaveLoadedSettings)
                     {
                         Save();
@@ -63,6 +64,7 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 settings = SettingsModel.Default();
+                ApplyDevelopmentDebugDefaults();
                 AppLogger.Error($"AppSettings load failed; using safe defaults from {configPath}.", ex);
             }
 
@@ -103,6 +105,17 @@ namespace GoblinFarmer
                 AppLogger.Error("Failed to inspect AppSettings Debug.EnableDebugScreenshots preference.", ex);
                 return false;
             }
+        }
+
+        private static void ApplyDevelopmentDebugDefaults()
+        {
+#if DEBUG
+            if (System.Diagnostics.Debugger.IsAttached && !settings.Debug.EnableDebugScreenshots)
+            {
+                settings.Debug.EnableDebugScreenshots = true;
+                AppLogger.Info("Debug.EnableDebugScreenshots enabled for attached DEBUG debugger session.");
+            }
+#endif
         }
 
         public static string ResolveRuntimePath(string path)

@@ -361,6 +361,11 @@ function Save-GitOutput {
         [string[]]$Arguments
     )
 
+    if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot ".git") -PathType Container)) {
+        "Not a git checkout; git $($Arguments -join ' ') skipped for installed/debug-package run." | Out-File -FilePath $OutputPath -Encoding utf8
+        return $false
+    }
+
     try {
         $output = & git -C $RepoRoot @Arguments 2>&1
         $exitCode = $LASTEXITCODE

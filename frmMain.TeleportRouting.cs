@@ -158,6 +158,22 @@ namespace GoblinFarmer
                 key == PortLocationKey("Flooded Causeway");
         }
 
+        private void PortLogCaldeumDetection(string rawLocation, string bestMatch, double confidence)
+        {
+            if (!PortIsCaldeumRouteLocation(rawLocation))
+            {
+                return;
+            }
+
+            string routeLocation = PortGetRouteLocationForDetectedLocation(rawLocation);
+            AppLogger.Info(
+                $"CaldeumDetection: raw={PortLogField(PortDisplayLocation(rawLocation))}; " +
+                $"display={PortLogField(PortDisplayLocation(PortDetectedLocationDisplayName(rawLocation)))}; " +
+                $"normalized={PortLogField(PortDisplayLocation(PortDetectedLocationDisplayName(routeLocation)))}; " +
+                $"bestMatch={PortLogField(PortDisplayLocation(PortDetectedLocationDisplayName(bestMatch)))}; " +
+                $"confidence={confidence:0.000}");
+        }
+
         private static string PortDisplayLocation(string location)
         {
             return string.IsNullOrWhiteSpace(location) ? "Unknown" : location;
