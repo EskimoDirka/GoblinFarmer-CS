@@ -94,10 +94,11 @@ namespace GoblinFarmer
             // 
             // lblCombatStatus
             // 
-            lblCombatStatus.AutoSize = true;
-            lblCombatStatus.Location = new Point(14, 65);
+            lblCombatStatus.AutoEllipsis = true;
+            lblCombatStatus.AutoSize = false;
+            lblCombatStatus.Location = new Point(14, 61);
             lblCombatStatus.Name = "lblCombatStatus";
-            lblCombatStatus.Size = new Size(110, 15);
+            lblCombatStatus.Size = new Size(280, 18);
             lblCombatStatus.TabIndex = 1;
             lblCombatStatus.Text = "Combat Status: Idle";
             // 
@@ -117,10 +118,11 @@ namespace GoblinFarmer
             // 
             // lblDiabloStatus
             // 
-            lblDiabloStatus.AutoSize = true;
-            lblDiabloStatus.Location = new Point(14, 37);
+            lblDiabloStatus.AutoEllipsis = true;
+            lblDiabloStatus.AutoSize = false;
+            lblDiabloStatus.Location = new Point(14, 32);
             lblDiabloStatus.Name = "lblDiabloStatus";
-            lblDiabloStatus.Size = new Size(133, 15);
+            lblDiabloStatus.Size = new Size(280, 18);
             lblDiabloStatus.TabIndex = 3;
             lblDiabloStatus.Text = "Diablo Status: Unknown";
             // 
@@ -137,7 +139,7 @@ namespace GoblinFarmer
             // 
             grpFlows.Controls.Add(btnMakeNewGame);
             grpFlows.Controls.Add(btnExitGame);
-            grpFlows.Location = new Point(12, 162);
+            grpFlows.Location = new Point(12, 142);
             grpFlows.Name = "grpFlows";
             grpFlows.Size = new Size(311, 63);
             grpFlows.TabIndex = 6;
@@ -341,17 +343,18 @@ namespace GoblinFarmer
             grpStatus.Controls.Add(lblCombatStatus);
             grpStatus.Location = new Point(12, 12);
             grpStatus.Name = "grpStatus";
-            grpStatus.Size = new Size(311, 127);
+            grpStatus.Size = new Size(311, 118);
             grpStatus.TabIndex = 8;
             grpStatus.TabStop = false;
             grpStatus.Text = "Status";
             // 
             // lblAppStatus
             // 
-            lblAppStatus.AutoSize = true;
-            lblAppStatus.Location = new Point(14, 94);
+            lblAppStatus.AutoEllipsis = true;
+            lblAppStatus.AutoSize = false;
+            lblAppStatus.Location = new Point(14, 90);
             lblAppStatus.Name = "lblAppStatus";
-            lblAppStatus.Size = new Size(89, 15);
+            lblAppStatus.Size = new Size(280, 18);
             lblAppStatus.TabIndex = 4;
             lblAppStatus.Text = "App Status: Idle";
             // 
@@ -360,7 +363,7 @@ namespace GoblinFarmer
             grpCharacter.Controls.Add(radWD);
             grpCharacter.Controls.Add(radDH);
             grpCharacter.Controls.Add(radMonk);
-            grpCharacter.Location = new Point(12, 250);
+            grpCharacter.Location = new Point(12, 222);
             grpCharacter.Name = "grpCharacter";
             grpCharacter.Size = new Size(144, 114);
             grpCharacter.TabIndex = 9;
@@ -407,9 +410,9 @@ namespace GoblinFarmer
             grpHotkeys.Controls.Add(chkLoot);
             grpHotkeys.Controls.Add(chkKadala);
             grpHotkeys.Controls.Add(chkCombat);
-            grpHotkeys.Location = new Point(12, 393);
+            grpHotkeys.Location = new Point(12, 348);
             grpHotkeys.Name = "grpHotkeys";
-            grpHotkeys.Size = new Size(270, 163);
+            grpHotkeys.Size = new Size(270, 132);
             grpHotkeys.TabIndex = 10;
             grpHotkeys.TabStop = false;
             grpHotkeys.Text = "Hotkeys";
@@ -471,7 +474,7 @@ namespace GoblinFarmer
             grpSessionStats.Controls.Add(lblSessionBlocked);
             grpSessionStats.Controls.Add(lblSessionTeleports);
             grpSessionStats.Controls.Add(lblSessionGames);
-            grpSessionStats.Location = new Point(175, 250);
+            grpSessionStats.Location = new Point(175, 222);
             grpSessionStats.Name = "grpSessionStats";
             grpSessionStats.Size = new Size(148, 114);
             grpSessionStats.TabIndex = 12;
@@ -525,18 +528,19 @@ namespace GoblinFarmer
             // 
             // lblEscape
             // 
-            lblEscape.AutoSize = true;
-            lblEscape.Location = new Point(690, 26);
+            lblEscape.AutoSize = false;
+            lblEscape.Location = new Point(349, 35);
             lblEscape.Name = "lblEscape";
-            lblEscape.Size = new Size(94, 15);
+            lblEscape.Size = new Size(544, 20);
             lblEscape.TabIndex = 11;
             lblEscape.Text = "Press Esc to stop";
+            lblEscape.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // frmMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(918, 567);
+            ClientSize = new Size(918, 610);
             Controls.Add(lblEscape);
             Controls.Add(grpSessionStats);
             Controls.Add(grpHotkeys);

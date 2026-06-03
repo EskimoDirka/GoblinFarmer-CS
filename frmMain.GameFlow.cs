@@ -258,8 +258,8 @@ namespace GoblinFarmer
 
                 bool clickedPlay = WaitForBattleNetPlayButtonAndClick(
                     Img("Start Game", "Battle Net Play Button.png"),
-                    timeoutMs: 60000,
-                    confidence: PortStartGameButtonConfidence,
+                    timeoutMs: AppSettings.Launch.BattleNetPlayButtonTimeoutMs,
+                    confidence: AppSettings.ImageRecognition.BattleNetPlayButtonConfidence,
                     token: token);
 
                 if (!clickedPlay)
@@ -272,7 +272,7 @@ namespace GoblinFarmer
                 if (battleNetPlayClickAcceptedByBattleNet)
                 {
                     AddWorkflowStep("Battle.net accepted Play click");
-                    PortSleep(token, 2000);
+                    PortSleep(token, AppSettings.Launch.BattleNetPostPlayAcceptedDelayMs);
                     CloseBattleNet();
                 }
                 else
@@ -286,7 +286,7 @@ namespace GoblinFarmer
                 Stopwatch sw = Stopwatch.StartNew();
                 AddWorkflowStep("Waiting for Diablo process");
 
-                while (sw.ElapsedMilliseconds < 120000)
+                while (sw.ElapsedMilliseconds < AppSettings.Launch.DiabloStartTimeoutMs)
                 {
                     if (token.IsCancellationRequested)
                     {
@@ -301,7 +301,7 @@ namespace GoblinFarmer
                         return true;
                     }
 
-                    PortSleep(token, 1000);
+                    PortSleep(token, AppSettings.Launch.DiabloStartPollIntervalMs);
                 }
 
                 MessageBox.Show("Diablo III did not start within the timeout.");

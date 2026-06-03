@@ -26,18 +26,18 @@ namespace GoblinFarmer
         private const int PortWmKeyUp = 0x0101;
         private const int PortWmSysKeyDown = 0x0104;
         private const int PortWmSysKeyUp = 0x0105;
-        private const int PortLaunchGracePeriodMs = 45000;
         private const int PortDiabloMissingExitThreshold = 4;
-        private const double PortStartGameButtonConfidence = 0.85;
-        private const double PortCharacterLoadConfidence = 0.82;
-        private const double PortGameMenuConfidence = 0.80;
-        private const double PortVendorUiConfidence = 0.80;
-        private const double PortBlankInventoryTileConfidence = 0.78;
-        private const double PortBountyMenuConfidence = 0.74;
-        private const double PortCurrentLocationConfidence = 0.82;
-        private const double PortBlockedLocationConfidence = 0.68;
-        private const double PortMapActHeaderConfidence = 0.92;
-        private const double PortWorldMapConfidence = 0.80;
+        private static int PortLaunchGracePeriodMs => AppSettings.Launch.LaunchGracePeriodMs;
+        private static double PortStartGameButtonConfidence => AppSettings.ImageRecognition.StartGameButtonConfidence;
+        private static double PortCharacterLoadConfidence => AppSettings.ImageRecognition.CharacterLoadConfidence;
+        private static double PortGameMenuConfidence => AppSettings.ImageRecognition.GameMenuConfidence;
+        private static double PortVendorUiConfidence => AppSettings.ImageRecognition.VendorUiConfidence;
+        private static double PortBlankInventoryTileConfidence => AppSettings.ImageRecognition.BlankInventoryTileConfidence;
+        private static double PortBountyMenuConfidence => AppSettings.ImageRecognition.BountyMenuConfidence;
+        private static double PortCurrentLocationConfidence => AppSettings.ImageRecognition.CurrentLocationConfidence;
+        private static double PortBlockedLocationConfidence => AppSettings.ImageRecognition.BlockedLocationConfidence;
+        private static double PortMapActHeaderConfidence => AppSettings.ImageRecognition.MapActHeaderConfidence;
+        private static double PortWorldMapConfidence => AppSettings.ImageRecognition.WorldMapConfidence;
         private IntPtr portOriginalCursorHandle = IntPtr.Zero;
 
         private readonly Dictionary<string, PortMapPoint> portActCoords = new(StringComparer.OrdinalIgnoreCase);
@@ -238,6 +238,29 @@ namespace GoblinFarmer
             }
 
             portInitialized = true;
+            PortInitializeReleaseUi();
+            AppSettings.DiscoverMissingRuntimePaths();
+            PortRefreshReleaseSettingsUi();
+            if (!PortEnsureRequiredConfiguration())
+            {
+                PortSetAutomationControlsEnabled(false);
+                PortSetAppStatus("Setup Required");
+                AddWorkflowStep("First-run setup required");
+                return;
+            }
+
+            PortCompleteRuntimeStartup();
+        }
+
+        private void PortCompleteRuntimeStartup()
+        {
+            if (portRuntimeStartupComplete)
+            {
+                return;
+            }
+
+            portRuntimeStartupComplete = true;
+            PortSetAutomationControlsEnabled(true);
             _ = PortScanRegions;
             PortLoadCoordinates();
             PortLoadImageCaches();
@@ -252,8 +275,17 @@ namespace GoblinFarmer
             chkKadala.Checked = true;
             chkLoot.Checked = true;
             chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
-            chkKeepDebugScreenshots.Enabled = AppSettings.Debug.EnableDebugScreenshots;
-            chkKeepDebugScreenshots.Visible = AppSettings.Debug.EnableDebugScreenshots || AppSettings.Debug.EnableVerboseLogging;
+            chkKeepDebugScreenshots.CheckedChanged += (_, _) =>
+            {
+                if (!AppSettings.Debug.DebugMode)
+                {
+                    return;
+                }
+
+                AppSettings.Debug.EnableDebugScreenshots = chkKeepDebugScreenshots.Checked;
+                AppSettings.Save();
+            };
+            PortApplyDebugModeUi();
             chkBlockSkill1TeleportHotkey.Checked = true;
             portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
             chkBlockSkill1TeleportHotkey.CheckedChanged += (_, _) => portBlockSkill1TeleportHotkey = chkBlockSkill1TeleportHotkey.Checked;
@@ -408,6 +440,16 @@ namespace GoblinFarmer
         {
             if (isAutomationRunning || portCombatRunning)
             {
+                return;
+            }
+
+            if (!AppSettings.RequiredRuntimeConfigurationIsValid(out string configMessage))
+            {
+                PortSetAppStatus("Setup Required");
+                AddWorkflowStep("Automation blocked: setup required");
+                PortSetAutomationControlsEnabled(false);
+                AppLogger.Info($"Automation blocked because required configuration is invalid: {configMessage.Replace(Environment.NewLine, " | ")}");
+                MessageBox.Show(this, configMessage, "GoblinFarmer Setup Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 

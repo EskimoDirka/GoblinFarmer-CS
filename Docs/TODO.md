@@ -128,9 +128,18 @@
 * [x] Auto-create config with safe defaults when missing.
 * [x] Log loaded config values on startup.
 * [x] Add config support for Debug, UI, Repair, and Teleport sections.
+* [x] Add config support for Diablo III path, Battle.net path, Images root, scan-region cache path, launch timings, and image-recognition thresholds.
+* [x] Add first-run setup dialog when required runtime configuration is missing.
+* [x] Add Settings panel to view, change, and validate Diablo III and Battle.net executable paths.
+* [x] Block farming automation until required runtime configuration validates.
+* [x] Add Diablo III and Battle.net executable auto-discovery before first-run prompting.
 * [x] Hide Diagnostic Overlay and Route Inspector unless enabled by config.
+* [x] Add Debug Mode toggle and keep debug-only controls hidden during normal use.
 * [x] Gate debug screenshots and missing-asset prompts through config.
 * [x] Keep route-rule config as design review only; do not migrate live route rules yet.
+* [x] Add self-contained release publish script.
+* [x] Add Inno Setup installer script with Start Menu and optional desktop shortcuts.
+* [x] Add release checklist.
 * [ ] Validate a fresh release-style run with diagnostic overlay and route inspector hidden by default.
 * [ ] Validate enabling `ShowDiagnosticOverlay` and `ShowRouteInspector` restores the diagnostic tabs.
 * [ ] Validate disabling `EnableDebugScreenshots` suppresses success/failure/debug screenshot capture.
@@ -378,13 +387,14 @@ scripts/publish-release.ps1
 
 Requirements:
 
-* Build Release.
-* Publish Release.
-* Deploy to D:\GoblinFarmer.
-* Verify Images folder exists.
-* Verify executable exists.
-* Verify icon exists.
-* Display publish summary.
+* [x] Build Release.
+* [x] Publish self-contained Release.
+* [x] Publish to `artifacts\publish\GoblinFarmer`.
+* [x] Verify Images folder exists.
+* [x] Verify executable exists.
+* [x] Verify icon exists.
+* [x] Display publish summary.
+* [x] Compile Inno Setup installer when `ISCC.exe` is installed.
 
 ### Git Helper Script
 

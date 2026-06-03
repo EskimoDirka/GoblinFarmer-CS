@@ -282,8 +282,8 @@ namespace GoblinFarmer
 
                 bool clickedPlay = WaitForBattleNetPlayButtonAndClick(
                     Img("Start Game", "Battle Net Play Button.png"),
-                    timeoutMs: 60000,
-                    confidence: 0.85);
+                    timeoutMs: AppSettings.Launch.BattleNetPlayButtonTimeoutMs,
+                    confidence: AppSettings.ImageRecognition.BattleNetPlayButtonConfidence);
 
                 if (!clickedPlay)
                 {
@@ -295,7 +295,7 @@ namespace GoblinFarmer
                 if (battleNetPlayClickAcceptedByBattleNet)
                 {
                     AddWorkflowStep("Battle.net accepted Play click");
-                    Thread.Sleep(2000);
+                    Thread.Sleep(AppSettings.Launch.BattleNetPostPlayAcceptedDelayMs);
                     CloseBattleNet();
                 }
                 else
@@ -309,7 +309,7 @@ namespace GoblinFarmer
                 Stopwatch sw = Stopwatch.StartNew();
                 AddWorkflowStep("Waiting for Diablo process");
 
-                while (sw.ElapsedMilliseconds < 120000)
+                while (sw.ElapsedMilliseconds < AppSettings.Launch.DiabloStartTimeoutMs)
                 {
                     if (IsDiabloRunning())
                     {
@@ -319,7 +319,7 @@ namespace GoblinFarmer
                         return true;
                     }
 
-                    Thread.Sleep(1000);
+                    Thread.Sleep(AppSettings.Launch.DiabloStartPollIntervalMs);
                 }
 
                 MessageBox.Show("Diablo III did not start within the timeout.");
@@ -357,12 +357,12 @@ namespace GoblinFarmer
 
         private bool LaunchBattleNetExecutable()
         {
-            string battleNetPath = @"D:\Battle.net\Battle.net.exe";
+            string battleNetPath = AppSettings.ResolveRuntimePath(AppSettings.Runtime.BattleNetExecutablePath);
 
             if (!File.Exists(battleNetPath))
             {
-                MessageBox.Show("Battle.net not found.");
-                AppLogger.Info($"Battle.net launch failed: executable not found at {battleNetPath}");
+                MessageBox.Show("Battle.net executable is not configured or could not be found. Open Settings to select Battle.net.exe.");
+                AppLogger.Info($"Battle.net launch failed: configured executable not found; configuredPath={AppSettings.Runtime.BattleNetExecutablePath}; resolvedPath={battleNetPath}");
                 return false;
             }
 
@@ -388,7 +388,7 @@ namespace GoblinFarmer
                     return false;
                 }
 
-                if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: 30000, logFoundAfterLaunch: true))
+                if (!WaitForBattleNetWindowAndFocus(token, timeoutMs: AppSettings.Launch.BattleNetWindowFocusTimeoutMs, logFoundAfterLaunch: true))
                 {
                     AppLogger.Info("Battle.net setup failed after retry");
                     return false;
@@ -404,7 +404,7 @@ namespace GoblinFarmer
 
             Stopwatch playPrecheckWait = Stopwatch.StartNew();
 
-            while (playPrecheckWait.ElapsedMilliseconds < 3000)
+            while (playPrecheckWait.ElapsedMilliseconds < AppSettings.Launch.BattleNetPlayPrecheckMs)
             {
                 if (token.IsCancellationRequested)
                 {
@@ -416,7 +416,7 @@ namespace GoblinFarmer
                     "BattleNetPlayButton",
                     "Battle.net Play button pre-check",
                     out DrawingPoint precheckPlayButtonCenter,
-                    confidence: 0.85))
+                    confidence: AppSettings.ImageRecognition.BattleNetPlayButtonConfidence))
                 {
                     AppLogger.Info($"Battle.net Play button visible during pre-check; skipping Diablo III tab selection; point={precheckPlayButtonCenter.X},{precheckPlayButtonCenter.Y}; elapsed={playPrecheckWait.ElapsedMilliseconds}ms");
                     return true;
@@ -434,7 +434,7 @@ namespace GoblinFarmer
                 AppLogger.Info("Diablo III tab not clicked; continuing to Battle.net Play button search");
             }
 
-            if (!PortSleepOrThreadSleep(token, 1200))
+            if (!PortSleepOrThreadSleep(token, AppSettings.Launch.BattleNetPostTabSettleMs))
             {
                 return false;
             }
@@ -491,7 +491,7 @@ namespace GoblinFarmer
                     "BattleNetD3Tab",
                     "Diablo III tab",
                     out DrawingPoint tabCenter,
-                    confidence: 0.80))
+                    confidence: AppSettings.ImageRecognition.BattleNetDiabloTabConfidence))
                 {
                     AppLogger.Info($"Diablo III tab found by image: {Path.GetFileName(imagePath)} at {tabCenter.X},{tabCenter.Y}");
                     LeftClick(tabCenter);
@@ -569,7 +569,7 @@ namespace GoblinFarmer
                     return;
                 }
 
-                if (FindImageOnScreen(playButtonPath, out DrawingPoint playButtonCenter, confidence: 0.75))
+                if (FindImageOnScreen(playButtonPath, out DrawingPoint playButtonCenter, confidence: Math.Max(0.50, AppSettings.ImageRecognition.BattleNetPlayButtonConfidence - 0.10)))
                 {
                     AppLogger.Info($"Diablo III page confirmed: Battle.net Play button visible at {playButtonCenter.X},{playButtonCenter.Y}; elapsed={sw.ElapsedMilliseconds}ms");
                     return;
@@ -620,7 +620,7 @@ namespace GoblinFarmer
                         imagePath,
                         confidence,
                         token,
-                        timeoutMs: 10000,
+                        timeoutMs: AppSettings.Launch.BattleNetPlayClickAcceptedTimeoutMs,
                         clickElapsedMs: sw.ElapsedMilliseconds);
                     if (!accepted)
                     {
@@ -1318,7 +1318,7 @@ namespace GoblinFarmer
                 }
             }
 
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "Manual Captures");
+            return Path.Combine(AppSettings.ImagesRootPath, "Manual Captures");
         }
 
         private string PortMissingAssetTargetFileName(string imagePath, string missingAssetName, string callingFlow)
@@ -1475,16 +1475,6 @@ namespace GoblinFarmer
             return Process.GetProcessesByName("Battle.net").Length > 0;
         }
 
-        private bool IsDiabloMainMenuVisible()
-        {
-            return false;
-        }
-
-        private void ClickBattleNetPlayButton()
-        {
-            // Image recognition later
-        }
-
         // Close Battlnet after starting Diablo
         private void CloseBattleNet()
         {
@@ -1510,7 +1500,7 @@ namespace GoblinFarmer
             IntPtr stillVisibleWindow;
             do
             {
-                Thread.Sleep(250);
+                Thread.Sleep(AppSettings.Launch.BattleNetClosePollIntervalMs);
                 stillRunning = IsBattleNetRunning();
                 stillVisibleWindow = FindBattleNetWindow();
                 if (!stillRunning && stillVisibleWindow == IntPtr.Zero)
@@ -1518,7 +1508,7 @@ namespace GoblinFarmer
                     break;
                 }
             }
-            while (sw.ElapsedMilliseconds < 5000);
+            while (sw.ElapsedMilliseconds < AppSettings.Launch.BattleNetCloseTimeoutMs);
 
             battleNetCloseProcessRemaining = stillRunning;
             battleNetCloseVisibleWindowRemaining = stillVisibleWindow != IntPtr.Zero;
@@ -1924,10 +1914,9 @@ namespace GoblinFarmer
 
         private static string Img(params string[] parts)
         {
-            return Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "Images",
-                Path.Combine(parts));
+            return parts.Length == 0
+                ? AppSettings.ImagesRootPath
+                : Path.Combine(AppSettings.ImagesRootPath, Path.Combine(parts));
         }
 
         // Folder Scanner ==========================================

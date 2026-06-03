@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Release-readiness configuration, focused route-hotkey reliability, bounty menu combat-close validation, and Start Game retry monitoring using current-session debug package evidence.
+Final release preparation: Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, and cautious health/performance review while preserving current automation behavior.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -69,6 +69,9 @@ Release-readiness configuration, focused route-hotkey reliability, bounty menu c
 - Combat-active bounty menu auto-close now mirrors the old Python app: a dedicated combat-menu watcher starts with combat, polls the Bounty Complete title region about every 100ms, uses threshold `0.740`, and sends a single automation-safe injected Escape with about a 1s cooldown.
 - Bounty close logging now includes `CombatMenuWatcherStarted`, `BountyMenuDetected`, `BountyMenuEscapeSent`, `InjectedEscapeIgnoredByStopWatcher`, and `CombatMenuWatcherStopped`, with combat state and `automationCancelled=false` where relevant.
 - `Config\AppSettings.json` centralizes release/debug configuration, auto-creates when missing, logs loaded values, and currently controls diagnostic panes, debug screenshots, missing-asset prompts, notification display, repair timing, teleport confirmation timeout, and Bounty Complete watcher poll/cooldown timing.
+- `Config\AppSettings.json` now also stores Diablo III and Battle.net executable paths, the relative Images root, scan-region cache path, launch timings, and image-recognition thresholds. Missing executable paths trigger auto-discovery and first-run setup instead of relying on source-machine install paths.
+- Normal UI mode keeps diagnostic panes and debug screenshot controls hidden unless Debug Mode is enabled from the Settings panel.
+- Release publishing uses `Scripts\publish-release.ps1` for a self-contained `win-x64` folder and `Installer\GoblinFarmer.iss` for an Inno Setup installer targeting `%LOCALAPPDATA%\Programs\GoblinFarmer`.
 - Exit Game workflow no longer generates desktop right-clicks after Diablo exits.
 - Exit Game workflow no longer closes GoblinFarmer after Diablo exits.
 - Battle.net Play button window-relative scan region has dedicated fallback comparison diagnostics; current region is `16,1256,292,75`, recalibrated from fallback diagnostics.
@@ -117,6 +120,10 @@ Release-readiness configuration, focused route-hotkey reliability, bounty menu c
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Added release-ready runtime path configuration, auto-discovery for Diablo III and Battle.net, first-run setup, Settings panel validation/change controls, and automation blocking while required config is invalid.
+- Added configurable launch timings and image-recognition thresholds for user-adjustable release tuning without source edits.
+- Added a self-contained publish script and Inno Setup installer definition with Start Menu/desktop shortcuts, icon preservation, and config preservation across installer upgrades.
+- Removed obsolete launch stubs and routed image/scan-region locations through config-backed helpers while preserving route, combat, repair, salvage, Battle.net Play, and bounty-menu behavior.
 - Ported the Python combat bounty-menu watcher behavior from `GoblinFarming.py`: combat start now launches a watcher task, scans `Bounty Menu Title.png` in the refreshed `Bounty Complete Scan Region.png` region, uses threshold `0.740`, polls at `100ms`, sends injected Escape with a `1000ms` cooldown, and does not call combat/automation stop or input cleanup.
 - Added explicit `InjectedEscapeIgnoredByStopWatcher` logging in the C# Escape stop path so the app records when the bounty watcher Escape is passed through to Diablo instead of stopping combat.
 - Added a `Bounty` config section with `PollIntervalMs=100` and `EscapeCooldownMs=1000`.
@@ -409,4 +416,4 @@ Runtime Images:
 `bin\Debug\net10.0-windows\Images`
 
 Release Target:
-`D:\GoblinFarmer`
+`%LOCALAPPDATA%\Programs\GoblinFarmer`

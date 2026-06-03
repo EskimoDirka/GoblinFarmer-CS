@@ -60,7 +60,8 @@ The latest reviewed package, `GoblinFarmer_Debug_20260602_221905.zip`, showed Bo
 
 - Diagnostic Overlay: compact read-only live status panel for location, route, combat, retry, failure, log, and screenshot state.
 - Route State Inspector: fuller read-only diagnostics tab for route decisions, blocking state, retry state, active workflow, Diablo focus/running status, and latest evidence paths.
-- Configuration: `Config/AppSettings.json` controls release/debug UI, notifications, repair timing, and teleport timeout settings.
+- Debug Mode: off by default for normal use. Enable it from the Settings panel to show diagnostic panes and optional debug screenshot controls.
+- Configuration: `Config/AppSettings.json` controls executable paths, image/template paths, launch timings, release/debug UI, notifications, image-recognition thresholds, repair timing, teleport timeout settings, and bounty watcher timing.
 - Screenshot-On-Failure: captures paired Diablo/App failure screenshots for major workflow failures, including teleport, Start Game, Battle.net, repair, cancellation, and unexpected exception cases.
 - Missing-Asset Capture Prompt: logs missing template context and offers an optional modeless capture helper while combat is inactive.
 - Success Screenshot Capture: captures paired Diablo/App screenshots for sparse workflow milestones such as Battle.net Play clicked, Diablo launch detected, Start Game verified, teleport confirmed, repair/salvage complete, and Exit Game complete.
@@ -89,6 +90,67 @@ dotnet build GoblinFarmer.csproj
 
 The project uses project-relative image assets and copies runtime images into the build output.
 
+## Install
+
+GoblinFarmer releases use a self-contained Windows publish folder plus an optional Inno Setup installer.
+
+For users:
+
+- Run `GoblinFarmerSetup-<version>.exe` when an installer is provided.
+- The installer places the app under `%LOCALAPPDATA%\Programs\GoblinFarmer`, creates a Start Menu shortcut, and can create a desktop shortcut.
+- No source checkout or .NET SDK is required for the self-contained release.
+
+If using the publish folder directly, run `GoblinFarmer.exe` from the published `GoblinFarmer` folder.
+
+## First-Run Setup
+
+On first launch, GoblinFarmer attempts to discover the Diablo III and Battle.net executables. If either path is missing, the first-run setup dialog opens.
+
+Select:
+
+- `Diablo III64.exe` or `Diablo III.exe`
+- `Battle.net.exe`
+- The `Images` template folder
+
+Automation stays disabled until required paths and template folders validate successfully.
+
+## Config Files
+
+Runtime configuration lives beside the app:
+
+```text
+Config/AppSettings.json
+ScanRegions.json
+```
+
+`AppSettings.json` is user-editable, but normal path changes can be made from the Settings panel. Image/template paths should stay relative to the installed app folder when possible, with the default `Images` folder copied into every release.
+
+Required template folders:
+
+```text
+Images/Combat
+Images/Current Location
+Images/Leave Game
+Images/Repair
+Images/Salvage
+Images/Start Game
+Images/Teleport Function
+```
+
+Logs and screenshots are written under the runtime app folder and are not required for installation.
+
+## Release Build
+
+Publish a release folder from the project root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1 -Version 1.0.0
+```
+
+The script runs a self-contained `win-x64` Release publish, verifies the executable, icon, config, and Images folder, then compiles `Installer/GoblinFarmer.iss` if Inno Setup is installed. If `ISCC.exe` is not available, the publish folder is still ready to distribute.
+
+See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a final build.
+
 ## Project Structure
 
 ```text
@@ -107,6 +169,10 @@ Images/
 
 Scripts/
   create-debug-package.ps1
+  publish-release.ps1
+
+Installer/
+  GoblinFarmer.iss
 
 frmMain.*.cs              Main WinForms feature areas
 Form1.cs                  Form and shared app logic

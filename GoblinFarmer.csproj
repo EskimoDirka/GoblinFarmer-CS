@@ -104,7 +104,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="GoblinFarmerIcon.ico" />
+    <Content Include="GoblinFarmerIcon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Content Include="Config\AppSettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

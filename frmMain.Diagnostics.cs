@@ -19,8 +19,8 @@ namespace GoblinFarmer
 
         private void PortInitializeDiagnosticOverlay()
         {
-            bool showOverlay = AppSettings.Debug.ShowDiagnosticOverlay;
-            bool showInspector = AppSettings.Debug.ShowRouteInspector;
+            bool showOverlay = AppSettings.Debug.DebugMode && AppSettings.Debug.ShowDiagnosticOverlay;
+            bool showInspector = AppSettings.Debug.DebugMode && AppSettings.Debug.ShowRouteInspector;
             if (!showOverlay && !showInspector)
             {
                 AppLogger.Info("Diagnostic UI hidden by config: ShowDiagnosticOverlay=False; ShowRouteInspector=False");
@@ -32,8 +32,8 @@ namespace GoblinFarmer
                 return;
             }
 
-            ClientSize = new Size(1350, 567);
-            MinimumSize = new Size(1080, 606);
+            ClientSize = new Size(1350, 610);
+            MinimumSize = new Size(1080, 649);
 
             TabControl tabs = new()
             {
