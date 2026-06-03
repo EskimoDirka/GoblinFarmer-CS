@@ -11,7 +11,7 @@ This section is reserved for the v1.3 main-window screenshot.
 Suggested path:
 
 ```text
-Docs/Screenshots/GoblinFarmer-v1.3-main.png
+Docs/Goblin Farmer v1.3.0.png
 ```
 
 ## Features
