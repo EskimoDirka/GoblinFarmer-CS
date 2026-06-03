@@ -571,7 +571,7 @@ namespace GoblinFarmer
             Icon = (Icon)resources.GetObject("$this.Icon");
             MinimumSize = new Size(934, 649);
             Name = "frmMain";
-            Text = "Goblin Farmer";
+            Text = "GoblinFarmer";
             Load += frmMain_Load;
             grpFlows.ResumeLayout(false);
             grpRoutes.ResumeLayout(false);

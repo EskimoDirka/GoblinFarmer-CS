@@ -5,9 +5,11 @@ Use this before publishing a final Windows release.
 ## Build
 
 - [ ] Run `dotnet build GoblinFarmer.csproj`.
-- [ ] Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1 -Version <version>`.
+- [ ] Confirm `GoblinFarmer.csproj` contains the intended `<Version>`, `<AssemblyVersion>`, `<FileVersion>`, and `<InformationalVersion>`.
+- [ ] Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1`.
 - [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, and `Images\`.
 - [ ] If Inno Setup is installed, confirm `artifacts\installer\GoblinFarmerSetup-<version>.exe` is created.
+- [ ] Confirm the app title bar shows the expected version, for example `GoblinFarmer v1.3.0`.
 
 ## Install
 

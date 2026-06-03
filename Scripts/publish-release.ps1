@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version,
     [string]$Runtime = "win-x64",
     [switch]$SkipInstaller
 )
@@ -40,6 +40,36 @@ if (!(Test-Path $projectPath)) {
     Stop-Publish "Project file not found: $projectPath"
 }
 
+[xml]$projectXml = Get-Content -LiteralPath $projectPath
+$propertyGroups = @($projectXml.Project.PropertyGroup)
+$projectVersion = $propertyGroups |
+    ForEach-Object { $_.Version } |
+    Where-Object { ![string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -First 1
+$projectAssemblyVersion = $propertyGroups |
+    ForEach-Object { $_.AssemblyVersion } |
+    Where-Object { ![string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -First 1
+$projectFileVersion = $propertyGroups |
+    ForEach-Object { $_.FileVersion } |
+    Where-Object { ![string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -First 1
+$projectInformationalVersion = $propertyGroups |
+    ForEach-Object { $_.InformationalVersion } |
+    Where-Object { ![string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -First 1
+
+if ([string]::IsNullOrWhiteSpace($projectVersion) -or
+    [string]::IsNullOrWhiteSpace($projectAssemblyVersion) -or
+    [string]::IsNullOrWhiteSpace($projectFileVersion) -or
+    [string]::IsNullOrWhiteSpace($projectInformationalVersion)) {
+    Stop-Publish "Version metadata is incomplete in GoblinFarmer.csproj."
+}
+
+if (![string]::IsNullOrWhiteSpace($Version) -and $Version -ne $projectVersion) {
+    Stop-Publish "The project version is $projectVersion, but -Version $Version was supplied. Update GoblinFarmer.csproj instead of overriding release metadata."
+}
+
 $resolvedRepo = [System.IO.Path]::GetFullPath($repoRoot)
 $resolvedPublishRoot = [System.IO.Path]::GetFullPath($publishRoot)
 $resolvedPublishDir = [System.IO.Path]::GetFullPath($publishDir)
@@ -49,7 +79,8 @@ if (!$resolvedPublishDir.StartsWith($resolvedPublishRoot, [System.StringComparis
 
 Write-Host "GoblinFarmer release publish"
 Write-Host "Repository: $resolvedRepo"
-Write-Host "Version:    $Version"
+Write-Host "Version:    $projectVersion"
+Write-Host "File ver:   $projectFileVersion"
 Write-Host "Runtime:    $Runtime"
 
 New-Item -ItemType Directory -Force -Path $publishRoot, $installerOutput | Out-Null
@@ -64,10 +95,7 @@ Invoke-Step "dotnet publish self-contained Release" {
         --self-contained true `
         --output $publishDir `
         -p:PublishSingleFile=false `
-        -p:IncludeNativeLibrariesForSelfExtract=true `
-        -p:AssemblyVersion=$Version `
-        -p:FileVersion=$Version `
-        -p:InformationalVersion=$Version
+        -p:IncludeNativeLibrariesForSelfExtract=true
 }
 
 $exePath = Join-Path $publishDir "GoblinFarmer.exe"
@@ -91,10 +119,20 @@ if (!(Test-Path $iconPath)) {
     Stop-Publish "Published icon missing: $iconPath"
 }
 
+$exeVersionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath)
+if ($exeVersionInfo.FileVersion -ne $projectFileVersion) {
+    Stop-Publish "Published executable FileVersion is $($exeVersionInfo.FileVersion), expected $projectFileVersion."
+}
+
+if ($exeVersionInfo.ProductVersion -ne $projectInformationalVersion) {
+    Stop-Publish "Published executable ProductVersion is $($exeVersionInfo.ProductVersion), expected $projectInformationalVersion."
+}
+
 $iscc = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
 if (!$SkipInstaller -and $null -ne $iscc -and (Test-Path $installerScript)) {
     Invoke-Step "compile Inno Setup installer" {
-        & $iscc.Source "/DMyAppVersion=$Version" "/DSourceDir=$publishDir" $installerScript
+        $sourceDirDefine = "/DSourceDir=`"$publishDir`""
+        & $iscc.Source $sourceDirDefine $installerScript
     }
 }
 elseif (!$SkipInstaller -and $null -eq $iscc) {
@@ -108,6 +146,8 @@ Write-Host ""
 Write-Host "========== Release Publish Summary =========="
 Write-Host "Publish folder: $publishDir"
 Write-Host "Executable:     $exePath"
+Write-Host "EXE version:    $($exeVersionInfo.ProductVersion)"
+Write-Host "EXE file ver:   $($exeVersionInfo.FileVersion)"
 Write-Host "Config:         $configPath"
 Write-Host "Images:         $imagesPath"
 Write-Host "Installer out:  $installerOutput"

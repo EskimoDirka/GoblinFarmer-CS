@@ -27,10 +27,28 @@ namespace GoblinFarmer
         public frmMain()
         {
             InitializeComponent();
-            
-            //  Dynamic App Version
+
+            Text = $"GoblinFarmer v{PortGetAppDisplayVersion()}";
+        }
+
+        private static string PortGetAppDisplayVersion()
+        {
+            var informationalVersion = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion;
+
+            if (!string.IsNullOrWhiteSpace(informationalVersion))
+            {
+                var metadataIndex = informationalVersion.IndexOf('+');
+                return metadataIndex >= 0
+                    ? informationalVersion[..metadataIndex]
+                    : informationalVersion;
+            }
+
             var version = Assembly.GetExecutingAssembly().GetName().Version;
-            this.Text = $"GoblinFarmer v{version?.Major}.{version?.Minor}.{version?.Build}";
+            return version is null
+                ? "unknown"
+                : $"{version.Major}.{version.Minor}.{version.Build}";
         }
 
         private void frmMain_Load(object sender, EventArgs e)

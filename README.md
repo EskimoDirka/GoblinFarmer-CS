@@ -151,10 +151,10 @@ Logs and screenshots are written under the runtime app folder and are not requir
 Publish a release folder from the project root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1 -Version 1.0.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1
 ```
 
-The script runs a self-contained `win-x64` Release publish, verifies the executable, icon, config, and Images folder, then compiles `Installer/GoblinFarmer.iss` if Inno Setup is installed. If `ISCC.exe` is not available, the publish folder is still ready to distribute.
+The version is owned by `GoblinFarmer.csproj`. The script runs a self-contained `win-x64` Release publish, verifies the executable version metadata, icon, config, and Images folder, then compiles `Installer/GoblinFarmer.iss` if Inno Setup is installed. The installer reads the version from the published executable. If `ISCC.exe` is not available, the publish folder is still ready to distribute.
 
 See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a final build.
 

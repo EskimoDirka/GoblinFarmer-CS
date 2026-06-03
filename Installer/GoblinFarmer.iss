@@ -1,9 +1,13 @@
 #define MyAppName "GoblinFarmer"
-#ifndef MyAppVersion
-#define MyAppVersion GetFileVersion("D:\GoblinFarmer_Publish\GoblinFarmer.exe")
-#endif
 #ifndef SourceDir
 #define SourceDir "..\artifacts\publish\GoblinFarmer"
+#endif
+#define SourceExe SourceDir + "\GoblinFarmer.exe"
+#define MyAppFileVersion GetFileVersion(SourceExe)
+#if Copy(MyAppFileVersion, Len(MyAppFileVersion) - 1, 2) == ".0"
+#define MyAppVersion Copy(MyAppFileVersion, 1, Len(MyAppFileVersion) - 2)
+#else
+#define MyAppVersion MyAppFileVersion
 #endif
 
 [Setup]

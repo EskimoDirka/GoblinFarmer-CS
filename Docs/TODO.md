@@ -158,6 +158,9 @@
 * [x] Add self-contained release publish script.
 * [x] Add Inno Setup installer script with Start Menu and optional desktop shortcuts.
 * [x] Add release checklist.
+* [x] Make `GoblinFarmer.csproj` the release version source of truth for app title, publish metadata, and installer naming.
+* [x] Update the release publish script to verify published EXE `FileVersion` and `ProductVersion` instead of overriding version metadata.
+* [x] Update the Inno Setup script to read the installer version from the published `GoblinFarmer.exe`.
 * [ ] Validate a fresh release-style run with diagnostic overlay and route inspector hidden by default.
 * [ ] Validate enabling `ShowDiagnosticOverlay` and `ShowRouteInspector` restores the diagnostic tabs.
 * [ ] Validate disabling `EnableDebugScreenshots` suppresses success/failure/debug screenshot capture.

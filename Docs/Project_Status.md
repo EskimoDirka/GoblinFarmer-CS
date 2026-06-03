@@ -3,7 +3,7 @@
 This file is the source of truth for current route logic, stable behavior, active work, known issues, recent fixes, and the next recommended task.
 
 ## Current Focus
-Final release preparation: Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, Hotkeys visibility polish, Debug screenshot defaults, startup form sizing, Battle.net visible-window launch/close semantics, final Caverns of Frost Level 1 hotkey blocking validation, and cautious health/performance review while preserving current automation behavior.
+Final release preparation: single-source release versioning from `GoblinFarmer.csproj`, Windows installer/publish workflow, portable runtime configuration, first-run setup validation, clean normal overlay, Hotkeys visibility polish, Debug screenshot defaults, startup form sizing, Battle.net visible-window launch/close semantics, final Caverns of Frost Level 1 hotkey blocking validation, and cautious health/performance review while preserving current automation behavior.
 
 ## Official Route Logic
 - Southern Highlands: next Northern Highlands; no block.
@@ -25,6 +25,7 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 
 ## Known Stable Systems
 - Images are project-relative and copied into the build output.
+- Release versioning is owned by `GoblinFarmer.csproj`; the app title reads `AssemblyInformationalVersion`, the published EXE carries the project file/product versions, and Inno Setup derives installer naming from the published executable.
 - Battle.net can relaunch/focus if the process exists but no visible window exists.
 - Diablo launch grace period prevents false cancellation while Diablo starts.
 - Start Game has verified successfully in prior runs, though reliability work remains open.
@@ -143,6 +144,11 @@ Final release preparation: Windows installer/publish workflow, portable runtime 
 - Nested project folder structure remains messy and should be cleaned up later.
 
 ## Recently Fixed
+- Fixed release versioning drift for v1.3 by keeping `<Version>1.3.0</Version>`, `<AssemblyVersion>1.3.0.0</AssemblyVersion>`, `<FileVersion>1.3.0.0</FileVersion>`, and `<InformationalVersion>1.3.0</InformationalVersion>` in `GoblinFarmer.csproj` as the release source of truth.
+- Disabled SDK source-revision decoration for informational version metadata so Windows `ProductVersion` stays `1.3.0` instead of `1.3.0+<commit>`.
+- Updated the app title to display `GoblinFarmer v1.3.0` from `AssemblyInformationalVersion` instead of relying on a hard-coded designer title or publish-time overrides.
+- Updated `Scripts\publish-release.ps1` to stop overriding MSBuild version properties, verify the published EXE `FileVersion` / `ProductVersion`, and pass only the publish folder to Inno Setup.
+- Updated `Installer\GoblinFarmer.iss` to read the published executable version with `GetFileVersion(...)` and generate a versioned installer filename from that published EXE.
 - Fixed Start Game stable-detection deadlock from `GoblinFarmer_Debug_20260603_072805.zip` / `Logs\GoblinFarmer_20260603_072517.log`: the log showed repeated Start Game matches around `316,688` / `320,691`, but the old stable gate kept emitting `StartGameButtonUnstable` and timed out with `clickAttempts=0`.
 - Replaced fragile Start Game stability reset behavior with practical in-tolerance acceptance by consecutive visible scans or stable duration, with detailed timeout logs for first/latest point, dx/dy, tolerance, visible count, stable duration, and required thresholds.
 - Added `StartGameAcceptedByLoadedGameState` recovery so manual Start Game clicks detected by character-load, loaded-location, or in-game evidence continue the Make New Game flow.
