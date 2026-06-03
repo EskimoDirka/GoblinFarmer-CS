@@ -27,9 +27,10 @@ namespace GoblinFarmer
         public frmMain()
         {
             InitializeComponent();
+            
             //  Dynamic App Version
-            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-            this.Text = "GoblinFarmer v" + (version?.ToString() ?? "unknown");
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            this.Text = $"GoblinFarmer v{version?.Major}.{version?.Minor}.{version?.Build}";
         }
 
         private void frmMain_Load(object sender, EventArgs e)
