@@ -8,6 +8,8 @@
 * Added Start Game recovery handling
 * Improved Make New Game workflow protection
 * Improved teleport routing and location handling
+* Preserved selected combat profile across app restarts
+* Improved Demon Hunter no-click-region suppression
 * Added dynamic application version display
 * Installer version now synchronized with application version
 
@@ -18,6 +20,8 @@
 * Installer packaging improvements
 * Version metadata cleanup
 * Cleaned up Debug/Release options so debug defaults stay internal to debug builds
+* Added `User.CombatProfile` to `Config\AppSettings.json`
+* Demon Hunter protected UI regions now suppress unsafe injected mouse clicks without stopping key rotation
 * Included the debug package script in published and installed builds
 * Added the routine GitHub sync helper for build, publish, executable refresh, portable zip creation, commit, and push
 

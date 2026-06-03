@@ -51,6 +51,8 @@ On first launch, GoblinFarmer attempts to discover the required runtime paths. I
 
 Automation stays disabled until the required paths and template folders validate successfully. Paths can also be reviewed and changed later from the Settings area in the app.
 
+The selected combat profile is saved in `Config\AppSettings.json` under `User.CombatProfile` and restored when GoblinFarmer starts.
+
 After install, use the built-in `Verify Paths` button to confirm the Diablo III, Battle.net, and Images paths for the current machine.
 
 Required template folders:

@@ -268,11 +268,8 @@ namespace GoblinFarmer
             PortLoadCoordinates();
             PortLoadImageCaches();
             PortWireButtons();
-
-            if (!radMonk.Checked && !radDH.Checked && !radWD.Checked)
-            {
-                radMonk.Checked = true;
-            }
+            PortApplyCombatProfilePreference();
+            PortWireCombatProfilePreference();
 
             chkCombat.Checked = true;
             chkTeleportNextHotkey.Checked = true;
@@ -313,6 +310,43 @@ namespace GoblinFarmer
             PortInstallKeyboardHook();
             portDiabloWasRunning = IsDiabloRunning();
             PortCleanupOldDebugScreenshots(AppSettings.RetentionDays);
+        }
+
+        private void PortApplyCombatProfilePreference()
+        {
+            switch (AppSettings.User.CombatProfile)
+            {
+                case "demon_hunter":
+                    radDH.Checked = true;
+                    break;
+                case "witch_doctor":
+                    radWD.Checked = true;
+                    break;
+                default:
+                    radMonk.Checked = true;
+                    break;
+            }
+
+            AppLogger.Info($"Combat profile preference applied: {AppSettings.User.CombatProfile}");
+        }
+
+        private void PortWireCombatProfilePreference()
+        {
+            radMonk.CheckedChanged += (_, _) => PortSaveCombatProfilePreference("monk", radMonk.Checked);
+            radDH.CheckedChanged += (_, _) => PortSaveCombatProfilePreference("demon_hunter", radDH.Checked);
+            radWD.CheckedChanged += (_, _) => PortSaveCombatProfilePreference("witch_doctor", radWD.Checked);
+        }
+
+        private static void PortSaveCombatProfilePreference(string combatProfile, bool selected)
+        {
+            if (!selected || string.Equals(AppSettings.User.CombatProfile, combatProfile, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            AppSettings.User.CombatProfile = combatProfile;
+            AppSettings.Save();
+            AppLogger.Info($"Combat profile preference saved: {combatProfile}");
         }
 
         private void PortLogDebugStartupState()

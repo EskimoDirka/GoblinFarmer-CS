@@ -483,9 +483,11 @@ namespace GoblinFarmer
 
                 AddWorkflowStep("Demon Hunter momentum not detected; sending Shift+Left Click");
 
-                if (!PortDemonHunterShiftLeftClick(token, stopCombatWhenUnsafe: true))
+                if (!PortDemonHunterShiftLeftClick(token))
                 {
-                    return;
+                    AppLogger.Info($"Demon Hunter momentum maintenance skipped unsafe Shift+Left Click; combat remains active; {PortCombatInputContext()}");
+                    PortSleep(token, 350);
+                    continue;
                 }
 
                 PortSleep(token, 350);

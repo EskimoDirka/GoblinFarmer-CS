@@ -7,11 +7,12 @@ GoblinFarmer includes combat helpers for Monk, Demon Hunter, and Witch Doctor pr
 - Combat helpers are intended to support farming workflows while Diablo III is focused.
 - Combat input is guarded by no-click regions so the app avoids clicking known UI areas.
 - Physical hotkeys can be suppressed during combat when they would conflict with automation.
+- The selected combat profile is saved in `Config\AppSettings.json` as `User.CombatProfile` and restored on startup.
 
 ## Profiles
 
 - Monk: uses the current Monk combat loop and safety checks.
-- Demon Hunter: supports right-hold behavior from safe world areas and avoids sending new mouse clicks over protected UI.
+- Demon Hunter: supports right-hold behavior from safe world areas, keeps key rotation running while protected UI clicks are suppressed, and skips unsafe Shift+Left maintenance clicks instead of stopping combat.
 - Witch Doctor: supports held/channel behavior from safe world areas and keeps keyboard timers running while UI clicks are suppressed.
 
 ## Combat Profile Skill Setup

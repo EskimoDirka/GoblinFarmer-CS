@@ -34,6 +34,7 @@ namespace GoblinFarmer
         public static TeleportSettings Teleport => settings.Teleport;
         public static BountySettings Bounty => settings.Bounty;
         public static ImageRecognitionSettings ImageRecognition => settings.ImageRecognition;
+        public static UserSettings User => settings.User;
         public static int RetentionDays => 1;
 
         public static void Load()
@@ -57,6 +58,7 @@ namespace GoblinFarmer
                 {
                     string json = File.ReadAllText(configPath);
                     bool hasSavedDebugScreenshotsPreference = HasSavedDebugScreenshotsPreference(json);
+                    bool hasSavedUserCombatProfilePreference = HasSavedUserCombatProfilePreference(json);
                     SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(json, JsonOptions);
                     settings = loaded ?? SettingsModel.Default();
                     bool shouldSaveLoadedSettings = loaded == null;
@@ -65,6 +67,12 @@ namespace GoblinFarmer
                         settings.Debug.EnableDebugScreenshots = DebugSettings.DefaultEnableDebugScreenshots;
                         shouldSaveLoadedSettings = true;
                         AppLogger.Info($"AppSettings missing Debug.EnableDebugScreenshots; using persisted default {settings.Debug.EnableDebugScreenshots}.");
+                    }
+
+                    if (!hasSavedUserCombatProfilePreference)
+                    {
+                        shouldSaveLoadedSettings = true;
+                        AppLogger.Info($"AppSettings missing User.CombatProfile; using default {settings.User.CombatProfile}.");
                     }
 
                     settings.Normalize();
@@ -135,6 +143,27 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 AppLogger.Error("Failed to inspect AppSettings Debug.EnableDebugScreenshots preference.", ex);
+                return false;
+            }
+        }
+
+        private static bool HasSavedUserCombatProfilePreference(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
+
+                return document.RootElement.TryGetProperty("User", out JsonElement userElement) &&
+                    userElement.ValueKind == JsonValueKind.Object &&
+                    userElement.TryGetProperty("CombatProfile", out _);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to inspect AppSettings User.CombatProfile preference.", ex);
                 return false;
             }
         }
@@ -430,7 +459,8 @@ namespace GoblinFarmer
                 $"Bounty.PollIntervalMs={Bounty.PollIntervalMs}; " +
                 $"Bounty.EscapeCooldownMs={Bounty.EscapeCooldownMs}; " +
                 $"ImageRecognition.StartGameButtonConfidence={ImageRecognition.StartGameButtonConfidence:0.000}; " +
-                $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}");
+                $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}; " +
+                $"User.CombatProfile={User.CombatProfile}");
         }
 
         internal sealed class SettingsModel
@@ -443,6 +473,7 @@ namespace GoblinFarmer
             public TeleportSettings Teleport { get; set; } = new();
             public BountySettings Bounty { get; set; } = new();
             public ImageRecognitionSettings ImageRecognition { get; set; } = new();
+            public UserSettings User { get; set; } = new();
 
             public static SettingsModel Default()
             {
@@ -456,6 +487,7 @@ namespace GoblinFarmer
                     Teleport = new TeleportSettings(),
                     Bounty = new BountySettings(),
                     ImageRecognition = new ImageRecognitionSettings(),
+                    User = new UserSettings(),
                 };
                 model.Normalize();
                 return model;
@@ -473,6 +505,7 @@ namespace GoblinFarmer
                     Teleport = Teleport,
                     Bounty = Bounty,
                     ImageRecognition = ImageRecognition,
+                    User = User,
                 };
             }
 
@@ -486,6 +519,7 @@ namespace GoblinFarmer
                 Teleport ??= new TeleportSettings();
                 Bounty ??= new BountySettings();
                 ImageRecognition ??= new ImageRecognitionSettings();
+                User ??= new UserSettings();
                 Runtime.Normalize();
                 Launch.Normalize();
                 UI.Normalize();
@@ -493,6 +527,26 @@ namespace GoblinFarmer
                 Teleport.Normalize();
                 Bounty.Normalize();
                 ImageRecognition.Normalize();
+                User.Normalize();
+            }
+        }
+
+        internal sealed class UserSettings
+        {
+            private static readonly string[] ValidCombatProfiles = ["monk", "demon_hunter", "witch_doctor"];
+
+            public string CombatProfile { get; set; } = "monk";
+
+            public void Normalize()
+            {
+                CombatProfile = string.IsNullOrWhiteSpace(CombatProfile)
+                    ? "monk"
+                    : CombatProfile.Trim().ToLowerInvariant();
+
+                if (!ValidCombatProfiles.Contains(CombatProfile, StringComparer.OrdinalIgnoreCase))
+                {
+                    CombatProfile = "monk";
+                }
             }
         }
 
