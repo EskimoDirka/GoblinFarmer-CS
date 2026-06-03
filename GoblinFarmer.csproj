@@ -16,7 +16,7 @@
   <ItemGroup>
     <None Remove="Config\AppSettings.json" />
     <None Remove="Images\Combat\Bounty Menu Title.png" />
-    <None Remove="Images\Combat\Bounty Menu Scan Region.png" />
+    <None Remove="Images\Combat\Bounty Complete Scan Region.png" />
     <None Remove="Images\Combat\Enchantress Menu Scan Region.png" />
     <None Remove="Images\Combat\Hex Ready.png" />
     <None Remove="Images\Combat\Momentum Count 20.png" />
@@ -111,7 +111,7 @@
     <Content Include="Images\Combat\Bounty Menu Title.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Images\Combat\Bounty Menu Scan Region.png">
+    <Content Include="Images\Combat\Bounty Complete Scan Region.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Images\Combat\Enchantress Menu Scan Region.png">

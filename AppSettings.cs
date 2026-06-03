@@ -18,6 +18,7 @@ namespace GoblinFarmer
         public static UiSettings UI => settings.UI;
         public static RepairSettings Repair => settings.Repair;
         public static TeleportSettings Teleport => settings.Teleport;
+        public static BountySettings Bounty => settings.Bounty;
         public static int RetentionDays => 1;
 
         public static void Load()
@@ -64,7 +65,9 @@ namespace GoblinFarmer
                 $"Repair.PostArrivalSettleDelayMs={Repair.PostArrivalSettleDelayMs}; " +
                 $"Repair.RepairMenuPollingIntervalMs={Repair.RepairMenuPollingIntervalMs}; " +
                 $"Teleport.TeleportConfirmationTimeoutMs={Teleport.TeleportConfirmationTimeoutMs}; " +
-                $"Teleport.TeleportRetryCount={Teleport.TeleportRetryCount}");
+                $"Teleport.TeleportRetryCount={Teleport.TeleportRetryCount}; " +
+                $"Bounty.PollIntervalMs={Bounty.PollIntervalMs}; " +
+                $"Bounty.EscapeCooldownMs={Bounty.EscapeCooldownMs}");
         }
 
         internal sealed class SettingsModel
@@ -73,6 +76,7 @@ namespace GoblinFarmer
             public UiSettings UI { get; set; } = new();
             public RepairSettings Repair { get; set; } = new();
             public TeleportSettings Teleport { get; set; } = new();
+            public BountySettings Bounty { get; set; } = new();
 
             public static SettingsModel Default()
             {
@@ -82,6 +86,7 @@ namespace GoblinFarmer
                     UI = new UiSettings(),
                     Repair = new RepairSettings(),
                     Teleport = new TeleportSettings(),
+                    Bounty = new BountySettings(),
                 };
                 model.Normalize();
                 return model;
@@ -93,9 +98,11 @@ namespace GoblinFarmer
                 UI ??= new UiSettings();
                 Repair ??= new RepairSettings();
                 Teleport ??= new TeleportSettings();
+                Bounty ??= new BountySettings();
                 UI.Normalize();
                 Repair.Normalize();
                 Teleport.Normalize();
+                Bounty.Normalize();
             }
         }
 
@@ -154,6 +161,18 @@ namespace GoblinFarmer
             {
                 TeleportConfirmationTimeoutMs = Math.Clamp(TeleportConfirmationTimeoutMs, 5000, 60000);
                 TeleportRetryCount = Math.Clamp(TeleportRetryCount, 0, 10);
+            }
+        }
+
+        internal sealed class BountySettings
+        {
+            public int PollIntervalMs { get; set; } = 100;
+            public int EscapeCooldownMs { get; set; } = 1000;
+
+            public void Normalize()
+            {
+                PollIntervalMs = Math.Clamp(PollIntervalMs, 50, 1000);
+                EscapeCooldownMs = Math.Clamp(EscapeCooldownMs, 500, 10000);
             }
         }
     }

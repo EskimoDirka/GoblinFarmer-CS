@@ -24,7 +24,11 @@ namespace GoblinFarmer
                     bool scriptedEscapeActive = DateTime.UtcNow.Ticks < Interlocked.Read(ref portIgnoreEscapeHotkeyUntilTicks);
                     bool diabloActive = PortDiabloIsActive();
 
-                    if (!scriptedEscapeActive && escapeDown && !escapeWasDown && (isAutomationRunning || portCombatRunning))
+                    if (scriptedEscapeActive && escapeDown && !escapeWasDown && (isAutomationRunning || portCombatRunning))
+                    {
+                        PortLogInjectedEscapeIgnoredByStopWatcher("polling", portAutomationEscapeReason);
+                    }
+                    else if (!scriptedEscapeActive && escapeDown && !escapeWasDown && (isAutomationRunning || portCombatRunning))
                     {
                         BeginInvoke(new Action(() => PortStopAllAutomation("Escape")));
                     }
@@ -137,12 +141,19 @@ namespace GoblinFarmer
                 KBDLLHOOKSTRUCT keyInfo = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
                 int vkCode = keyInfo.vkCode;
                 bool injected = (keyInfo.flags & 0x10) != 0;
+                bool isEscape = vkCode == PortVkEscape;
                 bool isSkill1 = vkCode == PortVk1;
                 bool isSkill2 = vkCode == PortVk2;
                 bool isAutomationNumberHotkey = isSkill1 || isSkill2;
                 bool isLootReleaseKey = vkCode == PortVkAlt || vkCode == PortVkBacktick;
                 bool keyDown = message == PortWmKeyDown || message == PortWmSysKeyDown;
                 bool keyUp = message == PortWmKeyUp || message == PortWmSysKeyUp;
+
+                if (isEscape && injected && keyDown && (isAutomationRunning || portCombatRunning))
+                {
+                    PortLogInjectedEscapeIgnoredByStopWatcher("keyboardHook", portAutomationEscapeReason);
+                    return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+                }
 
                 if (isLootReleaseKey && keyUp && portLootSpamLeftClickDown)
                 {
@@ -247,6 +258,20 @@ namespace GoblinFarmer
             }
 
             return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+        }
+
+        private void PortLogInjectedEscapeIgnoredByStopWatcher(string watcher, string reason)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastInjectedEscapeIgnoredLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromMilliseconds(250).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastInjectedEscapeIgnoredLogTicks, nowTicks);
+            string source = string.IsNullOrWhiteSpace(reason) ? "Automation" : reason;
+            AppLogger.Info($"InjectedEscapeIgnoredByStopWatcher: watcher={watcher}; source={source}; injectedEscape=true; combatActive={portCombatRunning}; automationRunning={isAutomationRunning}; ignoreUntilTicks={Interlocked.Read(ref portIgnoreEscapeHotkeyUntilTicks)}");
         }
 
         private bool PortShouldHandleTeleportNextHotkey()

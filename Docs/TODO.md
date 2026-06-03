@@ -107,16 +107,19 @@
 * [x] Validate optimized repair station timing after New Tristram arrival remained reliable in `GoblinFarmer_Debug_20260602_213950.zip`.
 * [x] Confirm repair logs include `waitAfterArrivalMs`, `timeUntilRepairStationDetectedMs`, `timeUntilRepairMenuOpenedMs`, and `totalRepairWorkflowDurationMs`.
 * [x] Complete Salvage workflow testing.
-* [x] Add bounty menu diagnostics for `BountyMenuDetected`, `BountyMenuEscapeSent`, `BountyMenuEscapeSkipped`, and skip reasons.
-* [x] Make bounty menu auto-close send automation-safe injected Escape so it does not cancel automation.
-* [x] Log bounty menu scan image path, `Bounty Menu Scan Region.png` path, reference/screen region, best confidence, threshold, and detection source.
+* [x] Add bounty menu diagnostics for `BountyMenuDetected` and `BountyMenuEscapeSent`.
+* [x] Keep app-injected Escape automation-safe so bounty watcher Escape does not cancel automation.
+* [x] Log bounty menu scan image path, `Bounty Complete Scan Region.png` path, reference/screen region, best confidence, threshold, and detection source.
 * [x] Capture low-confidence bounty menu scan-region screenshots for visual comparison against the configured scan-region asset.
 * [x] Treat narrow bounty menu near-matches below `0.780` as `RegionNearMatch` instead of ignoring repeated `0.777` detections.
 * [x] Refresh `Bounty Menu Title.png` from the latest live gold `BOUNTY COMPLETE` popup title.
-* [x] Allow detected Bounty Complete popup close during combat by sending automation-safe injected Escape without stopping combat automation.
-* [ ] Validate passive bounty menu detection logs `BountyMenuDetected` and sends Escape when Diablo is foreground, including while combat is active.
-* [ ] Validate bounty menu Escape throttling logs `BountyMenuEscapeSkipped` for inactive Diablo, missing image data, low confidence, or throttle.
-* [ ] Validate the configured `Images\Combat\Bounty Menu Scan Region.png` green-box region is used in live logs via `BountyMenuScanResult`.
+* [x] Port the Python combat-menu watcher pattern for Bounty Complete: combat-only loop, 100ms poll, 0.740 threshold, injected Escape, and 1000ms cooldown.
+* [x] Add bounty close diagnostics for `CombatMenuWatcherStarted`, `BountyMenuDetected`, `BountyMenuEscapeSent`, and `InjectedEscapeIgnoredByStopWatcher`.
+* [x] Add config-controlled Bounty Complete watcher poll interval and Escape cooldown.
+* [ ] Validate combat-active bounty menu detection logs `BountyMenuDetected` and sends `BountyMenuEscapeSent` while Diablo is foreground and combat is active.
+* [ ] Validate bounty watcher injected Escape logs `InjectedEscapeIgnoredByStopWatcher` and does not stop combat or automation.
+* [ ] Validate bounty menu Escape cooldown prevents repeated Escape spam.
+* [ ] Validate the configured `Images\Combat\Bounty Complete Scan Region.png` green-box region is used in live logs via `BountyMenuScanResult`.
 * [ ] Validate paired App screenshot diagnostics log visibility, minimized/foreground state, possible occlusion, and capture bounds.
 
 ### Configuration And Release Readiness

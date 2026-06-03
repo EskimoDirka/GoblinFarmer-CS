@@ -33,7 +33,7 @@ namespace GoblinFarmer
         private const double PortGameMenuConfidence = 0.80;
         private const double PortVendorUiConfidence = 0.80;
         private const double PortBlankInventoryTileConfidence = 0.78;
-        private const double PortBountyMenuConfidence = 0.78;
+        private const double PortBountyMenuConfidence = 0.74;
         private const double PortCurrentLocationConfidence = 0.82;
         private const double PortBlockedLocationConfidence = 0.68;
         private const double PortMapActHeaderConfidence = 0.92;
@@ -65,12 +65,15 @@ namespace GoblinFarmer
         private volatile bool portCombatStopping;
         private volatile bool portHotkeysRunning;
         private Thread? portHotkeyThread;
+        private Task? portCombatMenuWatcherTask;
         private IntPtr portKeyboardHookHandle = IntPtr.Zero;
         private LowLevelKeyboardProc? portKeyboardProc;
         private CancellationTokenSource? portAutomationCts;
         private CancellationTokenSource? portCombatCts;
         private bool portInitialized;
         private long portIgnoreEscapeHotkeyUntilTicks;
+        private long portLastInjectedEscapeIgnoredLogTicks;
+        private string portAutomationEscapeReason = "";
         private string portCombatClass = "";
         private string portLastTeleportKey = "";
         private string portQueuedTeleportKey = "";
@@ -135,8 +138,7 @@ namespace GoblinFarmer
         private long portLastWitchDoctorHeldInputNoClickLogTicks;
         private long portLastWitchDoctorScrollSuppressedNoClickLogTicks;
         private long portLastLootSpamDecisionLogTicks;
-        private long portLastBountyMenuEscapeTicks;
-        private long portLastBountyMenuSkipLogTicks;
+        private long portLastBountyMenuCloseTicks;
         private bool? portLastCombatCursorDecisionAllowed;
         private bool? portLastDemonHunterDecisionAllowed;
         private bool? portLastLootSpamDecisionAllowed;
@@ -1351,9 +1353,10 @@ namespace GoblinFarmer
             portRuntimeShiftHeld = false;
         }
 
-        private void PortPressEscapeForAutomation()
+        private void PortPressEscapeForAutomation(string reason = "Automation")
         {
-            Interlocked.Exchange(ref portIgnoreEscapeHotkeyUntilTicks, DateTime.UtcNow.AddMilliseconds(900).Ticks);
+            portAutomationEscapeReason = reason;
+            Interlocked.Exchange(ref portIgnoreEscapeHotkeyUntilTicks, DateTime.UtcNow.AddMilliseconds(1000).Ticks);
             PortPressKey(PortVkEscape);
         }
 
