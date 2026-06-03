@@ -4,12 +4,14 @@ param(
     [string]$Remote = "origin",
     [string]$Branch,
     [string]$Runtime = "win-x64",
+    [string]$UserInstallDir = "E:\GoblinFarmer",
+    [switch]$SkipUserExeRefresh,
     [switch]$CreateGitHubRelease,
     [switch]$SkipInstaller
 )
 
-# Routine local publish helper. It assumes docs/source edits are already made,
-# then verifies, publishes, creates local artifacts, commits, and pushes.
+# Routine GitHub sync helper. It assumes docs/source edits are already made,
+# then verifies, publishes, refreshes the user executable, commits, and pushes.
 # GitHub Releases are intentionally opt-in for larger app milestones.
 
 $ErrorActionPreference = "Stop"
@@ -88,6 +90,93 @@ function Get-GitHubCliPath {
     return $null
 }
 
+function Test-IsPathInside {
+    param(
+        [string]$ChildPath,
+        [string]$ParentPath
+    )
+
+    $childFull = [System.IO.Path]::GetFullPath($ChildPath).TrimEnd('\')
+    $parentFull = [System.IO.Path]::GetFullPath($ParentPath).TrimEnd('\')
+    return $childFull.Equals($parentFull, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $childFull.StartsWith("$parentFull\", [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Test-ProcessRunningFromPath {
+    param([string]$Path)
+
+    $resolvedPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    foreach ($process in Get-Process -Name "GoblinFarmer" -ErrorAction SilentlyContinue) {
+        try {
+            $processPath = $process.MainModule.FileName
+            if (![string]::IsNullOrWhiteSpace($processPath) -and (Test-IsPathInside -ChildPath $processPath -ParentPath $resolvedPath)) {
+                return $true
+            }
+        }
+        catch {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Sync-UserExecutable {
+    param(
+        [string]$SourceDir,
+        [string]$DestinationDir
+    )
+
+    $sourceFull = [System.IO.Path]::GetFullPath($SourceDir)
+    $destinationFull = [System.IO.Path]::GetFullPath($DestinationDir)
+    $driveRoot = [System.IO.Path]::GetPathRoot($destinationFull)
+
+    if (!$destinationFull.StartsWith("E:\", [System.StringComparison]::OrdinalIgnoreCase)) {
+        Stop-Release "Refusing to refresh user executable outside E:\. Destination was: $destinationFull"
+    }
+
+    if ($destinationFull.TrimEnd('\').Equals($driveRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+        Stop-Release "Refusing to refresh a drive root: $destinationFull"
+    }
+
+    if (Test-IsPathInside -ChildPath $destinationFull -ParentPath $repoRoot) {
+        Stop-Release "Refusing to refresh user executable inside the repository: $destinationFull"
+    }
+
+    if (Test-ProcessRunningFromPath -Path $destinationFull) {
+        Stop-Release "GoblinFarmer appears to be running from $destinationFull. Close it before refreshing the user executable."
+    }
+
+    New-Item -ItemType Directory -Force -Path $destinationFull | Out-Null
+
+    $preserveNames = @(
+        "Config",
+        "Logs",
+        "DebugPackages",
+        "Sessions",
+        "Screenshots",
+        "debug-screenshots",
+        "ScanRegions.json",
+        "session-info.txt",
+        "route-failure-summary.txt",
+        "debug-package-manifest.txt",
+        "debug-screenshot-manifest.txt"
+    )
+
+    $preserveSet = New-Object "System.Collections.Generic.HashSet[string]" ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $preserveNames) {
+        [void]$preserveSet.Add($name)
+    }
+
+    Get-ChildItem -LiteralPath $destinationFull -Force | ForEach-Object {
+        if (!$preserveSet.Contains($_.Name)) {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force
+        }
+    }
+
+    Copy-Item -Path (Join-Path $sourceFull "*") -Destination $destinationFull -Recurse -Force
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $projectPath = Join-Path $repoRoot "GoblinFarmer.csproj"
 $publishScript = Join-Path $PSScriptRoot "publish-release.ps1"
@@ -123,12 +212,13 @@ if ([string]::IsNullOrWhiteSpace($Branch)) {
     }
 }
 
-Write-Host "GoblinFarmer publish/push"
+Write-Host "GoblinFarmer GitHub Sync"
 Write-Host "Repository: $repoRoot"
 Write-Host "Version:    $Version"
 Write-Host "Project:    $projectVersion"
 Write-Host "Branch:     $Branch"
 Write-Host "Runtime:    $Runtime"
+Write-Host "User exe:   $UserInstallDir"
 
 Invoke-ReleaseStep "dotnet build" {
     dotnet build $projectPath
@@ -157,6 +247,15 @@ if (Test-Path -LiteralPath $portableZip) {
 
 Invoke-ReleaseStep "create portable zip" {
     Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $portableZip -CompressionLevel Optimal
+}
+
+if ($SkipUserExeRefresh) {
+    Write-Warning "Skipping user executable refresh because -SkipUserExeRefresh was supplied."
+}
+else {
+    Invoke-ReleaseStep "refresh user executable" {
+        Sync-UserExecutable -SourceDir $publishDir -DestinationDir $UserInstallDir
+    }
 }
 
 Write-Host ""
@@ -259,9 +358,12 @@ else {
 }
 
 Write-Host ""
-Write-Host "========== Publish Summary =========="
+Write-Host "========== GitHub Sync Summary =========="
 Write-Host "Commit:       $(git rev-parse --short HEAD)"
 Write-Host "Publish dir:  $publishDir"
+if (!$SkipUserExeRefresh) {
+    Write-Host "User exe:     $UserInstallDir"
+}
 Write-Host "Portable zip: $portableZip"
 if ($null -ne $installerPath) {
     Write-Host "Installer:    $installerPath"
@@ -272,4 +374,4 @@ else {
 if ($CreateGitHubRelease) {
     Write-Host "GitHub rel:   $Version"
 }
-Write-Host "Publish/push flow complete."
+Write-Host "GitHub sync complete."
