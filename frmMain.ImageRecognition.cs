@@ -494,6 +494,17 @@ namespace GoblinFarmer
 
             string detected = PortResolveDetectedLocation(bestName, bestConfidence, secondName, secondConfidence, threshold);
             PortLogCaldeumDetection(detected, bestName, bestConfidence);
+            DebugManager.RecordImageRecognition(new ImageRecognitionDiagnostic(
+                bestName,
+                bestConfidence,
+                secondName,
+                secondConfidence,
+                FormatRectangle(PortCurrentLocationTitleRegion()),
+                threshold,
+                "unavailable",
+                label,
+                detected,
+                templates.Count));
             if (logPerf)
             {
                 AppLogger.Info($"PERF PortDetectCurrentLocation ({label}): scanned {templates.Count} templates in title region in {perf.ElapsedMilliseconds}ms, best={PortDisplayLocation(bestName)} confidence={bestConfidence:0.000}, second={PortDisplayLocation(secondName)} confidence={secondConfidence:0.000}, threshold={threshold:0.000}, detected={PortDisplayLocation(detected)}");

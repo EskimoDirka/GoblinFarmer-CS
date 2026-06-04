@@ -31,6 +31,7 @@ namespace GoblinFarmer
             portCombatClass = radWD.Checked ? "witch_doctor" : radDH.Checked ? "demon_hunter" : "monk";
             portOriginalCursorHandle = PortCurrentCursorHandle();
             Interlocked.Exchange(ref portLastCombatCursorClickTicks, 0);
+            DebugManager.Session.BeginCombatActive();
             SetCombatStatus($"{radWD.Checked switch { true => "Witch Doctor", false when radDH.Checked => "Demon Hunter", _ => "Monk" }} Running");
             AddWorkflowStep("Combat started");
             AppLogger.Info($"Combat started: class={portCombatClass}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; {PortCombatInputContext()}");
@@ -86,6 +87,7 @@ namespace GoblinFarmer
                 ForceReleaseAllRuntimeInputs($"combat stop complete: {reason}");
                 cts?.Dispose();
                 ClipCursor(IntPtr.Zero);
+                DebugManager.Session.EndCombatActive();
                 SetCombatStatus("Idle");
                 SetAppStatus($"Combat Stopped ({reason})");
                 AddWorkflowStep($"Combat stopped ({reason})");

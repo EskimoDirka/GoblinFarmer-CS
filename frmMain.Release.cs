@@ -75,16 +75,7 @@ namespace GoblinFarmer
                 }
 
                 bool debugModeEnabled = portDebugModeCheckBox.Checked;
-                AppSettings.Debug.DebugModePreferenceSaved = true;
-                AppSettings.Debug.DebugMode = debugModeEnabled;
-                AppSettings.Debug.EnableMissingAssetPrompts = debugModeEnabled;
-                AppSettings.Debug.ShowDiagnosticOverlay = debugModeEnabled;
-                AppSettings.Debug.ShowRouteInspector = debugModeEnabled;
-                if (debugModeEnabled)
-                {
-                    AppSettings.Debug.EnableDebugScreenshots = true;
-                }
-
+                DebugManager.ApplyReleaseDebugModePreference(debugModeEnabled, AppSettings.Debug);
                 AppSettings.Save();
                 PortApplyDebugModeUi();
                 PortLogDebugModeToggle(oldDebugMode, AppSettings.Debug.DebugMode, diagnosticsBefore);
@@ -495,7 +486,7 @@ namespace GoblinFarmer
             }
 
             bool debugMode = AppSettings.Debug.DebugMode;
-            bool dynamicDebugControlsVisible = AppSettings.ShouldShowDynamicDebugControls(AppSettings.CurrentDebugDefaultsProfile);
+            bool dynamicDebugControlsVisible = DebugManager.ShouldShowDynamicDebugControls(AppSettings.CurrentDebugDefaultsProfile);
             bool debugControlsForcedVisible = !dynamicDebugControlsVisible;
             if (portDebugModeCheckBox != null)
             {

@@ -115,10 +115,7 @@ namespace GoblinFarmer
         private bool battleNetCloseTimedOut;
         private bool battleNetCloseProcessRemaining;
         private bool battleNetCloseVisibleWindowRemaining;
-        private readonly Dictionary<string, DateTime> portDebugScreenshotLastCaptured = new(StringComparer.OrdinalIgnoreCase);
-        private readonly object portDebugScreenshotLock = new();
         private readonly object portRuntimeInputLock = new();
-        private int portDebugScreenshotCountThisRun;
         private int portConsecutiveDiabloMissingChecks;
         private bool portLaunchGraceStableLogged;
         private volatile bool portBattleNetLaunchFlowActive;
@@ -391,6 +388,9 @@ namespace GoblinFarmer
                 $"ConfigPath={AppSettings.ConfigPath}; " +
                 $"FirstRunSetupSuppressed={AppSettings.FirstRunSetupSuppressed}; " +
                 $"DebugDefaultsProfile={AppSettings.CurrentDebugDefaultsProfile}; " +
+                $"VsDebugForcedEvidenceInMemory={DebugManager.UsesInMemoryForcedVsDebugEvidenceSettings}; " +
+                $"ReleaseDebugPreferencesPersisted={DebugManager.UsesUserSavedReleaseDebugModePreferences}; " +
+                $"NormalReleaseUserMode={DebugManager.IsNormalReleaseUserMode}; " +
                 $"DebugMode={AppSettings.Debug.DebugMode}; " +
                 $"KeepDebugScreenshots={(chkKeepDebugScreenshots != null && chkKeepDebugScreenshots.Checked)}; " +
                 $"ShowDiagnosticOverlay={AppSettings.Debug.ShowDiagnosticOverlay}; " +
@@ -579,6 +579,7 @@ namespace GoblinFarmer
                 bool ok = await Task.Run(() => work(token));
                 if (token.IsCancellationRequested)
                 {
+                    DebugManager.Session.RecordWorkflowCancellation("Workflow cancelled");
                     PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
                     PortSetAppStatus("Cancelled");
                     AddWorkflowStep("Flow cancelled");
@@ -603,6 +604,7 @@ namespace GoblinFarmer
             }
             catch (OperationCanceledException)
             {
+                DebugManager.Session.RecordWorkflowCancellation("Workflow cancelled by exception");
                 PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
                 PortSetAppStatus("Cancelled");
                 AddWorkflowStep("Flow cancelled");
@@ -610,6 +612,7 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 AppLogger.Error("Unhandled exception in automation run.", ex);
+                DebugManager.Session.RecordUnexpectedException(ex.Message);
                 PortIncrementFailures();
                 PortCaptureFailureScreenshot("UnexpectedException", "Workflow");
                 PortSetAppStatus("Flow Failed");
@@ -695,6 +698,7 @@ namespace GoblinFarmer
                     ? $"source={source}"
                     : "";
             AppLogger.Info($"Teleport target location: {displayName}; source={source}; ignoreBlocking={bypassFailsafe}; blockingChecked={shouldCheckBlocking}; blockingSkipped={blockingSkipped}; blockingSkipReason={PortDisplayLocation(blockingSkipReason)}");
+            DebugManager.Session.RecordTeleportAttempted();
             if (blockingSkipped)
             {
                 portLastBlockingDecision = $"Skipped; Source={source}; Requested={PortDisplayLocation(displayName)}; IgnoreBlocking={bypassFailsafe}; BlockingChecked={shouldCheckBlocking}";
@@ -778,6 +782,7 @@ namespace GoblinFarmer
                 if (!portActCoords.TryGetValue(target.Act, out PortMapPoint? act))
                 {
                     AppLogger.Info($"Teleport to {displayName} failed: missing world map coordinates for {target.Act}");
+                    DebugManager.Session.RecordTeleportFailureOrTimeout($"Teleport failed: missing world map coordinates for {target.Act}");
                     return false;
                 }
 
@@ -785,18 +790,21 @@ namespace GoblinFarmer
                 if (!PortSafeRightClick(PortScaleGamePoint(portMapRightClickPoint)))
                 {
                     AppLogger.Info($"Teleport to {displayName} failed: right-click to world map was unsafe");
+                    DebugManager.Session.RecordTeleportFailureOrTimeout($"Teleport failed: world map right-click unsafe for {displayName}");
                     return false;
                 }
 
                 if (!PortWaitForWorldMapReady(token, 5000))
                 {
                     AppLogger.Info($"Teleport to {displayName} failed: world map did not become ready");
+                    DebugManager.Session.RecordTeleportFailureOrTimeout($"Teleport failed: world map not ready for {displayName}");
                     return false;
                 }
 
                 if (!PortSafeLeftClick(PortScaleGamePoint(new DrawingPoint(act.X, act.Y))))
                 {
                     AppLogger.Info($"Teleport to {displayName} failed: act click for {target.Act} was unsafe");
+                    DebugManager.Session.RecordTeleportFailureOrTimeout($"Teleport failed: act click unsafe for {displayName}");
                     return false;
                 }
 
@@ -804,6 +812,7 @@ namespace GoblinFarmer
                 if (!PortWaitForMapActHeader(target.Act, token, 6000))
                 {
                     AppLogger.Info($"Teleport to {displayName} failed: act header did not change to {target.Act}");
+                    DebugManager.Session.RecordTeleportFailureOrTimeout($"Teleport failed: act header did not change for {displayName}");
                     return false;
                 }
             }
@@ -816,6 +825,7 @@ namespace GoblinFarmer
             if (!PortSafeLeftClick(destinationClickPoint))
             {
                 AppLogger.Info($"Teleport to {displayName} failed: destination click was unsafe; destinationClickPoint={destinationClickPoint.X},{destinationClickPoint.Y}; currentMapAct={PortDisplayLocation(currentAct)}; targetAct={target.Act}; targetReferencePoint={target.X},{target.Y}");
+                DebugManager.Session.RecordTeleportFailureOrTimeout($"Teleport failed: destination click unsafe for {displayName}");
                 return false;
             }
 
@@ -850,6 +860,7 @@ namespace GoblinFarmer
             else if (verifyArrival && PortFailureCount() == failuresBeforeArrivalConfirmation)
             {
                 PortIncrementFailures();
+                DebugManager.Session.RecordTeleportFailureOrTimeout(token.IsCancellationRequested ? $"Teleport interrupted: {displayName}" : $"Teleport confirmation timed out: {displayName}");
                 string screenshotPath = PortCaptureFailureScreenshot(token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout", "Teleport");
                 PortLogRouteFailureSummary(
                     token.IsCancellationRequested ? "TeleportInterrupted" : "TeleportConfirmationTimeout",
@@ -1567,6 +1578,7 @@ namespace GoblinFarmer
         {
             AddWorkflowStep($"FAILED: {step}");
             AppLogger.Error($"Workflow step failed: {step}");
+            DebugManager.Session.SetLastKnownIssue($"Workflow step failed: {step}");
             PortIncrementFailures();
             PortCaptureDebugScreenshot("WorkflowFailed");
             ForceReleaseAllRuntimeInputs($"workflow failed: {step}");

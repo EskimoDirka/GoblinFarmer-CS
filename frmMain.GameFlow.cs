@@ -271,6 +271,7 @@ namespace GoblinFarmer
                 {
                     MessageBox.Show("Could not find Battle.net Play button.");
                     PortSetAppStatus("Play Button Not Found");
+                    DebugManager.Session.RecordBattleNetLaunchFailure("Battle.net launch failed: Play button not found");
                     return false;
                 }
 
@@ -311,6 +312,7 @@ namespace GoblinFarmer
 
                 MessageBox.Show("Diablo III did not start within the timeout.");
                 PortSetAppStatus("Diablo Start Timeout");
+                DebugManager.Session.RecordBattleNetLaunchFailure("Battle.net launch failed: Diablo start timeout");
                 return false;
             }
             finally
@@ -381,6 +383,7 @@ namespace GoblinFarmer
             MessageBox.Show("Could not find Diablo Start Game button.");
             PortSetAppStatus("Start Game Not Found");
             AppLogger.Info($"Start Game failed: clickAttempts={attempts}; detectionAttempts={detectionAttempts}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; loaded={PortCharacterLoadConfirmationVisible() || PortGameLoadedLocationTitleVisible()}; reason={(attempts >= maxAttempts ? "max click attempts reached" : "timeout waiting for stable Start Game button")}");
+            DebugManager.Session.RecordStartGameFailure(attempts >= maxAttempts ? "Start Game failed: max click attempts reached" : "Start Game failed: timeout waiting for stable button");
             PortCaptureFailureScreenshot("StartGameButtonNotFound", "StartGame");
             return false;
         }

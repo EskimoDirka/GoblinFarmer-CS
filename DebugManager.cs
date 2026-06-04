@@ -1,0 +1,625 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Text;
+
+namespace GoblinFarmer
+{
+    internal static class DebugManager
+    {
+        private const int DebugScreenshotRunCap = 50;
+        private static readonly TimeSpan DebugScreenshotThrottle = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan ExpensiveDiagnosticThrottle = TimeSpan.FromSeconds(2);
+        private static readonly object SyncRoot = new();
+        private static readonly Dictionary<string, DateTime> LastDebugScreenshotByKey = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, DateTime> LastExpensiveDiagnosticByKey = new(StringComparer.OrdinalIgnoreCase);
+        private static int debugScreenshotsThisSession;
+
+        public static DiagnosticsSessionState Session { get; } = new();
+
+        public static string BaseDirectory => AppDomain.CurrentDomain.BaseDirectory;
+        public static string LogsDirectory => Path.Combine(BaseDirectory, "Logs");
+        public static string ScreenshotsDirectory => Path.Combine(BaseDirectory, "Screenshots");
+        public static string DebugScreenshotsDirectory => Path.Combine(BaseDirectory, "debug-screenshots");
+        public static string SessionsDirectory => Path.Combine(BaseDirectory, "Sessions");
+        public static string SessionInfoPath => Path.Combine(BaseDirectory, "session-info.txt");
+
+        public static bool IsVisualStudioDebugSession => AppSettings.IsVsDebugProfile;
+        public static bool IsReleaseDebugModeEnabled => !AppSettings.IsVsDebugProfile && AppSettings.Debug.DebugMode;
+        public static bool IsNormalReleaseUserMode => !AppSettings.IsVsDebugProfile && !AppSettings.Debug.DebugMode;
+        public static bool UsesInMemoryForcedVsDebugEvidenceSettings => AppSettings.IsVsDebugProfile;
+        public static bool UsesUserSavedReleaseDebugModePreferences => !AppSettings.IsVsDebugProfile;
+        public static bool DiagnosticLoggingEnabled => AppSettings.IsVsDebugProfile || (AppSettings.Debug.DebugMode && AppSettings.Debug.EnableVerboseLogging);
+
+        public static AppSettings.DebugDefaultsProfile ResolveDebugDefaultsProfile(string? explicitProfile, bool debuggerAttached, bool debugBuild)
+        {
+            if (Enum.TryParse(explicitProfile, ignoreCase: true, out AppSettings.DebugDefaultsProfile parsedProfile))
+            {
+                return parsedProfile;
+            }
+
+            return IsVsDebugLaunchSurface(debuggerAttached, debugBuild)
+                ? AppSettings.DebugDefaultsProfile.VsDebug
+                : AppSettings.DebugDefaultsProfile.ReleaseUser;
+        }
+
+        public static bool IsVsDebugLaunchSurface(bool debuggerAttached, bool debugBuild)
+        {
+            return debuggerAttached && debugBuild;
+        }
+
+        public static bool ShouldSuppressFirstRunSetup(AppSettings.DebugDefaultsProfile profile)
+        {
+            return profile == AppSettings.DebugDefaultsProfile.VsDebug;
+        }
+
+        public static bool ShouldShowDynamicDebugControls(AppSettings.DebugDefaultsProfile profile)
+        {
+            return profile != AppSettings.DebugDefaultsProfile.VsDebug;
+        }
+
+        public static bool ShouldRequireFirstRunSetup(AppSettings.DebugDefaultsProfile profile, bool requiredRuntimeConfigurationIsValid)
+        {
+            return !ShouldSuppressFirstRunSetup(profile) && !requiredRuntimeConfigurationIsValid;
+        }
+
+        public static void ApplyVisualStudioDebugDefaults(AppSettings.DebugSettings debug)
+        {
+            debug.DebugMode = true;
+            debug.ShowDiagnosticOverlay = true;
+            debug.ShowRouteInspector = true;
+            debug.EnableDebugScreenshots = true;
+            debug.EnableMissingAssetPrompts = true;
+            debug.EnableVerboseLogging = true;
+        }
+
+        public static void ApplyReleaseUserDefaultsIfPreferenceUnsaved(AppSettings.DebugSettings debug)
+        {
+            if (debug.DebugModePreferenceSaved)
+            {
+                return;
+            }
+
+            debug.DebugMode = false;
+            debug.ShowDiagnosticOverlay = false;
+            debug.ShowRouteInspector = false;
+            debug.EnableDebugScreenshots = false;
+            debug.EnableMissingAssetPrompts = false;
+            debug.EnableVerboseLogging = false;
+        }
+
+        public static void ApplyReleaseDebugModePreference(bool enabled, AppSettings.DebugSettings debug)
+        {
+            debug.DebugModePreferenceSaved = true;
+            debug.DebugMode = enabled;
+            debug.EnableMissingAssetPrompts = enabled;
+            debug.ShowDiagnosticOverlay = enabled;
+            debug.ShowRouteInspector = enabled;
+            if (enabled)
+            {
+                debug.EnableDebugScreenshots = true;
+            }
+        }
+
+        public static bool ShouldShowDiagnosticOverlay()
+        {
+            return AppSettings.IsVsDebugProfile || (AppSettings.Debug.DebugMode && AppSettings.Debug.ShowDiagnosticOverlay);
+        }
+
+        public static bool ShouldShowRouteInspector()
+        {
+            return AppSettings.IsVsDebugProfile || (AppSettings.Debug.DebugMode && AppSettings.Debug.ShowRouteInspector);
+        }
+
+        public static bool ShouldCaptureDebugEvidence(bool keepDebugScreenshotsChecked)
+        {
+            return AppSettings.Debug.EnableDebugScreenshots && keepDebugScreenshotsChecked;
+        }
+
+        public static bool TryReserveDebugScreenshot(string actionName, string reason, out string skipReason)
+        {
+            skipReason = "";
+            string key = $"{actionName}|{reason}";
+            DateTime now = DateTime.Now;
+
+            lock (SyncRoot)
+            {
+                if (debugScreenshotsThisSession >= DebugScreenshotRunCap)
+                {
+                    skipReason = "run cap reached";
+                    return false;
+                }
+
+                if (LastDebugScreenshotByKey.TryGetValue(key, out DateTime lastCaptured) &&
+                    now - lastCaptured < DebugScreenshotThrottle)
+                {
+                    skipReason = "throttled";
+                    return false;
+                }
+
+                LastDebugScreenshotByKey[key] = now;
+                debugScreenshotsThisSession++;
+                return true;
+            }
+        }
+
+        public static void ReleaseDebugScreenshotReservation()
+        {
+            lock (SyncRoot)
+            {
+                debugScreenshotsThisSession = Math.Max(0, debugScreenshotsThisSession - 1);
+            }
+        }
+
+        public static bool ShouldLogExpensiveDiagnostic(string key)
+        {
+            if (!DiagnosticLoggingEnabled)
+            {
+                return false;
+            }
+
+            DateTime now = DateTime.Now;
+            lock (SyncRoot)
+            {
+                if (LastExpensiveDiagnosticByKey.TryGetValue(key, out DateTime lastLogged) &&
+                    now - lastLogged < ExpensiveDiagnosticThrottle)
+                {
+                    return false;
+                }
+
+                LastExpensiveDiagnosticByKey[key] = now;
+                return true;
+            }
+        }
+
+        public static void RecordDebugScreenshotPath(string path)
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                Session.SetLatestScreenshot(path);
+            }
+        }
+
+        public static void RecordImageRecognition(ImageRecognitionDiagnostic diagnostic)
+        {
+            string key = $"{diagnostic.CallingFlow}|{diagnostic.TemplateName}|{diagnostic.ScanRegion}";
+            if (!ShouldLogExpensiveDiagnostic(key))
+            {
+                return;
+            }
+
+            AppLogger.Info(
+                "ImageRecognitionDiagnostic: " +
+                $"flow={LogField(diagnostic.CallingFlow)}; " +
+                $"template={LogField(diagnostic.TemplateName)}; " +
+                $"confidence={diagnostic.Confidence:0.000}; " +
+                $"runnerUp={LogField(diagnostic.RunnerUpName)}; " +
+                $"runnerUpConfidence={diagnostic.RunnerUpConfidence:0.000}; " +
+                $"scanRegion={LogField(diagnostic.ScanRegion)}; " +
+                $"threshold={diagnostic.Threshold:0.000}; " +
+                $"bestPoint={LogField(diagnostic.BestMatchPoint)}; " +
+                $"detected={LogField(diagnostic.DetectedName)}; " +
+                $"templateCount={diagnostic.TemplateCount}");
+        }
+
+        public static string FindLatestDebugPackagePath()
+        {
+            DirectoryInfo? directory = new(BaseDirectory);
+            for (int depth = 0; directory != null && depth < 8; depth++, directory = directory.Parent)
+            {
+                string packageDirectory = Path.Combine(directory.FullName, "DebugPackages");
+                if (!Directory.Exists(packageDirectory))
+                {
+                    continue;
+                }
+
+                FileInfo? latestPackage = new DirectoryInfo(packageDirectory)
+                    .GetFiles("GoblinFarmer_Debug_*.zip")
+                    .OrderByDescending(file => file.LastWriteTime)
+                    .FirstOrDefault();
+
+                if (latestPackage != null)
+                {
+                    return latestPackage.FullName;
+                }
+            }
+
+            return "";
+        }
+
+        public static CleanupResult CleanupOldSessionSummaries(int retentionCount)
+        {
+            CleanupResult result = CleanupOldSessionSummaries(SessionsDirectory, retentionCount);
+            AppLogger.Info($"Session summary retention cleanup complete: scanned={result.Scanned}; deleted={result.Deleted}; kept={result.Kept}; retentionCount={retentionCount}; folder={SessionsDirectory}");
+            return result;
+        }
+
+        internal static CleanupResult CleanupOldSessionSummaries(string sessionsDirectory, int retentionCount)
+        {
+            return CleanupOldFilesByCount(sessionsDirectory, "Session_*.md", retentionCount, "session summary");
+        }
+
+        public static CleanupResult CleanupOldDebugPackages(int retentionCount)
+        {
+            CleanupResult total = new(0, 0, 0);
+            foreach (string directory in FindDebugPackageDirectories())
+            {
+                CleanupResult result = CleanupOldDebugPackages(directory, retentionCount);
+                total = total.Add(result);
+            }
+
+            if (total.Scanned == 0)
+            {
+                string defaultPackageDirectory = Path.Combine(BaseDirectory, "DebugPackages");
+                AppLogger.Info($"Debug package retention cleanup complete: scanned=0; deleted=0; kept=0; retentionCount={retentionCount}; folder={defaultPackageDirectory}");
+            }
+            else
+            {
+                AppLogger.Info($"Debug package retention cleanup complete: scanned={total.Scanned}; deleted={total.Deleted}; kept={total.Kept}; retentionCount={retentionCount}");
+            }
+
+            return total;
+        }
+
+        internal static CleanupResult CleanupOldDebugPackages(string packageDirectory, int retentionCount)
+        {
+            return CleanupOldFilesByCount(packageDirectory, "GoblinFarmer_Debug_*.zip", retentionCount, "debug package");
+        }
+
+        private static CleanupResult CleanupOldFilesByCount(string directory, string searchPattern, int retentionCount, string artifactName)
+        {
+            if (retentionCount <= 0)
+            {
+                AppLogger.Info($"{artifactName} retention cleanup disabled: retentionCount={retentionCount}; folder={directory}");
+                return new CleanupResult(0, 0, 0);
+            }
+
+            if (!Directory.Exists(directory))
+            {
+                return new CleanupResult(0, 0, 0);
+            }
+
+            FileInfo[] files;
+            try
+            {
+                files = new DirectoryInfo(directory)
+                    .GetFiles(searchPattern, SearchOption.TopDirectoryOnly)
+                    .OrderByDescending(file => file.LastWriteTimeUtc)
+                    .ThenByDescending(file => file.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"{artifactName} retention cleanup scan failed: folder={directory}; pattern={searchPattern}", ex);
+                return new CleanupResult(0, 0, 0);
+            }
+
+            int deleted = 0;
+            foreach (FileInfo file in files.Skip(retentionCount))
+            {
+                try
+                {
+                    file.Delete();
+                    deleted++;
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error($"{artifactName} retention cleanup delete failed: path={file.FullName}", ex);
+                }
+            }
+
+            return new CleanupResult(files.Length, deleted, files.Length - deleted);
+        }
+
+        private static IEnumerable<string> FindDebugPackageDirectories()
+        {
+            HashSet<string> directories = new(StringComparer.OrdinalIgnoreCase);
+            DirectoryInfo? directory = new(BaseDirectory);
+            for (int depth = 0; directory != null && depth < 8; depth++, directory = directory.Parent)
+            {
+                string packageDirectory = Path.Combine(directory.FullName, "DebugPackages");
+                if (Directory.Exists(packageDirectory))
+                {
+                    directories.Add(Path.GetFullPath(packageDirectory));
+                }
+            }
+
+            return directories;
+        }
+
+        public static string FindLatestScreenshotPath()
+        {
+            if (!string.IsNullOrWhiteSpace(Session.LatestScreenshotPath))
+            {
+                return Session.LatestScreenshotPath;
+            }
+
+            if (!Directory.Exists(ScreenshotsDirectory))
+            {
+                return "";
+            }
+
+            return new DirectoryInfo(ScreenshotsDirectory)
+                .GetFiles("*.*")
+                .Where(file => IsScreenshotExtension(file.Extension))
+                .OrderByDescending(file => file.LastWriteTime)
+                .FirstOrDefault()
+                ?.FullName ?? "";
+        }
+
+        public static string ExportSessionSummary(SessionSummaryContext context)
+        {
+            try
+            {
+                Directory.CreateDirectory(SessionsDirectory);
+
+                DateTime endedAt = DateTime.Now;
+                DiagnosticsSessionSnapshot snapshot = Session.Snapshot(endedAt);
+                string path = Path.Combine(SessionsDirectory, $"Session_{snapshot.StartedAtLocal:yyyyMMdd_HHmmss}.md");
+                string latestLogPath = string.IsNullOrWhiteSpace(context.LatestLogPath) ? AppLogger.CurrentLogFilePath : context.LatestLogPath;
+                string latestPackagePath = string.IsNullOrWhiteSpace(context.LatestDebugPackagePath) ? FindLatestDebugPackagePath() : context.LatestDebugPackagePath;
+                string latestScreenshotPath = string.IsNullOrWhiteSpace(context.LatestScreenshotPath) ? FindLatestScreenshotPath() : context.LatestScreenshotPath;
+                string latestFailurePath = string.IsNullOrWhiteSpace(context.LatestFailureScreenshotPath) ? latestScreenshotPath : context.LatestFailureScreenshotPath;
+                string lastKnownIssue = string.IsNullOrWhiteSpace(context.LastKnownIssue) ? snapshot.LastKnownIssue : context.LastKnownIssue;
+
+                StringBuilder builder = new();
+                builder.AppendLine("# GoblinFarmer Session Summary");
+                builder.AppendLine();
+                builder.AppendLine($"- App version: {AppDisplayVersion}");
+                builder.AppendLine($"- Build mode: {AppSettings.BuildConfiguration}");
+                builder.AppendLine($"- Debug profile: {AppSettings.CurrentDebugDefaultsProfile}");
+                builder.AppendLine($"- Debug mode: {AppSettings.Debug.DebugMode}");
+                builder.AppendLine($"- Session start: {snapshot.StartedAtLocal:O}");
+                builder.AppendLine($"- Session end: {snapshot.EndedAtLocal:O}");
+                builder.AppendLine($"- Duration: {snapshot.Duration:hh\\:mm\\:ss}");
+                builder.AppendLine($"- Games created: {snapshot.GamesCreated}");
+                builder.AppendLine($"- Teleports attempted: {snapshot.TeleportsAttempted}");
+                builder.AppendLine($"- Teleports confirmed: {snapshot.TeleportsConfirmed}");
+                builder.AppendLine($"- Teleport blocks: {snapshot.TeleportBlocks}");
+                builder.AppendLine($"- Teleport failures/timeouts: {snapshot.TeleportFailuresOrTimeouts}");
+                builder.AppendLine($"- Start Game failures: {snapshot.StartGameFailures}");
+                builder.AppendLine($"- Battle.net launch failures: {snapshot.BattleNetLaunchFailures}");
+                builder.AppendLine($"- Repair failures: {snapshot.RepairFailures}");
+                builder.AppendLine($"- Salvage failures: {snapshot.SalvageFailures}");
+                builder.AppendLine($"- Workflow cancellations: {snapshot.WorkflowCancellations}");
+                builder.AppendLine($"- Unexpected exceptions: {snapshot.UnexpectedExceptions}");
+                builder.AppendLine($"- Combat/farming active time: {snapshot.CombatActiveTime:hh\\:mm\\:ss}");
+                builder.AppendLine($"- Latest log path: {DisplayPath(latestLogPath)}");
+                builder.AppendLine($"- Latest debug package path: {DisplayPath(latestPackagePath)}");
+                builder.AppendLine($"- Latest screenshot path: {DisplayPath(latestScreenshotPath)}");
+                builder.AppendLine($"- Latest failure screenshot path: {DisplayPath(latestFailurePath)}");
+                builder.AppendLine($"- Latest failure type: {DisplayPath(context.LatestFailureType)}");
+                builder.AppendLine($"- Active workflow at exit: {DisplayPath(context.ActiveWorkflow)}");
+                builder.AppendLine($"- Last known issue/recent failure summary: {DisplayPath(lastKnownIssue)}");
+
+                File.WriteAllText(path, builder.ToString());
+                Session.SetLatestSessionSummary(path);
+                AppLogger.Info($"Session summary exported: {path}");
+                return path;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Session summary export failed.", ex);
+                return "";
+            }
+        }
+
+        public static string AppDisplayVersion
+        {
+            get
+            {
+                string? informationalVersion = Assembly.GetExecutingAssembly()
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                    ?.InformationalVersion;
+
+                if (!string.IsNullOrWhiteSpace(informationalVersion))
+                {
+                    int metadataIndex = informationalVersion.IndexOf('+');
+                    return metadataIndex >= 0
+                        ? informationalVersion[..metadataIndex]
+                        : informationalVersion;
+                }
+
+                Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+                return version is null
+                    ? "unknown"
+                    : $"{version.Major}.{version.Minor}.{version.Build}";
+            }
+        }
+
+        private static bool IsScreenshotExtension(string extension)
+        {
+            return extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string DisplayPath(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "none" : value;
+        }
+
+        private static string LogField(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? "Unknown"
+                : value.Replace(";", ",").Replace(Environment.NewLine, " ");
+        }
+    }
+
+    internal sealed class DiagnosticsSessionState
+    {
+        private readonly object syncRoot = new();
+        private DateTime? combatActiveStartedAt;
+        private TimeSpan combatActiveTime;
+        private int gamesCreated;
+        private int teleportsAttempted;
+        private int teleportsConfirmed;
+        private int teleportBlocks;
+        private int teleportFailuresOrTimeouts;
+        private int startGameFailures;
+        private int battleNetLaunchFailures;
+        private int repairFailures;
+        private int salvageFailures;
+        private int workflowCancellations;
+        private int unexpectedExceptions;
+        private string lastKnownIssue = "";
+        private string latestScreenshotPath = "";
+        private string latestSessionSummaryPath = "";
+
+        public DateTime StartedAtLocal { get; } = DateTime.Now;
+        public DateTime StartedAtUtc => StartedAtLocal.ToUniversalTime();
+        public string LatestScreenshotPath => latestScreenshotPath;
+
+        public void RecordGameCreated() => Interlocked.Increment(ref gamesCreated);
+        public void RecordTeleportAttempted() => Interlocked.Increment(ref teleportsAttempted);
+        public void RecordTeleportConfirmed() => Interlocked.Increment(ref teleportsConfirmed);
+        public void RecordTeleportBlocked(string issue) => RecordIssueAndIncrement(ref teleportBlocks, issue);
+        public void RecordTeleportFailureOrTimeout(string issue) => RecordIssueAndIncrement(ref teleportFailuresOrTimeouts, issue);
+        public void RecordStartGameFailure(string issue) => RecordIssueAndIncrement(ref startGameFailures, issue);
+        public void RecordBattleNetLaunchFailure(string issue) => RecordIssueAndIncrement(ref battleNetLaunchFailures, issue);
+        public void RecordRepairFailure(string issue) => RecordIssueAndIncrement(ref repairFailures, issue);
+        public void RecordSalvageFailure(string issue) => RecordIssueAndIncrement(ref salvageFailures, issue);
+        public void RecordWorkflowCancellation(string issue) => RecordIssueAndIncrement(ref workflowCancellations, issue);
+        public void RecordUnexpectedException(string issue) => RecordIssueAndIncrement(ref unexpectedExceptions, issue);
+
+        public void SetLatestScreenshot(string path)
+        {
+            lock (syncRoot)
+            {
+                latestScreenshotPath = path;
+            }
+        }
+
+        public void SetLatestSessionSummary(string path)
+        {
+            lock (syncRoot)
+            {
+                latestSessionSummaryPath = path;
+            }
+        }
+
+        public void SetLastKnownIssue(string issue)
+        {
+            if (string.IsNullOrWhiteSpace(issue))
+            {
+                return;
+            }
+
+            lock (syncRoot)
+            {
+                lastKnownIssue = issue.Trim();
+            }
+        }
+
+        public void BeginCombatActive()
+        {
+            lock (syncRoot)
+            {
+                combatActiveStartedAt ??= DateTime.Now;
+            }
+        }
+
+        public void EndCombatActive()
+        {
+            lock (syncRoot)
+            {
+                if (combatActiveStartedAt.HasValue)
+                {
+                    combatActiveTime += DateTime.Now - combatActiveStartedAt.Value;
+                    combatActiveStartedAt = null;
+                }
+            }
+        }
+
+        public DiagnosticsSessionSnapshot Snapshot(DateTime endedAtLocal)
+        {
+            lock (syncRoot)
+            {
+                TimeSpan activeTime = combatActiveTime;
+                if (combatActiveStartedAt.HasValue)
+                {
+                    activeTime += endedAtLocal - combatActiveStartedAt.Value;
+                }
+
+                return new DiagnosticsSessionSnapshot(
+                    StartedAtLocal,
+                    endedAtLocal,
+                    endedAtLocal - StartedAtLocal,
+                    Volatile.Read(ref gamesCreated),
+                    Volatile.Read(ref teleportsAttempted),
+                    Volatile.Read(ref teleportsConfirmed),
+                    Volatile.Read(ref teleportBlocks),
+                    Volatile.Read(ref teleportFailuresOrTimeouts),
+                    Volatile.Read(ref startGameFailures),
+                    Volatile.Read(ref battleNetLaunchFailures),
+                    Volatile.Read(ref repairFailures),
+                    Volatile.Read(ref salvageFailures),
+                    Volatile.Read(ref workflowCancellations),
+                    Volatile.Read(ref unexpectedExceptions),
+                    activeTime,
+                    latestScreenshotPath,
+                    latestSessionSummaryPath,
+                    lastKnownIssue);
+            }
+        }
+
+        private void RecordIssueAndIncrement(ref int counter, string issue)
+        {
+            Interlocked.Increment(ref counter);
+            SetLastKnownIssue(issue);
+        }
+    }
+
+    internal readonly record struct DiagnosticsSessionSnapshot(
+        DateTime StartedAtLocal,
+        DateTime EndedAtLocal,
+        TimeSpan Duration,
+        int GamesCreated,
+        int TeleportsAttempted,
+        int TeleportsConfirmed,
+        int TeleportBlocks,
+        int TeleportFailuresOrTimeouts,
+        int StartGameFailures,
+        int BattleNetLaunchFailures,
+        int RepairFailures,
+        int SalvageFailures,
+        int WorkflowCancellations,
+        int UnexpectedExceptions,
+        TimeSpan CombatActiveTime,
+        string LatestScreenshotPath,
+        string LatestSessionSummaryPath,
+        string LastKnownIssue);
+
+    internal readonly record struct SessionSummaryContext(
+        string LatestLogPath,
+        string LatestDebugPackagePath,
+        string LatestScreenshotPath,
+        string LatestFailureScreenshotPath,
+        string LatestFailureType,
+        string ActiveWorkflow,
+        string LastKnownIssue);
+
+    internal readonly record struct ImageRecognitionDiagnostic(
+        string TemplateName,
+        double Confidence,
+        string RunnerUpName,
+        double RunnerUpConfidence,
+        string ScanRegion,
+        double Threshold,
+        string BestMatchPoint,
+        string CallingFlow,
+        string DetectedName,
+        int TemplateCount);
+
+    internal readonly record struct CleanupResult(int Scanned, int Deleted, int Kept)
+    {
+        public CleanupResult Add(CleanupResult other)
+        {
+            return new CleanupResult(
+                Scanned + other.Scanned,
+                Deleted + other.Deleted,
+                Kept + other.Kept);
+        }
+    }
+}

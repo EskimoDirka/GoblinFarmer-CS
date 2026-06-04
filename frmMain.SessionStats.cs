@@ -21,18 +21,21 @@ namespace GoblinFarmer
         private void PortIncrementGamesCreated()
         {
             Interlocked.Increment(ref sessionGamesCreated);
+            DebugManager.Session.RecordGameCreated();
             PortUpdateSessionStats();
         }
 
         private void PortIncrementTeleportsCompleted()
         {
             Interlocked.Increment(ref sessionTeleportsCompleted);
+            DebugManager.Session.RecordTeleportConfirmed();
             PortUpdateSessionStats();
         }
 
         private void PortIncrementBlockedTeleports()
         {
             Interlocked.Increment(ref sessionBlockedTeleports);
+            DebugManager.Session.RecordTeleportBlocked($"Teleport blocked: {PortDisplayLocation(portLastBlockingReason)}");
             PortUpdateSessionStats();
         }
 
@@ -67,20 +70,41 @@ namespace GoblinFarmer
         private void PortLogSessionSummary()
         {
             TimeSpan runtime = sessionStartTime == default ? TimeSpan.Zero : DateTime.Now - sessionStartTime;
+            DiagnosticsSessionSnapshot diagnosticsSnapshot = DebugManager.Session.Snapshot(DateTime.Now);
             AppLogger.Info("========== Session Summary ==========");
             AppLogger.Info($"Games Created: {sessionGamesCreated}");
             AppLogger.Info($"Teleports Completed: {sessionTeleportsCompleted}");
             AppLogger.Info($"Blocked Teleports: {sessionBlockedTeleports}");
             AppLogger.Info($"Failures: {sessionFailures}");
             AppLogger.Info($"Runtime: {runtime:hh\\:mm\\:ss}");
+            AppLogger.Info(
+                "Diagnostics Counters: " +
+                $"TeleportsAttempted={diagnosticsSnapshot.TeleportsAttempted}; " +
+                $"TeleportsConfirmed={diagnosticsSnapshot.TeleportsConfirmed}; " +
+                $"TeleportFailuresOrTimeouts={diagnosticsSnapshot.TeleportFailuresOrTimeouts}; " +
+                $"StartGameFailures={diagnosticsSnapshot.StartGameFailures}; " +
+                $"BattleNetLaunchFailures={diagnosticsSnapshot.BattleNetLaunchFailures}; " +
+                $"RepairFailures={diagnosticsSnapshot.RepairFailures}; " +
+                $"SalvageFailures={diagnosticsSnapshot.SalvageFailures}; " +
+                $"WorkflowCancellations={diagnosticsSnapshot.WorkflowCancellations}; " +
+                $"UnexpectedExceptions={diagnosticsSnapshot.UnexpectedExceptions}; " +
+                $"CombatActiveTime={diagnosticsSnapshot.CombatActiveTime:hh\\:mm\\:ss}");
             AppLogger.Info("=====================================");
+            DebugManager.ExportSessionSummary(new SessionSummaryContext(
+                AppLogger.CurrentLogFilePath,
+                portDiagnosticLatestPackagePath,
+                portDiagnosticLatestScreenshotPath,
+                DebugManager.FindLatestScreenshotPath(),
+                portDiagnosticLatestFailureScreenshotType,
+                portLastWorkflowStep,
+                diagnosticsSnapshot.LastKnownIssue));
         }
 
         private void PortWriteSessionMetadata()
         {
             try
             {
-                string metadataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-info.txt");
+                string metadataPath = DebugManager.SessionInfoPath;
                 string[] lines =
                 [
                     $"SessionStartLocal={sessionStartTime:O}",
@@ -100,11 +124,13 @@ namespace GoblinFarmer
         private string PortCaptureFailureScreenshot(string failureType, string workflow = "Workflow")
         {
             portDiagnosticLatestFailureScreenshotType = string.IsNullOrWhiteSpace(failureType) ? "Unknown" : failureType;
+            DebugManager.Session.SetLastKnownIssue($"{workflow}: {portDiagnosticLatestFailureScreenshotType}");
             CaptureDebugScreenshot(workflow, portDiagnosticLatestFailureScreenshotType);
             PortScreenshotPair pair = PortCaptureDiagnosticScreenshotPair("Failure", workflow, portDiagnosticLatestFailureScreenshotType);
             if (!string.IsNullOrWhiteSpace(pair.DiabloPath) || !string.IsNullOrWhiteSpace(pair.AppPath))
             {
                 string path = !string.IsNullOrWhiteSpace(pair.DiabloPath) ? pair.DiabloPath : pair.AppPath;
+                DebugManager.RecordDebugScreenshotPath(path);
                 AppLogger.Info($"Failure screenshot saved: type={portDiagnosticLatestFailureScreenshotType}; path={path}");
             }
 
@@ -125,15 +151,12 @@ namespace GoblinFarmer
         {
             try
             {
-                if (!AppSettings.Debug.EnableDebugScreenshots)
+                if (!DebugManager.ShouldCaptureDebugEvidence(chkKeepDebugScreenshots == null || chkKeepDebugScreenshots.Checked))
                 {
-                    AppLogger.Info($"Debug screenshot skipped: disabled by AppSettings; reason={reason}");
-                    return "";
-                }
-
-                if (chkKeepDebugScreenshots != null && !chkKeepDebugScreenshots.Checked)
-                {
-                    AppLogger.Info($"Debug screenshot skipped: disabled by Keep Debug Screenshots setting; reason={reason}");
+                    string skipReason = AppSettings.Debug.EnableDebugScreenshots
+                        ? "disabled by Keep Debug Screenshots setting"
+                        : "disabled by AppSettings";
+                    AppLogger.Info($"Debug screenshot skipped: {skipReason}; reason={reason}");
                     return "";
                 }
 
@@ -164,7 +187,7 @@ namespace GoblinFarmer
                     return "";
                 }
 
-                string screenshotDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Screenshots");
+                string screenshotDirectory = DebugManager.ScreenshotsDirectory;
                 Directory.CreateDirectory(screenshotDirectory);
 
                 string safeReason = string.Join("_", reason.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
@@ -184,6 +207,7 @@ namespace GoblinFarmer
 
                 screenshot.Save(path, System.Drawing.Imaging.ImageFormat.Png);
                 portDiagnosticLatestScreenshotPath = path;
+                DebugManager.RecordDebugScreenshotPath(path);
                 AppLogger.Info($"Debug screenshot saved: {path}");
                 return path;
             }
@@ -198,19 +222,16 @@ namespace GoblinFarmer
         {
             try
             {
-                if (!AppSettings.Debug.EnableDebugScreenshots)
+                if (!DebugManager.ShouldCaptureDebugEvidence(chkKeepDebugScreenshots == null || chkKeepDebugScreenshots.Checked))
                 {
-                    AppLogger.Info($"Diagnostic screenshot pair skipped: disabled by AppSettings; outcome={outcome}; workflow={workflow}; action={action}");
+                    string skipReason = AppSettings.Debug.EnableDebugScreenshots
+                        ? "disabled by Keep Debug Screenshots setting"
+                        : "disabled by AppSettings";
+                    AppLogger.Info($"Diagnostic screenshot pair skipped: {skipReason}; outcome={outcome}; workflow={workflow}; action={action}");
                     return new PortScreenshotPair("", "");
                 }
 
-                if (chkKeepDebugScreenshots != null && !chkKeepDebugScreenshots.Checked)
-                {
-                    AppLogger.Info($"Diagnostic screenshot pair skipped: disabled by Keep Debug Screenshots setting; outcome={outcome}; workflow={workflow}; action={action}");
-                    return new PortScreenshotPair("", "");
-                }
-
-                string screenshotDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Screenshots");
+                string screenshotDirectory = DebugManager.ScreenshotsDirectory;
                 Directory.CreateDirectory(screenshotDirectory);
 
                 DateTime timestamp = DateTime.Now;
@@ -229,6 +250,7 @@ namespace GoblinFarmer
                 if (!string.IsNullOrWhiteSpace(latestPath))
                 {
                     portDiagnosticLatestScreenshotPath = latestPath;
+                    DebugManager.RecordDebugScreenshotPath(latestPath);
                 }
 
                 AppLogger.Info($"Diagnostic screenshot pair saved: timestamp={timestamp:yyyy-MM-dd HH:mm:ss.fff}; outcome={safeOutcome}; workflow={safeWorkflow}; action={safeAction}; diablo={PortDisplayLocation(savedDiabloPath)}; app={PortDisplayLocation(savedAppPath)}");
@@ -370,7 +392,7 @@ namespace GoblinFarmer
         {
             try
             {
-                string screenshotDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Screenshots");
+                string screenshotDirectory = DebugManager.ScreenshotsDirectory;
                 if (!Directory.Exists(screenshotDirectory))
                 {
                     AppLogger.Info($"Screenshot retention cleanup complete: deleted=0, retentionDays={retentionDays}");

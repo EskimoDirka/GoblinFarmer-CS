@@ -13,6 +13,8 @@ namespace GoblinFarmer
             ApplicationConfiguration.Initialize();
             AppSettings.Load();
             AppLogger.CleanupOldLogs(AppSettings.RetentionDays);
+            DebugManager.CleanupOldSessionSummaries(AppSettings.Debug.SessionSummaryRetentionCount);
+            DebugManager.CleanupOldDebugPackages(AppSettings.Debug.DebugPackageRetentionCount);
             Application.Run(new frmMain());
         }
     }

@@ -46,6 +46,21 @@
 - Debug package manifest reports package size, session start, session duration, total screenshots, success screenshots, failure screenshots, and stale screenshot exclusions
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
 
+## Debug Manager / Session Summary
+- VS Debug starts with Debug Mode, diagnostic overlay, route inspector, debug screenshots, missing-asset prompts, and verbose logging enabled in memory
+- VS Debug forced evidence settings are not saved as Release/user preferences
+- Normal Release starts quiet: Debug Mode off, diagnostics hidden, debug screenshot controls hidden
+- Release Debug Mode opt-in enables diagnostic overlay, route inspector, missing-asset prompts, and seeds Keep Debug Screenshots on
+- Turning Release Debug Mode off returns to the compact/quiet diagnostics UI
+- Session counters increase from existing events: games created, teleports attempted/confirmed/blocked/failed, Start Game failures, Battle.net launch failures, repair/salvage failures, workflow cancellations, unexpected exceptions
+- Combat active time increases only while combat is running
+- App exit writes `Sessions\Session_YYYYMMDD_HHMMSS.md`
+- Session summary includes app version/build mode, start/end/duration, latest log, latest debug package, latest screenshot/failure screenshot, latest failure type, and last known issue
+- Startup retention keeps only the newest `Debug.SessionSummaryRetentionCount` matching `Sessions\Session_*.md` files
+- Startup retention keeps only the newest `Debug.DebugPackageRetentionCount` matching `DebugPackages\GoblinFarmer_Debug_*.zip` files
+- Retention cleanup does not delete unrelated files in `Sessions\` or unrelated zip files in `DebugPackages\`
+- Image-recognition diagnostic logs appear only when diagnostic logging is enabled and are throttled; no extra scans occur
+
 ## Town And Exit
 - Repair complete captures paired Diablo/App success screenshots
 - Salvage complete or skipped captures paired Diablo/App success screenshots

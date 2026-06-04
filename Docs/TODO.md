@@ -189,7 +189,19 @@ Requirements:
 
 ### Debug Manager Candidate
 
-Future direction: see `High Priority Future Enhancements > Debug Manager`.
+Status: first pass implemented as `DebugManager` plus `DiagnosticsSessionState`.
+
+* [x] Centralize Debug Mode/profile decisions behind `DebugManager` while preserving the existing `AppSettings` surface.
+* [x] Clearly separate Visual Studio Debug defaults, Release executable Debug Mode, and normal Release user mode.
+* [x] Keep forced VS Debug evidence settings in memory only; saved Release Debug Mode preferences still come from `Config\AppSettings.json`.
+* [x] Centralize screenshot enablement checks, debug screenshot throttling, and shared artifact paths for logs, screenshots, debug screenshots, session metadata, and session summaries.
+* [x] Add lightweight session counters for games, teleports attempted/confirmed/blocked/failed, Start Game failures, Battle.net launch failures, repair/salvage failures, workflow cancellations, unexpected exceptions, and combat active time.
+* [x] Export `Sessions\Session_YYYYMMDD_HHMMSS.md` safely at app shutdown.
+* [x] Add retention cleanup for `Sessions\Session_*.md`, keeping the newest `Debug.SessionSummaryRetentionCount` entries by default.
+* [x] Add retention cleanup for `DebugPackages\GoblinFarmer_Debug_*.zip`, keeping the newest `Debug.DebugPackageRetentionCount` entries by default.
+* [x] Route existing current-location image-recognition metadata through the manager without adding extra scans.
+* [ ] Validate the new session summary after the next live app exit.
+* [ ] Validate session/debug package retention after enough artifacts exist to exceed the configured counts.
 
 ### Diagnostic Overlay
 
@@ -297,6 +309,7 @@ Requirements:
 * [x] Export zip package.
 * [x] Filter packaged screenshots to the current GoblinFarmer session only.
 * [x] Exclude stale screenshots from previous sessions while preserving retention cleanup behavior.
+* [x] Runtime retention cleanup now applies only to `DebugPackages\GoblinFarmer_Debug_*.zip` and keeps the newest configured package count.
 
 Example output:
 
@@ -463,22 +476,23 @@ Simplify repository structure after debugging phase is complete.
 
 ### Session Summary Export
 
-Create session export feature.
+Status: first pass implemented.
 
 Output:
 
 Sessions/
 
 * Session_YYYYMMDD.md
+* Session_YYYYMMDD_HHMMSS.md
 
 Include:
 
 * Games created.
-* Teleports completed.
-* Failures.
-* Runtime.
-* Last known issue.
-* Relevant screenshots.
+* Teleports attempted, confirmed, blocked, and failed/timed out.
+* Start Game, Battle.net, repair, salvage, workflow cancellation, and unexpected exception counters.
+* Combat/farming active time tracked passively from combat start/stop.
+* Session start/end/duration, app version, build mode, debug profile, latest log, latest debug package, latest screenshot/failure screenshot, and last known issue.
+* Retention cleanup applies only to `Sessions\Session_*.md` and keeps the newest configured summary count.
 
 ### Debug Package Attachments
 
@@ -541,13 +555,14 @@ These are future enhancements and nice-to-haves, not active blockers.
 
 ### Debug Manager
 
-* [ ] Centralize debug mode behavior.
-* [ ] Clearly separate VS Debug defaults, Release Debug Mode, and normal user release behavior.
-* [ ] Centralize debug screenshot retention settings.
+* [x] Centralize debug mode behavior.
+* [x] Clearly separate VS Debug defaults, Release Debug Mode, and normal user release behavior.
+* [x] Centralize debug screenshot retention settings.
+* [x] Centralize session summary and debug package count retention settings.
 * [ ] Centralize debug package inclusion rules.
-* [ ] Provide consistent diagnostic logging controls.
-* [ ] Keep expensive diagnostics opt-in, throttled, or tied to existing events.
-* [ ] Keep wrappers allocation-light in hot loops and prefer state-change logging over per-tick logging.
+* [x] Provide consistent diagnostic logging controls.
+* [x] Keep expensive diagnostics opt-in, throttled, or tied to existing events.
+* [x] Keep wrappers allocation-light in hot loops and prefer state-change logging over per-tick logging.
 
 ### Developer Dashboard
 

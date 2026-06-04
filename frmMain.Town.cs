@@ -76,6 +76,7 @@ namespace GoblinFarmer
 
                 if (!PortRepairGearFromOpenBlacksmith(token, closeAfterRepair: false, repairWorkflow, out repairMenuOpenedWorkflowElapsedMs))
                 {
+                    DebugManager.Session.RecordRepairFailure("Repair failed: repair menu or button did not complete");
                     PortCaptureFailureScreenshot("RepairFailed", "Repair");
                     return PortWorkflowFailed("Repairing");
                 }
@@ -83,6 +84,7 @@ namespace GoblinFarmer
                 AddWorkflowStep("Checking inventory for salvage");
                 if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true))
                 {
+                    DebugManager.Session.RecordSalvageFailure("Salvage failed during repair flow");
                     return PortWorkflowFailed("Salvaging");
                 }
 
@@ -118,6 +120,7 @@ namespace GoblinFarmer
             PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Tab", new DrawingPoint(683, 638))));
             if (!PortWaitForImageInDiablo(Img("Salvage", "Salvage Button.png"), token, 20000, PortVendorUiConfidence))
             {
+                DebugManager.Session.RecordSalvageFailure("Salvage failed: Salvage button not visible");
                 return false;
             }
 
@@ -190,6 +193,7 @@ namespace GoblinFarmer
         {
             if (!ActivateDiabloWindow())
             {
+                DebugManager.Session.RecordRepairFailure("Repair failed: Diablo activation failed before blacksmith menu");
                 return new(false, 0, 0, -1);
             }
 
@@ -242,6 +246,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"Repair station wait/click timing: blacksmith menu not visible after {attempts} clicks in {sw.ElapsedMilliseconds}ms");
+            DebugManager.Session.RecordRepairFailure("Repair failed: repair station/blacksmith menu not found");
             PortCaptureFailureScreenshot("RepairStationNotFound", "Repair");
             return new(false, attempts, sw.ElapsedMilliseconds, -1);
         }

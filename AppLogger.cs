@@ -8,6 +8,8 @@ namespace GoblinFarmer
         private static readonly string LogDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
         private static readonly string LogFilePath = Path.Combine(LogDirectory, $"GoblinFarmer_{DateTime.Now:yyyyMMdd_HHmmss}.log");
 
+        public static string CurrentLogFilePath => LogFilePath;
+
         public static void Info(string message)
         {
             Write("INFO", message);

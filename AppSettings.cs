@@ -254,34 +254,27 @@ namespace GoblinFarmer
 
         internal static DebugDefaultsProfile ResolveDebugDefaultsProfile(string? explicitProfile, bool debuggerAttached, bool debugBuild)
         {
-            if (Enum.TryParse(explicitProfile, ignoreCase: true, out DebugDefaultsProfile parsedProfile))
-            {
-                return parsedProfile;
-            }
-
-            return IsVsDebugLaunchSurface(debuggerAttached, debugBuild)
-                ? DebugDefaultsProfile.VsDebug
-                : DebugDefaultsProfile.ReleaseUser;
+            return DebugManager.ResolveDebugDefaultsProfile(explicitProfile, debuggerAttached, debugBuild);
         }
 
         internal static bool IsVsDebugLaunchSurface(bool debuggerAttached, bool debugBuild)
         {
-            return debuggerAttached && debugBuild;
+            return DebugManager.IsVsDebugLaunchSurface(debuggerAttached, debugBuild);
         }
 
         internal static bool ShouldSuppressFirstRunSetup(DebugDefaultsProfile profile)
         {
-            return profile == DebugDefaultsProfile.VsDebug;
+            return DebugManager.ShouldSuppressFirstRunSetup(profile);
         }
 
         internal static bool ShouldShowDynamicDebugControls(DebugDefaultsProfile profile)
         {
-            return profile != DebugDefaultsProfile.VsDebug;
+            return DebugManager.ShouldShowDynamicDebugControls(profile);
         }
 
         internal static bool ShouldRequireFirstRunSetup(DebugDefaultsProfile profile, bool requiredRuntimeConfigurationIsValid)
         {
-            return !ShouldSuppressFirstRunSetup(profile) && !requiredRuntimeConfigurationIsValid;
+            return DebugManager.ShouldRequireFirstRunSetup(profile, requiredRuntimeConfigurationIsValid);
         }
 
         public static void ApplyDebugDefaultsProfile()
@@ -293,12 +286,7 @@ namespace GoblinFarmer
                 return;
             }
 
-            settings.Debug.DebugMode = true;
-            settings.Debug.ShowDiagnosticOverlay = true;
-            settings.Debug.ShowRouteInspector = true;
-            settings.Debug.EnableDebugScreenshots = true;
-            settings.Debug.EnableMissingAssetPrompts = true;
-            settings.Debug.EnableVerboseLogging = true;
+            DebugManager.ApplyVisualStudioDebugDefaults(settings.Debug);
         }
 
         public static void ApplyVsDebugDevDefaults()
@@ -387,17 +375,7 @@ namespace GoblinFarmer
                 return;
             }
 
-            if (settings.Debug.DebugModePreferenceSaved)
-            {
-                return;
-            }
-
-            settings.Debug.DebugMode = false;
-            settings.Debug.ShowDiagnosticOverlay = false;
-            settings.Debug.ShowRouteInspector = false;
-            settings.Debug.EnableDebugScreenshots = false;
-            settings.Debug.EnableMissingAssetPrompts = false;
-            settings.Debug.EnableVerboseLogging = false;
+            DebugManager.ApplyReleaseUserDefaultsIfPreferenceUnsaved(settings.Debug);
         }
 
         internal static LaunchProfileSnapshot ResolveLaunchProfileForTests(string? explicitProfile, bool debuggerAttached, bool debugBuild, string? explicitConfigPath, string baseDirectory)
@@ -407,12 +385,7 @@ namespace GoblinFarmer
             DebugSettings debug = new();
             if (profile == DebugDefaultsProfile.VsDebug)
             {
-                debug.DebugMode = true;
-                debug.ShowDiagnosticOverlay = true;
-                debug.ShowRouteInspector = true;
-                debug.EnableDebugScreenshots = true;
-                debug.EnableMissingAssetPrompts = true;
-                debug.EnableVerboseLogging = true;
+                DebugManager.ApplyVisualStudioDebugDefaults(debug);
             }
 
             return new LaunchProfileSnapshot(
@@ -664,6 +637,8 @@ namespace GoblinFarmer
                 $"Debug.EnableMissingAssetPrompts={Debug.EnableMissingAssetPrompts}; " +
                 $"Debug.EnableVerboseLogging={Debug.EnableVerboseLogging}; " +
                 $"VerboseLogging={Debug.EnableVerboseLogging}; " +
+                $"Debug.SessionSummaryRetentionCount={Debug.SessionSummaryRetentionCount}; " +
+                $"Debug.DebugPackageRetentionCount={Debug.DebugPackageRetentionCount}; " +
                 $"UI.NotificationDurationMs={UI.NotificationDurationMs}; " +
                 $"UI.NotificationOpacity={UI.NotificationOpacity:0.00}; " +
                 $"UI.NotificationPosition={UI.NotificationPosition}; " +
@@ -753,6 +728,7 @@ namespace GoblinFarmer
                 Runtime.Normalize();
                 Launch.Normalize();
                 UI.Normalize();
+                Debug.Normalize();
                 Repair.Normalize();
                 Teleport.Normalize();
                 Bounty.Normalize();
@@ -840,6 +816,8 @@ namespace GoblinFarmer
             public bool EnableDebugScreenshots { get; set; } = DefaultEnableDebugScreenshots;
             public bool EnableMissingAssetPrompts { get; set; }
             public bool EnableVerboseLogging { get; set; }
+            public int SessionSummaryRetentionCount { get; set; } = DefaultSessionSummaryRetentionCount;
+            public int DebugPackageRetentionCount { get; set; } = DefaultDebugPackageRetentionCount;
 
             public DebugSettings Clone()
             {
@@ -852,10 +830,20 @@ namespace GoblinFarmer
                     EnableDebugScreenshots = EnableDebugScreenshots,
                     EnableMissingAssetPrompts = EnableMissingAssetPrompts,
                     EnableVerboseLogging = EnableVerboseLogging,
+                    SessionSummaryRetentionCount = SessionSummaryRetentionCount,
+                    DebugPackageRetentionCount = DebugPackageRetentionCount,
                 };
             }
 
+            public void Normalize()
+            {
+                SessionSummaryRetentionCount = Math.Clamp(SessionSummaryRetentionCount, 0, 1000);
+                DebugPackageRetentionCount = Math.Clamp(DebugPackageRetentionCount, 0, 1000);
+            }
+
             public const bool DefaultEnableDebugScreenshots = false;
+            public const int DefaultSessionSummaryRetentionCount = 50;
+            public const int DefaultDebugPackageRetentionCount = 20;
         }
 
         internal sealed class UiSettings

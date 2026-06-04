@@ -19,8 +19,8 @@ namespace GoblinFarmer
 
         private void PortInitializeDiagnosticOverlay()
         {
-            bool showOverlay = AppSettings.IsVsDebugProfile || (AppSettings.Debug.DebugMode && AppSettings.Debug.ShowDiagnosticOverlay);
-            bool showInspector = AppSettings.IsVsDebugProfile || (AppSettings.Debug.DebugMode && AppSettings.Debug.ShowRouteInspector);
+            bool showOverlay = DebugManager.ShouldShowDiagnosticOverlay();
+            bool showInspector = DebugManager.ShouldShowRouteInspector();
             if (!showOverlay && !showInspector)
             {
                 AppLogger.Info("Diagnostic UI hidden by config: ShowDiagnosticOverlay=False; ShowRouteInspector=False");
@@ -292,27 +292,8 @@ namespace GoblinFarmer
 
         private static string PortFindLatestDebugPackagePath()
         {
-            DirectoryInfo? directory = new(AppDomain.CurrentDomain.BaseDirectory);
-            for (int depth = 0; directory != null && depth < 8; depth++, directory = directory.Parent)
-            {
-                string packageDirectory = Path.Combine(directory.FullName, "DebugPackages");
-                if (!Directory.Exists(packageDirectory))
-                {
-                    continue;
-                }
-
-                FileInfo? latestPackage = new DirectoryInfo(packageDirectory)
-                    .GetFiles("GoblinFarmer_Debug_*.zip")
-                    .OrderByDescending(file => file.LastWriteTime)
-                    .FirstOrDefault();
-
-                if (latestPackage != null)
-                {
-                    return latestPackage.FullName;
-                }
-            }
-
-            return "none";
+            string path = DebugManager.FindLatestDebugPackagePath();
+            return string.IsNullOrWhiteSpace(path) ? "none" : path;
         }
     }
 }

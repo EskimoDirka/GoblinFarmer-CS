@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using OpenCvSharp;
 using DrawingPoint = System.Drawing.Point;
 using CvPoint = OpenCvSharp.Point;
-using System.Reflection;
 
 namespace GoblinFarmer
 {
@@ -28,27 +27,7 @@ namespace GoblinFarmer
         {
             InitializeComponent();
 
-            Text = $"GoblinFarmer v{PortGetAppDisplayVersion()}";
-        }
-
-        private static string PortGetAppDisplayVersion()
-        {
-            var informationalVersion = Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                ?.InformationalVersion;
-
-            if (!string.IsNullOrWhiteSpace(informationalVersion))
-            {
-                var metadataIndex = informationalVersion.IndexOf('+');
-                return metadataIndex >= 0
-                    ? informationalVersion[..metadataIndex]
-                    : informationalVersion;
-            }
-
-            var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version is null
-                ? "unknown"
-                : $"{version.Major}.{version.Minor}.{version.Build}";
+            Text = $"GoblinFarmer v{DebugManager.AppDisplayVersion}";
         }
 
         private void frmMain_Load(object sender, EventArgs e)
@@ -317,6 +296,7 @@ namespace GoblinFarmer
                 {
                     MessageBox.Show("Could not find Battle.net Play button.");
                     SetAppStatus("Play Button Not Found");
+                    DebugManager.Session.RecordBattleNetLaunchFailure("Battle.net launch failed: Play button not found");
                     return false;
                 }
 
@@ -352,6 +332,7 @@ namespace GoblinFarmer
 
                 MessageBox.Show("Diablo III did not start within the timeout.");
                 SetAppStatus("Diablo Start Timeout");
+                DebugManager.Session.RecordBattleNetLaunchFailure("Battle.net launch failed: Diablo start timeout");
                 return false;
             }
             finally
@@ -375,6 +356,7 @@ namespace GoblinFarmer
             {
                 MessageBox.Show("Battle.net executable is not configured or could not be found. Open Settings to select Battle.net.exe.");
                 AppLogger.Info($"Battle.net launch failed: executable not found; source={battleNetPathSource}; path={PortLogField(battleNetPath)}; configuredPath={PortLogField(AppSettings.Runtime.BattleNetExecutablePath)}; detectedPath={PortLogField(detectedBattleNetPath)}");
+                DebugManager.Session.RecordBattleNetLaunchFailure("Battle.net launch failed: executable not found");
                 return false;
             }
 
@@ -420,6 +402,7 @@ namespace GoblinFarmer
             bool processDetected = IsBattleNetRunning();
             IntPtr finalWindow = FindBattleNetWindow();
             AppLogger.Info($"Battle.net launch failed: launch-ready Battle.net window not detected within {launchStartupTimeoutMs}ms; attempts={launchAttempts}; elapsedMs={sw.ElapsedMilliseconds}; processObserved={processDetected}; windowDetected={finalWindow != IntPtr.Zero}; executablePath={PortLogField(battleNetPath)}");
+            DebugManager.Session.RecordBattleNetLaunchFailure("Battle.net launch failed: launch-ready window not detected");
             return false;
         }
 
@@ -435,6 +418,7 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 AppLogger.Error($"Battle.net launch attempt failed: attempt={attempt}; elapsedMs={elapsedMs}; executablePath={PortLogField(battleNetPath)}", ex);
+                DebugManager.Session.RecordBattleNetLaunchFailure($"Battle.net launch attempt failed: {ex.Message}");
                 return false;
             }
         }
@@ -1094,7 +1078,6 @@ namespace GoblinFarmer
         {
             actionName = string.IsNullOrWhiteSpace(actionName) ? "Unknown" : actionName.Trim();
             reason = string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason.Trim();
-            string throttleKey = $"{actionName}|{reason}";
             Rectangle captureRegion = region.HasValue
                 ? Rectangle.Intersect(SystemInformation.VirtualScreen, region.Value)
                 : SystemInformation.VirtualScreen;
@@ -1112,23 +1095,10 @@ namespace GoblinFarmer
                 return "";
             }
 
-            lock (portDebugScreenshotLock)
+            if (!DebugManager.TryReserveDebugScreenshot(actionName, reason, out string skipReason))
             {
-                if (portDebugScreenshotCountThisRun >= 50)
-                {
-                    AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=run cap reached");
-                    return "";
-                }
-
-                if (portDebugScreenshotLastCaptured.TryGetValue(throttleKey, out DateTime lastCaptured) &&
-                    DateTime.Now - lastCaptured < TimeSpan.FromSeconds(10))
-                {
-                    AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=throttled");
-                    return "";
-                }
-
-                portDebugScreenshotLastCaptured[throttleKey] = DateTime.Now;
-                portDebugScreenshotCountThisRun++;
+                AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason={skipReason}");
+                return "";
             }
 
             string windowTitle = PortForegroundWindowTitle();
@@ -1136,7 +1106,7 @@ namespace GoblinFarmer
             try
             {
                 string category = PortDebugScreenshotCategory(actionName);
-                string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "debug-screenshots", category);
+                string directory = Path.Combine(DebugManager.DebugScreenshotsDirectory, category);
                 Directory.CreateDirectory(directory);
 
                 string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
@@ -1156,16 +1126,13 @@ namespace GoblinFarmer
                 }
 
                 screenshot.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                DebugManager.RecordDebugScreenshotPath(path);
                 AppLogger.Info($"DebugScreenshotCaptured: action={PortLogField(actionName)}; reason={PortLogField(reason)}; path={PortLogField(path)}; region={PortLogField(regionText)}; windowTitle={PortLogField(windowTitle)}");
                 return path;
             }
             catch (Exception ex)
             {
-                lock (portDebugScreenshotLock)
-                {
-                    portDebugScreenshotCountThisRun = Math.Max(0, portDebugScreenshotCountThisRun - 1);
-                }
-
+                DebugManager.ReleaseDebugScreenshotReservation();
                 AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=capture failed: {PortLogField(ex.Message)}");
                 return "";
             }

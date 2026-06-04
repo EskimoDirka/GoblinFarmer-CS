@@ -9,6 +9,8 @@ Run("Demon Hunter right mouse remains held after initial safe start", TestRightM
 Run("Initial safe-wait timeout stops only when Python would stop", TestInitialSafeWaitTimeoutPolicy);
 Run("Default AppSettings path/debug profile are launch-surface neutral", TestAppSettingsLaunchParityDefaults);
 Run("VS Debug/dev profile suppresses first-run setup and forces internal debug defaults", TestVsDebugDevProfileDefaults);
+Run("DebugManager profile helpers separate VS, release debug, and normal release", TestDebugManagerProfileHelpers);
+Run("DebugManager retention cleanup only deletes matching artifacts", TestDebugManagerRetentionCleanupFilters);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverrideWins);
 Run("Demon Hunter no-click suppression diagnostic is not named as failure or stall", TestDemonHunterNoClickSuppressionDiagnosticName);
@@ -97,6 +99,83 @@ static void TestVsDebugDevProfileDefaults()
     AssertTrue(snapshot.DebugMode, "VS/dev profile should force Debug Mode on internally");
     AssertTrue(snapshot.KeepDebugScreenshots, "VS/dev profile should force Keep Debug Screenshots on internally");
     AssertFalse(snapshot.DynamicDebugControlsVisible, "VS/dev profile should not show dynamic debug checkboxes");
+}
+
+static void TestDebugManagerProfileHelpers()
+{
+    AppSettings.DebugSettings debug = new();
+    DebugManager.ApplyVisualStudioDebugDefaults(debug);
+
+    AssertTrue(debug.DebugMode, "VS defaults should force debug mode in memory");
+    AssertTrue(debug.ShowDiagnosticOverlay, "VS defaults should show diagnostics in memory");
+    AssertTrue(debug.ShowRouteInspector, "VS defaults should show route inspector in memory");
+    AssertTrue(debug.EnableDebugScreenshots, "VS defaults should enable screenshots in memory");
+    AssertTrue(DebugManager.ShouldSuppressFirstRunSetup(AppSettings.DebugDefaultsProfile.VsDebug), "VS defaults should suppress first-run setup");
+    AssertFalse(DebugManager.ShouldShowDynamicDebugControls(AppSettings.DebugDefaultsProfile.VsDebug), "VS defaults should hide dynamic debug controls");
+
+    debug = new AppSettings.DebugSettings();
+    DebugManager.ApplyReleaseUserDefaultsIfPreferenceUnsaved(debug);
+    AssertFalse(debug.DebugMode, "normal release should stay quiet by default");
+    AssertFalse(debug.EnableDebugScreenshots, "normal release should not capture screenshots by default");
+
+    DebugManager.ApplyReleaseDebugModePreference(true, debug);
+    AssertTrue(debug.DebugModePreferenceSaved, "release debug mode should mark user preference saved");
+    AssertTrue(debug.DebugMode, "release debug mode should enable debug mode");
+    AssertTrue(debug.EnableDebugScreenshots, "release debug mode should seed screenshots on");
+}
+
+static void TestDebugManagerRetentionCleanupFilters()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.Tests", Guid.NewGuid().ToString("N"));
+    string sessions = Path.Combine(root, "Sessions");
+    string packages = Path.Combine(root, "DebugPackages");
+    Directory.CreateDirectory(sessions);
+    Directory.CreateDirectory(packages);
+
+    try
+    {
+        string oldSession = Touch(Path.Combine(sessions, "Session_20260101_000000.md"), -4);
+        string keptSession1 = Touch(Path.Combine(sessions, "Session_20260102_000000.md"), -3);
+        string keptSession2 = Touch(Path.Combine(sessions, "Session_20260103_000000.md"), -2);
+        string unrelatedSession = Touch(Path.Combine(sessions, "Notes_20260101.md"), -5);
+
+        CleanupResult sessionResult = DebugManager.CleanupOldSessionSummaries(sessions, 2);
+        AssertEqual(3, sessionResult.Scanned, "session cleanup should scan only Session_*.md");
+        AssertEqual(1, sessionResult.Deleted, "session cleanup should delete one old matching file");
+        AssertEqual(2, sessionResult.Kept, "session cleanup should keep newest matching files");
+        AssertFalse(File.Exists(oldSession), "old matching session summary should be deleted");
+        AssertTrue(File.Exists(keptSession1), "newer session summary should be kept");
+        AssertTrue(File.Exists(keptSession2), "newest session summary should be kept");
+        AssertTrue(File.Exists(unrelatedSession), "unrelated session file should not be deleted");
+
+        string oldPackage = Touch(Path.Combine(packages, "GoblinFarmer_Debug_20260101_000000.zip"), -4);
+        string keptPackage = Touch(Path.Combine(packages, "GoblinFarmer_Debug_20260102_000000.zip"), -3);
+        string unrelatedZip = Touch(Path.Combine(packages, "Other_Debug_20260101_000000.zip"), -5);
+
+        CleanupResult packageResult = DebugManager.CleanupOldDebugPackages(packages, 1);
+        AssertEqual(2, packageResult.Scanned, "package cleanup should scan only GoblinFarmer_Debug_*.zip");
+        AssertEqual(1, packageResult.Deleted, "package cleanup should delete one old matching file");
+        AssertEqual(1, packageResult.Kept, "package cleanup should keep newest matching package");
+        AssertFalse(File.Exists(oldPackage), "old matching debug package should be deleted");
+        AssertTrue(File.Exists(keptPackage), "newest matching debug package should be kept");
+        AssertTrue(File.Exists(unrelatedZip), "unrelated zip should not be deleted");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    static string Touch(string path, int ageMinutes)
+    {
+        File.WriteAllText(path, Path.GetFileName(path));
+        DateTime timestamp = DateTime.UtcNow.AddMinutes(ageMinutes);
+        File.SetCreationTimeUtc(path, timestamp);
+        File.SetLastWriteTimeUtc(path, timestamp);
+        return path;
+    }
 }
 
 static void TestReleaseProfileRequiresSetupWhenMissingPaths()
