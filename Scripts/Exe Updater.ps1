@@ -202,3 +202,28 @@ Write-Host "Project exe: $projectExeCopy"
 Write-Host "GitHub exe:  $githubUploadExe"
 Write-Host "User app:    $destinationFull"
 Write-Host "Preserved:   Existing Config, Logs, Screenshots, debug-screenshots, DebugPackages, ScanRegions/session metadata"
+
+Write-Host ""
+Write-Host "========== Git Change Check =========="
+$gitCommand = Get-Command git -ErrorAction SilentlyContinue
+if ($null -eq $gitCommand) {
+    Write-Host "Git was not found on PATH, so change status could not be checked."
+}
+else {
+    $repoCheck = & git -C $repoRoot rev-parse --is-inside-work-tree 2>$null
+    if ($LASTEXITCODE -ne 0 -or $repoCheck.Trim() -ne "true") {
+        Write-Host "Repository folder is not recognized by Git: $repoRoot"
+    }
+    else {
+        $gitStatus = & git -C $repoRoot status --short -- "GoblinFarmer.exe" "GitHub Upload/GoblinFarmer.exe"
+        if ([string]::IsNullOrWhiteSpace(($gitStatus -join ""))) {
+            Write-Host "No Git changes detected for the copied exe files."
+            Write-Host "Visual Studio will not show them until their contents differ from the last commit."
+        }
+        else {
+            Write-Host "Git sees these exe changes:"
+            $gitStatus | ForEach-Object { Write-Host $_ }
+            Write-Host "Commit and push these changes to sync them with GitHub."
+        }
+    }
+}
