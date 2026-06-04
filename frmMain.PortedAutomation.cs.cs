@@ -19,6 +19,7 @@ namespace GoblinFarmer
         private const int PortVkUp = 0x26;
         private const int PortVk1 = 0x31;
         private const int PortVk2 = 0x32;
+        private const int PortVk3 = 0x33;
         private const int PortVkBacktick = 0xC0;
         private const int PortKeyUp = 0x0002;
         private const int PortWhKeyboardLl = 13;
@@ -84,6 +85,7 @@ namespace GoblinFarmer
         private volatile bool portRuntimeLeftMouseHeld;
         private volatile bool portRuntimeRightMouseHeld;
         private volatile bool portRuntimeShiftHeld;
+        private volatile bool portMonkSkill3Held;
         private volatile bool portDemonHunterRightHeldFromSafeRegion;
         private volatile bool portWitchDoctorHeldInputFromSafeRegion;
         private volatile bool portDiabloWasRunning;
@@ -314,11 +316,19 @@ namespace GoblinFarmer
             radWD.CheckedChanged += (_, _) => PortSaveCombatProfilePreference("witch_doctor", radWD.Checked);
         }
 
-        private static void PortSaveCombatProfilePreference(string combatProfile, bool selected)
+        private void PortSaveCombatProfilePreference(string combatProfile, bool selected)
         {
             if (!selected || string.Equals(AppSettings.User.CombatProfile, combatProfile, StringComparison.OrdinalIgnoreCase))
             {
                 return;
+            }
+
+            if (portCombatRunning &&
+                string.Equals(portCombatClass, "monk", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(combatProfile, "monk", StringComparison.OrdinalIgnoreCase))
+            {
+                AppLogger.Info($"Monk combat profile change requested: newProfile={combatProfile}; stopping active Monk combat for Skill 3 safety release");
+                PortStopCombat($"combat profile changed to {combatProfile}");
             }
 
             AppSettings.User.CombatProfile = combatProfile;
@@ -1412,14 +1422,17 @@ namespace GoblinFarmer
                 bool heldLeft = portRuntimeLeftMouseHeld;
                 bool heldRight = portRuntimeRightMouseHeld;
                 bool heldShift = portRuntimeShiftHeld;
+                bool heldMonkSkill3 = portMonkSkill3Held;
                 bool hadLootSpam = portLootSpamLeftClickDown;
 
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs called: reason={reason}; heldLeft={heldLeft}; heldRight={heldRight}; heldShift={heldShift}; lootSpamActive={hadLootSpam}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs called: reason={reason}; heldLeft={heldLeft}; heldRight={heldRight}; heldShift={heldShift}; heldMonkSkill3={heldMonkSkill3}; lootSpamActive={hadLootSpam}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
                 portLootSpamLeftClickDown = false;
                 if (hadLootSpam)
                 {
                     AppLogger.Info($"Loot spam force cleanup; {PortCombatInputContext()}");
                 }
+
+                bool sentMonkSkill3 = PortMonkSkill3Up(reason);
 
                 if (!hasDiabloRect)
                 {
@@ -1429,7 +1442,7 @@ namespace GoblinFarmer
                     AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=left; held={heldLeft}; sent=false; Diablo window unavailable; state cleared");
                     AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=right; held={heldRight}; sent=false; Diablo window unavailable; state cleared");
                     AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held={heldShift}; sent=false; Diablo window unavailable; state cleared");
-                    AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft=false; sentRight=false; sentShift=false; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+                    AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft=false; sentRight=false; sentShift=false; sentMonkSkill3={sentMonkSkill3}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
                     return;
                 }
 
@@ -1473,7 +1486,7 @@ namespace GoblinFarmer
                     AppLogger.Info($"ForceReleaseAllRuntimeInputs release skipped: reason={reason}; input=shift; held=false; sent=false; diabloWindow={windowText}; diabloRect={rectText}");
                 }
 
-                AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft={sentLeft}; sentRight={sentRight}; sentShift={sentShift}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
+                AppLogger.Info($"ForceReleaseAllRuntimeInputs complete: reason={reason}; sentLeft={sentLeft}; sentRight={sentRight}; sentShift={sentShift}; sentMonkSkill3={sentMonkSkill3}; diabloWindow={windowText}; diabloRect={rectText}; {PortCombatInputContext()}");
             }
         }
 

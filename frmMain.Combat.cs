@@ -74,6 +74,11 @@ namespace GoblinFarmer
                 portCombatCts = null;
                 portCombatClass = "";
 
+                if (stoppedClass == "monk")
+                {
+                    PortMonkSkill3Up($"combat stop: {reason}");
+                }
+
                 Thread.Sleep(75);
                 ForceReleaseAllRuntimeInputs($"combat stop: {reason}");
                 Thread.Sleep(50);
@@ -161,30 +166,78 @@ namespace GoblinFarmer
         // Monk combat loop =================================
         private void PortMonkLoop(CancellationToken token)
         {
-            while (!token.IsCancellationRequested &&
-                   portCombatRunning &&
-                   portCombatClass == "monk")
+            try
             {
-                if (!PortDiabloIsActive())
+                while (!token.IsCancellationRequested &&
+                       portCombatRunning &&
+                       portCombatClass == "monk")
                 {
-                    BeginInvoke(new Action(() => PortStopCombat("Diablo inactive")));
+                    if (!PortDiabloIsActive())
+                    {
+                        BeginInvoke(new Action(() => PortStopCombat("Diablo inactive")));
+                        return;
+                    }
+
+                    PortMonkSkill3Down();
+
+                    PortPressKey(PortVk1);
+
+                    Thread.Sleep(10);
+
+                    PortPressKey(PortVk2);
+
+                    Thread.Sleep(10);
+                }
+            }
+            finally
+            {
+                PortMonkSkill3Up("Monk loop exit");
+                ForceReleaseAllRuntimeInputs("Monk loop exit");
+            }
+        }
+
+        private void PortMonkSkill3Down()
+        {
+            lock (portRuntimeInputLock)
+            {
+                if (portMonkSkill3Held)
+                {
                     return;
                 }
 
-                PortPressKey(PortVk1);
-
-                Thread.Sleep(10);
-
-                PortPressKey(PortVk2);
-
-                Thread.Sleep(10);
-
-                PortPressKey(0x33);
-
-                Thread.Sleep(10);
+                PortMarkAutomationNumberKeyInjection(PortVk3);
+                keybd_event(PortVk3, 0, 0, UIntPtr.Zero);
+                portMonkSkill3Held = true;
+                AppLogger.Info($"Monk Skill 3 hold started: key=3; vk={PortVk3}; keyDownSent=true; held=true; combatRunning={portCombatRunning}; combatClass={portCombatClass}; {PortCombatInputContext()}");
             }
+        }
 
-            ForceReleaseAllRuntimeInputs("Monk loop exit");
+        private bool PortMonkSkill3Up(string reason)
+        {
+            lock (portRuntimeInputLock)
+            {
+                if (!portMonkSkill3Held)
+                {
+                    return false;
+                }
+
+                PortMarkAutomationNumberKeyInjection(PortVk3);
+                keybd_event(PortVk3, 0, PortKeyUp, UIntPtr.Zero);
+                portMonkSkill3Held = false;
+                bool safetyRelease = PortIsMonkSkill3SafetyRelease(reason);
+                AppLogger.Info($"Monk Skill 3 hold released: reason={reason}; safetyRelease={safetyRelease}; key=3; vk={PortVk3}; keyUpSent=true; held=false; combatRunning={portCombatRunning}; combatClass={portCombatClass}; {PortCombatInputContext()}");
+                return true;
+            }
+        }
+
+        private static bool PortIsMonkSkill3SafetyRelease(string reason)
+        {
+            return reason.Contains("stop", StringComparison.OrdinalIgnoreCase) ||
+                reason.Contains("pause", StringComparison.OrdinalIgnoreCase) ||
+                reason.Contains("closing", StringComparison.OrdinalIgnoreCase) ||
+                reason.Contains("dispose", StringComparison.OrdinalIgnoreCase) ||
+                reason.Contains("exit", StringComparison.OrdinalIgnoreCase) ||
+                reason.Contains("lost focus", StringComparison.OrdinalIgnoreCase);
         }
 
         // Witch Doctor combat loop =================================
