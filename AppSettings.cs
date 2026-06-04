@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Diagnostics;
 using Microsoft.Win32;
 
 namespace GoblinFarmer
@@ -16,6 +17,7 @@ namespace GoblinFarmer
         private static SettingsModel settings = SettingsModel.Default();
         private static string configPath = ResolveAppSettingsConfigPath();
         private static DebugSettings persistedDebugSettings = new();
+        private static bool firstRunSetupSuppressed;
 
         public enum DebugDefaultsProfile
         {
@@ -26,6 +28,19 @@ namespace GoblinFarmer
         public static string ConfigPath => configPath;
         public static DebugDefaultsProfile CurrentDebugDefaultsProfile { get; private set; } = ResolveDebugDefaultsProfile();
         public static bool IsVsDebugProfile => CurrentDebugDefaultsProfile == DebugDefaultsProfile.VsDebug;
+        public static bool FirstRunSetupSuppressed => firstRunSetupSuppressed;
+        public static string BuildConfiguration =>
+#if DEBUG
+            "Debug";
+#else
+            "Release";
+#endif
+        public static bool IsDebugBuild =>
+#if DEBUG
+            true;
+#else
+            false;
+#endif
         public static RuntimeSettings Runtime => settings.Runtime;
         public static LaunchSettings Launch => settings.Launch;
         public static DebugSettings Debug => settings.Debug;
@@ -41,6 +56,7 @@ namespace GoblinFarmer
         {
             configPath = ResolveAppSettingsConfigPath();
             CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
+            firstRunSetupSuppressed = ShouldSuppressFirstRunSetup(CurrentDebugDefaultsProfile);
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
@@ -53,6 +69,7 @@ namespace GoblinFarmer
                     File.WriteAllText(configPath, JsonSerializer.Serialize(settings, JsonOptions));
                     AppLogger.Info($"AppSettings created with safe defaults: {configPath}");
                     ApplyDebugDefaultsProfile();
+                    ApplyVsDebugDevDefaults();
                 }
                 else
                 {
@@ -84,6 +101,7 @@ namespace GoblinFarmer
                     }
 
                     ApplyDebugDefaultsProfile();
+                    ApplyVsDebugDevDefaults();
                 }
             }
             catch (Exception ex)
@@ -93,6 +111,7 @@ namespace GoblinFarmer
                 ApplyReleaseDebugPersistenceDefaults();
                 persistedDebugSettings = settings.Debug.Clone();
                 ApplyDebugDefaultsProfile();
+                ApplyVsDebugDevDefaults();
                 AppLogger.Error($"AppSettings load failed; using safe defaults from {configPath}.", ex);
             }
 
@@ -101,15 +120,19 @@ namespace GoblinFarmer
 
         private static string ResolveAppSettingsConfigPath()
         {
-#if DEBUG
-            string? projectConfigPath = TryResolveProjectAppSettingsPath();
-            if (!string.IsNullOrWhiteSpace(projectConfigPath))
-            {
-                return projectConfigPath;
-            }
-#endif
+            return ResolveAppSettingsConfigPath(
+                Environment.GetEnvironmentVariable("GOBLINFARMER_APPSETTINGS_PATH"),
+                AppDomain.CurrentDomain.BaseDirectory);
+        }
 
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "AppSettings.json");
+        internal static string ResolveAppSettingsConfigPath(string? explicitPath, string baseDirectory)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitPath))
+            {
+                return Path.GetFullPath(Environment.ExpandEnvironmentVariables(explicitPath.Trim()));
+            }
+
+            return Path.Combine(baseDirectory, "Config", "AppSettings.json");
         }
 
         private static string? TryResolveProjectAppSettingsPath()
@@ -122,6 +145,23 @@ namespace GoblinFarmer
                 if (File.Exists(projectFilePath) && File.Exists(projectConfigPath))
                 {
                     return projectConfigPath;
+                }
+
+                directory = directory.Parent;
+            }
+
+            return null;
+        }
+
+        private static string? TryResolveProjectRoot()
+        {
+            DirectoryInfo? directory = new(AppDomain.CurrentDomain.BaseDirectory);
+            while (directory != null)
+            {
+                string projectFilePath = Path.Combine(directory.FullName, "GoblinFarmer.csproj");
+                if (File.Exists(projectFilePath))
+                {
+                    return directory.FullName;
                 }
 
                 directory = directory.Parent;
@@ -206,16 +246,48 @@ namespace GoblinFarmer
 
         private static DebugDefaultsProfile ResolveDebugDefaultsProfile()
         {
-#if DEBUG
-            return DebugDefaultsProfile.VsDebug;
-#else
-            return DebugDefaultsProfile.ReleaseUser;
-#endif
+            return ResolveDebugDefaultsProfile(
+                Environment.GetEnvironmentVariable("GOBLINFARMER_DEBUG_DEFAULTS_PROFILE"),
+                Debugger.IsAttached,
+                IsDebugBuild);
+        }
+
+        internal static DebugDefaultsProfile ResolveDebugDefaultsProfile(string? explicitProfile, bool debuggerAttached, bool debugBuild)
+        {
+            if (Enum.TryParse(explicitProfile, ignoreCase: true, out DebugDefaultsProfile parsedProfile))
+            {
+                return parsedProfile;
+            }
+
+            return IsVsDebugLaunchSurface(debuggerAttached, debugBuild)
+                ? DebugDefaultsProfile.VsDebug
+                : DebugDefaultsProfile.ReleaseUser;
+        }
+
+        internal static bool IsVsDebugLaunchSurface(bool debuggerAttached, bool debugBuild)
+        {
+            return debuggerAttached && debugBuild;
+        }
+
+        internal static bool ShouldSuppressFirstRunSetup(DebugDefaultsProfile profile)
+        {
+            return profile == DebugDefaultsProfile.VsDebug;
+        }
+
+        internal static bool ShouldShowDynamicDebugControls(DebugDefaultsProfile profile)
+        {
+            return profile != DebugDefaultsProfile.VsDebug;
+        }
+
+        internal static bool ShouldRequireFirstRunSetup(DebugDefaultsProfile profile, bool requiredRuntimeConfigurationIsValid)
+        {
+            return !ShouldSuppressFirstRunSetup(profile) && !requiredRuntimeConfigurationIsValid;
         }
 
         public static void ApplyDebugDefaultsProfile()
         {
             CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
+            firstRunSetupSuppressed = ShouldSuppressFirstRunSetup(CurrentDebugDefaultsProfile);
             if (CurrentDebugDefaultsProfile != DebugDefaultsProfile.VsDebug)
             {
                 return;
@@ -229,9 +301,87 @@ namespace GoblinFarmer
             settings.Debug.EnableVerboseLogging = true;
         }
 
+        public static void ApplyVsDebugDevDefaults()
+        {
+            CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
+            firstRunSetupSuppressed = ShouldSuppressFirstRunSetup(CurrentDebugDefaultsProfile);
+            if (!firstRunSetupSuppressed)
+            {
+                return;
+            }
+
+            ApplyDebugDefaultsProfile();
+
+            string? projectRoot = TryResolveProjectRoot();
+            if (!string.IsNullOrWhiteSpace(projectRoot))
+            {
+                ApplyProjectRuntimeDefaults(projectRoot);
+
+                string projectImages = Path.Combine(projectRoot, "Images");
+                if (Directory.Exists(projectImages))
+                {
+                    settings.Runtime.ImagesRoot = projectImages;
+                }
+            }
+
+            if (!ExecutableExists(settings.Runtime.DiabloExecutablePath))
+            {
+                string discoveredDiablo = DiscoverDiabloExecutable();
+                if (!string.IsNullOrWhiteSpace(discoveredDiablo))
+                {
+                    settings.Runtime.DiabloExecutablePath = discoveredDiablo;
+                }
+            }
+
+            if (!ExecutableExists(settings.Runtime.BattleNetExecutablePath))
+            {
+                string discoveredBattleNet = DiscoverBattleNetExecutable();
+                if (!string.IsNullOrWhiteSpace(discoveredBattleNet))
+                {
+                    settings.Runtime.BattleNetExecutablePath = discoveredBattleNet;
+                }
+            }
+
+            settings.Normalize();
+        }
+
+        private static void ApplyProjectRuntimeDefaults(string projectRoot)
+        {
+            string projectConfigPath = Path.Combine(projectRoot, "Config", "AppSettings.json");
+            if (!File.Exists(projectConfigPath))
+            {
+                return;
+            }
+
+            try
+            {
+                SettingsModel? projectSettings = JsonSerializer.Deserialize<SettingsModel>(File.ReadAllText(projectConfigPath), JsonOptions);
+                RuntimeSettings? projectRuntime = projectSettings?.Runtime;
+                if (projectRuntime == null)
+                {
+                    return;
+                }
+
+                if (!ExecutableExists(settings.Runtime.DiabloExecutablePath) && ExecutableExists(projectRuntime.DiabloExecutablePath))
+                {
+                    settings.Runtime.DiabloExecutablePath = projectRuntime.DiabloExecutablePath;
+                }
+
+                if (!ExecutableExists(settings.Runtime.BattleNetExecutablePath) && ExecutableExists(projectRuntime.BattleNetExecutablePath))
+                {
+                    settings.Runtime.BattleNetExecutablePath = projectRuntime.BattleNetExecutablePath;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Failed to inspect VS/dev runtime defaults from {projectConfigPath}.", ex);
+            }
+        }
+
         private static void ApplyReleaseDebugPersistenceDefaults()
         {
             CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
+            firstRunSetupSuppressed = ShouldSuppressFirstRunSetup(CurrentDebugDefaultsProfile);
             if (CurrentDebugDefaultsProfile != DebugDefaultsProfile.ReleaseUser)
             {
                 return;
@@ -248,6 +398,30 @@ namespace GoblinFarmer
             settings.Debug.EnableDebugScreenshots = false;
             settings.Debug.EnableMissingAssetPrompts = false;
             settings.Debug.EnableVerboseLogging = false;
+        }
+
+        internal static LaunchProfileSnapshot ResolveLaunchProfileForTests(string? explicitProfile, bool debuggerAttached, bool debugBuild, string? explicitConfigPath, string baseDirectory)
+        {
+            DebugDefaultsProfile profile = ResolveDebugDefaultsProfile(explicitProfile, debuggerAttached, debugBuild);
+            bool setupSuppressed = ShouldSuppressFirstRunSetup(profile);
+            DebugSettings debug = new();
+            if (profile == DebugDefaultsProfile.VsDebug)
+            {
+                debug.DebugMode = true;
+                debug.ShowDiagnosticOverlay = true;
+                debug.ShowRouteInspector = true;
+                debug.EnableDebugScreenshots = true;
+                debug.EnableMissingAssetPrompts = true;
+                debug.EnableVerboseLogging = true;
+            }
+
+            return new LaunchProfileSnapshot(
+                profile,
+                setupSuppressed,
+                debug.DebugMode,
+                debug.EnableDebugScreenshots,
+                ShouldShowDynamicDebugControls(profile),
+                ResolveAppSettingsConfigPath(explicitConfigPath, baseDirectory));
         }
 
         public static string ResolveRuntimePath(string path)
@@ -462,7 +636,14 @@ namespace GoblinFarmer
         {
             AppLogger.Info(
                 "AppSettings loaded: " +
+                $"AppSettingsPath={configPath}; " +
                 $"path={configPath}; " +
+                $"ExecutablePath={Environment.ProcessPath ?? AppDomain.CurrentDomain.BaseDirectory}; " +
+                $"LaunchKind={(Debugger.IsAttached ? "VS/debugger" : "installed exe/standalone")}; " +
+                $"DebuggerAttached={Debugger.IsAttached}; " +
+                $"BuildConfiguration={BuildConfiguration}; " +
+                $"VsDevProfileActive={IsVsDebugProfile}; " +
+                $"FirstRunSetupSuppressed={FirstRunSetupSuppressed}; " +
                 $"DebugDefaultsProfile={CurrentDebugDefaultsProfile}; " +
                 $"Runtime.DiabloExecutablePath={Runtime.DiabloExecutablePath}; " +
                 $"Runtime.BattleNetExecutablePath={Runtime.BattleNetExecutablePath}; " +
@@ -495,12 +676,22 @@ namespace GoblinFarmer
                 $"ImageRecognition.StartGameButtonConfidence={ImageRecognition.StartGameButtonConfidence:0.000}; " +
                 $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}; " +
                 $"User.CombatProfile={User.CombatProfile}; " +
+                $"SelectedCombatProfile={User.CombatProfile}; " +
+                $"SelectedCombatClass={User.CombatProfile}; " +
                 $"User.CombatHotkeyEnabled={User.CombatHotkeyEnabled}; " +
                 $"User.TeleportNextHotkeyEnabled={User.TeleportNextHotkeyEnabled}; " +
                 $"User.ExitGameHotkeyEnabled={User.ExitGameHotkeyEnabled}; " +
                 $"User.KadalaHotkeyEnabled={User.KadalaHotkeyEnabled}; " +
                 $"User.LootHotkeyEnabled={User.LootHotkeyEnabled}");
         }
+
+        internal readonly record struct LaunchProfileSnapshot(
+            DebugDefaultsProfile Profile,
+            bool FirstRunSetupSuppressed,
+            bool DebugMode,
+            bool KeepDebugScreenshots,
+            bool DynamicDebugControlsVisible,
+            string ConfigPath);
 
         internal sealed class SettingsModel
         {

@@ -290,6 +290,25 @@ Validation:
 - Confirm the package excludes screenshots from previous app sessions and reports stale screenshot exclusions in the manifest/console.
 - Confirm Battle.net launch summary entries distinguish fully automated launch from suspected manual Play intervention.
 
+## Future Enhancement Roadmap
+These are future enhancements and nice-to-haves, not active blockers for the current validation pass.
+
+High priority:
+- Goblin statistics / GPH: session goblin count, active farming GPH, session runtime, optional lifetime count, and optional goblin history log.
+- Asset validator: validate required image/template, route/location, combat, and script assets; warn clearly for missing, duplicated, misnamed, or not-copied assets.
+- Debug Manager: centralize debug mode behavior, VS Debug defaults, Release Debug Mode, screenshot retention, debug package inclusion, and diagnostic logging controls.
+- Developer dashboard: debug-only live state panel for detected location, template confidence, combat state, route decisions, blocked hotkey reason, Battle.net actions, and latest diagnostic screenshot.
+
+Medium priority:
+- Route rules configuration: evaluate moving route allow/block behavior into validated JSON/config.
+- Enhanced session statistics: runs completed, failed runs, average run length, combat uptime, route detection failures, Battle.net launch failures, and reliability counters.
+- Recognition confidence overlay: debug-only current location, confidence, and runner-up confidence display for close-match diagnosis.
+
+Low priority / nice-to-have:
+- Route replay: save and replay route decisions after a session.
+- Visual route viewer: show allowed transitions, blocked transitions, and return/teleport behavior.
+- Historical analytics: daily averages, weekly GPH, lifetime statistics, best session, and long-term trends.
+
 ### Route Rule Config Design Review
 Do not migrate live route rules yet. Recommended future JSON shape:
 

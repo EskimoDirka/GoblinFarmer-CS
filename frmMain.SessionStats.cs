@@ -118,7 +118,7 @@ namespace GoblinFarmer
 
         private PortScreenshotPair PortCaptureCombatDiagnosticScreenshot(string action)
         {
-            return PortCaptureDiagnosticScreenshotPair("Failure", "Combat", action);
+            return PortCaptureDiagnosticScreenshotPair(CombatDiagnosticNames.DemonHunterNoClickSuppressionOutcome, CombatDiagnosticNames.DemonHunterNoClickSuppressionWorkflow, action);
         }
 
         private string PortCaptureDebugScreenshot(string reason)

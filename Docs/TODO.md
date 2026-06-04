@@ -189,17 +189,7 @@ Requirements:
 
 ### Debug Manager Candidate
 
-Future direction: consider a lightweight `DebugManager` or `DiagnosticsManager` similar in spirit to `PortScanRegionManager`, but limited to low-overhead wrappers and passive state snapshots.
-
-Useful responsibilities:
-
-* [ ] Centralize throttled diagnostic logging for repeated state decisions such as combat safe/unsafe transitions, route blocks, and launch polling.
-* [ ] Centralize named diagnostic event summaries such as `CombatStallSummary`, `RouteFailureSummary`, and launch/start-game summaries.
-* [ ] Provide a single helper for paired app/Diablo screenshot capture with consistent outcome/workflow/action names.
-* [ ] Provide passive state snapshot helpers for combat input, route state, launch state, and foreground/window state.
-* [ ] Provide package-friendly artifact registration so future debug outputs are automatically considered by `create-debug-package.ps1`.
-* [ ] Keep expensive work opt-in, throttled, or tied to existing events; do not add timer-driven image scans just for diagnostics.
-* [ ] Keep wrappers allocation-light in hot loops and prefer state-change logging over per-tick logging.
+Future direction: see `High Priority Future Enhancements > Debug Manager`.
 
 ### Diagnostic Overlay
 
@@ -480,37 +470,9 @@ Implemented behavior:
 * [x] Preserve existing runtime config, logs, screenshots, debug packages, and scan/session metadata.
 * [x] Provide `Scripts\Exe Updater.bat` as the double-click launcher.
 
-### Asset Validation Tool
-
-Create image asset validator.
-
-Checks:
-
-* Missing image files.
-* Duplicate image names.
-* Missing scan region files.
-* Missing coordinate files.
-* Images not marked Content.
-* Images not copied to output.
-
 ---
 
 ## Architecture Improvements
-
-### Route Rules Configuration
-
-Move route logic into configuration.
-
-Possible file:
-
-Config/RouteRules.json
-
-Benefits:
-
-* No recompilation required for route changes.
-* Easier testing.
-* Easier maintenance.
-* Easier future expansion.
 
 ### Battle.net Scan Regions
 
@@ -603,25 +565,98 @@ Future possibility:
 
 ---
 
-## Nice-To-Have Future Features
+## High Priority Future Enhancements
 
-### Visual Route Viewer
+These are future enhancements and nice-to-haves, not active blockers.
 
-* [ ] Display current route.
-* [ ] Display next target.
-* [ ] Display blocked state.
-* [ ] Display current detected location.
+### Goblin Statistics / GPH
 
-### Route Replay
+* [ ] Track session goblin count.
+* [ ] Track goblins per hour while combat/farming is active.
+* [ ] Track session runtime.
+* [ ] Optionally track lifetime goblin count.
+* [ ] Optionally write a goblin history log.
 
-* [ ] Save route history.
-* [ ] Save teleport history.
-* [ ] Save failed teleport history.
+### Asset Validator
+
+* [ ] Validate required image/template assets exist.
+* [ ] Validate route/location templates exist.
+* [ ] Validate combat templates exist.
+* [ ] Validate required scripts are included in publish/debug output.
+* [ ] Warn clearly when assets are missing, duplicated, misnamed, or not copied to output.
+
+### Debug Manager
+
+* [ ] Centralize debug mode behavior.
+* [ ] Clearly separate VS Debug defaults, Release Debug Mode, and normal user release behavior.
+* [ ] Centralize debug screenshot retention settings.
+* [ ] Centralize debug package inclusion rules.
+* [ ] Provide consistent diagnostic logging controls.
+* [ ] Keep expensive diagnostics opt-in, throttled, or tied to existing events.
+* [ ] Keep wrappers allocation-light in hot loops and prefer state-change logging over per-tick logging.
 
 ### Developer Dashboard
 
-* [ ] Live location display.
-* [ ] Live route display.
-* [ ] Image recognition diagnostics.
-* [ ] Session statistics.
-* [ ] Current workflow state.
+* [ ] Add a debug-only live state panel.
+* [ ] Show current detected location.
+* [ ] Show best template match and confidence.
+* [ ] Show runner-up match/confidence when useful.
+* [ ] Show combat state.
+* [ ] Show last route decision.
+* [ ] Show last blocked hotkey reason.
+* [ ] Show last Battle.net launch/click action.
+* [ ] Show last diagnostic screenshot path.
+
+## Medium Priority Future Enhancements
+
+These are future enhancements and nice-to-haves, not active blockers.
+
+### Route Rules Configuration
+
+* [ ] Evaluate moving hardcoded route allow/block behavior into a JSON/config-driven route rules file.
+* [ ] Keep route names, allowed transitions, blocked transitions, and return behavior easier to inspect.
+* [ ] Include startup validation so bad route config fails clearly.
+
+### Enhanced Session Statistics
+
+* [ ] Track runs completed.
+* [ ] Track failed runs.
+* [ ] Track average run length.
+* [ ] Track combat uptime.
+* [ ] Track route detection failures.
+* [ ] Track Battle.net launch failures.
+* [ ] Add useful reliability counters for long farming sessions.
+
+### Recognition Confidence Overlay
+
+* [ ] Add a debug-only overlay or panel section.
+* [ ] Display current detected location.
+* [ ] Display confidence percentage.
+* [ ] Display runner-up template/confidence.
+* [ ] Help diagnose close matches like City Of Caldeum vs Gates of Caldeum.
+
+## Low Priority / Nice-To-Have Future Enhancements
+
+These are future enhancements and nice-to-haves, not active blockers.
+
+### Route Replay
+
+* [ ] Save route decisions from a session.
+* [ ] Replay route decision logs after the fact.
+* [ ] Help debug route logic without needing a live farming run.
+
+### Visual Route Viewer
+
+* [ ] Add a visual or tree-style route map.
+* [ ] Show allowed transitions.
+* [ ] Show blocked transitions.
+* [ ] Show return/teleport behavior.
+* [ ] Keep this focused on route visibility/debugging, separate from manual route buttons.
+
+### Historical Analytics
+
+* [ ] Track daily goblin averages.
+* [ ] Track weekly GPH.
+* [ ] Track lifetime statistics.
+* [ ] Track best session record.
+* [ ] Track long-term farming trends.

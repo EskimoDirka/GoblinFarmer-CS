@@ -17,6 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
     <EmbeddedResource Remove="Form1.PortedAutomation.resx" />
   </ItemGroup>
 

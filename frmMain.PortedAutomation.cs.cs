@@ -48,20 +48,6 @@ namespace GoblinFarmer
         private readonly Dictionary<Button, Color> portButtonDefaultBackColors = new();
         private readonly Dictionary<Button, Color> portButtonDefaultForeColors = new();
 
-        private readonly PortCombatNoClickRegion[] portCombatNoClickRegions =
-        [
-            new("TopLeftPortraitNoClickRegion", 0 / 2560.0, 0 / 1440.0, 166 / 2560.0, 226 / 1440.0),
-            new("FollowerPortraitNoClickRegion", 141 / 2560.0, 4 / 1440.0, 135 / 2560.0, 159 / 1440.0),
-            new("ChatButtonNoClickRegion", 6 / 2560.0, 1270 / 1440.0, 118 / 2560.0, 134 / 1440.0),
-            new("HealthGlobeNoClickRegion", 430 / 2560.0, 1220 / 1440.0, 390 / 2560.0, 220 / 1440.0),
-            new("SkillBarNoClickRegion", 818 / 2560.0, 1300 / 1440.0, 930 / 2560.0, 130 / 1440.0),
-            new("ResourceGlobeNoClickRegion", 1690 / 2560.0, 1220 / 1440.0, 410 / 2560.0, 220 / 1440.0),
-            new("BottomRightButtonsNoClickRegion", 2310 / 2560.0, 1278 / 1440.0, 214 / 2560.0, 124 / 1440.0),
-            new("RightQuestIconNoClickRegion", 2448 / 2560.0, 472 / 1440.0, 44 / 2560.0, 62 / 1440.0),
-            new("TopRightStatusNoClickRegion", 2237 / 2560.0, 28 / 1440.0, 115 / 2560.0, 50 / 1440.0),
-            new("ExtendedRightMenuNoClickRegion", 2410 / 2560.0, 1120 / 1440.0, 150 / 2560.0, 240 / 1440.0),
-        ];
-
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
         private volatile bool portHotkeysRunning;
@@ -161,8 +147,6 @@ namespace GoblinFarmer
 
         private sealed record PortMapPoint(string Name, string Act, int X, int Y);
         private sealed record PortLocationDetectionResult(string Detected, string BestName, double BestConfidence, string SecondName, double SecondConfidence, int TemplateCount, long ElapsedMilliseconds);
-        private sealed record PortCombatNoClickRegion(string Name, double Left, double Top, double Width, double Height);
-
         private sealed class PortNoActivateSplashForm : Form
         {
             private const int WS_EX_NOACTIVATE = 0x08000000;
@@ -401,6 +385,11 @@ namespace GoblinFarmer
         {
             AppLogger.Info(
                 "Debug startup state: " +
+                $"DebuggerAttached={System.Diagnostics.Debugger.IsAttached}; " +
+                $"BuildConfiguration={AppSettings.BuildConfiguration}; " +
+                $"VsDevProfileActive={AppSettings.IsVsDebugProfile}; " +
+                $"ConfigPath={AppSettings.ConfigPath}; " +
+                $"FirstRunSetupSuppressed={AppSettings.FirstRunSetupSuppressed}; " +
                 $"DebugDefaultsProfile={AppSettings.CurrentDebugDefaultsProfile}; " +
                 $"DebugMode={AppSettings.Debug.DebugMode}; " +
                 $"KeepDebugScreenshots={(chkKeepDebugScreenshots != null && chkKeepDebugScreenshots.Checked)}; " +

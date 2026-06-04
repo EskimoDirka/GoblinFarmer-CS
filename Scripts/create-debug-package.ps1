@@ -1,7 +1,8 @@
 param(
     [int]$MaxScreenshots = 10,
     [int]$MaxFailureScreenshots = 10,
-    [int]$MaxSuccessScreenshots = 10
+    [int]$MaxSuccessScreenshots = 10,
+    [int]$MaxDiagnosticScreenshots = 10
 )
 
 $ErrorActionPreference = "Stop"
@@ -175,7 +176,6 @@ function Get-ScreenshotFailureType {
         "BattleNetPlayClickAccepted",
         "BattleNetManualPlaySuspected",
         "BattleNetStillOpenAfterDiabloLaunch",
-        "DemonHunterNoClickSuppressionStall",
         "DiabloTabNotFound",
         "RepairStationNotFound",
         "RepairFailed",
@@ -196,7 +196,7 @@ function Get-DiagnosticScreenshotInfo {
     param([System.IO.FileInfo]$File)
 
     $name = $File.BaseName
-    if ($name -match '^(?<date>\d{4}-\d{2}-\d{2})_(?<time>\d{6})_(?<ms>\d{3})_(?<outcome>Success|Failure)_(?<workflow>[^_]+)_(?<action>.+)_(?<surface>Diablo|App)$') {
+    if ($name -match '^(?<date>\d{4}-\d{2}-\d{2})_(?<time>\d{6})_(?<ms>\d{3})_(?<outcome>Success|Failure|Diagnostic)_(?<workflow>[^_]+)_(?<action>.+)_(?<surface>Diablo|App)$') {
         $timestampText = "$($matches.date) $($matches.time.Substring(0, 2)):$($matches.time.Substring(2, 2)):$($matches.time.Substring(4, 2)).$($matches.ms)"
         $pairKey = "$($matches.date)_$($matches.time)_$($matches.ms)_$($matches.outcome)_$($matches.workflow)_$($matches.action)"
         return [pscustomobject]@{
@@ -244,7 +244,7 @@ function Select-DiagnosticScreenshotGroups {
     @($Files |
         ForEach-Object {
             $info = Get-DiagnosticScreenshotInfo $_
-            if ($info.Outcome -eq $Outcome) {
+            if ($info.Outcome -eq $Outcome -and -not (Test-RetiredDemonHunterSuppressionScreenshot $info)) {
                 [pscustomobject]@{ File = $_; Info = $info }
             }
         } |
@@ -412,6 +412,42 @@ function Get-LogValue {
     return $Fallback
 }
 
+function Get-RetiredDemonHunterSuppressionAction {
+    return ("DemonHunterNoClickSuppression" + "Stall")
+}
+
+function Get-ActiveDemonHunterSuppressionAction {
+    return "DemonHunterNoClickSuppressionActive"
+}
+
+function Convert-RetiredCombatDiagnosticLine {
+    param([string]$Line)
+
+    $retiredAction = Get-RetiredDemonHunterSuppressionAction
+    if ($Line -notlike "*$retiredAction*") {
+        return $Line
+    }
+
+    $activeAction = Get-ActiveDemonHunterSuppressionAction
+    $activeEvent = "Diagnostic_Combat_$activeAction"
+    $line = $Line.Replace($retiredAction, $activeAction)
+    $line = $line.Replace("Failure_Combat_$activeAction", $activeEvent)
+    $line = $line.Replace(("Combat" + "StallSummary"), "CombatDiagnosticSummary")
+    $line = $line.Replace("event=$activeAction", "event=$activeEvent")
+    $line = $line.Replace("result=Blocked", "result=Active")
+    $line = $line.Replace("blockReason=", "suppressionReason=")
+    return $line
+}
+
+function Test-RetiredDemonHunterSuppressionScreenshot {
+    param($Info)
+
+    return $null -ne $Info -and
+        $Info.Outcome -eq "FAILURE" -and
+        $Info.Workflow -eq "Combat" -and
+        $Info.Action -eq (Get-RetiredDemonHunterSuppressionAction)
+}
+
 function Get-DebugScreenshotSkipInfo {
     param([System.IO.FileInfo]$LogFile)
 
@@ -421,6 +457,20 @@ function Get-DebugScreenshotSkipInfo {
         DiagnosticSkippedByKeepSettingCount = 0
         AppSettingsDebugScreenshots = "Unknown"
         AppSettingsKeepDebugScreenshots = "Unknown"
+        StartupDebugMode = "Unknown"
+        ActualDebugModeAtPackageTime = "Unknown"
+        LatestDebugModeToggleOldValue = "Unknown"
+        LatestDebugModeToggleNewValue = "Unknown"
+        LatestDebugModeToggleDiagnosticUiAdded = "Unknown"
+        LatestDebugModeToggleDiagnosticUiRemoved = "Unknown"
+        StartupAppSettingsPath = "Unknown"
+        StartupExecutablePath = "Unknown"
+        StartupBuildConfiguration = "Unknown"
+        StartupDebugDefaultsProfile = "Unknown"
+        StartupLaunchKind = "Unknown"
+        StartupDebuggerAttached = "Unknown"
+        StartupVsDevProfileActive = "Unknown"
+        StartupFirstRunSetupSuppressed = "Unknown"
     }
 
     if ($null -eq $LogFile -or -not (Test-Path -LiteralPath $LogFile.FullName -PathType Leaf)) {
@@ -437,9 +487,28 @@ function Get-DebugScreenshotSkipInfo {
         if ($line -match "Diagnostic screenshot pair skipped: disabled by Keep Debug Screenshots setting") {
             $info.DiagnosticSkippedByKeepSettingCount++
         }
-        if ($line -match "AppSettings loaded: .*Debug\.EnableDebugScreenshots=(?<enabled>True|False).*KeepDebugScreenshots=(?<keep>True|False)") {
-            $info.AppSettingsDebugScreenshots = $matches.enabled
-            $info.AppSettingsKeepDebugScreenshots = $matches.keep
+        if ($line -match "AppSettings loaded: (?<values>.*)$") {
+            $values = Convert-LogKeyValueText $matches.values
+            $info.AppSettingsDebugScreenshots = Get-LogValue $values "Debug.EnableDebugScreenshots" $info.AppSettingsDebugScreenshots
+            $info.AppSettingsKeepDebugScreenshots = Get-LogValue $values "KeepDebugScreenshots" $info.AppSettingsKeepDebugScreenshots
+            $info.StartupDebugMode = Get-LogValue $values "DebugMode" $info.StartupDebugMode
+            $info.ActualDebugModeAtPackageTime = $info.StartupDebugMode
+            $info.StartupAppSettingsPath = Get-LogValue $values "AppSettingsPath" $info.StartupAppSettingsPath
+            $info.StartupExecutablePath = Get-LogValue $values "ExecutablePath" $info.StartupExecutablePath
+            $info.StartupBuildConfiguration = Get-LogValue $values "BuildConfiguration" $info.StartupBuildConfiguration
+            $info.StartupDebugDefaultsProfile = Get-LogValue $values "DebugDefaultsProfile" $info.StartupDebugDefaultsProfile
+            $info.StartupLaunchKind = Get-LogValue $values "LaunchKind" $info.StartupLaunchKind
+            $info.StartupDebuggerAttached = Get-LogValue $values "DebuggerAttached" $info.StartupDebuggerAttached
+            $info.StartupVsDevProfileActive = Get-LogValue $values "VsDevProfileActive" $info.StartupVsDevProfileActive
+            $info.StartupFirstRunSetupSuppressed = Get-LogValue $values "FirstRunSetupSuppressed" $info.StartupFirstRunSetupSuppressed
+        }
+        if ($line -match "DebugModeToggled: (?<values>.*)$") {
+            $values = Convert-LogKeyValueText $matches.values
+            $info.LatestDebugModeToggleOldValue = Get-LogValue $values "oldDebugMode" $info.LatestDebugModeToggleOldValue
+            $info.LatestDebugModeToggleNewValue = Get-LogValue $values "newDebugMode" $info.LatestDebugModeToggleNewValue
+            $info.LatestDebugModeToggleDiagnosticUiAdded = Get-LogValue $values "diagnosticUiAdded" $info.LatestDebugModeToggleDiagnosticUiAdded
+            $info.LatestDebugModeToggleDiagnosticUiRemoved = Get-LogValue $values "diagnosticUiRemoved" $info.LatestDebugModeToggleDiagnosticUiRemoved
+            $info.ActualDebugModeAtPackageTime = $info.LatestDebugModeToggleNewValue
         }
     }
 
@@ -569,7 +638,7 @@ function New-CombatSummaryBlock {
         [string]$Source,
         [string]$Button,
         [string]$ConsecutiveSuppressedDecisionLogs,
-        [string]$BlockReason,
+        [string]$SuppressionReason,
         [string]$NoClickRegionName,
         [string]$NoClickRegionIndex,
         [string]$IntendedClickPoint,
@@ -589,7 +658,7 @@ function New-CombatSummaryBlock {
         "  source: $Source",
         "  button: $Button",
         "  consecutive suppressed decisions: $ConsecutiveSuppressedDecisionLogs",
-        "  blocking reason: $BlockReason",
+        "  suppression reason: $SuppressionReason",
         "  no-click region: $NoClickRegionName",
         "  no-click region index: $NoClickRegionIndex",
         "  intended click point: $IntendedClickPoint",
@@ -630,7 +699,8 @@ function New-RouteFailureSummary {
     $workflowSummaryKeys = @{}
     $added = 0
 
-    foreach ($line in Get-Content -LiteralPath $LogFile.FullName) {
+    foreach ($rawLine in Get-Content -LiteralPath $LogFile.FullName) {
+        $line = Convert-RetiredCombatDiagnosticLine $rawLine
         if ($line -notmatch "^(?<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[INFO\] (?<msg>.*)$") {
             continue
         }
@@ -738,18 +808,18 @@ function New-RouteFailureSummary {
             continue
         }
 
-        if ($message -match "^CombatStallSummary: (?<kv>.*)$") {
+        if ($message -match "^CombatDiagnosticSummary: (?<kv>.*)$") {
             $values = Convert-LogKeyValueText $matches.kv
             $block = New-CombatSummaryBlock `
                 -Timestamp $timestamp `
-                -Event (Get-LogValue $values "event" "CombatStallSummary") `
+                -Event (Get-LogValue $values "event" "CombatDiagnosticSummary") `
                 -Workflow (Get-LogValue $values "workflow" "Combat") `
-                -Result (Get-LogValue $values "result" "Blocked") `
+                -Result (Get-LogValue $values "result" "Active") `
                 -Class (Get-LogValue $values "class") `
                 -Source (Get-LogValue $values "source") `
                 -Button (Get-LogValue $values "button") `
                 -ConsecutiveSuppressedDecisionLogs (Get-LogValue $values "consecutiveSuppressedDecisionLogs") `
-                -BlockReason (Get-LogValue $values "blockReason") `
+                -SuppressionReason (Get-LogValue $values "suppressionReason") `
                 -NoClickRegionName (Get-LogValue $values "noClickRegionName") `
                 -NoClickRegionIndex (Get-LogValue $values "noClickRegionIndex") `
                 -IntendedClickPoint (Get-LogValue $values "intendedClickPoint") `
@@ -926,6 +996,10 @@ if ($MaxSuccessScreenshots -lt 1) {
     Write-Warning "MaxSuccessScreenshots must be at least 1. Using 1."
     $MaxSuccessScreenshots = 1
 }
+if ($MaxDiagnosticScreenshots -lt 1) {
+    Write-Warning "MaxDiagnosticScreenshots must be at least 1. Using 1."
+    $MaxDiagnosticScreenshots = 1
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Write-Host "PSScriptRoot = $PSScriptRoot"
@@ -942,6 +1016,7 @@ Write-Host "Timestamp: $timestamp"
 Write-Host "Max normal screenshots: $MaxScreenshots"
 Write-Host "Max failure screenshots: $MaxFailureScreenshots"
 Write-Host "Max success screenshot groups: $MaxSuccessScreenshots"
+Write-Host "Max diagnostic screenshot groups: $MaxDiagnosticScreenshots"
 
 if (Test-Path -LiteralPath $stagingRoot) {
     Remove-Item -LiteralPath $stagingRoot -Recurse -Force
@@ -970,7 +1045,9 @@ try {
     else {
         $logDestinationDirectory = Join-Path $stagingRoot "Logs"
         New-Item -ItemType Directory -Path $logDestinationDirectory -Force | Out-Null
-        Copy-Item -LiteralPath $latestLog.FullName -Destination (Join-Path $logDestinationDirectory $latestLog.Name) -Force
+        Get-Content -LiteralPath $latestLog.FullName |
+            ForEach-Object { Convert-RetiredCombatDiagnosticLine $_ } |
+            Out-File -FilePath (Join-Path $logDestinationDirectory $latestLog.Name) -Encoding utf8
         Write-Host "Included latest log: $($latestLog.Name)"
     }
 
@@ -1021,18 +1098,22 @@ try {
 
     $failureGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "FAILURE" $MaxFailureScreenshots)
     $successGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "SUCCESS" $MaxSuccessScreenshots)
+    $diagnosticGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "DIAGNOSTIC" $MaxDiagnosticScreenshots)
     $selectedPairKeys = @{}
-    foreach ($group in @($failureGroups + $successGroups)) {
+    foreach ($group in @($failureGroups + $successGroups + $diagnosticGroups)) {
         $selectedPairKeys[$group.Name] = $true
     }
 
     $failureScreenshots = @(Get-FilesFromScreenshotGroups $failureGroups)
     $successScreenshots = @(Get-FilesFromScreenshotGroups $successGroups)
+    $diagnosticScreenshots = @(Get-FilesFromScreenshotGroups $diagnosticGroups)
 
     $normalScreenshots = @($sessionScreenshots |
         Where-Object {
             $info = Get-DiagnosticScreenshotInfo $_
-            $info.Outcome -eq "DEBUG" -and -not $selectedPairKeys.ContainsKey($info.PairKey)
+            $info.Outcome -eq "DEBUG" -and
+                -not (Test-RetiredDemonHunterSuppressionScreenshot $info) -and
+                -not $selectedPairKeys.ContainsKey($info.PairKey)
         } |
         Select-Object -First $MaxScreenshots)
 
@@ -1054,8 +1135,9 @@ try {
     else {
         $failureCount = Copy-FilesToPackageFolder $failureScreenshots (Join-Path $stagingRoot "Screenshots\Failure")
         $successCount = Copy-FilesToPackageFolder $successScreenshots (Join-Path $stagingRoot "Screenshots\Success")
+        $diagnosticCount = Copy-FilesToPackageFolder $diagnosticScreenshots (Join-Path $stagingRoot "Screenshots\Diagnostic")
         $normalCount = Copy-FilesToPackageFolder $normalScreenshots (Join-Path $stagingRoot "Screenshots\Recent")
-        New-ScreenshotManifest @($failureGroups + $successGroups) $screenshotManifestPath
+        New-ScreenshotManifest @($failureGroups + $successGroups + $diagnosticGroups) $screenshotManifestPath
 
         if ($failureCount -eq 0) {
             Write-Warning "No failure screenshots found. Expected failure type names in screenshot filenames."
@@ -1071,6 +1153,13 @@ try {
         }
         else {
             Write-Host "Included success screenshots: $successCount"
+        }
+
+        if ($diagnosticCount -eq 0) {
+            Write-Host "No diagnostic screenshots found."
+        }
+        else {
+            Write-Host "Included diagnostic screenshots: $diagnosticCount"
         }
 
         if ($normalCount -eq 0) {
@@ -1121,7 +1210,7 @@ try {
     }
 
     Write-Step "Creating zip package"
-    $totalScreenshotCount = $failureScreenshots.Count + $successScreenshots.Count + $normalScreenshots.Count
+    $totalScreenshotCount = $failureScreenshots.Count + $successScreenshots.Count + $diagnosticScreenshots.Count + $normalScreenshots.Count
     $buildManifestLines = {
         param(
             [long]$PackageSizeBytes,
@@ -1152,6 +1241,7 @@ try {
             "- Total screenshots included: $totalScreenshotCount",
             "- Failure screenshots included: $($failureScreenshots.Count)",
             "- Success screenshots included: $($successScreenshots.Count)",
+            "- Diagnostic screenshots included: $($diagnosticScreenshots.Count)",
             "- Normal debug screenshots included: $($normalScreenshots.Count)",
             "- Debug screenshots included: $debugScreenshotCount",
             "- All discovered screenshots: $($allScreenshots.Count)",
@@ -1159,6 +1249,22 @@ try {
             "- Excluded stale screenshots: $excludedStaleScreenshots",
             "- Debug screenshots setting from latest log: $($debugSkipInfo.AppSettingsDebugScreenshots)",
             "- Keep debug screenshots setting from latest log: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)",
+            "- App Debug Mode at package time: $($debugSkipInfo.ActualDebugModeAtPackageTime)",
+            "- App Debug Mode at startup: $($debugSkipInfo.StartupDebugMode)",
+            "- Latest Debug Mode toggle old value: $($debugSkipInfo.LatestDebugModeToggleOldValue)",
+            "- Latest Debug Mode toggle new value: $($debugSkipInfo.LatestDebugModeToggleNewValue)",
+            "- Latest Debug Mode toggle added diagnostic UI: $($debugSkipInfo.LatestDebugModeToggleDiagnosticUiAdded)",
+            "- Latest Debug Mode toggle removed diagnostic UI: $($debugSkipInfo.LatestDebugModeToggleDiagnosticUiRemoved)",
+            "- Startup AppSettings path: $($debugSkipInfo.StartupAppSettingsPath)",
+            "- Startup executable path: $($debugSkipInfo.StartupExecutablePath)",
+            "- Startup build configuration: $($debugSkipInfo.StartupBuildConfiguration)",
+            "- Startup launch kind: $($debugSkipInfo.StartupLaunchKind)",
+            "- Startup debug defaults profile: $($debugSkipInfo.StartupDebugDefaultsProfile)",
+            "- Startup debugger attached: $($debugSkipInfo.StartupDebuggerAttached)",
+            "- Startup VS/dev profile active: $($debugSkipInfo.StartupVsDevProfileActive)",
+            "- Startup first-run setup suppressed: $($debugSkipInfo.StartupFirstRunSetupSuppressed)",
+            "- Git status captured: $gitStatusCaptured",
+            "- Git log captured: $gitLogCaptured",
             "- DebugScreenshotSkipped disabled-by-config entries: $($debugSkipInfo.SkippedByConfigCount)",
             "- Diagnostic screenshot pair skipped by AppSettings entries: $($debugSkipInfo.DiagnosticSkippedByAppSettingsCount)",
             "- Diagnostic screenshot pair skipped by Keep Debug Screenshots entries: $($debugSkipInfo.DiagnosticSkippedByKeepSettingCount)",
@@ -1169,6 +1275,7 @@ try {
             "- Screenshots older than the current GoblinFarmer session start are not copied",
             "- bin folders are not copied",
             "- obj folders are not copied",
+            "- source files are not copied except selected docs and manifest inputs",
             "- build artifacts are not copied except selected runtime logs/screenshots"
         )
     }
@@ -1204,11 +1311,18 @@ Write-Host "Latest log:          $(if ($null -ne $latestLog) { $latestLog.Name }
 Write-Host "Total screenshots:   $totalScreenshotCount"
 Write-Host "Failure screenshots: $($failureScreenshots.Count)"
 Write-Host "Success screenshots: $($successScreenshots.Count)"
+Write-Host "Diagnostic screenshots: $($diagnosticScreenshots.Count)"
 Write-Host "Normal screenshots:  $($normalScreenshots.Count)"
 Write-Host "Debug screenshots:   $debugScreenshotCount"
 Write-Host "Stale screenshots:   $excludedStaleScreenshots excluded"
 Write-Host "Debug screenshots on:$($debugSkipInfo.AppSettingsDebugScreenshots)"
 Write-Host "Keep screenshots on: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"
+Write-Host "App Debug Mode:      $($debugSkipInfo.ActualDebugModeAtPackageTime) (startup: $($debugSkipInfo.StartupDebugMode))"
+Write-Host "Debugger attached:   $($debugSkipInfo.StartupDebuggerAttached)"
+Write-Host "Build configuration: $($debugSkipInfo.StartupBuildConfiguration)"
+Write-Host "VS/dev profile:      $($debugSkipInfo.StartupVsDevProfileActive)"
+Write-Host "First-run suppressed:$($debugSkipInfo.StartupFirstRunSetupSuppressed)"
+Write-Host "AppSettings path:    $($debugSkipInfo.StartupAppSettingsPath)"
 Write-Host "Skipped screenshots: DebugScreenshotSkipped=$($debugSkipInfo.SkippedByConfigCount); DiagnosticAppSettings=$($debugSkipInfo.DiagnosticSkippedByAppSettingsCount); DiagnosticKeepSetting=$($debugSkipInfo.DiagnosticSkippedByKeepSettingCount)"
 Write-Host "Latest failure type: $latestFailureType"
 Write-Host "Git status captured: $gitStatusCaptured"

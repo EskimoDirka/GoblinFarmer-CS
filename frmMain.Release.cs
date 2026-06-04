@@ -63,11 +63,14 @@ namespace GoblinFarmer
             };
             portDebugModeCheckBox.CheckedChanged += (_, _) =>
             {
+                bool oldDebugMode = AppSettings.Debug.DebugMode;
+                bool diagnosticsBefore = Controls.Find("tabDiagnostics", searchAllChildren: false).Any();
                 if (AppSettings.IsVsDebugProfile)
                 {
                     AppSettings.ApplyDebugDefaultsProfile();
                     PortRefreshDebugControlsFromSettings();
                     PortApplyDebugModeUi();
+                    PortLogDebugModeToggle(oldDebugMode, AppSettings.Debug.DebugMode, diagnosticsBefore);
                     return;
                 }
 
@@ -84,6 +87,7 @@ namespace GoblinFarmer
 
                 AppSettings.Save();
                 PortApplyDebugModeUi();
+                PortLogDebugModeToggle(oldDebugMode, AppSettings.Debug.DebugMode, diagnosticsBefore);
             };
 
             portSettingsGroup.Controls.Add(diabloCaption);
@@ -173,9 +177,23 @@ namespace GoblinFarmer
 
         private bool PortEnsureRequiredConfiguration()
         {
-            if (AppSettings.RequiredRuntimeConfigurationIsValid(out string _))
+            bool requiredConfigurationIsValid = AppSettings.RequiredRuntimeConfigurationIsValid(out string _);
+            if (!AppSettings.ShouldRequireFirstRunSetup(AppSettings.CurrentDebugDefaultsProfile, requiredConfigurationIsValid))
             {
-                AppLogger.Info("Runtime configuration validated.");
+                if (AppSettings.FirstRunSetupSuppressed)
+                {
+                    AppLogger.Info(
+                        "First-run setup suppressed for VS/dev profile: " +
+                        $"DebugDefaultsProfile={AppSettings.CurrentDebugDefaultsProfile}; " +
+                        $"DebugMode={AppSettings.Debug.DebugMode}; " +
+                        $"KeepDebugScreenshots={AppSettings.Debug.EnableDebugScreenshots}; " +
+                        $"ConfigPath={AppSettings.ConfigPath}");
+                }
+                else
+                {
+                    AppLogger.Info("Runtime configuration validated.");
+                }
+
                 return true;
             }
 
@@ -477,18 +495,19 @@ namespace GoblinFarmer
             }
 
             bool debugMode = AppSettings.Debug.DebugMode;
-            bool debugControlsForcedVisible = AppSettings.IsVsDebugProfile;
+            bool dynamicDebugControlsVisible = AppSettings.ShouldShowDynamicDebugControls(AppSettings.CurrentDebugDefaultsProfile);
+            bool debugControlsForcedVisible = !dynamicDebugControlsVisible;
             if (portDebugModeCheckBox != null)
             {
-                portDebugModeCheckBox.Visible = !debugControlsForcedVisible;
-                portDebugModeCheckBox.Enabled = !debugControlsForcedVisible;
+                portDebugModeCheckBox.Visible = dynamicDebugControlsVisible;
+                portDebugModeCheckBox.Enabled = dynamicDebugControlsVisible;
             }
 
             if (chkKeepDebugScreenshots != null)
             {
                 chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
-                chkKeepDebugScreenshots.Enabled = !debugControlsForcedVisible && debugMode;
-                chkKeepDebugScreenshots.Visible = !debugControlsForcedVisible && debugMode;
+                chkKeepDebugScreenshots.Enabled = dynamicDebugControlsVisible && debugMode;
+                chkKeepDebugScreenshots.Visible = dynamicDebugControlsVisible && debugMode;
             }
 
             grpHotkeys.Size = new Size(270, 157);
@@ -511,6 +530,24 @@ namespace GoblinFarmer
             {
                 PortInitializeDiagnosticOverlay();
             }
+        }
+
+        private void PortLogDebugModeToggle(bool oldDebugMode, bool newDebugMode, bool diagnosticsBefore)
+        {
+            bool diagnosticsAfter = Controls.Find("tabDiagnostics", searchAllChildren: false).Any();
+            AppLogger.Info(
+                "DebugModeToggled: " +
+                $"oldDebugMode={oldDebugMode}; " +
+                $"newDebugMode={newDebugMode}; " +
+                $"diagnosticUiBefore={diagnosticsBefore}; " +
+                $"diagnosticUiAfter={diagnosticsAfter}; " +
+                $"diagnosticUiAdded={!diagnosticsBefore && diagnosticsAfter}; " +
+                $"diagnosticUiRemoved={diagnosticsBefore && !diagnosticsAfter}; " +
+                $"debugScreenshotsEnabled={AppSettings.Debug.EnableDebugScreenshots}; " +
+                $"debugPackageCaptureAvailable=True; " +
+                $"ShowDiagnosticOverlay={AppSettings.Debug.ShowDiagnosticOverlay}; " +
+                $"ShowRouteInspector={AppSettings.Debug.ShowRouteInspector}; " +
+                $"AppSettingsPath={AppSettings.ConfigPath}");
         }
     }
 }

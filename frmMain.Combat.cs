@@ -302,30 +302,73 @@ namespace GoblinFarmer
         {
             AddWorkflowStep("Demon Hunter momentum build started");
 
-            Stopwatch sw = Stopwatch.StartNew();
+            bool waitForCountTemplate = PortDemonHunterMomentumCountTemplateAvailable();
+            Stopwatch? missingTemplateStopwatch = waitForCountTemplate ? null : Stopwatch.StartNew();
+            bool holdingClick = false;
 
-            while (!token.IsCancellationRequested &&
-                   portCombatRunning &&
-                   portCombatClass == "demon_hunter" &&
-                   sw.ElapsedMilliseconds < 6000)
+            try
             {
-                if (!PortDiabloIsActive())
+                while (!token.IsCancellationRequested &&
+                       portCombatRunning &&
+                       portCombatClass == "demon_hunter")
                 {
-                    BeginInvoke(new Action(() => PortStopCombat("Diablo inactive")));
-                    return;
-                }
+                    if (!PortDiabloIsActive())
+                    {
+                        BeginInvoke(new Action(() => PortStopCombat("Diablo inactive during Demon Hunter momentum build")));
+                        return;
+                    }
 
-                if (PortDemonHunterMomentumReady())
-                {
-                    AddWorkflowStep("Demon Hunter momentum build complete");
-                    return;
-                }
+                    if (!PortCombatClickIsSafe())
+                    {
+                        PortLogCombatClickDecision(
+                            "Demon Hunter momentum build",
+                            false,
+                            "left",
+                            ref portLastDemonHunterDecisionLogTicks,
+                            ref portLastDemonHunterDecisionAllowed);
 
-                PortDemonHunterShiftLeftClick(token);
-                Thread.Sleep(150);
+                        if (holdingClick)
+                        {
+                            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                            PortRuntimeShiftUp();
+                            holdingClick = false;
+                        }
+
+                        PortSleep(token, 50);
+                        continue;
+                    }
+
+                    if (!holdingClick)
+                    {
+                        PortRuntimeShiftDown();
+                        PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+                        holdingClick = true;
+                    }
+
+                    if (waitForCountTemplate && PortDemonHunterMomentumReady())
+                    {
+                        AddWorkflowStep("Demon Hunter momentum build complete");
+                        return;
+                    }
+
+                    if (!waitForCountTemplate && missingTemplateStopwatch?.ElapsedMilliseconds >= 6000)
+                    {
+                        AppLogger.Info("Demon Hunter momentum count template missing; continuing after timed startup build");
+                        AddWorkflowStep("Demon Hunter momentum build finished after missing-template timeout");
+                        return;
+                    }
+
+                    PortSleep(token, 50);
+                }
             }
-
-            AddWorkflowStep("Demon Hunter momentum build finished or timed out");
+            finally
+            {
+                if (holdingClick)
+                {
+                    PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+                    PortRuntimeShiftUp();
+                }
+            }
         }
 
         private bool PortDemonHunterShiftLeftClick(CancellationToken token, bool stopCombatWhenUnsafe = false)
@@ -490,11 +533,9 @@ namespace GoblinFarmer
 
                 AddWorkflowStep("Demon Hunter momentum not detected; sending Shift+Left Click");
 
-                if (!PortDemonHunterShiftLeftClick(token))
+                if (!PortDemonHunterShiftLeftClick(token, stopCombatWhenUnsafe: true))
                 {
-                    AppLogger.Info($"Demon Hunter momentum maintenance skipped unsafe Shift+Left Click; combat remains active; {PortCombatInputContext()}");
-                    PortSleep(token, 350);
-                    continue;
+                    return;
                 }
 
                 PortSleep(token, 350);
@@ -699,12 +740,17 @@ namespace GoblinFarmer
 
             double confidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, momentumRegion);
 
-            if (confidence < 0.75)
+            if (confidence < 0.86)
             {
                 AppLogger.Info($"Demon Hunter Momentum Count 20 confidence={confidence:0.000}");
             }
 
-            return confidence >= 0.75;
+            return confidence >= 0.86;
+        }
+
+        private bool PortDemonHunterMomentumCountTemplateAvailable()
+        {
+            return File.Exists(Img("Combat", "Momentum Count 20.png"));
         }
 
         private void PortStartCombatMenuWatcher(CancellationToken token)
@@ -805,25 +851,13 @@ namespace GoblinFarmer
                     cursor.Y >= rect.Top &&
                     cursor.Y < rect.Bottom;
 
-                int width = rect.Right - rect.Left;
-                int height = rect.Bottom - rect.Top;
-                for (int i = 0; i < portCombatNoClickRegions.Length; i++)
+                Rectangle diabloRectangle = new(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                if (CombatClickSafety.TryGetNoClickRegion(cursor, diabloRectangle, out CombatNoClickRegion noClickDefinition, out Rectangle region, out int regionIndex))
                 {
-                    PortCombatNoClickRegion noClickDefinition = portCombatNoClickRegions[i];
-                    Rectangle region = new(
-                        rect.Left + (int)Math.Round(width * noClickDefinition.Left),
-                        rect.Top + (int)Math.Round(height * noClickDefinition.Top),
-                        (int)Math.Round(width * noClickDefinition.Width),
-                        (int)Math.Round(height * noClickDefinition.Height));
-
-                    if (region.Contains(cursor))
-                    {
-                        insideNoClickRegion = true;
-                        noClickRegionName = noClickDefinition.Name;
-                        noClickRegionIndex = i;
-                        noClickRegion = region;
-                        break;
-                    }
+                    insideNoClickRegion = true;
+                    noClickRegionName = noClickDefinition.Name;
+                    noClickRegionIndex = regionIndex;
+                    noClickRegion = region;
                 }
             }
 
@@ -835,7 +869,7 @@ namespace GoblinFarmer
                 cbSize = Marshal.SizeOf<CURSORINFO>()
             };
             bool hasCursorInfo = GetCursorInfo(out cursorInfo);
-            bool safe = hasRect && hasCursor && cursorInsideDiablo && !insideNoClickRegion;
+            bool safe = hasCursor && !insideNoClickRegion;
 
             return new PortCombatClickDiagnostics(
                 safe,
@@ -902,7 +936,7 @@ namespace GoblinFarmer
 
             if (!string.IsNullOrWhiteSpace(blockReason))
             {
-                AppLogger.Info($"{source}: {button} click suppressed; combatInputMode=PhysicalCursorNoClickSuppression; clickSendMethod=suppressed; blockReason={blockReason}; noClickRegionName={diagnostics.NoClickRegionName}; mouse={intendedClickPoint}; intendedClickPoint={intendedClickPoint}; diabloRect={diabloRect}; regionRect={regionRectangle}; combatActive={portCombatRunning}; blocked=true; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; {PortCombatInputContext()}");
+                AppLogger.Info($"{source}: {button} click suppressed; combatInputMode=PhysicalCursorNoClickSuppression; clickSendMethod=suppressed; blockReason={blockReason}; noClickRegionName={diagnostics.NoClickRegionName}; activeRegionName={diagnostics.NoClickRegionName}; mouse={intendedClickPoint}; cursor={intendedClickPoint}; intendedClickPoint={intendedClickPoint}; diabloRect={diabloRect}; regionRect={regionRectangle}; activeRegionRect={regionRectangle}; rightMouseHeld={portRuntimeRightMouseHeld}; shiftHeld={portRuntimeShiftHeld}; leftClickSent=false; combatRunning={portCombatRunning}; combatClass={portCombatClass}; combatActive={portCombatRunning}; blocked=true; foreground=0x{diagnostics.ForegroundWindow.ToInt64():X}; {PortCombatInputContext()}");
                 PortMaybeLogDemonHunterSuppressionEvidence(source, button, diagnostics, intendedClickPoint, diabloRect, regionRectangle);
                 return;
             }
@@ -943,14 +977,14 @@ namespace GoblinFarmer
             }
 
             Interlocked.Exchange(ref portLastDemonHunterSuppressionEvidenceTicks, nowTicks);
-            PortScreenshotPair pair = PortCaptureCombatDiagnosticScreenshot("DemonHunterNoClickSuppressionStall");
+            PortScreenshotPair pair = PortCaptureCombatDiagnosticScreenshot(CombatDiagnosticNames.DemonHunterNoClickSuppressionAction);
             string screenshotPath = !string.IsNullOrWhiteSpace(pair.DiabloPath) ? pair.DiabloPath : pair.AppPath;
             if (string.IsNullOrWhiteSpace(screenshotPath))
             {
                 screenshotPath = "None";
             }
 
-            string summary = $"CombatStallSummary: event=DemonHunterNoClickSuppressionStall; workflow=Combat; result=Blocked; class=demon_hunter; source={PortLogField(source)}; button={PortLogField(button)}; consecutiveSuppressedDecisionLogs={suppressedCount}; blockReason={PortLogField(diagnostics.NoClickRegionName)}; noClickRegionName={PortLogField(diagnostics.NoClickRegionName)}; noClickRegionIndex={diagnostics.NoClickRegionIndex}; intendedClickPoint={PortLogField(intendedClickPoint)}; diabloRect={PortLogField(diabloRect)}; regionRect={PortLogField(regionRectangle)}; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; screenshotPath={PortLogField(PortDisplayLocation(screenshotPath))}; likelyExplanation=Demon Hunter combat remained active while repeated combat clicks were suppressed because the cursor stayed in no-click UI regions.";
+            string summary = $"{CombatDiagnosticNames.DemonHunterNoClickSuppressionSummary}: event={CombatDiagnosticNames.DemonHunterNoClickSuppressionEvent}; workflow={CombatDiagnosticNames.DemonHunterNoClickSuppressionWorkflow}; result=Active; class=demon_hunter; source={PortLogField(source)}; button={PortLogField(button)}; consecutiveSuppressedDecisionLogs={suppressedCount}; suppressionReason={PortLogField(diagnostics.NoClickRegionName)}; noClickRegionName={PortLogField(diagnostics.NoClickRegionName)}; noClickRegionIndex={diagnostics.NoClickRegionIndex}; intendedClickPoint={PortLogField(intendedClickPoint)}; diabloRect={PortLogField(diabloRect)}; regionRect={PortLogField(regionRectangle)}; clickSendMethod=suppressed; combatActive={portCombatRunning}; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; screenshotPath={PortLogField(PortDisplayLocation(screenshotPath))}; likelyExplanation=Demon Hunter combat remained active while repeated combat clicks were suppressed because the cursor stayed in no-click UI regions.";
             AppLogger.Info(summary);
         }
 
