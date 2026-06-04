@@ -7,8 +7,13 @@ namespace GoblinFarmer
         private const int GoblinEvidenceScanIntervalMs = 750;
         private static readonly TimeSpan GoblinEvidenceCooldown = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan GoblinEvidenceMissingTemplateLogCooldown = TimeSpan.FromMinutes(5);
-        private static readonly Rectangle GoblinEvidenceCalibrationMinimapReferenceRegion = new(2050, 20, 480, 420);
-        private static readonly Rectangle GoblinEvidenceCalibrationJournalReferenceRegion = new(25, 650, 900, 420);
+        // Minimap calibration region derived from real calibration capture using ShareX measurements at 2560x1440.
+        // May require future scaling adjustments for different resolutions/UI scales.
+        private static readonly Rectangle GoblinEvidenceCalibrationMinimapReferenceRegion = new(2108, 66, 421, 423);
+        // Journal calibration region derived from ShareX measurements at 2560x1440.
+        // Sized to capture the Diablo journal/event feed area used for future goblin evidence detection.
+        // May require scaling adjustments for different resolutions or UI scales.
+        private static readonly Rectangle GoblinEvidenceCalibrationJournalReferenceRegion = new(64, 736, 645, 417);
         private readonly object portGoblinEvidenceLock = new();
         private readonly Dictionary<GoblinEvidenceType, DateTime> portLastGoblinEvidenceByType = new();
         private readonly Dictionary<GoblinEvidenceType, DateTime> portLastGoblinEvidenceMissingTemplateLogByType = new();
@@ -96,7 +101,7 @@ namespace GoblinFarmer
             // TODO: Replace template placeholder with calibrated journal kill region/assets.
             return PortDetectGoblinEvidenceTemplate(
                 GoblinEvidenceType.JournalKill,
-                "Journal",
+                "JournalCandidate",
                 Img("Goblin Evidence", "Journal Kill.png"),
                 PortGoblinEvidenceJournalRegion(),
                 0.90,
@@ -108,7 +113,7 @@ namespace GoblinFarmer
             // TODO: Replace template placeholder with calibrated journal encounter region/assets.
             return PortDetectGoblinEvidenceTemplate(
                 GoblinEvidenceType.JournalEncounter,
-                "Journal",
+                "JournalCandidate",
                 Img("Goblin Evidence", "Journal Encounter.png"),
                 PortGoblinEvidenceJournalRegion(),
                 0.90,
@@ -120,7 +125,7 @@ namespace GoblinFarmer
             // TODO: Add calibrated minimap icon template(s) and tighten this region per resolution.
             return PortDetectGoblinEvidenceTemplate(
                 GoblinEvidenceType.MinimapIcon,
-                "Minimap",
+                "MinimapCandidate",
                 Img("Goblin Evidence", "Minimap Goblin Icon.png"),
                 PortGoblinEvidenceMinimapRegion(),
                 0.65,
@@ -185,6 +190,7 @@ namespace GoblinFarmer
 
         private void PortRecordGoblinEvidence(GoblinEvidenceCandidate candidate)
         {
+            candidate = candidate with { GoblinType = GoblinTypeNormalizer.Normalize(candidate.GoblinType) };
             DateTime now = DateTime.Now;
             lock (portGoblinEvidenceLock)
             {
@@ -208,6 +214,7 @@ namespace GoblinFarmer
 
             DebugManager.Session.RecordGoblinEvidence(evidenceEvent);
             AppLogger.Info($"GoblinEvidence: Type={candidate.Type}; Confidence={candidate.Confidence:0.00}; Source={candidate.Source}; Screenshot={PortLogField(PortDisplayLocation(screenshotPath))}; Notes={PortLogField(candidate.Notes)}");
+            PortTryRecordGoblinFound(candidate.Source, candidate.GoblinType, allowUnresolvedFallback: false);
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
         }
@@ -258,6 +265,7 @@ namespace GoblinFarmer
                 finally
                 {
                     Interlocked.Exchange(ref portGoblinEvidenceCalibrationCaptureActive, 0);
+                    DebugManager.CleanupOldGoblinEvidence(AppSettings.Debug.GoblinEvidenceRetentionCount);
                 }
             });
         }
@@ -274,16 +282,15 @@ namespace GoblinFarmer
             string journalPath = Path.Combine(directory, $"{prefix}_Journal.png");
             string metadataPath = Path.Combine(directory, $"{prefix}_Metadata.txt");
 
-            if (!PortTryCaptureGoblinEvidenceSourceScreenshot(out Bitmap screenshot, "GoblinCalibration"))
+            string savedFullPath = PortCaptureDiabloScreenshotToFile(fullPath, "GoblinCalibration");
+            if (string.IsNullOrWhiteSpace(savedFullPath) || !File.Exists(savedFullPath))
             {
                 AppLogger.Info("GoblinCalibration: Snapshot failed; reason=source screenshot unavailable");
                 return;
             }
 
-            using (screenshot)
+            using (Bitmap screenshot = new(savedFullPath))
             {
-                screenshot.Save(fullPath, System.Drawing.Imaging.ImageFormat.Png);
-
                 // TODO: These are calibration starter regions for 2560x1440 and may need tuning per resolution/UI scale.
                 Rectangle minimapRegion = PortScaleAndClampGoblinCalibrationRegion(
                     GoblinEvidenceCalibrationMinimapReferenceRegion,
@@ -303,58 +310,20 @@ namespace GoblinFarmer
                     $"Combat Active: {portCombatRunning}",
                     $"Combat Profile: {PortGoblinEvidenceCombatProfileDisplayName()}",
                     $"Current Location: {currentLocation}",
-                    $"Full Screenshot Path: {fullPath}",
-                    $"Minimap Crop Path: {PortDisplayLocation(savedMinimapPath)}",
-                    $"Journal Crop Path: {PortDisplayLocation(savedJournalPath)}",
+                    $"Full Screenshot Path: {savedFullPath}",
+                    $"Minimap Crop Path: {savedMinimapPath}",
+                    $"Journal Crop Path: {savedJournalPath}",
                     $"Minimap Region: {PortFormatGoblinCalibrationRegion(minimapRegion)}",
                     $"Journal Region: {PortFormatGoblinCalibrationRegion(journalRegion)}",
                 ]);
 
-                DebugManager.RecordDebugScreenshotPath(fullPath);
+                DebugManager.RecordDebugScreenshotPath(savedFullPath);
                 AppLogger.Info("GoblinCalibration: Snapshot saved");
-                AppLogger.Info($"GoblinCalibration: Full={PortLogField(fullPath)}");
+                AppLogger.Info($"GoblinCalibration: Full={PortLogField(savedFullPath)}");
                 AppLogger.Info($"GoblinCalibration: Minimap={PortLogField(PortDisplayLocation(savedMinimapPath))}; Region={PortFormatGoblinCalibrationRegion(minimapRegion)}");
                 AppLogger.Info($"GoblinCalibration: Journal={PortLogField(PortDisplayLocation(savedJournalPath))}; Region={PortFormatGoblinCalibrationRegion(journalRegion)}");
                 AppLogger.Info($"GoblinCalibration: Metadata={PortLogField(metadataPath)}");
             }
-        }
-
-        private bool PortTryCaptureGoblinEvidenceSourceScreenshot(out Bitmap screenshot, string reason)
-        {
-            screenshot = new Bitmap(1, 1);
-
-            IntPtr diabloWindow = FindDiabloWindow();
-            RECT rect;
-            if (diabloWindow != IntPtr.Zero && PortTryGetDiabloClientScreenRect(diabloWindow, reason, out rect))
-            {
-                AppLogger.Info($"GoblinCalibration: Capturing Diablo client screenshot; reason={reason}");
-            }
-            else
-            {
-                Rectangle screen = SystemInformation.VirtualScreen;
-                rect = new RECT
-                {
-                    Left = screen.Left,
-                    Top = screen.Top,
-                    Right = screen.Right,
-                    Bottom = screen.Bottom,
-                };
-                AppLogger.Info($"GoblinCalibration: Capturing virtual screen fallback; reason={reason}; bounds={screen.Left},{screen.Top},{screen.Width},{screen.Height}");
-            }
-
-            int width = rect.Right - rect.Left;
-            int height = rect.Bottom - rect.Top;
-            if (width <= 0 || height <= 0)
-            {
-                AppLogger.Info($"GoblinCalibration: Source screenshot skipped; reason={reason}; invalidBounds={rect.Left},{rect.Top},{rect.Right},{rect.Bottom}");
-                return false;
-            }
-
-            screenshot.Dispose();
-            screenshot = new Bitmap(width, height);
-            using Graphics graphics = Graphics.FromImage(screenshot);
-            graphics.CopyFromScreen(rect.Left, rect.Top, 0, 0, screenshot.Size);
-            return true;
         }
 
         private static Rectangle PortScaleAndClampGoblinCalibrationRegion(Rectangle referenceRegion, Size screenshotSize)

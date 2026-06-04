@@ -50,6 +50,8 @@ namespace GoblinFarmer
         private readonly Dictionary<string, Button> portTeleportButtons = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<Button, Color> portButtonDefaultBackColors = new();
         private readonly Dictionary<Button, Color> portButtonDefaultForeColors = new();
+        private readonly object portGoblinTrackerLock = new();
+        private readonly GoblinAreaDuplicateGuard portGoblinAreaDuplicateGuard = new();
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;

@@ -2,8 +2,10 @@ param(
     [string]$RuntimeRoot = "",
     [int]$MaxScreenshots = 10,
     [int]$MaxFailureScreenshots = 10,
-    [int]$MaxSuccessScreenshots = 10,
-    [int]$MaxDiagnosticScreenshots = 10
+    [int]$MaxSuccessScreenshots = 0,
+    [int]$MaxDiagnosticScreenshots = 10,
+    [switch]$IncludeSuccessScreenshots,
+    [int]$MaxGoblinEvidenceFullImages = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -473,6 +475,48 @@ function Get-GoblinTrackerInfo {
     }
 }
 
+function Get-DebugEnableSuccessScreenshotsInfo {
+    param([string[]]$RuntimeRoots)
+
+    $configPaths = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $RuntimeRoots) {
+        Add-UniquePath $configPaths (Join-Path $root "Config\AppSettings.json")
+    }
+
+    $configFile = $configPaths.ToArray() |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        ForEach-Object { Get-Item -LiteralPath $_ } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($null -eq $configFile) {
+        return [pscustomobject]@{
+            Enabled = $false
+            Source = "none"
+        }
+    }
+
+    try {
+        $json = Get-Content -LiteralPath $configFile.FullName -Raw | ConvertFrom-Json
+        $enabled = $false
+        if ($null -ne $json.Debug -and $null -ne $json.Debug.EnableSuccessScreenshots) {
+            $enabled = [bool]$json.Debug.EnableSuccessScreenshots
+        }
+
+        return [pscustomobject]@{
+            Enabled = $enabled
+            Source = $configFile.FullName
+        }
+    }
+    catch {
+        Write-Warning "Could not parse Debug.EnableSuccessScreenshots from $($configFile.FullName): $($_.Exception.Message)"
+        return [pscustomobject]@{
+            Enabled = $false
+            Source = $configFile.FullName
+        }
+    }
+}
+
 function Format-ByteSize {
     param([long]$Bytes)
 
@@ -680,6 +724,65 @@ function Copy-DebugScreenshotsToPackage {
     }
 
     return $copied
+}
+
+function Get-PackageFolderTotals {
+    param([string]$StagingRoot)
+
+    if (-not (Test-Path -LiteralPath $StagingRoot -PathType Container)) {
+        return @()
+    }
+
+    $groups = Get-ChildItem -LiteralPath $StagingRoot -File -Recurse -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($StagingRoot.Length).TrimStart('\', '/')
+            $normalizedRelative = $relative.Replace('/', '\')
+            $folder = if ($normalizedRelative.StartsWith("Debug\GoblinEvidence\", [System.StringComparison]::OrdinalIgnoreCase)) {
+                "Debug/GoblinEvidence"
+            }
+            elseif ($relative.Contains('\')) { $relative.Split('\')[0] } elseif ($relative.Contains('/')) { $relative.Split('/')[0] } else { "(root)" }
+            [pscustomobject]@{
+                Folder = $folder
+                Length = $_.Length
+            }
+        } |
+        Group-Object Folder |
+        Sort-Object { ($_.Group | Measure-Object Length -Sum).Sum } -Descending
+
+    foreach ($group in $groups) {
+        $bytes = [long](($group.Group | Measure-Object Length -Sum).Sum)
+        [pscustomobject]@{
+            Folder = $group.Name
+            Count = $group.Count
+            Bytes = $bytes
+            Size = Format-ByteSize $bytes
+        }
+    }
+}
+
+function Get-FolderFileTotals {
+    param([string[]]$Folders)
+
+    $paths = @{}
+    foreach ($folder in $Folders) {
+        if (-not (Test-Path -LiteralPath $folder -PathType Container)) {
+            continue
+        }
+
+        Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                $paths[$_.FullName] = $_
+            }
+    }
+
+    $files = @($paths.Values)
+    $sizeMeasure = $files | Measure-Object Length -Sum
+    $bytes = if ($null -ne $sizeMeasure.Sum) { [long]$sizeMeasure.Sum } else { 0L }
+    return [pscustomobject]@{
+        Count = $files.Count
+        Bytes = $bytes
+        Size = Format-ByteSize $bytes
+    }
 }
 
 function Save-GitOutput {
@@ -1324,13 +1427,17 @@ if ($MaxFailureScreenshots -lt 1) {
     $MaxFailureScreenshots = 1
 }
 
-if ($MaxSuccessScreenshots -lt 1) {
-    Write-Warning "MaxSuccessScreenshots must be at least 1. Using 1."
-    $MaxSuccessScreenshots = 1
+if ($MaxSuccessScreenshots -lt 0) {
+    Write-Warning "MaxSuccessScreenshots must be at least 0. Using 0."
+    $MaxSuccessScreenshots = 0
 }
 if ($MaxDiagnosticScreenshots -lt 1) {
     Write-Warning "MaxDiagnosticScreenshots must be at least 1. Using 1."
     $MaxDiagnosticScreenshots = 1
+}
+if ($MaxGoblinEvidenceFullImages -lt 0) {
+    Write-Warning "MaxGoblinEvidenceFullImages must be at least 0. Using 0."
+    $MaxGoblinEvidenceFullImages = 0
 }
 
 $runtimeRootInfo = Resolve-RuntimeRoot $RuntimeRoot $PSScriptRoot
@@ -1358,6 +1465,8 @@ Write-Host "Max normal screenshots: $MaxScreenshots"
 Write-Host "Max failure screenshots: $MaxFailureScreenshots"
 Write-Host "Max success screenshot groups: $MaxSuccessScreenshots"
 Write-Host "Max diagnostic screenshot groups: $MaxDiagnosticScreenshots"
+Write-Host "Include success screenshots: $($IncludeSuccessScreenshots.IsPresent)"
+Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
 
 if (Test-Path -LiteralPath $stagingRoot) {
     Remove-Item -LiteralPath $stagingRoot -Recurse -Force
@@ -1417,6 +1526,7 @@ try {
     $sessionStart = [DateTime]$sessionInfo.Start
     $sessionDuration = (Get-Date) - $sessionStart
     $goblinTrackerInfo = Get-GoblinTrackerInfo $packageRuntimeRoots
+    $successScreenshotSetting = Get-DebugEnableSuccessScreenshotsInfo $packageRuntimeRoots
     Write-Host "Session start: $($sessionStart.ToString('yyyy-MM-dd HH:mm:ss.fff zzz'))"
     Write-Host "Session source: $($sessionInfo.SourceKind) ($($sessionInfo.Source))"
     Write-Host "Session duration: $($sessionDuration.ToString('hh\:mm\:ss'))"
@@ -1436,6 +1546,10 @@ try {
     $debugScreenshotFolders = $debugScreenshotFoldersList.ToArray()
     $goblinEvidenceFolders = $goblinEvidenceFoldersList.ToArray()
     $goblinEvidenceSourceRoots = $goblinEvidenceSourceRootsList.ToArray()
+    $goblinEvidenceSourceTotals = Get-FolderFileTotals $goblinEvidenceFolders
+    if ($goblinEvidenceSourceTotals.Count -gt 0) {
+        Write-Host "Current goblin evidence files: $($goblinEvidenceSourceTotals.Count), $($goblinEvidenceSourceTotals.Size)"
+    }
 
     Write-Step "Collecting latest screenshots"
     $allScreenshotCandidates = foreach ($folder in $screenshotFolders) {
@@ -1461,7 +1575,17 @@ try {
     Write-Host "Selected screenshot folder: $selectedScreenshotFolder"
 
     $failureGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "FAILURE" $MaxFailureScreenshots)
-    $successGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "SUCCESS" $MaxSuccessScreenshots)
+    $availableSuccessGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "SUCCESS" ([int]::MaxValue))
+    $availableSuccessScreenshots = @(Get-FilesFromScreenshotGroups $availableSuccessGroups)
+    $availableSuccessScreenshotSizeMeasure = $availableSuccessScreenshots | Measure-Object Length -Sum
+    $availableSuccessScreenshotSizeBytes = if ($null -ne $availableSuccessScreenshotSizeMeasure.Sum) { [long]$availableSuccessScreenshotSizeMeasure.Sum } else { 0L }
+    $availableSuccessScreenshotSizeDisplay = Format-ByteSize $availableSuccessScreenshotSizeBytes
+    $successGroups = if ($IncludeSuccessScreenshots -and $MaxSuccessScreenshots -gt 0) {
+        @(Select-DiagnosticScreenshotGroups $sessionScreenshots "SUCCESS" $MaxSuccessScreenshots)
+    }
+    else {
+        @()
+    }
     $diagnosticGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "DIAGNOSTIC" $MaxDiagnosticScreenshots)
     $selectedPairKeys = @{}
     foreach ($group in @($failureGroups + $successGroups + $diagnosticGroups)) {
@@ -1471,6 +1595,10 @@ try {
     $failureScreenshots = @(Get-FilesFromScreenshotGroups $failureGroups)
     $successScreenshots = @(Get-FilesFromScreenshotGroups $successGroups)
     $diagnosticScreenshots = @(Get-FilesFromScreenshotGroups $diagnosticGroups)
+    Write-Host "Enable success screenshots setting: $($successScreenshotSetting.Enabled) ($($successScreenshotSetting.Source))"
+    if ($successScreenshotSetting.Enabled -and $availableSuccessScreenshots.Count -gt 0) {
+        Write-Host "Available success screenshots excluded by default: $($availableSuccessScreenshots.Count), $availableSuccessScreenshotSizeDisplay"
+    }
 
     $normalScreenshots = @($sessionScreenshots |
         Where-Object {
@@ -1512,7 +1640,10 @@ try {
                 Write-Host "Latest failure screenshot filename: $($latestFailureScreenshot.Name)"
         }
 
-        if ($successCount -eq 0) {
+        if (-not $IncludeSuccessScreenshots -or $MaxSuccessScreenshots -eq 0) {
+            Write-Host "Success screenshots skipped by package policy. Use -IncludeSuccessScreenshots with -MaxSuccessScreenshots to include debug-only success evidence."
+        }
+        elseif ($successCount -eq 0) {
             Write-Warning "No success screenshots found."
         }
         else {
@@ -1561,14 +1692,35 @@ try {
     $goblinEvidenceCandidates = foreach ($folder in $goblinEvidenceFolders) {
         if (Test-Path -LiteralPath $folder -PathType Container) {
             Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' }
+                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt)$' }
         }
     }
     $goblinEvidenceScreenshots = @($goblinEvidenceCandidates |
         Where-Object { $_.LastWriteTime -ge $sessionStart -or $_.CreationTime -ge $sessionStart } |
         Sort-Object LastWriteTime -Descending)
+    $goblinEvidenceFullImages = @($goblinEvidenceScreenshots |
+        Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and $_.BaseName -like '*_Full' } |
+        Sort-Object LastWriteTime -Descending)
+    $selectedGoblinEvidenceFullImages = if ($MaxGoblinEvidenceFullImages -gt 0) {
+        @($goblinEvidenceFullImages | Select-Object -First $MaxGoblinEvidenceFullImages)
+    }
+    else {
+        @()
+    }
+    $selectedGoblinEvidenceFullImagePaths = @{}
+    foreach ($file in $selectedGoblinEvidenceFullImages) {
+        $selectedGoblinEvidenceFullImagePaths[$file.FullName] = $true
+    }
+    $excludedGoblinEvidenceFullImages = [Math]::Max(0, $goblinEvidenceFullImages.Count - $selectedGoblinEvidenceFullImages.Count)
+    $goblinEvidenceScreenshots = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $_.Extension -notmatch '^\.(png|jpg|jpeg|bmp)$' -or
+                $_.BaseName -notlike '*_Full' -or
+                $selectedGoblinEvidenceFullImagePaths.ContainsKey($_.FullName)
+        })
     $selectedGoblinEvidenceFolder = if ($goblinEvidenceScreenshots.Count -gt 0) { Split-Path -Parent $goblinEvidenceScreenshots[0].FullName } elseif (-not [string]::IsNullOrWhiteSpace($goblinTrackerInfo.EvidenceScreenshotFolder)) { $goblinTrackerInfo.EvidenceScreenshotFolder } else { "none" }
     Write-Host "Selected goblin evidence folder: $selectedGoblinEvidenceFolder"
+    Write-Host "Excluded goblin evidence full images: $excludedGoblinEvidenceFullImages"
     $goblinEvidenceScreenshotCount = Copy-DebugScreenshotsToPackage $goblinEvidenceScreenshots $goblinEvidenceSourceRoots (Join-Path $stagingRoot "Debug")
     if ($goblinEvidenceScreenshotCount -eq 0) {
         Write-Host "No current-session goblin evidence screenshots found."
@@ -1608,6 +1760,18 @@ try {
 
     Write-Step "Creating zip package"
     $totalScreenshotCount = $failureScreenshots.Count + $successScreenshots.Count + $diagnosticScreenshots.Count + $normalScreenshots.Count
+    $goblinEvidenceSourceSummaryLine = if ($goblinEvidenceSourceTotals.Count -gt 0) {
+        "Current GoblinEvidence source files: count=$($goblinEvidenceSourceTotals.Count); totalSize=$($goblinEvidenceSourceTotals.Size); totalSizeBytes=$($goblinEvidenceSourceTotals.Bytes)"
+    }
+    else {
+        "Current GoblinEvidence source files: none"
+    }
+    $goblinEvidenceSourceFolderTotalLine = if ($goblinEvidenceSourceTotals.Count -gt 0) {
+        "- Debug/GoblinEvidence current source: $($goblinEvidenceSourceTotals.Count) files, $($goblinEvidenceSourceTotals.Size) ($($goblinEvidenceSourceTotals.Bytes) bytes)"
+    }
+    else {
+        ""
+    }
     $buildManifestLines = {
         param(
             [long]$PackageSizeBytes,
@@ -1639,6 +1803,12 @@ try {
             "Goblin evidence last time: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastEvidenceTimeLocal)) { 'none' } else { $goblinTrackerInfo.LastEvidenceTimeLocal })",
             "Goblin evidence screenshot folder: $selectedGoblinEvidenceFolder",
             "Goblin evidence last screenshot: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastEvidenceScreenshotPath)) { 'none' } else { $goblinTrackerInfo.LastEvidenceScreenshotPath })",
+            "Success screenshot package policy: $(if ($IncludeSuccessScreenshots) { 'Included when selected' } else { 'Skipped by default' })",
+            "Debug.EnableSuccessScreenshots: $($successScreenshotSetting.Enabled)",
+            "Debug.EnableSuccessScreenshots source: $($successScreenshotSetting.Source)",
+            "$(if ($successScreenshotSetting.Enabled -and $availableSuccessScreenshots.Count -gt 0) { "Success screenshots available but excluded by default: count=$($availableSuccessScreenshots.Count); totalSize=$availableSuccessScreenshotSizeDisplay; totalSizeBytes=$availableSuccessScreenshotSizeBytes" } else { "Success screenshots available but excluded by default: none" })",
+            "Goblin evidence full-image package policy: most recent $MaxGoblinEvidenceFullImages included; $excludedGoblinEvidenceFullImages excluded",
+            $goblinEvidenceSourceSummaryLine,
             "Log folders searched:",
             ($logFolders | ForEach-Object { "- $_" }),
             "Selected log folder: $selectedLogFolder",
@@ -1663,10 +1833,13 @@ try {
             "- Total screenshots included: $totalScreenshotCount",
             "- Failure screenshots included: $($failureScreenshots.Count)",
             "- Success screenshots included: $($successScreenshots.Count)",
+            "- Success screenshots available: $($availableSuccessScreenshots.Count)",
+            "- Success screenshots available total size: $availableSuccessScreenshotSizeDisplay ($availableSuccessScreenshotSizeBytes bytes)",
             "- Diagnostic screenshots included: $($diagnosticScreenshots.Count)",
             "- Normal debug screenshots included: $($normalScreenshots.Count)",
             "- Debug screenshots included: $debugScreenshotCount",
             "- Goblin evidence screenshots included: $goblinEvidenceScreenshotCount",
+            "- Goblin evidence full images excluded: $excludedGoblinEvidenceFullImages",
             "- All discovered screenshots: $($allScreenshots.Count)",
             "- Current-session screenshots: $($sessionScreenshots.Count)",
             "- Excluded stale screenshots: $excludedStaleScreenshots",
@@ -1694,8 +1867,14 @@ try {
             "- Latest failure screenshot type: $latestFailureType",
             "- Latest failure screenshot: $(if ($null -ne $latestFailureScreenshot) { $latestFailureScreenshot.FullName } else { 'none' })",
             "",
+            "Package folder totals:",
+            (Get-PackageFolderTotals $stagingRoot | ForEach-Object { "- $($_.Folder): $($_.Count) files, $($_.Size) ($($_.Bytes) bytes)" }),
+            $goblinEvidenceSourceFolderTotalLine,
+            "",
             "Exclusions:",
             "- Screenshots older than the current GoblinFarmer session start are not copied",
+            "- Screenshots/Success is excluded unless -IncludeSuccessScreenshots is set",
+            "- Debug/GoblinEvidence/Calibration *_Full images are excluded except the most recent MaxGoblinEvidenceFullImages",
             "- bin folders are not copied",
             "- obj folders are not copied",
             "- source files are not copied except selected docs and manifest inputs",

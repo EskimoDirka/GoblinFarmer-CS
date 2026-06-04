@@ -15,6 +15,7 @@ namespace GoblinFarmer
             AppLogger.CleanupOldLogs(AppSettings.RetentionDays);
             DebugManager.CleanupOldSessionSummaries(AppSettings.Debug.SessionSummaryRetentionCount);
             DebugManager.CleanupOldDebugPackages(AppSettings.Debug.DebugPackageRetentionCount);
+            DebugManager.CleanupOldGoblinEvidence(AppSettings.Debug.GoblinEvidenceRetentionCount);
             Application.Run(new frmMain());
         }
     }

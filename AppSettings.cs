@@ -18,6 +18,9 @@ namespace GoblinFarmer
         private static string configPath = ResolveAppSettingsConfigPath();
         private static DebugSettings persistedDebugSettings = new();
         private static bool firstRunSetupSuppressed;
+        private static bool vsDebugProjectRootConfigUsed;
+        private static string appSettingsPathResolution = "startup";
+        private static RuntimePathPreservationResult lastRuntimePathPreservation;
 
         public enum DebugDefaultsProfile
         {
@@ -26,6 +29,7 @@ namespace GoblinFarmer
         }
 
         public static string ConfigPath => configPath;
+        public static bool VsDebugProjectRootConfigUsed => vsDebugProjectRootConfigUsed;
         public static DebugDefaultsProfile CurrentDebugDefaultsProfile { get; private set; } = ResolveDebugDefaultsProfile();
         public static bool IsVsDebugProfile => CurrentDebugDefaultsProfile == DebugDefaultsProfile.VsDebug;
         public static bool FirstRunSetupSuppressed => firstRunSetupSuppressed;
@@ -54,9 +58,23 @@ namespace GoblinFarmer
 
         public static void Load()
         {
-            configPath = ResolveAppSettingsConfigPath();
             CurrentDebugDefaultsProfile = ResolveDebugDefaultsProfile();
+            ConfigPathResolution pathResolution = ResolveAppSettingsConfigPathWithMetadata(
+                Environment.GetEnvironmentVariable("GOBLINFARMER_APPSETTINGS_PATH"),
+                AppDomain.CurrentDomain.BaseDirectory,
+                CurrentDebugDefaultsProfile);
+            configPath = pathResolution.Path;
+            vsDebugProjectRootConfigUsed = pathResolution.UsedVsDebugProjectRootConfig;
+            appSettingsPathResolution = pathResolution.Reason;
             firstRunSetupSuppressed = ShouldSuppressFirstRunSetup(CurrentDebugDefaultsProfile);
+            lastRuntimePathPreservation = default;
+            AppLogger.Info(
+                "AppSettings path resolved: " +
+                $"path={configPath}; " +
+                $"resolution={appSettingsPathResolution}; " +
+                $"vsDebugProjectRootConfigUsed={vsDebugProjectRootConfigUsed}; " +
+                $"projectRootConfigPath={pathResolution.ProjectRootConfigPath}; " +
+                $"baseDirectory={AppDomain.CurrentDomain.BaseDirectory}");
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
@@ -75,6 +93,7 @@ namespace GoblinFarmer
                 {
                     string json = File.ReadAllText(configPath);
                     bool hasSavedDebugScreenshotsPreference = HasSavedDebugScreenshotsPreference(json);
+                    bool hasSavedSuccessScreenshotsPreference = HasSavedSuccessScreenshotsPreference(json);
                     bool hasSavedUserPreferences = HasSavedUserPreferences(json);
                     SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(json, JsonOptions);
                     settings = loaded ?? SettingsModel.Default();
@@ -84,6 +103,13 @@ namespace GoblinFarmer
                         settings.Debug.EnableDebugScreenshots = DebugSettings.DefaultEnableDebugScreenshots;
                         shouldSaveLoadedSettings = true;
                         AppLogger.Info($"AppSettings missing Debug.EnableDebugScreenshots; using persisted default {settings.Debug.EnableDebugScreenshots}.");
+                    }
+
+                    if (!hasSavedSuccessScreenshotsPreference)
+                    {
+                        settings.Debug.EnableSuccessScreenshots = DebugSettings.DefaultEnableSuccessScreenshots;
+                        shouldSaveLoadedSettings = true;
+                        AppLogger.Info($"AppSettings missing Debug.EnableSuccessScreenshots; using persisted default {settings.Debug.EnableSuccessScreenshots}.");
                     }
 
                     if (!hasSavedUserPreferences)
@@ -127,17 +153,53 @@ namespace GoblinFarmer
 
         internal static string ResolveAppSettingsConfigPath(string? explicitPath, string baseDirectory)
         {
+            DebugDefaultsProfile profile = ResolveDebugDefaultsProfile();
+            return ResolveAppSettingsConfigPath(explicitPath, baseDirectory, profile);
+        }
+
+        internal static string ResolveAppSettingsConfigPath(string? explicitPath, string baseDirectory, DebugDefaultsProfile profile)
+        {
+            return ResolveAppSettingsConfigPathWithMetadata(explicitPath, baseDirectory, profile).Path;
+        }
+
+        private static ConfigPathResolution ResolveAppSettingsConfigPathWithMetadata(string? explicitPath, string baseDirectory, DebugDefaultsProfile profile)
+        {
             if (!string.IsNullOrWhiteSpace(explicitPath))
             {
-                return Path.GetFullPath(Environment.ExpandEnvironmentVariables(explicitPath.Trim()));
+                return new ConfigPathResolution(
+                    Path.GetFullPath(Environment.ExpandEnvironmentVariables(explicitPath.Trim())),
+                    false,
+                    "",
+                    "explicit override");
             }
 
-            return Path.Combine(baseDirectory, "Config", "AppSettings.json");
+            string projectConfigPath = TryResolveProjectAppSettingsPath(baseDirectory) ?? "";
+            if (profile == DebugDefaultsProfile.VsDebug && !string.IsNullOrWhiteSpace(projectConfigPath))
+            {
+                return new ConfigPathResolution(
+                    projectConfigPath,
+                    true,
+                    projectConfigPath,
+                    "VS Debug project-root config");
+            }
+
+            return new ConfigPathResolution(
+                Path.Combine(baseDirectory, "Config", "AppSettings.json"),
+                false,
+                projectConfigPath,
+                profile == DebugDefaultsProfile.VsDebug
+                    ? "VS Debug app-local config fallback"
+                    : "app-local config");
         }
 
         private static string? TryResolveProjectAppSettingsPath()
         {
-            DirectoryInfo? directory = new(AppDomain.CurrentDomain.BaseDirectory);
+            return TryResolveProjectAppSettingsPath(AppDomain.CurrentDomain.BaseDirectory);
+        }
+
+        private static string? TryResolveProjectAppSettingsPath(string baseDirectory)
+        {
+            DirectoryInfo? directory = new(baseDirectory);
             while (directory != null)
             {
                 string projectFilePath = Path.Combine(directory.FullName, "GoblinFarmer.csproj");
@@ -155,7 +217,12 @@ namespace GoblinFarmer
 
         private static string? TryResolveProjectRoot()
         {
-            DirectoryInfo? directory = new(AppDomain.CurrentDomain.BaseDirectory);
+            return TryResolveProjectRoot(AppDomain.CurrentDomain.BaseDirectory);
+        }
+
+        private static string? TryResolveProjectRoot(string baseDirectory)
+        {
+            DirectoryInfo? directory = new(baseDirectory);
             while (directory != null)
             {
                 string projectFilePath = Path.Combine(directory.FullName, "GoblinFarmer.csproj");
@@ -175,6 +242,7 @@ namespace GoblinFarmer
             try
             {
                 settings.Normalize();
+                lastRuntimePathPreservation = PreserveRuntimePathValues(settings, configPath);
                 ApplyReleaseDebugPersistenceDefaults();
                 SettingsModel modelToSave = settings;
                 if (IsVsDebugProfile)
@@ -188,13 +256,105 @@ namespace GoblinFarmer
 
                 Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
                 File.WriteAllText(configPath, JsonSerializer.Serialize(modelToSave, JsonOptions));
-                AppLogger.Info($"AppSettings saved: {configPath}");
+                AppLogger.Info(
+                    "AppSettings saved: " +
+                    $"path={configPath}; " +
+                    $"preservedDiabloPath={lastRuntimePathPreservation.DiabloPathPreserved}; " +
+                    $"preservedBattleNetPath={lastRuntimePathPreservation.BattleNetPathPreserved}; " +
+                    $"preservedImagesRoot={lastRuntimePathPreservation.ImagesRootPreserved}");
                 ApplyDebugDefaultsProfile();
             }
             catch (Exception ex)
             {
                 AppLogger.Error($"AppSettings save failed: {configPath}", ex);
             }
+        }
+
+        internal static RuntimePathPreservationResult PreserveRuntimePathValuesForTests(SettingsModel target, string existingConfigPath)
+        {
+            target.Normalize();
+            return PreserveRuntimePathValues(target, existingConfigPath);
+        }
+
+        private static RuntimePathPreservationResult PreserveRuntimePathValues(SettingsModel target, string existingConfigPath)
+        {
+            if (!File.Exists(existingConfigPath))
+            {
+                return default;
+            }
+
+            try
+            {
+                SettingsModel? existing = JsonSerializer.Deserialize<SettingsModel>(File.ReadAllText(existingConfigPath), JsonOptions);
+                RuntimeSettings? existingRuntime = existing?.Runtime;
+                if (existingRuntime == null)
+                {
+                    return default;
+                }
+
+                bool diabloPreserved = false;
+                bool battleNetPreserved = false;
+                bool imagesPreserved = false;
+
+                if (ShouldPreserveExistingExecutablePath(target.Runtime.DiabloExecutablePath, existingRuntime.DiabloExecutablePath))
+                {
+                    target.Runtime.DiabloExecutablePath = existingRuntime.DiabloExecutablePath.Trim();
+                    diabloPreserved = true;
+                }
+
+                if (ShouldPreserveExistingExecutablePath(target.Runtime.BattleNetExecutablePath, existingRuntime.BattleNetExecutablePath))
+                {
+                    target.Runtime.BattleNetExecutablePath = existingRuntime.BattleNetExecutablePath.Trim();
+                    battleNetPreserved = true;
+                }
+
+                if (ShouldPreserveExistingImagesRoot(target.Runtime.ImagesRoot, existingRuntime.ImagesRoot))
+                {
+                    target.Runtime.ImagesRoot = existingRuntime.ImagesRoot.Trim();
+                    imagesPreserved = true;
+                }
+
+                if (diabloPreserved || battleNetPreserved || imagesPreserved)
+                {
+                    AppLogger.Info(
+                        "AppSettings runtime path values preserved from existing config: " +
+                        $"path={existingConfigPath}; " +
+                        $"preservedDiabloPath={diabloPreserved}; " +
+                        $"preservedBattleNetPath={battleNetPreserved}; " +
+                        $"preservedImagesRoot={imagesPreserved}");
+                }
+
+                return new RuntimePathPreservationResult(diabloPreserved, battleNetPreserved, imagesPreserved);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Failed to inspect existing AppSettings runtime path values for preservation: {existingConfigPath}", ex);
+                return default;
+            }
+        }
+
+        private static bool ShouldPreserveExistingExecutablePath(string? currentPath, string? existingPath)
+        {
+            return string.IsNullOrWhiteSpace(currentPath) &&
+                !string.IsNullOrWhiteSpace(existingPath);
+        }
+
+        private static bool ShouldPreserveExistingImagesRoot(string? currentPath, string? existingPath)
+        {
+            if (string.IsNullOrWhiteSpace(existingPath))
+            {
+                return false;
+            }
+
+            string current = currentPath?.Trim() ?? "";
+            string existing = existingPath.Trim();
+            if (string.Equals(current, existing, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return string.IsNullOrWhiteSpace(current) ||
+                string.Equals(current, "Images", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool HasSavedDebugScreenshotsPreference(string json)
@@ -214,6 +374,27 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 AppLogger.Error("Failed to inspect AppSettings Debug.EnableDebugScreenshots preference.", ex);
+                return false;
+            }
+        }
+
+        private static bool HasSavedSuccessScreenshotsPreference(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
+
+                return document.RootElement.TryGetProperty("Debug", out JsonElement debugElement) &&
+                    debugElement.ValueKind == JsonValueKind.Object &&
+                    debugElement.TryGetProperty("EnableSuccessScreenshots", out _);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to inspect AppSettings Debug.EnableSuccessScreenshots preference.", ex);
                 return false;
             }
         }
@@ -306,9 +487,10 @@ namespace GoblinFarmer
                 ApplyProjectRuntimeDefaults(projectRoot);
 
                 string projectImages = Path.Combine(projectRoot, "Images");
-                if (Directory.Exists(projectImages))
+                if (Directory.Exists(projectImages) && !Directory.Exists(ImagesRootPath))
                 {
-                    settings.Runtime.ImagesRoot = projectImages;
+                    settings.Runtime.ImagesRoot = Path.GetRelativePath(RuntimeRootPath, projectImages);
+                    AppLogger.Info($"VS/dev Images root defaulted from project folder: {settings.Runtime.ImagesRoot}");
                 }
             }
 
@@ -394,7 +576,8 @@ namespace GoblinFarmer
                 debug.DebugMode,
                 debug.EnableDebugScreenshots,
                 ShouldShowDynamicDebugControls(profile),
-                ResolveAppSettingsConfigPath(explicitConfigPath, baseDirectory));
+                ResolveAppSettingsConfigPath(explicitConfigPath, baseDirectory, profile),
+                ResolveAppSettingsConfigPathWithMetadata(explicitConfigPath, baseDirectory, profile).UsedVsDebugProjectRootConfig);
         }
 
         public static string ResolveRuntimePath(string path)
@@ -410,7 +593,26 @@ namespace GoblinFarmer
                 return Path.GetFullPath(expanded);
             }
 
-            return Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, expanded));
+            return Path.GetFullPath(Path.Combine(RuntimeRootPath, expanded));
+        }
+
+        private static string RuntimeRootPath
+        {
+            get
+            {
+                string? configDirectory = Path.GetDirectoryName(configPath);
+                if (!string.IsNullOrWhiteSpace(configDirectory) &&
+                    string.Equals(Path.GetFileName(configDirectory), "Config", StringComparison.OrdinalIgnoreCase))
+                {
+                    DirectoryInfo? root = Directory.GetParent(configDirectory);
+                    if (root != null)
+                    {
+                        return root.FullName;
+                    }
+                }
+
+                return AppDomain.CurrentDomain.BaseDirectory;
+            }
         }
 
         public static string ImagesRootPath => ResolveRuntimePath(Runtime.ImagesRoot);
@@ -485,33 +687,49 @@ namespace GoblinFarmer
         public static bool RequiredRuntimeConfigurationIsValid(out string message)
         {
             List<string> errors = [];
+            bool diabloMissing = !ExecutableExists(Runtime.DiabloExecutablePath);
+            bool battleNetMissing = !ExecutableExists(Runtime.BattleNetExecutablePath);
+            bool imagesMissing = !Directory.Exists(ImagesRootPath);
 
-            if (!ExecutableExists(Runtime.DiabloExecutablePath))
+            if (diabloMissing)
             {
                 errors.Add("Diablo III executable is missing or invalid.");
             }
 
-            if (!ExecutableExists(Runtime.BattleNetExecutablePath))
+            if (battleNetMissing)
             {
                 errors.Add("Battle.net executable is missing or invalid.");
             }
 
-            if (!Directory.Exists(ImagesRootPath))
+            if (imagesMissing)
             {
                 errors.Add($"Images folder is missing: {ImagesRootPath}");
             }
 
+            int missingTemplateFolderCount = 0;
             string[] requiredImageFolders = ["Combat", "Current Location", "Leave Game", "Repair", "Salvage", "Start Game", "Teleport Function"];
             foreach (string folder in requiredImageFolders)
             {
                 string path = Path.Combine(ImagesRootPath, folder);
                 if (!Directory.Exists(path))
                 {
+                    missingTemplateFolderCount++;
                     errors.Add($"Required template folder is missing: {path}");
                 }
             }
 
             message = string.Join(Environment.NewLine, errors);
+            AppLogger.Info(
+                "Runtime configuration check: " +
+                $"valid={errors.Count == 0}; " +
+                $"setupBlockedByMissingPath={errors.Count > 0}; " +
+                $"diabloMissing={diabloMissing}; " +
+                $"battleNetMissing={battleNetMissing}; " +
+                $"imagesMissing={imagesMissing}; " +
+                $"missingTemplateFolderCount={missingTemplateFolderCount}; " +
+                $"configPath={configPath}; " +
+                $"vsDebugProjectRootConfigUsed={vsDebugProjectRootConfigUsed}; " +
+                $"message={message.Replace(Environment.NewLine, " | ")}");
             return errors.Count == 0;
         }
 
@@ -611,6 +829,12 @@ namespace GoblinFarmer
                 "AppSettings loaded: " +
                 $"AppSettingsPath={configPath}; " +
                 $"path={configPath}; " +
+                $"ConfigPathResolution={appSettingsPathResolution}; " +
+                $"VsDebugProjectRootConfigUsed={vsDebugProjectRootConfigUsed}; " +
+                $"RuntimeRootPath={RuntimeRootPath}; " +
+                $"PreservedDiabloPath={lastRuntimePathPreservation.DiabloPathPreserved}; " +
+                $"PreservedBattleNetPath={lastRuntimePathPreservation.BattleNetPathPreserved}; " +
+                $"PreservedImagesRoot={lastRuntimePathPreservation.ImagesRootPreserved}; " +
                 $"ExecutablePath={Environment.ProcessPath ?? AppDomain.CurrentDomain.BaseDirectory}; " +
                 $"LaunchKind={(Debugger.IsAttached ? "VS/debugger" : "installed exe/standalone")}; " +
                 $"DebuggerAttached={Debugger.IsAttached}; " +
@@ -634,11 +858,13 @@ namespace GoblinFarmer
                 $"ShowRouteInspector={Debug.ShowRouteInspector}; " +
                 $"Debug.EnableDebugScreenshots={Debug.EnableDebugScreenshots}; " +
                 $"EnableDebugScreenshots={Debug.EnableDebugScreenshots}; " +
+                $"Debug.EnableSuccessScreenshots={Debug.EnableSuccessScreenshots}; " +
                 $"Debug.EnableMissingAssetPrompts={Debug.EnableMissingAssetPrompts}; " +
                 $"Debug.EnableVerboseLogging={Debug.EnableVerboseLogging}; " +
                 $"VerboseLogging={Debug.EnableVerboseLogging}; " +
                 $"Debug.SessionSummaryRetentionCount={Debug.SessionSummaryRetentionCount}; " +
                 $"Debug.DebugPackageRetentionCount={Debug.DebugPackageRetentionCount}; " +
+                $"Debug.GoblinEvidenceRetentionCount={Debug.GoblinEvidenceRetentionCount}; " +
                 $"UI.NotificationDurationMs={UI.NotificationDurationMs}; " +
                 $"UI.NotificationOpacity={UI.NotificationOpacity:0.00}; " +
                 $"UI.NotificationPosition={UI.NotificationPosition}; " +
@@ -666,7 +892,19 @@ namespace GoblinFarmer
             bool DebugMode,
             bool KeepDebugScreenshots,
             bool DynamicDebugControlsVisible,
-            string ConfigPath);
+            string ConfigPath,
+            bool VsDebugProjectRootConfigUsed);
+
+        private readonly record struct ConfigPathResolution(
+            string Path,
+            bool UsedVsDebugProjectRootConfig,
+            string ProjectRootConfigPath,
+            string Reason);
+
+        internal readonly record struct RuntimePathPreservationResult(
+            bool DiabloPathPreserved,
+            bool BattleNetPathPreserved,
+            bool ImagesRootPreserved);
 
         internal sealed class SettingsModel
         {
@@ -814,10 +1052,13 @@ namespace GoblinFarmer
             public bool ShowDiagnosticOverlay { get; set; }
             public bool ShowRouteInspector { get; set; }
             public bool EnableDebugScreenshots { get; set; } = DefaultEnableDebugScreenshots;
+            // Debug-only success milestone screenshots; disabled by default to keep normal runs and packages compact.
+            public bool EnableSuccessScreenshots { get; set; } = DefaultEnableSuccessScreenshots;
             public bool EnableMissingAssetPrompts { get; set; }
             public bool EnableVerboseLogging { get; set; }
             public int SessionSummaryRetentionCount { get; set; } = DefaultSessionSummaryRetentionCount;
             public int DebugPackageRetentionCount { get; set; } = DefaultDebugPackageRetentionCount;
+            public int GoblinEvidenceRetentionCount { get; set; } = DefaultGoblinEvidenceRetentionCount;
 
             public DebugSettings Clone()
             {
@@ -828,10 +1069,12 @@ namespace GoblinFarmer
                     ShowDiagnosticOverlay = ShowDiagnosticOverlay,
                     ShowRouteInspector = ShowRouteInspector,
                     EnableDebugScreenshots = EnableDebugScreenshots,
+                    EnableSuccessScreenshots = EnableSuccessScreenshots,
                     EnableMissingAssetPrompts = EnableMissingAssetPrompts,
                     EnableVerboseLogging = EnableVerboseLogging,
                     SessionSummaryRetentionCount = SessionSummaryRetentionCount,
                     DebugPackageRetentionCount = DebugPackageRetentionCount,
+                    GoblinEvidenceRetentionCount = GoblinEvidenceRetentionCount,
                 };
             }
 
@@ -839,11 +1082,14 @@ namespace GoblinFarmer
             {
                 SessionSummaryRetentionCount = Math.Clamp(SessionSummaryRetentionCount, 0, 1000);
                 DebugPackageRetentionCount = Math.Clamp(DebugPackageRetentionCount, 0, 1000);
+                GoblinEvidenceRetentionCount = Math.Clamp(GoblinEvidenceRetentionCount, 0, 1000);
             }
 
             public const bool DefaultEnableDebugScreenshots = false;
+            public const bool DefaultEnableSuccessScreenshots = false;
             public const int DefaultSessionSummaryRetentionCount = 50;
             public const int DefaultDebugPackageRetentionCount = 20;
+            public const int DefaultGoblinEvidenceRetentionCount = 250;
         }
 
         internal sealed class UiSettings

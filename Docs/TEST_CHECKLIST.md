@@ -39,11 +39,12 @@
 - Debug package includes `debug-screenshot-manifest.txt`
 - Screenshot manifest pairs success/failure Diablo and App screenshots by timestamp, workflow, and action
 - Screenshot manifest includes only current-session screenshots
-- Success screenshots are included under `Screenshots\Success`
+- Success screenshots are excluded from packages by default
+- If `Debug.EnableSuccessScreenshots=true`, package manifest reports available success screenshot count and total size without automatically including them
 - Failure screenshots are included under `Screenshots\Failure`
 - Recent debug screenshots are included under `Screenshots\Recent`
 - Screenshots from previous sessions are excluded from the package
-- Debug package manifest reports package size, session start, session duration, total screenshots, success screenshots, failure screenshots, and stale screenshot exclusions
+- Debug package manifest reports package size, session start, session duration, total screenshots, success screenshot availability, failure screenshots, folder totals, and stale screenshot exclusions
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
 
 ## Debug Manager / Session Summary

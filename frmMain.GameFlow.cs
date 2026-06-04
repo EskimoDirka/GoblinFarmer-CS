@@ -27,7 +27,13 @@ namespace GoblinFarmer
             string currentLocation = "";
             bool startGameVisible = PortStartGameButtonVisible(logPerf: true);
             bool playerInGame = false;
-            if (!startGameVisible)
+            if (PortStartGameInGameGuardVisible(out string initialGuardReason, out string guardLocation))
+            {
+                currentLocation = guardLocation;
+                playerInGame = true;
+                AppLogger.Info($"Make New Game initial state: in-game guard triggered; startGameVisible={startGameVisible}; reason={PortLogField(initialGuardReason)}; currentLocation={PortDisplayLocation(currentLocation)}");
+            }
+            else if (!startGameVisible)
             {
                 Stopwatch currentLocationPerf = Stopwatch.StartNew();
                 currentLocation = PortDetectSpecificLocation("New Tristram");
@@ -350,6 +356,22 @@ namespace GoblinFarmer
                 AppLogger.Info($"Start Game button detection attempt: attempt={detectionAttempts}; clickAttempts={attempts}/{maxAttempts}; elapsedMs={sw.ElapsedMilliseconds}; confidence={PortStartGameButtonConfidence:0.000}");
                 if (PortTryFindStableStartGameButton(token, out DrawingPoint centerPoint, out long stableElapsedMs, detectionAttempts))
                 {
+                    StartGameClickReadiness readiness = PortEvaluateStartGameClickReadiness(stableStartGameVisible: true, stableElapsedMs);
+                    AppLogger.Info($"Start Game click readiness: detectionAttempt={detectionAttempts}; decision={readiness.Decision}; mainMenuConfirmed={readiness.MainMenuConfirmed}; reason={PortLogField(readiness.Reason)}; stableElapsedMs={stableElapsedMs}");
+                    if (readiness.Decision == StartGameClickDecision.BlockAlreadyInGame)
+                    {
+                        AppLogger.Info($"Start Game click blocked: in-game guard triggered; reason={PortLogField(readiness.Reason)}; action=continue leave-game flow first");
+                        return false;
+                    }
+
+                    if (readiness.Decision != StartGameClickDecision.Allow)
+                    {
+                        AppLogger.Info($"Start Game click blocked: main menu not confirmed; reason={PortLogField(readiness.Reason)}");
+                        PortSleep(token, 250);
+                        continue;
+                    }
+
+                    AppLogger.Info($"Start Game click allowed: main menu confirmed; point={centerPoint.X},{centerPoint.Y}; stableElapsedMs={stableElapsedMs}");
                     attempts++;
                     AppLogger.Info($"Start Game stable match confirmed: detectionAttempt={detectionAttempts}; clickAttempt={attempts}/{maxAttempts}; point={centerPoint.X},{centerPoint.Y}; stableElapsedMs={stableElapsedMs}");
                     AddWorkflowStep($"Clicking Start Game (attempt {attempts})");
@@ -403,9 +425,10 @@ namespace GoblinFarmer
             int visibleCount = 0;
             int consecutiveStableCount = 0;
             const int tolerancePx = 8;
-            const int requiredConsecutiveStableScans = 3;
-            const int requiredStableDurationMs = 250;
+            const int requiredConsecutiveStableScans = StartGameClickPolicy.RequiredConsecutiveStableScans;
+            const int requiredStableDurationMs = StartGameClickPolicy.RequiredStableDurationMs;
 
+            PortMoveCursorAwayFromStartGameScanRegion();
             while (sw.ElapsedMilliseconds < 2500)
             {
                 if (token.IsCancellationRequested)
@@ -463,7 +486,7 @@ namespace GoblinFarmer
                     continue;
                 }
 
-                if (consecutiveStableCount >= requiredConsecutiveStableScans || stableDurationMs >= requiredStableDurationMs)
+                if (consecutiveStableCount >= requiredConsecutiveStableScans && stableDurationMs >= requiredStableDurationMs)
                 {
                     centerPoint = foundPoint;
                     stableElapsedMs = sw.ElapsedMilliseconds;
@@ -479,6 +502,90 @@ namespace GoblinFarmer
             long finalStableDurationMs = firstSeenAt > 0 ? sw.ElapsedMilliseconds - firstSeenAt : 0;
             AppLogger.Info($"StartGameButtonStableNotFound: detectionAttempt={detectionAttempt}; scans={scans}; elapsed={sw.ElapsedMilliseconds}ms; buttonVisible={PortStartGameButtonVisible(logPerf: true)}; firstPoint={firstPointText}; latestPoint={latestPointText}; dx={latestDx}; dy={latestDy}; tolerance={tolerancePx}; visibleCount={visibleCount}; consecutiveStableCount={consecutiveStableCount}; stableDurationMs={finalStableDurationMs}; requiredStableDurationMs={requiredStableDurationMs}; requiredConsecutiveStableScans={requiredConsecutiveStableScans}; reason=stable acceptance conditions not met before detection window timeout");
             return false;
+        }
+
+        private StartGameClickReadiness PortEvaluateStartGameClickReadiness(bool stableStartGameVisible, long stableElapsedMs)
+        {
+            bool leaveGameVisible = PortGameMenuVisible();
+            bool characterLoadVisible = PortCharacterLoadConfirmationVisible();
+            bool loadedLocationVisible = PortGameLoadedLocationTitleVisible();
+            bool playerInGameVisible = PortPlayerIsInGame();
+            bool currentLocationVisible = PortIsInGame();
+            StartGameClickState state = new(
+                stableStartGameVisible,
+                leaveGameVisible,
+                characterLoadVisible,
+                loadedLocationVisible,
+                playerInGameVisible,
+                currentLocationVisible,
+                stableElapsedMs);
+            StartGameClickReadiness readiness = StartGameClickPolicy.Evaluate(state);
+            AppLogger.Info($"Start Game state guard: stableStartGameVisible={state.StableStartGameVisible}; leaveGameVisible={state.LeaveGameVisible}; characterLoadVisible={state.CharacterLoadVisible}; loadedLocationVisible={state.LoadedLocationVisible}; playerInGameVisible={state.PlayerInGameVisible}; currentLocationVisible={state.CurrentLocationVisible}; stableElapsedMs={state.StableElapsedMs}; decision={readiness.Decision}; mainMenuConfirmed={readiness.MainMenuConfirmed}; reason={PortLogField(readiness.Reason)}");
+            return readiness;
+        }
+
+        private bool PortStartGameInGameGuardVisible(out string reason, out string currentLocation)
+        {
+            bool leaveGameVisible = PortGameMenuVisible();
+            bool characterLoadVisible = PortCharacterLoadConfirmationVisible();
+            bool loadedLocationVisible = PortGameLoadedLocationTitleVisible();
+            currentLocation = "";
+            if (!loadedLocationVisible)
+            {
+                currentLocation = PortDetectCurrentLocation();
+                loadedLocationVisible = !string.IsNullOrWhiteSpace(currentLocation);
+            }
+
+            StartGameClickState state = new(
+                StableStartGameVisible: false,
+                LeaveGameVisible: leaveGameVisible,
+                CharacterLoadVisible: characterLoadVisible,
+                LoadedLocationVisible: loadedLocationVisible,
+                PlayerInGameVisible: false,
+                CurrentLocationVisible: !string.IsNullOrWhiteSpace(currentLocation),
+                StableElapsedMs: 0);
+            StartGameClickReadiness readiness = StartGameClickPolicy.Evaluate(state);
+            reason = readiness.Decision == StartGameClickDecision.BlockAlreadyInGame ? readiness.Reason : "";
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                AppLogger.Info($"Start Game in-game guard triggered: reason={PortLogField(reason)}; leaveGameVisible={leaveGameVisible}; characterLoadVisible={characterLoadVisible}; loadedLocationVisible={loadedLocationVisible}; currentLocation={PortDisplayLocation(currentLocation)}");
+                return true;
+            }
+
+            AppLogger.Info($"Start Game in-game guard clear: leaveGameVisible={leaveGameVisible}; characterLoadVisible={characterLoadVisible}; loadedLocationVisible={loadedLocationVisible}; currentLocation={PortDisplayLocation(currentLocation)}");
+            return false;
+        }
+
+        private void PortMoveCursorAwayFromStartGameScanRegion()
+        {
+            string imagePath = Img("Start Game", "Start Game Button.png");
+            Rectangle referenceRegion = PortScanRegion("StartGameButton", imagePath);
+            if (!PortTryGetDiabloRect(out RECT rect) || !GetCursorPos(out DrawingPoint cursor))
+            {
+                AppLogger.Info("Start Game cursor move-away skipped: Diablo rect or cursor unavailable");
+                return;
+            }
+
+            Rectangle diabloRect = new(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+            Rectangle scanRegion = PortScaleReferenceRectangle(referenceRegion, rect);
+            if (!scanRegion.Contains(cursor))
+            {
+                AppLogger.Info($"Start Game cursor move-away not needed: cursor={cursor.X},{cursor.Y}; scanRegion={FormatRectangle(scanRegion)}");
+                return;
+            }
+
+            DrawingPoint target = new(
+                Math.Clamp(scanRegion.Left - 48, diabloRect.Left + 12, diabloRect.Right - 12),
+                Math.Clamp(scanRegion.Top - 48, diabloRect.Top + 12, diabloRect.Bottom - 12));
+            if (scanRegion.Contains(target))
+            {
+                target = new(
+                    Math.Clamp(scanRegion.Right + 48, diabloRect.Left + 12, diabloRect.Right - 12),
+                    Math.Clamp(scanRegion.Bottom + 48, diabloRect.Top + 12, diabloRect.Bottom - 12));
+            }
+
+            SetCursorPos(target.X, target.Y);
+            AppLogger.Info($"Start Game cursor moved away before image recognition: from={cursor.X},{cursor.Y}; to={target.X},{target.Y}; scanRegion={FormatRectangle(scanRegion)}");
         }
 
         private void PortLogStartGameVerificationFailure(int attempt, int maxAttempts, DrawingPoint clickPoint, string screenshotPath)

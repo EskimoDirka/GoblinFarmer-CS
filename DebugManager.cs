@@ -69,6 +69,7 @@ namespace GoblinFarmer
             debug.ShowDiagnosticOverlay = true;
             debug.ShowRouteInspector = true;
             debug.EnableDebugScreenshots = true;
+            debug.EnableSuccessScreenshots = false;
             debug.EnableMissingAssetPrompts = true;
             debug.EnableVerboseLogging = true;
         }
@@ -84,6 +85,7 @@ namespace GoblinFarmer
             debug.ShowDiagnosticOverlay = false;
             debug.ShowRouteInspector = false;
             debug.EnableDebugScreenshots = false;
+            debug.EnableSuccessScreenshots = false;
             debug.EnableMissingAssetPrompts = false;
             debug.EnableVerboseLogging = false;
         }
@@ -266,6 +268,148 @@ namespace GoblinFarmer
             return CleanupOldFilesByCount(packageDirectory, "GoblinFarmer_Debug_*.zip", retentionCount, "debug package");
         }
 
+        public static CleanupResult CleanupOldGoblinEvidence(int retentionCount)
+        {
+            CleanupResult result = CleanupOldGoblinEvidence(GoblinEvidenceDirectory, retentionCount);
+            AppLogger.Info($"GoblinEvidence retention cleanup complete: scanned={result.Scanned}; deleted={result.Deleted}; skipped={result.Skipped}; kept={result.Kept}; retentionCount={retentionCount}; folder={GoblinEvidenceDirectory}");
+            return result;
+        }
+
+        internal static CleanupResult CleanupOldGoblinEvidence(string goblinEvidenceDirectory, int retentionCount)
+        {
+            if (retentionCount <= 0)
+            {
+                AppLogger.Info($"GoblinEvidence retention cleanup disabled: retentionCount={retentionCount}; folder={goblinEvidenceDirectory}");
+                return new CleanupResult(0, 0, 0);
+            }
+
+            if (!Directory.Exists(goblinEvidenceDirectory))
+            {
+                return new CleanupResult(0, 0, 0);
+            }
+
+            string root;
+            try
+            {
+                root = Path.GetFullPath(goblinEvidenceDirectory);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"GoblinEvidence retention cleanup skipped: invalid folder={goblinEvidenceDirectory}", ex);
+                return new CleanupResult(0, 0, 0, 1);
+            }
+
+            int skipped = 0;
+            FileInfo[] files;
+            try
+            {
+                files = EnumerateFilesInsideDirectory(root, ref skipped)
+                    .OrderByDescending(file => file.LastWriteTimeUtc)
+                    .ThenBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(file => file.FullName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"GoblinEvidence retention cleanup scan failed: folder={root}", ex);
+                return new CleanupResult(0, 0, 0, 1);
+            }
+
+            int deleted = 0;
+            foreach (FileInfo file in files.Skip(retentionCount))
+            {
+                if (!IsPathInsideDirectory(root, file.FullName))
+                {
+                    skipped++;
+                    AppLogger.Info($"GoblinEvidence retention cleanup skipped outside folder: path={file.FullName}; folder={root}");
+                    continue;
+                }
+
+                try
+                {
+                    file.Delete();
+                    deleted++;
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    AppLogger.Error($"GoblinEvidence retention cleanup delete skipped: path={file.FullName}", ex);
+                }
+            }
+
+            return new CleanupResult(files.Length, deleted, files.Length - deleted, skipped);
+        }
+
+        private static List<FileInfo> EnumerateFilesInsideDirectory(string root, ref int skipped)
+        {
+            List<FileInfo> discoveredFiles = [];
+            Stack<DirectoryInfo> directories = new();
+            directories.Push(new DirectoryInfo(root));
+
+            while (directories.Count > 0)
+            {
+                DirectoryInfo directory = directories.Pop();
+                FileInfo[] files;
+                try
+                {
+                    files = directory.GetFiles("*", SearchOption.TopDirectoryOnly);
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    AppLogger.Error($"GoblinEvidence retention cleanup scan skipped folder: folder={directory.FullName}", ex);
+                    continue;
+                }
+
+                foreach (FileInfo file in files)
+                {
+                    if (IsPathInsideDirectory(root, file.FullName))
+                    {
+                        discoveredFiles.Add(file);
+                    }
+                    else
+                    {
+                        skipped++;
+                        AppLogger.Info($"GoblinEvidence retention cleanup skipped outside folder: path={file.FullName}; folder={root}");
+                    }
+                }
+
+                DirectoryInfo[] childDirectories;
+                try
+                {
+                    childDirectories = directory.GetDirectories("*", SearchOption.TopDirectoryOnly);
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    AppLogger.Error($"GoblinEvidence retention cleanup scan skipped child folders: folder={directory.FullName}", ex);
+                    continue;
+                }
+
+                foreach (DirectoryInfo childDirectory in childDirectories)
+                {
+                    if ((childDirectory.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
+                    {
+                        skipped++;
+                        AppLogger.Info($"GoblinEvidence retention cleanup skipped linked folder: folder={childDirectory.FullName}");
+                        continue;
+                    }
+
+                    if (IsPathInsideDirectory(root, childDirectory.FullName))
+                    {
+                        directories.Push(childDirectory);
+                    }
+                    else
+                    {
+                        skipped++;
+                        AppLogger.Info($"GoblinEvidence retention cleanup skipped outside folder: folder={childDirectory.FullName}; root={root}");
+                    }
+                }
+            }
+
+            return discoveredFiles;
+        }
+
         private static CleanupResult CleanupOldFilesByCount(string directory, string searchPattern, int retentionCount, string artifactName)
         {
             if (retentionCount <= 0)
@@ -295,6 +439,7 @@ namespace GoblinFarmer
             }
 
             int deleted = 0;
+            int skipped = 0;
             foreach (FileInfo file in files.Skip(retentionCount))
             {
                 try
@@ -304,11 +449,21 @@ namespace GoblinFarmer
                 }
                 catch (Exception ex)
                 {
+                    skipped++;
                     AppLogger.Error($"{artifactName} retention cleanup delete failed: path={file.FullName}", ex);
                 }
             }
 
-            return new CleanupResult(files.Length, deleted, files.Length - deleted);
+            return new CleanupResult(files.Length, deleted, files.Length - deleted, skipped);
+        }
+
+        private static bool IsPathInsideDirectory(string directory, string path)
+        {
+            string root = Path.GetFullPath(directory)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                Path.DirectorySeparatorChar;
+            string fullPath = Path.GetFullPath(path);
+            return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
         }
 
         private static IEnumerable<string> FindDebugPackageDirectories()
@@ -388,6 +543,9 @@ namespace GoblinFarmer
                 builder.AppendLine("## Goblin Tracker");
                 builder.AppendLine();
                 builder.AppendLine($"Goblins Found: {snapshot.GoblinCount}");
+                builder.AppendLine($"Goblin Found Records: {snapshot.GoblinFoundRecordCount}");
+                builder.AppendLine($"Counted Area Keys: {snapshot.CountedGoblinAreaCount}");
+                builder.AppendLine($"Last Counted Area: {DisplayPath(snapshot.LastCountedGoblinAreaKey)}");
                 builder.AppendLine($"Active Combat Time: {snapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}");
                 builder.AppendLine($"GPH: {snapshot.GoblinsPerHour:0.00}");
                 builder.AppendLine();
@@ -473,6 +631,7 @@ namespace GoblinFarmer
         private TimeSpan goblinActiveCombatTime;
         private int goblinCount;
         private readonly List<GoblinEvidenceEvent> goblinEvidenceEvents = [];
+        private readonly List<GoblinFoundRecord> goblinFoundRecords = [];
         private int gamesCreated;
         private int teleportsAttempted;
         private int teleportsConfirmed;
@@ -492,7 +651,23 @@ namespace GoblinFarmer
         public DateTime StartedAtUtc => StartedAtLocal.ToUniversalTime();
         public string LatestScreenshotPath => latestScreenshotPath;
 
-        public int RecordGoblinFound() => Interlocked.Increment(ref goblinCount);
+        public int RecordGoblinFound(GoblinFoundRecord record)
+        {
+            lock (syncRoot)
+            {
+                goblinFoundRecords.Add(record);
+                return Interlocked.Increment(ref goblinCount);
+            }
+        }
+
+        public void RecordGoblinFoundRecord(GoblinFoundRecord record)
+        {
+            lock (syncRoot)
+            {
+                goblinFoundRecords.Add(record);
+            }
+        }
+
         public void RecordGameCreated() => Interlocked.Increment(ref gamesCreated);
         public void RecordTeleportAttempted() => Interlocked.Increment(ref teleportsAttempted);
         public void RecordTeleportConfirmed() => Interlocked.Increment(ref teleportsConfirmed);
@@ -579,6 +754,7 @@ namespace GoblinFarmer
             lock (syncRoot)
             {
                 Interlocked.Exchange(ref goblinCount, 0);
+                goblinFoundRecords.Clear();
                 goblinActiveCombatTime = TimeSpan.Zero;
                 if (goblinCombatStartedAt.HasValue)
                 {
@@ -608,11 +784,20 @@ namespace GoblinFarmer
                 GoblinEvidenceEvent? lastGoblinEvidence = goblinEvidenceEvents.Count > 0
                     ? goblinEvidenceEvents[^1]
                     : null;
+                GoblinFoundRecord? lastCountedGoblin = goblinFoundRecords.LastOrDefault(record => record.Counted);
+                int countedAreaCount = goblinFoundRecords
+                    .Where(record => record.Counted && !string.IsNullOrWhiteSpace(record.AreaKey))
+                    .Select(record => record.AreaKey)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
                 return new DiagnosticsSessionSnapshot(
                     StartedAtLocal,
                     endedAtLocal,
                     endedAtLocal - StartedAtLocal,
                     currentGoblinCount,
+                    goblinFoundRecords.Count,
+                    countedAreaCount,
+                    lastCountedGoblin?.AreaKey ?? "",
                     Volatile.Read(ref gamesCreated),
                     Volatile.Read(ref teleportsAttempted),
                     Volatile.Read(ref teleportsConfirmed),
@@ -663,6 +848,9 @@ namespace GoblinFarmer
         DateTime EndedAtLocal,
         TimeSpan Duration,
         int GoblinCount,
+        int GoblinFoundRecordCount,
+        int CountedGoblinAreaCount,
+        string LastCountedGoblinAreaKey,
         int GamesCreated,
         int TeleportsAttempted,
         int TeleportsConfirmed,
@@ -710,14 +898,15 @@ namespace GoblinFarmer
         string DetectedName,
         int TemplateCount);
 
-    internal readonly record struct CleanupResult(int Scanned, int Deleted, int Kept)
+    internal readonly record struct CleanupResult(int Scanned, int Deleted, int Kept, int Skipped = 0)
     {
         public CleanupResult Add(CleanupResult other)
         {
             return new CleanupResult(
                 Scanned + other.Scanned,
                 Deleted + other.Deleted,
-                Kept + other.Kept);
+                Kept + other.Kept,
+                Skipped + other.Skipped);
         }
     }
 }

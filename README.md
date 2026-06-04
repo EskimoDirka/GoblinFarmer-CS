@@ -16,9 +16,9 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Hotkey route blocking for known unsafe or incorrect location transitions.
 - Make New Game, Exit Game, repair, salvage, and town workflow helpers.
 - Monk, Demon Hunter, and Witch Doctor combat support.
-- Manual Goblin Tracker with `X` hotkey counting, active-combat-time GPH, live UI stats, and reset support.
+- Location-aware Goblin Tracker with `X` hotkey counting, same-area duplicate protection, active-combat-time GPH, live UI stats, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and debug package generation.
-- Runtime configuration for Diablo III, Battle.net, image templates, launch timings, and diagnostic behavior.
+- Runtime configuration for Diablo III, Battle.net, image templates, launch timings, diagnostic behavior, and VS Debug project-root config persistence.
 - Self-contained Windows release publishing plus optional Inno Setup installer packaging.
 - Dynamic app title and synchronized installer/application versioning.
 
@@ -52,7 +52,9 @@ On first launch, GoblinFarmer attempts to discover the required runtime paths. I
 
 Automation stays disabled until the required paths and template folders validate successfully. Paths can also be reviewed and changed later from the Settings area in the app.
 
-The selected combat profile and Hotkeys checkbox states are saved in `Config\AppSettings.json` under `User` and restored when GoblinFarmer starts. Visual Studio Debug runs use the project-level `Config\AppSettings.json` directly so form changes survive rebuilds; release and installed runs use the app-local copy beside the executable.
+The selected combat profile and Hotkeys checkbox states are saved in `Config\AppSettings.json` under `User` and restored when GoblinFarmer starts. Visual Studio Debug runs use the project-level `Config\AppSettings.json` directly so form or rebuild changes do not reset developer paths; release and installed runs use the app-local copy beside the executable.
+
+When config defaults are added later, GoblinFarmer preserves existing Diablo III, Battle.net, and custom Images paths instead of replacing them with blank/default values.
 
 After install, use the built-in `Verify Paths` button to confirm the Diablo III, Battle.net, and Images paths for the current machine.
 
@@ -81,7 +83,13 @@ After combat stops, Teleport Next is available as soon as combat is marked stopp
 
 ## Goblin Tracker
 
-The Goblin Tracker is a manual counter foundation. Press `X` while GoblinFarmer is running to add one goblin to the current session count. The counter does not require combat to be active and does not use image recognition, OCR, minimap detection, or automatic goblin detection.
+The Goblin Tracker is a counter foundation with resolved-area duplicate protection. Press `X` while GoblinFarmer is running to add one goblin for the current detected area; a second count in the same resolved area is suppressed because Diablo III can only spawn one goblin per area in a game. The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
+
+Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized and counted as `Gelatinous Sire`.
+
+Current found list: Gem Hoarder, Malevolent Tormentor, Treasure Goblin, Rainbow Goblin, Insufferable Miscreant, Blood Thief, Odious Collector, Gelatinous Sire.
+
+Still needed: Gilded Baron (journal captured; minimap still needed), Menagerist.
 
 The main window shows:
 
@@ -91,7 +99,7 @@ GPH: 0.00
 Active Time: 00:00:00
 ```
 
-GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the manual count, tracker active time, and GPH; if combat is currently running, tracker active time restarts from the reset moment.
+GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the count, tracker active time, GPH, and the in-memory counted-area duplicate guard; if combat is currently running, tracker active time restarts from the reset moment. Starting a new game clears only the counted-area guard so the same area can be counted again in the next game.
 
 ## Combat Profile Skill Setup
 
@@ -137,7 +145,7 @@ Default visible hotkeys:
 - `` ` `` / tilde: combat hotkey
 - `1`: Teleport Next Location
 - `2`: Exit Game
-- `X`: manually increment Goblin Tracker count
+- `X`: manually count a goblin for the current resolved area
 - `Alt` + `` ` ``: Loot
 - `Up Arrow`: Kadala
 
@@ -153,7 +161,8 @@ Debug tooling includes:
 - Optional debug screenshot retention.
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
-- Goblin Tracker count, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
+- Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
+- Count-based GoblinEvidence retention under `Debug\GoblinEvidence`, defaulting to the newest 250 files.
 - Detailed launch, Start Game, teleport, repair, salvage, bounty, and Exit Game logs.
 
 Generate a debug package from the project root:

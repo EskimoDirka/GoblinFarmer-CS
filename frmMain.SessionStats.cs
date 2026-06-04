@@ -14,6 +14,7 @@ namespace GoblinFarmer
         private void PortInitializeSessionStats()
         {
             sessionStartTime = DateTime.Now;
+            PortResetGoblinAreaDuplicateGuard("SessionStart");
             PortWriteSessionMetadata();
             PortUpdateSessionStats();
             PortUpdateGoblinTrackerStats();
@@ -23,6 +24,7 @@ namespace GoblinFarmer
         {
             Interlocked.Increment(ref sessionGamesCreated);
             DebugManager.Session.RecordGameCreated();
+            PortResetGoblinAreaDuplicateGuard("NewGameCreated");
             PortUpdateSessionStats();
         }
 
@@ -71,18 +73,118 @@ namespace GoblinFarmer
 
         private void PortIncrementGoblinCount()
         {
-            int count = DebugManager.Session.RecordGoblinFound();
-            AppLogger.Info($"GoblinTracker: Goblin count increased to {count}");
-            PortWriteSessionMetadata(logSuccess: false);
-            PortUpdateGoblinTrackerStats();
+            PortTryRecordGoblinFound("ManualHotkey", "Unknown", allowUnresolvedFallback: true);
         }
 
         private void PortResetGoblinTrackerStats()
         {
             DebugManager.Session.ResetGoblinTrackerStats();
+            PortResetGoblinAreaDuplicateGuard("TrackerStatsReset");
             AppLogger.Info("GoblinTracker: Session statistics reset");
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
+        }
+
+        private bool PortTryRecordGoblinFound(string source, string goblinType, bool allowUnresolvedFallback)
+        {
+            GoblinAreaResolution area = PortResolveCurrentGoblinArea(source);
+            source = string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim();
+            goblinType = GoblinTypeNormalizer.Normalize(goblinType);
+            string rawLocation = PortDisplayLocation(area.RawLocation);
+            string areaKey = PortDisplayLocation(area.AreaKey);
+            string displayLocation = PortDisplayLocation(area.DisplayLocation);
+            string suppressionReason = "";
+            int total = 0;
+
+            lock (portGoblinTrackerLock)
+            {
+                if (!area.Resolved)
+                {
+                    if (!allowUnresolvedFallback)
+                    {
+                        suppressionReason = "AreaUnresolved";
+                        GoblinFoundRecord suppressedRecord = new(
+                            "",
+                            "",
+                            goblinType,
+                            source,
+                            DateTime.UtcNow,
+                            false,
+                            suppressionReason);
+                        DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                        AppLogger.Info($"GoblinTracker: Count suppressed rawLocation='{PortLogField(rawLocation)}' areaKey='Unknown' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' reason='{suppressionReason}'");
+                        return false;
+                    }
+
+                    AppLogger.Info($"GoblinTracker: Area unresolved source='{PortLogField(source)}'; rawLocation='{PortLogField(rawLocation)}'; falling back to existing count behavior");
+                }
+                else if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey))
+                {
+                    suppressionReason = "AreaAlreadyCounted";
+                    GoblinFoundRecord suppressedRecord = new(
+                        area.AreaKey,
+                        area.DisplayLocation,
+                        goblinType,
+                        source,
+                        DateTime.UtcNow,
+                        false,
+                        suppressionReason);
+                    DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                    AppLogger.Info($"GoblinTracker: Duplicate suppressed rawLocation='{PortLogField(rawLocation)}' areaKey='{PortLogField(areaKey)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' reason='{suppressionReason}'");
+                    return false;
+                }
+
+                GoblinFoundRecord countedRecord = new(
+                    area.AreaKey,
+                    area.DisplayLocation,
+                    goblinType,
+                    source,
+                    DateTime.UtcNow,
+                    true,
+                    "");
+                total = DebugManager.Session.RecordGoblinFound(countedRecord);
+            }
+
+            AppLogger.Info($"GoblinTracker: Count accepted rawLocation='{PortLogField(rawLocation)}' areaKey='{PortLogField(areaKey)}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' total={total}");
+            PortWriteSessionMetadata(logSuccess: false);
+            PortUpdateGoblinTrackerStats();
+            return true;
+        }
+
+        private GoblinAreaResolution PortResolveCurrentGoblinArea(string source)
+        {
+            string rawLocation = "";
+            try
+            {
+                if (IsDiabloRunning())
+                {
+                    rawLocation = PortDetectCurrentLocation();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"GoblinTracker: Current area scan failed source={PortLogField(source)}", ex);
+            }
+
+            if (string.IsNullOrWhiteSpace(rawLocation))
+            {
+                rawLocation = portLastConfirmedLocation;
+            }
+
+            GoblinAreaResolution resolution = GoblinAreaResolver.Resolve(rawLocation);
+            AppLogger.Info($"GoblinTracker: Area resolved rawLocation='{PortLogField(PortDisplayLocation(resolution.RawLocation))}' areaKey='{PortLogField(PortDisplayLocation(resolution.AreaKey))}' source='{PortLogField(source)}' resolved={resolution.Resolved}");
+            return resolution;
+        }
+
+        private void PortResetGoblinAreaDuplicateGuard(string reason)
+        {
+            int cleared;
+            lock (portGoblinTrackerLock)
+            {
+                cleared = portGoblinAreaDuplicateGuard.Reset();
+            }
+
+            AppLogger.Info($"GoblinTracker: Area duplicate guard reset reason='{PortLogField(reason)}' clearedAreaKeys={cleared}");
         }
 
         private void PortUpdateGoblinTrackerStats()
@@ -128,6 +230,8 @@ namespace GoblinFarmer
             AppLogger.Info("Goblin Tracker");
             AppLogger.Info("--------------");
             AppLogger.Info($"Goblins Found: {diagnosticsSnapshot.GoblinCount}");
+            AppLogger.Info($"Counted Area Keys: {diagnosticsSnapshot.CountedGoblinAreaCount}");
+            AppLogger.Info($"Last Counted Area: {PortDisplayLocation(diagnosticsSnapshot.LastCountedGoblinAreaKey)}");
             AppLogger.Info($"Active Combat Time: {diagnosticsSnapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}");
             AppLogger.Info($"GPH: {diagnosticsSnapshot.GoblinsPerHour:0.00}");
             AppLogger.Info("Goblin Evidence");
@@ -159,6 +263,9 @@ namespace GoblinFarmer
                     $"SessionStartLocal={sessionStartTime:O}",
                     $"SessionStartUtc={sessionStartTime.ToUniversalTime():O}",
                     $"GoblinCount={snapshot.GoblinCount}",
+                    $"GoblinFoundRecordCount={snapshot.GoblinFoundRecordCount}",
+                    $"CountedGoblinAreaCount={snapshot.CountedGoblinAreaCount}",
+                    $"LastCountedGoblinAreaKey={snapshot.LastCountedGoblinAreaKey}",
                     $"ActiveCombatTime={snapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}",
                     $"ActiveCombatTimeSeconds={(long)snapshot.GoblinActiveCombatTime.TotalSeconds}",
                     $"CombatStartTimeLocal={(snapshot.GoblinCombatStartTime.HasValue ? snapshot.GoblinCombatStartTime.Value.ToString("O") : "")}",
@@ -203,6 +310,12 @@ namespace GoblinFarmer
 
         private PortScreenshotPair PortCaptureSuccessScreenshot(string workflow, string action)
         {
+            if (!AppSettings.Debug.EnableSuccessScreenshots)
+            {
+                AppLogger.Info("Success screenshot skipped (EnableSuccessScreenshots=false)");
+                return new PortScreenshotPair("", "");
+            }
+
             return PortCaptureDiagnosticScreenshotPair("Success", workflow, action);
         }
 
