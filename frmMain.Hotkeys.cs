@@ -145,10 +145,49 @@ namespace GoblinFarmer
                 bool isEscape = vkCode == PortVkEscape;
                 bool isSkill1 = vkCode == PortVk1;
                 bool isSkill2 = vkCode == PortVk2;
+                bool isGoblinTrackerHotkey = vkCode == PortVkX;
+                bool isGoblinCalibrationHotkey = vkCode == PortVkG;
                 bool isAutomationNumberHotkey = isSkill1 || isSkill2;
                 bool isLootReleaseKey = vkCode == PortVkAlt || vkCode == PortVkBacktick;
                 bool keyDown = message == PortWmKeyDown || message == PortWmSysKeyDown;
                 bool keyUp = message == PortWmKeyUp || message == PortWmSysKeyUp;
+                bool ctrlDown = (GetAsyncKeyState(PortVkCtrl) & 0x8000) != 0;
+                bool shiftDown = (GetAsyncKeyState(PortVkShift) & 0x8000) != 0;
+
+                if (isGoblinCalibrationHotkey && ctrlDown && shiftDown)
+                {
+                    if (keyDown && !portGoblinCalibrationHotkeyHandled)
+                    {
+                        portGoblinCalibrationHotkeyHandled = true;
+                        AppLogger.Info("GoblinEvidence: Save calibration snapshot");
+                        BeginInvoke(new Action(PortCaptureGoblinEvidenceCalibrationSnapshot));
+                    }
+                    else if (keyUp)
+                    {
+                        portGoblinCalibrationHotkeyHandled = false;
+                    }
+
+                    return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+                }
+                else if (isGoblinCalibrationHotkey && keyUp)
+                {
+                    portGoblinCalibrationHotkeyHandled = false;
+                }
+
+                if (isGoblinTrackerHotkey)
+                {
+                    if (keyDown && !portGoblinTrackerHotkeyHandled)
+                    {
+                        portGoblinTrackerHotkeyHandled = true;
+                        BeginInvoke(new Action(PortIncrementGoblinCount));
+                    }
+                    else if (keyUp)
+                    {
+                        portGoblinTrackerHotkeyHandled = false;
+                    }
+
+                    return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+                }
 
                 if (isEscape && injected && keyDown && (isAutomationRunning || portCombatRunning))
                 {

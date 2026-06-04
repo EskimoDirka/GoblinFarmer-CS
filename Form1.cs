@@ -34,6 +34,7 @@ namespace GoblinFarmer
         {
             PortInitializeSessionStats();
             PortInitializeDiagnosticOverlay();
+            btnResetGoblinTrackerStats.Click += (_, _) => PortResetGoblinTrackerStats();
             tmrStatus.Start();
 
             SetDiabloStatus("Unknown");
@@ -99,6 +100,7 @@ namespace GoblinFarmer
             SetDiabloStatus(diabloRunning ? "Running" : "Not Running");
             PortUpdateDiabloRuntimeMonitor(diabloRunning);
             PortUpdateSessionStats();
+            PortWriteSessionMetadata(logSuccess: false);
             PortUpdateDiagnosticOverlay(diabloRunning);
         }
 

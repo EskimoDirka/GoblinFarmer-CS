@@ -32,6 +32,7 @@
     <None Remove="Images\Combat\Momentum Stacks.png" />
     <None Remove="Images\Combat\No Click Regions 2560x1440.png" />
     <None Remove="Images\Combat\Witch Doctor Hex Scan Region.png" />
+    <None Remove="Images\Goblin Evidence\**\*.*" />
     <None Remove="Images\Current Location\Ancient Waterway.png" />
     <None Remove="Images\Current Location\Black Canyon Mines.png" />
     <None Remove="Images\Current Location\Caldeum Bazaar.png" />
@@ -147,6 +148,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Images\Combat\Witch Doctor Hex Scan Region.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\Goblin Evidence\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Images\Current Location\Ancient Waterway.png">

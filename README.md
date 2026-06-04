@@ -16,6 +16,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Hotkey route blocking for known unsafe or incorrect location transitions.
 - Make New Game, Exit Game, repair, salvage, and town workflow helpers.
 - Monk, Demon Hunter, and Witch Doctor combat support.
+- Manual Goblin Tracker with `X` hotkey counting, active-combat-time GPH, live UI stats, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and debug package generation.
 - Runtime configuration for Diablo III, Battle.net, image templates, launch timings, and diagnostic behavior.
 - Self-contained Windows release publishing plus optional Inno Setup installer packaging.
@@ -78,6 +79,20 @@ Images/Teleport Function
 
 After combat stops, Teleport Next is available as soon as combat is marked stopped. Cleanup still releases tracked mouse and Shift inputs before the queued teleport flow runs, Witch Doctor cleanup uses only a short best-effort Hex/chicken exit, and only user `1` presses trigger Teleport Next.
 
+## Goblin Tracker
+
+The Goblin Tracker is a manual counter foundation. Press `X` while GoblinFarmer is running to add one goblin to the current session count. The counter does not require combat to be active and does not use image recognition, OCR, minimap detection, or automatic goblin detection.
+
+The main window shows:
+
+```text
+Goblins: 0
+GPH: 0.00
+Active Time: 00:00:00
+```
+
+GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the manual count, tracker active time, and GPH; if combat is currently running, tracker active time restarts from the reset moment.
+
 ## Combat Profile Skill Setup
 
 GoblinFarmer expects these exact Diablo III skills and runes to be assigned to the listed keybinds for each combat profile. Incorrect skill placement may cause combat automation to behave incorrectly.
@@ -122,6 +137,7 @@ Default visible hotkeys:
 - `` ` `` / tilde: combat hotkey
 - `1`: Teleport Next Location
 - `2`: Exit Game
+- `X`: manually increment Goblin Tracker count
 - `Alt` + `` ` ``: Loot
 - `Up Arrow`: Kadala
 
@@ -137,6 +153,7 @@ Debug tooling includes:
 - Optional debug screenshot retention.
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
+- Goblin Tracker count, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Detailed launch, Start Game, teleport, repair, salvage, bounty, and Exit Game logs.
 
 Generate a debug package from the project root:

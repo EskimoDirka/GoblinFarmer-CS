@@ -16,6 +16,7 @@ namespace GoblinFarmer
             sessionStartTime = DateTime.Now;
             PortWriteSessionMetadata();
             PortUpdateSessionStats();
+            PortUpdateGoblinTrackerStats();
         }
 
         private void PortIncrementGamesCreated()
@@ -65,6 +66,41 @@ namespace GoblinFarmer
             lblSessionBlocked.Text = $"Blocked: {sessionBlockedTeleports}";
             lblSessionFailures.Text = $"Failures: {sessionFailures}";
             lblSessionRuntime.Text = $"Runtime: {runtime:hh\\:mm\\:ss}";
+            PortUpdateGoblinTrackerStats();
+        }
+
+        private void PortIncrementGoblinCount()
+        {
+            int count = DebugManager.Session.RecordGoblinFound();
+            AppLogger.Info($"GoblinTracker: Goblin count increased to {count}");
+            PortWriteSessionMetadata(logSuccess: false);
+            PortUpdateGoblinTrackerStats();
+        }
+
+        private void PortResetGoblinTrackerStats()
+        {
+            DebugManager.Session.ResetGoblinTrackerStats();
+            AppLogger.Info("GoblinTracker: Session statistics reset");
+            PortWriteSessionMetadata(logSuccess: false);
+            PortUpdateGoblinTrackerStats();
+        }
+
+        private void PortUpdateGoblinTrackerStats()
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(PortUpdateGoblinTrackerStats));
+                return;
+            }
+
+            DiagnosticsSessionSnapshot snapshot = DebugManager.Session.Snapshot(DateTime.Now);
+            lblGoblinCount.Text = $"Goblins: {snapshot.GoblinCount}";
+            lblGoblinGph.Text = $"GPH: {snapshot.GoblinsPerHour:0.00}";
+            lblGoblinActiveTime.Text = $"Active Time: {snapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}";
+            lblGoblinEvidenceLast.Text = $"Last Evidence: {(snapshot.GoblinEvidenceEventCount > 0 ? snapshot.LastGoblinEvidenceType.ToString() : "None")}";
+            lblGoblinEvidenceType.Text = $"Evidence Type: {(snapshot.GoblinEvidenceEventCount > 0 ? snapshot.LastGoblinEvidenceType.ToString() : "None")}";
+            lblGoblinEvidenceConfidence.Text = $"Evidence Confidence: {snapshot.LastGoblinEvidenceConfidence:0.00}";
+            lblGoblinEvidenceTime.Text = $"Evidence Time: {(snapshot.LastGoblinEvidenceTime.HasValue ? snapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}";
         }
 
         private void PortLogSessionSummary()
@@ -89,6 +125,18 @@ namespace GoblinFarmer
                 $"WorkflowCancellations={diagnosticsSnapshot.WorkflowCancellations}; " +
                 $"UnexpectedExceptions={diagnosticsSnapshot.UnexpectedExceptions}; " +
                 $"CombatActiveTime={diagnosticsSnapshot.CombatActiveTime:hh\\:mm\\:ss}");
+            AppLogger.Info("Goblin Tracker");
+            AppLogger.Info("--------------");
+            AppLogger.Info($"Goblins Found: {diagnosticsSnapshot.GoblinCount}");
+            AppLogger.Info($"Active Combat Time: {diagnosticsSnapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}");
+            AppLogger.Info($"GPH: {diagnosticsSnapshot.GoblinsPerHour:0.00}");
+            AppLogger.Info("Goblin Evidence");
+            AppLogger.Info("---------------");
+            AppLogger.Info($"Events Detected: {diagnosticsSnapshot.GoblinEvidenceEventCount}");
+            AppLogger.Info($"Last Evidence: {diagnosticsSnapshot.LastGoblinEvidenceType}");
+            AppLogger.Info($"Last Confidence: {diagnosticsSnapshot.LastGoblinEvidenceConfidence:0.00}");
+            AppLogger.Info($"Last Evidence Time: {(diagnosticsSnapshot.LastGoblinEvidenceTime.HasValue ? diagnosticsSnapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}");
+            AppLogger.Info($"Evidence Screenshot Folder: {DebugManager.GoblinEvidenceDirectory}");
             AppLogger.Info("=====================================");
             DebugManager.ExportSessionSummary(new SessionSummaryContext(
                 AppLogger.CurrentLogFilePath,
@@ -100,20 +148,36 @@ namespace GoblinFarmer
                 diagnosticsSnapshot.LastKnownIssue));
         }
 
-        private void PortWriteSessionMetadata()
+        private void PortWriteSessionMetadata(bool logSuccess = true)
         {
             try
             {
                 string metadataPath = DebugManager.SessionInfoPath;
+                DiagnosticsSessionSnapshot snapshot = DebugManager.Session.Snapshot(DateTime.Now);
                 string[] lines =
                 [
                     $"SessionStartLocal={sessionStartTime:O}",
                     $"SessionStartUtc={sessionStartTime.ToUniversalTime():O}",
+                    $"GoblinCount={snapshot.GoblinCount}",
+                    $"ActiveCombatTime={snapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}",
+                    $"ActiveCombatTimeSeconds={(long)snapshot.GoblinActiveCombatTime.TotalSeconds}",
+                    $"CombatStartTimeLocal={(snapshot.GoblinCombatStartTime.HasValue ? snapshot.GoblinCombatStartTime.Value.ToString("O") : "")}",
+                    $"CombatStartTimeUtc={(snapshot.GoblinCombatStartTime.HasValue ? snapshot.GoblinCombatStartTime.Value.ToUniversalTime().ToString("O") : "")}",
+                    $"GPH={snapshot.GoblinsPerHour:0.00}",
+                    $"GoblinEvidenceEventCount={snapshot.GoblinEvidenceEventCount}",
+                    $"LastGoblinEvidenceType={(snapshot.GoblinEvidenceEventCount > 0 ? snapshot.LastGoblinEvidenceType.ToString() : "None")}",
+                    $"LastGoblinEvidenceConfidence={snapshot.LastGoblinEvidenceConfidence:0.00}",
+                    $"LastGoblinEvidenceTimeLocal={(snapshot.LastGoblinEvidenceTime.HasValue ? snapshot.LastGoblinEvidenceTime.Value.ToString("O") : "")}",
+                    $"LastGoblinEvidenceScreenshotPath={snapshot.LastGoblinEvidenceScreenshotPath}",
+                    $"GoblinEvidenceScreenshotFolder={DebugManager.GoblinEvidenceDirectory}",
                     $"ProcessId={Environment.ProcessId}",
                     $"BaseDirectory={AppDomain.CurrentDomain.BaseDirectory}"
                 ];
                 File.WriteAllLines(metadataPath, lines);
-                AppLogger.Info($"Session metadata written: {metadataPath}; sessionStartLocal={sessionStartTime:O}");
+                if (logSuccess)
+                {
+                    AppLogger.Info($"Session metadata written: {metadataPath}; sessionStartLocal={sessionStartTime:O}; goblins={snapshot.GoblinCount}; activeCombatTime={snapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}; gph={snapshot.GoblinsPerHour:0.00}");
+                }
             }
             catch (Exception ex)
             {

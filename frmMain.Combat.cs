@@ -16,6 +16,7 @@ namespace GoblinFarmer
         {
             if (portCombatRunning)
             {
+                AppLogger.Info($"Combat stop requested by combat hotkey: key=backtick; combatActive={portCombatRunning}; combatStopping={portCombatStopping}");
                 PortStopCombat("hotkey");
                 return;
             }
@@ -32,6 +33,7 @@ namespace GoblinFarmer
             portOriginalCursorHandle = PortCurrentCursorHandle();
             Interlocked.Exchange(ref portLastCombatCursorClickTicks, 0);
             DebugManager.Session.BeginCombatActive();
+            PortWriteSessionMetadata(logSuccess: false);
             SetCombatStatus($"{radWD.Checked switch { true => "Witch Doctor", false when radDH.Checked => "Demon Hunter", _ => "Monk" }} Running");
             AddWorkflowStep("Combat started");
             AppLogger.Info($"Combat started: class={portCombatClass}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; {PortCombatInputContext()}");
@@ -93,6 +95,7 @@ namespace GoblinFarmer
                 cts?.Dispose();
                 ClipCursor(IntPtr.Zero);
                 DebugManager.Session.EndCombatActive();
+                PortWriteSessionMetadata(logSuccess: false);
                 SetCombatStatus("Idle");
                 SetAppStatus($"Combat Stopped ({reason})");
                 AddWorkflowStep($"Combat stopped ({reason})");

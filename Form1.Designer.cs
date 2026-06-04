@@ -69,6 +69,15 @@ namespace GoblinFarmer
             chkLoot = new CheckBox();
             chkKadala = new CheckBox();
             chkCombat = new CheckBox();
+            grpGoblinTracker = new GroupBox();
+            lblGoblinEvidenceTime = new Label();
+            lblGoblinEvidenceConfidence = new Label();
+            lblGoblinEvidenceType = new Label();
+            lblGoblinEvidenceLast = new Label();
+            btnResetGoblinTrackerStats = new Button();
+            lblGoblinActiveTime = new Label();
+            lblGoblinGph = new Label();
+            lblGoblinCount = new Label();
             grpSessionStats = new GroupBox();
             lblSessionRuntime = new Label();
             lblSessionFailures = new Label();
@@ -81,6 +90,7 @@ namespace GoblinFarmer
             grpStatus.SuspendLayout();
             grpCharacter.SuspendLayout();
             grpHotkeys.SuspendLayout();
+            grpGoblinTracker.SuspendLayout();
             grpSessionStats.SuspendLayout();
             SuspendLayout();
             // 
@@ -436,7 +446,7 @@ namespace GoblinFarmer
             chkExitGameHotkey.UseVisualStyleBackColor = true;
             // 
             // chkKeepDebugScreenshots
-            // 
+            //
             chkKeepDebugScreenshots.AutoSize = true;
             chkKeepDebugScreenshots.Location = new Point(15, 149);
             chkKeepDebugScreenshots.Name = "chkKeepDebugScreenshots";
@@ -474,6 +484,95 @@ namespace GoblinFarmer
             chkCombat.TabIndex = 0;
             chkCombat.Text = "Enable Combat Hotkey (tilde/backtick)";
             chkCombat.UseVisualStyleBackColor = true;
+            //
+            // grpGoblinTracker
+            //
+            grpGoblinTracker.Controls.Add(lblGoblinEvidenceTime);
+            grpGoblinTracker.Controls.Add(lblGoblinEvidenceConfidence);
+            grpGoblinTracker.Controls.Add(lblGoblinEvidenceType);
+            grpGoblinTracker.Controls.Add(lblGoblinEvidenceLast);
+            grpGoblinTracker.Controls.Add(btnResetGoblinTrackerStats);
+            grpGoblinTracker.Controls.Add(lblGoblinActiveTime);
+            grpGoblinTracker.Controls.Add(lblGoblinGph);
+            grpGoblinTracker.Controls.Add(lblGoblinCount);
+            grpGoblinTracker.Location = new Point(12, 517);
+            grpGoblinTracker.Name = "grpGoblinTracker";
+            grpGoblinTracker.Size = new Size(311, 148);
+            grpGoblinTracker.TabIndex = 13;
+            grpGoblinTracker.TabStop = false;
+            grpGoblinTracker.Text = "Goblin Tracker";
+            //
+            // lblGoblinEvidenceTime
+            //
+            lblGoblinEvidenceTime.AutoSize = true;
+            lblGoblinEvidenceTime.Location = new Point(12, 122);
+            lblGoblinEvidenceTime.Name = "lblGoblinEvidenceTime";
+            lblGoblinEvidenceTime.Size = new Size(96, 15);
+            lblGoblinEvidenceTime.TabIndex = 7;
+            lblGoblinEvidenceTime.Text = "Evidence Time: --";
+            //
+            // lblGoblinEvidenceConfidence
+            //
+            lblGoblinEvidenceConfidence.AutoSize = true;
+            lblGoblinEvidenceConfidence.Location = new Point(12, 104);
+            lblGoblinEvidenceConfidence.Name = "lblGoblinEvidenceConfidence";
+            lblGoblinEvidenceConfidence.Size = new Size(139, 15);
+            lblGoblinEvidenceConfidence.TabIndex = 6;
+            lblGoblinEvidenceConfidence.Text = "Evidence Confidence: 0.00";
+            //
+            // lblGoblinEvidenceType
+            //
+            lblGoblinEvidenceType.AutoSize = true;
+            lblGoblinEvidenceType.Location = new Point(12, 86);
+            lblGoblinEvidenceType.Name = "lblGoblinEvidenceType";
+            lblGoblinEvidenceType.Size = new Size(113, 15);
+            lblGoblinEvidenceType.TabIndex = 5;
+            lblGoblinEvidenceType.Text = "Evidence Type: None";
+            //
+            // lblGoblinEvidenceLast
+            //
+            lblGoblinEvidenceLast.AutoSize = true;
+            lblGoblinEvidenceLast.Location = new Point(12, 68);
+            lblGoblinEvidenceLast.Name = "lblGoblinEvidenceLast";
+            lblGoblinEvidenceLast.Size = new Size(113, 15);
+            lblGoblinEvidenceLast.TabIndex = 4;
+            lblGoblinEvidenceLast.Text = "Last Evidence: None";
+            //
+            // btnResetGoblinTrackerStats
+            //
+            btnResetGoblinTrackerStats.Location = new Point(183, 22);
+            btnResetGoblinTrackerStats.Name = "btnResetGoblinTrackerStats";
+            btnResetGoblinTrackerStats.Size = new Size(104, 23);
+            btnResetGoblinTrackerStats.TabIndex = 3;
+            btnResetGoblinTrackerStats.Text = "Reset Stats";
+            btnResetGoblinTrackerStats.UseVisualStyleBackColor = true;
+            //
+            // lblGoblinActiveTime
+            //
+            lblGoblinActiveTime.AutoSize = true;
+            lblGoblinActiveTime.Location = new Point(12, 58);
+            lblGoblinActiveTime.Name = "lblGoblinActiveTime";
+            lblGoblinActiveTime.Size = new Size(124, 15);
+            lblGoblinActiveTime.TabIndex = 2;
+            lblGoblinActiveTime.Text = "Active Time: 00:00:00";
+            //
+            // lblGoblinGph
+            //
+            lblGoblinGph.AutoSize = true;
+            lblGoblinGph.Location = new Point(12, 40);
+            lblGoblinGph.Name = "lblGoblinGph";
+            lblGoblinGph.Size = new Size(57, 15);
+            lblGoblinGph.TabIndex = 1;
+            lblGoblinGph.Text = "GPH: 0.00";
+            //
+            // lblGoblinCount
+            //
+            lblGoblinCount.AutoSize = true;
+            lblGoblinCount.Location = new Point(12, 22);
+            lblGoblinCount.Name = "lblGoblinCount";
+            lblGoblinCount.Size = new Size(61, 15);
+            lblGoblinCount.TabIndex = 0;
+            lblGoblinCount.Text = "Goblins: 0";
             // 
             // grpSessionStats
             // 
@@ -547,8 +646,9 @@ namespace GoblinFarmer
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(918, 610);
+            ClientSize = new Size(918, 676);
             Controls.Add(lblEscape);
+            Controls.Add(grpGoblinTracker);
             Controls.Add(grpSessionStats);
             Controls.Add(grpHotkeys);
             Controls.Add(grpCharacter);
@@ -556,7 +656,7 @@ namespace GoblinFarmer
             Controls.Add(grpRoutes);
             Controls.Add(grpFlows);
             Icon = (Icon)resources.GetObject("$this.Icon");
-            MinimumSize = new Size(934, 649);
+            MinimumSize = new Size(934, 715);
             Name = "frmMain";
             Text = "GoblinFarmer";
             Load += frmMain_Load;
@@ -568,6 +668,8 @@ namespace GoblinFarmer
             grpCharacter.PerformLayout();
             grpHotkeys.ResumeLayout(false);
             grpHotkeys.PerformLayout();
+            grpGoblinTracker.ResumeLayout(false);
+            grpGoblinTracker.PerformLayout();
             grpSessionStats.ResumeLayout(false);
             grpSessionStats.PerformLayout();
             ResumeLayout(false);
@@ -614,6 +716,15 @@ namespace GoblinFarmer
         private CheckBox chkKeepDebugScreenshots;
         private CheckBox chkTeleportNextHotkey;
         private CheckBox chkExitGameHotkey;
+        private GroupBox grpGoblinTracker;
+        private Label lblGoblinEvidenceTime;
+        private Label lblGoblinEvidenceConfidence;
+        private Label lblGoblinEvidenceType;
+        private Label lblGoblinEvidenceLast;
+        private Button btnResetGoblinTrackerStats;
+        private Label lblGoblinActiveTime;
+        private Label lblGoblinGph;
+        private Label lblGoblinCount;
         private GroupBox grpSessionStats;
         private Label lblSessionRuntime;
         private Label lblSessionFailures;

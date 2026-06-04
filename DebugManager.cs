@@ -20,6 +20,7 @@ namespace GoblinFarmer
         public static string LogsDirectory => Path.Combine(BaseDirectory, "Logs");
         public static string ScreenshotsDirectory => Path.Combine(BaseDirectory, "Screenshots");
         public static string DebugScreenshotsDirectory => Path.Combine(BaseDirectory, "debug-screenshots");
+        public static string GoblinEvidenceDirectory => Path.Combine(BaseDirectory, "Debug", "GoblinEvidence");
         public static string SessionsDirectory => Path.Combine(BaseDirectory, "Sessions");
         public static string SessionInfoPath => Path.Combine(BaseDirectory, "session-info.txt");
 
@@ -383,6 +384,22 @@ namespace GoblinFarmer
                 builder.AppendLine($"- Workflow cancellations: {snapshot.WorkflowCancellations}");
                 builder.AppendLine($"- Unexpected exceptions: {snapshot.UnexpectedExceptions}");
                 builder.AppendLine($"- Combat/farming active time: {snapshot.CombatActiveTime:hh\\:mm\\:ss}");
+                builder.AppendLine();
+                builder.AppendLine("## Goblin Tracker");
+                builder.AppendLine();
+                builder.AppendLine($"Goblins Found: {snapshot.GoblinCount}");
+                builder.AppendLine($"Active Combat Time: {snapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}");
+                builder.AppendLine($"GPH: {snapshot.GoblinsPerHour:0.00}");
+                builder.AppendLine();
+                builder.AppendLine("## Goblin Evidence");
+                builder.AppendLine();
+                builder.AppendLine($"Events Detected: {snapshot.GoblinEvidenceEventCount}");
+                builder.AppendLine($"Last Evidence: {snapshot.LastGoblinEvidenceType}");
+                builder.AppendLine($"Last Confidence: {snapshot.LastGoblinEvidenceConfidence:0.00}");
+                builder.AppendLine($"Last Evidence Time: {(snapshot.LastGoblinEvidenceTime.HasValue ? snapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}");
+                builder.AppendLine($"Evidence Screenshot Folder: {DisplayPath(snapshot.GoblinEvidenceScreenshotFolder)}");
+                builder.AppendLine($"Last Evidence Screenshot: {DisplayPath(snapshot.LastGoblinEvidenceScreenshotPath)}");
+                builder.AppendLine();
                 builder.AppendLine($"- Latest log path: {DisplayPath(latestLogPath)}");
                 builder.AppendLine($"- Latest debug package path: {DisplayPath(latestPackagePath)}");
                 builder.AppendLine($"- Latest screenshot path: {DisplayPath(latestScreenshotPath)}");
@@ -452,6 +469,10 @@ namespace GoblinFarmer
         private readonly object syncRoot = new();
         private DateTime? combatActiveStartedAt;
         private TimeSpan combatActiveTime;
+        private DateTime? goblinCombatStartedAt;
+        private TimeSpan goblinActiveCombatTime;
+        private int goblinCount;
+        private readonly List<GoblinEvidenceEvent> goblinEvidenceEvents = [];
         private int gamesCreated;
         private int teleportsAttempted;
         private int teleportsConfirmed;
@@ -471,6 +492,7 @@ namespace GoblinFarmer
         public DateTime StartedAtUtc => StartedAtLocal.ToUniversalTime();
         public string LatestScreenshotPath => latestScreenshotPath;
 
+        public int RecordGoblinFound() => Interlocked.Increment(ref goblinCount);
         public void RecordGameCreated() => Interlocked.Increment(ref gamesCreated);
         public void RecordTeleportAttempted() => Interlocked.Increment(ref teleportsAttempted);
         public void RecordTeleportConfirmed() => Interlocked.Increment(ref teleportsConfirmed);
@@ -482,6 +504,18 @@ namespace GoblinFarmer
         public void RecordSalvageFailure(string issue) => RecordIssueAndIncrement(ref salvageFailures, issue);
         public void RecordWorkflowCancellation(string issue) => RecordIssueAndIncrement(ref workflowCancellations, issue);
         public void RecordUnexpectedException(string issue) => RecordIssueAndIncrement(ref unexpectedExceptions, issue);
+
+        public void RecordGoblinEvidence(GoblinEvidenceEvent evidenceEvent)
+        {
+            lock (syncRoot)
+            {
+                goblinEvidenceEvents.Add(evidenceEvent);
+                if (!string.IsNullOrWhiteSpace(evidenceEvent.ScreenshotPath))
+                {
+                    latestScreenshotPath = evidenceEvent.ScreenshotPath;
+                }
+            }
+        }
 
         public void SetLatestScreenshot(string path)
         {
@@ -516,7 +550,9 @@ namespace GoblinFarmer
         {
             lock (syncRoot)
             {
-                combatActiveStartedAt ??= DateTime.Now;
+                DateTime now = DateTime.Now;
+                combatActiveStartedAt ??= now;
+                goblinCombatStartedAt ??= now;
             }
         }
 
@@ -528,6 +564,25 @@ namespace GoblinFarmer
                 {
                     combatActiveTime += DateTime.Now - combatActiveStartedAt.Value;
                     combatActiveStartedAt = null;
+                }
+
+                if (goblinCombatStartedAt.HasValue)
+                {
+                    goblinActiveCombatTime += DateTime.Now - goblinCombatStartedAt.Value;
+                    goblinCombatStartedAt = null;
+                }
+            }
+        }
+
+        public void ResetGoblinTrackerStats()
+        {
+            lock (syncRoot)
+            {
+                Interlocked.Exchange(ref goblinCount, 0);
+                goblinActiveCombatTime = TimeSpan.Zero;
+                if (goblinCombatStartedAt.HasValue)
+                {
+                    goblinCombatStartedAt = DateTime.Now;
                 }
             }
         }
@@ -542,10 +597,22 @@ namespace GoblinFarmer
                     activeTime += endedAtLocal - combatActiveStartedAt.Value;
                 }
 
+                TimeSpan goblinActiveTime = goblinActiveCombatTime;
+                if (goblinCombatStartedAt.HasValue)
+                {
+                    goblinActiveTime += endedAtLocal - goblinCombatStartedAt.Value;
+                }
+
+                int currentGoblinCount = Volatile.Read(ref goblinCount);
+                double goblinsPerHour = CalculateGoblinsPerHour(currentGoblinCount, goblinActiveTime);
+                GoblinEvidenceEvent? lastGoblinEvidence = goblinEvidenceEvents.Count > 0
+                    ? goblinEvidenceEvents[^1]
+                    : null;
                 return new DiagnosticsSessionSnapshot(
                     StartedAtLocal,
                     endedAtLocal,
                     endedAtLocal - StartedAtLocal,
+                    currentGoblinCount,
                     Volatile.Read(ref gamesCreated),
                     Volatile.Read(ref teleportsAttempted),
                     Volatile.Read(ref teleportsConfirmed),
@@ -558,10 +625,30 @@ namespace GoblinFarmer
                     Volatile.Read(ref workflowCancellations),
                     Volatile.Read(ref unexpectedExceptions),
                     activeTime,
+                    combatActiveStartedAt,
+                    goblinActiveTime,
+                    goblinCombatStartedAt,
+                    goblinsPerHour,
                     latestScreenshotPath,
                     latestSessionSummaryPath,
-                    lastKnownIssue);
+                    lastKnownIssue,
+                    goblinEvidenceEvents.Count,
+                    lastGoblinEvidence?.Type ?? GoblinEvidenceType.Unknown,
+                    lastGoblinEvidence?.Confidence ?? 0,
+                    lastGoblinEvidence?.Timestamp,
+                    lastGoblinEvidence?.ScreenshotPath ?? "",
+                    DebugManager.GoblinEvidenceDirectory);
             }
+        }
+
+        private static double CalculateGoblinsPerHour(int count, TimeSpan activeTime)
+        {
+            if (count <= 0 || activeTime.TotalSeconds <= 0 || activeTime.TotalHours <= 0)
+            {
+                return 0;
+            }
+
+            return count / activeTime.TotalHours;
         }
 
         private void RecordIssueAndIncrement(ref int counter, string issue)
@@ -575,6 +662,7 @@ namespace GoblinFarmer
         DateTime StartedAtLocal,
         DateTime EndedAtLocal,
         TimeSpan Duration,
+        int GoblinCount,
         int GamesCreated,
         int TeleportsAttempted,
         int TeleportsConfirmed,
@@ -587,9 +675,19 @@ namespace GoblinFarmer
         int WorkflowCancellations,
         int UnexpectedExceptions,
         TimeSpan CombatActiveTime,
+        DateTime? CombatStartTime,
+        TimeSpan GoblinActiveCombatTime,
+        DateTime? GoblinCombatStartTime,
+        double GoblinsPerHour,
         string LatestScreenshotPath,
         string LatestSessionSummaryPath,
-        string LastKnownIssue);
+        string LastKnownIssue,
+        int GoblinEvidenceEventCount,
+        GoblinEvidenceType LastGoblinEvidenceType,
+        double LastGoblinEvidenceConfidence,
+        DateTime? LastGoblinEvidenceTime,
+        string LastGoblinEvidenceScreenshotPath,
+        string GoblinEvidenceScreenshotFolder);
 
     internal readonly record struct SessionSummaryContext(
         string LatestLogPath,

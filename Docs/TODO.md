@@ -539,11 +539,17 @@ These are future enhancements and nice-to-haves, not active blockers.
 
 ### Goblin Statistics / GPH
 
-* [ ] Track session goblin count.
-* [ ] Track goblins per hour while combat/farming is active.
+* [x] Track session goblin count with manual physical `X` hotkey.
+* [x] Track goblins per hour while combat/farming is active, using tracker active combat time only.
 * [ ] Track session runtime.
 * [ ] Optionally track lifetime goblin count.
 * [ ] Optionally write a goblin history log.
+* [x] Add main UI Goblin Tracker stats and Reset Stats button.
+* [x] Include Goblin Tracker count, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
+* [ ] Manually validate physical `X` increments the counter once per press while GoblinFarmer is running.
+* [ ] Manually validate tracker active time advances only during combat automation and pauses while idle, in menus, waiting for game creation, waiting for Diablo launch, or paused.
+* [ ] Manually validate Reset Stats clears goblin count, tracker active time, and GPH, and restarts tracker timing from the reset moment if combat is active.
+* [ ] Manually validate a generated debug package includes Goblin Tracker metadata from `session-info.txt`.
 
 ### Asset Validator
 

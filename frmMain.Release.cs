@@ -483,6 +483,7 @@ namespace GoblinFarmer
             {
                 AppSettings.ApplyDebugDefaultsProfile();
                 PortRefreshDebugControlsFromSettings();
+                PortApplyVsDebugGoblinTrackerLayout();
             }
 
             bool debugMode = AppSettings.Debug.DebugMode;
@@ -521,6 +522,28 @@ namespace GoblinFarmer
             {
                 PortInitializeDiagnosticOverlay();
             }
+        }
+
+        private void PortApplyVsDebugGoblinTrackerLayout()
+        {
+            SuspendLayout();
+            grpGoblinTracker.SuspendLayout();
+
+            MinimumSize = new Size(Math.Max(MinimumSize.Width, 934), 779);
+            ClientSize = new Size(Math.Max(ClientSize.Width, 918), 740);
+
+            grpGoblinTracker.Size = new Size(311, 212);
+            lblGoblinCount.Location = new Point(12, 24);
+            lblGoblinGph.Location = new Point(12, 48);
+            lblGoblinActiveTime.Location = new Point(12, 72);
+            lblGoblinEvidenceLast.Location = new Point(12, 108);
+            lblGoblinEvidenceType.Location = new Point(12, 132);
+            lblGoblinEvidenceConfidence.Location = new Point(12, 156);
+            lblGoblinEvidenceTime.Location = new Point(12, 180);
+
+            grpGoblinTracker.ResumeLayout(false);
+            grpGoblinTracker.PerformLayout();
+            ResumeLayout(false);
         }
 
         private void PortLogDebugModeToggle(bool oldDebugMode, bool newDebugMode, bool diagnosticsBefore)

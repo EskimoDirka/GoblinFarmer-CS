@@ -32,14 +32,18 @@ namespace GoblinFarmer
                 return;
             }
 
-            ClientSize = new Size(1350, 610);
-            MinimumSize = new Size(1080, 649);
+            int clientHeight = AppSettings.IsVsDebugProfile ? 740 : 676;
+            int minimumHeight = AppSettings.IsVsDebugProfile ? 779 : 715;
+            int diagnosticsHeight = AppSettings.IsVsDebugProfile ? 623 : 559;
+
+            ClientSize = new Size(1350, clientHeight);
+            MinimumSize = new Size(1080, minimumHeight);
 
             TabControl tabs = new()
             {
                 Location = new Point(914, 63),
                 Name = "tabDiagnostics",
-                Size = new Size(420, 493),
+                Size = new Size(420, diagnosticsHeight),
             };
 
             TabPage compactTab = new()
@@ -84,6 +88,8 @@ namespace GoblinFarmer
             PortAddDiagnosticRow(table, portDiagnosticLabels, "Failed/Interrupted", "FailedInterruptedState");
             PortAddDiagnosticRow(table, portDiagnosticLabels, "Route State", "RouteState", 42);
             PortAddDiagnosticRow(table, portDiagnosticLabels, "Combat State", "CombatState", 42);
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Goblin Tracker", "GoblinTracker", 42);
+            PortAddDiagnosticRow(table, portDiagnosticLabels, "Goblin Evidence", "GoblinEvidence", 42);
             PortAddDiagnosticRow(table, portDiagnosticLabels, "Failure Counter", "FailureCounter");
             PortAddDiagnosticRow(table, portDiagnosticLabels, "Diablo Running Status", "DiabloRunningStatus");
             PortAddDiagnosticRow(table, portDiagnosticLabels, "Active Workflow", "ActiveWorkflow", 42);
@@ -111,6 +117,8 @@ namespace GoblinFarmer
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Waiting Target", "WaitingConfirmationTarget");
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Retry State Active", "RetryStateActive");
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Failure Counter", "FailureCounter");
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Goblin Tracker", "GoblinTracker", 42);
+            PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Goblin Evidence", "GoblinEvidence", 42);
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Latest Log Path", "LatestLogPath", 42);
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Latest Screenshot Path", "LatestScreenshotPath", 42);
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Latest Failure Type", "LatestFailureScreenshotType");
@@ -194,6 +202,9 @@ namespace GoblinFarmer
             string diabloActiveStatus = PortDiabloIsActive() ? "Active" : "Not Active";
             string routeState = $"CurrentKey={PortDisplayLocation(portLastTeleportKey)}; NextKey={PortDisplayLocation(portQueuedTeleportKey)}; RetryKey={PortDisplayLocation(portQueuedRetryTeleportKey)}; FailsafeBlocked={portAutomationBlockedByTeleportFailsafe}";
             string combatState = $"Running={portCombatRunning}; Stopping={portCombatStopping}; Class={PortDisplayLocation(portCombatClass)}; LootLeftDown={portLootSpamLeftClickDown}; DemonHunterRightHeld={portDemonHunterRightHeldFromSafeRegion}; RuntimeRightHeld={portRuntimeRightMouseHeld}";
+            DiagnosticsSessionSnapshot sessionSnapshot = DebugManager.Session.Snapshot(DateTime.Now);
+            string goblinTracker = $"Goblins={sessionSnapshot.GoblinCount}; ActiveCombatTime={sessionSnapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}; GPH={sessionSnapshot.GoblinsPerHour:0.00}";
+            string goblinEvidence = $"Events={sessionSnapshot.GoblinEvidenceEventCount}; Last={(sessionSnapshot.GoblinEvidenceEventCount > 0 ? sessionSnapshot.LastGoblinEvidenceType.ToString() : "None")}; Confidence={sessionSnapshot.LastGoblinEvidenceConfidence:0.00}; Time={(sessionSnapshot.LastGoblinEvidenceTime.HasValue ? sessionSnapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}";
             string appStatus = lblAppStatus.Text.Replace("App Status:", "", StringComparison.OrdinalIgnoreCase).Trim();
             string activeWorkflow = string.IsNullOrWhiteSpace(portLastWorkflowStep)
                 ? appStatus
@@ -210,6 +221,8 @@ namespace GoblinFarmer
             PortSetDiagnosticLabel("FailedInterruptedState", failedInterruptedState);
             PortSetDiagnosticLabel("RouteState", routeState);
             PortSetDiagnosticLabel("CombatState", combatState);
+            PortSetDiagnosticLabel("GoblinTracker", goblinTracker);
+            PortSetDiagnosticLabel("GoblinEvidence", goblinEvidence);
             PortSetDiagnosticLabel("FailureCounter", PortFailureCount().ToString());
             PortSetDiagnosticLabel("DiabloRunningStatus", diabloRunning ? "Running" : "Not Running");
             PortSetDiagnosticLabel("ActiveWorkflow", activeWorkflow);
@@ -237,6 +250,8 @@ namespace GoblinFarmer
             PortSetRouteInspectorLabel("WaitingConfirmationTarget", waitingConfirmationTarget);
             PortSetRouteInspectorLabel("RetryStateActive", failedInterruptedState);
             PortSetRouteInspectorLabel("FailureCounter", PortFailureCount().ToString());
+            PortSetRouteInspectorLabel("GoblinTracker", goblinTracker);
+            PortSetRouteInspectorLabel("GoblinEvidence", goblinEvidence);
             PortSetRouteInspectorLabel("LatestLogPath", portDiagnosticLastLogFile);
             PortSetRouteInspectorLabel("LatestScreenshotPath", portDiagnosticLatestScreenshotPath);
             PortSetRouteInspectorLabel("LatestFailureScreenshotType", portDiagnosticLatestFailureScreenshotType);

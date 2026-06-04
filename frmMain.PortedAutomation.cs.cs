@@ -12,8 +12,10 @@ namespace GoblinFarmer
         private const int PortVkShift = 0x10;
         private const int PortVkCtrl = 0x11;
         private const int PortVkAlt = 0x12;
+        private const int PortVkG = 0x47;
         private const int PortVkM = 0x4D;
         private const int PortVkQ = 0x51;
+        private const int PortVkX = 0x58;
         private const int PortVkReturn = 0x0D;
         private const int PortVkEscape = 0x1B;
         private const int PortVkUp = 0x26;
@@ -81,6 +83,7 @@ namespace GoblinFarmer
         private volatile bool portSuppressSkill2KeyUp;
         private volatile bool portSkill1TeleportHandled;
         private volatile bool portSkill2CombatHandled;
+        private volatile bool portGoblinTrackerHotkeyHandled;
         private volatile bool portLootSpamLeftClickDown;
         private volatile bool portRuntimeLeftMouseHeld;
         private volatile bool portRuntimeRightMouseHeld;
@@ -134,6 +137,7 @@ namespace GoblinFarmer
         private bool? portLastDemonHunterDecisionAllowed;
         private bool? portLastLootSpamDecisionAllowed;
         private int portDemonHunterConsecutiveSuppressedDecisionLogs;
+        private bool portGoblinCalibrationHotkeyHandled;
         private Form? portSplashForm;
         private Label? portSplashLabel;
         private System.Windows.Forms.Timer? portSplashTimer;

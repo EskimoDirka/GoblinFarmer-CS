@@ -415,6 +415,64 @@ function Get-CurrentSessionInfo {
     }
 }
 
+function Get-GoblinTrackerInfo {
+    param([string[]]$RuntimeRoots)
+
+    $sessionPaths = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $RuntimeRoots) {
+        Add-UniquePath $sessionPaths (Join-Path $root "session-info.txt")
+    }
+
+    $sessionFile = $sessionPaths.ToArray() |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        ForEach-Object { Get-Item -LiteralPath $_ } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    $values = if ($null -ne $sessionFile) {
+        Read-KeyValueFile $sessionFile.FullName
+    }
+    else {
+        [ordered]@{}
+    }
+
+    $goblinCount = if ($values.Contains("GoblinCount") -and $values["GoblinCount"] -match '^\d+$') {
+        [int]$values["GoblinCount"]
+    }
+    else {
+        0
+    }
+
+    $activeCombatTime = if ($values.Contains("ActiveCombatTime") -and -not [string]::IsNullOrWhiteSpace($values["ActiveCombatTime"])) {
+        $values["ActiveCombatTime"]
+    }
+    else {
+        "00:00:00"
+    }
+
+    $gph = if ($values.Contains("GPH") -and -not [string]::IsNullOrWhiteSpace($values["GPH"])) {
+        $values["GPH"]
+    }
+    else {
+        "0.00"
+    }
+
+    return [pscustomobject]@{
+        GoblinCount = $goblinCount
+        ActiveCombatTime = $activeCombatTime
+        ActiveCombatTimeSeconds = if ($values.Contains("ActiveCombatTimeSeconds")) { $values["ActiveCombatTimeSeconds"] } else { "0" }
+        CombatStartTimeLocal = if ($values.Contains("CombatStartTimeLocal")) { $values["CombatStartTimeLocal"] } else { "" }
+        GPH = $gph
+        EvidenceEventCount = if ($values.Contains("GoblinEvidenceEventCount")) { $values["GoblinEvidenceEventCount"] } else { "0" }
+        LastEvidenceType = if ($values.Contains("LastGoblinEvidenceType")) { $values["LastGoblinEvidenceType"] } else { "None" }
+        LastEvidenceConfidence = if ($values.Contains("LastGoblinEvidenceConfidence")) { $values["LastGoblinEvidenceConfidence"] } else { "0.00" }
+        LastEvidenceTimeLocal = if ($values.Contains("LastGoblinEvidenceTimeLocal")) { $values["LastGoblinEvidenceTimeLocal"] } else { "" }
+        LastEvidenceScreenshotPath = if ($values.Contains("LastGoblinEvidenceScreenshotPath")) { $values["LastGoblinEvidenceScreenshotPath"] } else { "" }
+        EvidenceScreenshotFolder = if ($values.Contains("GoblinEvidenceScreenshotFolder")) { $values["GoblinEvidenceScreenshotFolder"] } else { "Debug/GoblinEvidence" }
+        Source = if ($null -ne $sessionFile) { $sessionFile.FullName } else { "none" }
+    }
+}
+
 function Format-ByteSize {
     param([long]$Bytes)
 
@@ -1358,18 +1416,26 @@ try {
     $sessionInfo = Get-CurrentSessionInfo $packageRuntimeRoots $latestLog
     $sessionStart = [DateTime]$sessionInfo.Start
     $sessionDuration = (Get-Date) - $sessionStart
+    $goblinTrackerInfo = Get-GoblinTrackerInfo $packageRuntimeRoots
     Write-Host "Session start: $($sessionStart.ToString('yyyy-MM-dd HH:mm:ss.fff zzz'))"
     Write-Host "Session source: $($sessionInfo.SourceKind) ($($sessionInfo.Source))"
     Write-Host "Session duration: $($sessionDuration.ToString('hh\:mm\:ss'))"
+    Write-Host "Goblin tracker: goblins=$($goblinTrackerInfo.GoblinCount); activeCombatTime=$($goblinTrackerInfo.ActiveCombatTime); gph=$($goblinTrackerInfo.GPH); source=$($goblinTrackerInfo.Source)"
 
     $screenshotFoldersList = New-Object System.Collections.Generic.List[string]
     $debugScreenshotFoldersList = New-Object System.Collections.Generic.List[string]
+    $goblinEvidenceFoldersList = New-Object System.Collections.Generic.List[string]
+    $goblinEvidenceSourceRootsList = New-Object System.Collections.Generic.List[string]
     foreach ($root in $packageRuntimeRoots) {
         Add-UniquePath $screenshotFoldersList (Join-Path $root "Screenshots")
         Add-UniquePath $debugScreenshotFoldersList (Join-Path $root "debug-screenshots")
+        Add-UniquePath $goblinEvidenceFoldersList (Join-Path $root "Debug\GoblinEvidence")
+        Add-UniquePath $goblinEvidenceSourceRootsList (Join-Path $root "Debug")
     }
     $screenshotFolders = $screenshotFoldersList.ToArray()
     $debugScreenshotFolders = $debugScreenshotFoldersList.ToArray()
+    $goblinEvidenceFolders = $goblinEvidenceFoldersList.ToArray()
+    $goblinEvidenceSourceRoots = $goblinEvidenceSourceRootsList.ToArray()
 
     Write-Step "Collecting latest screenshots"
     $allScreenshotCandidates = foreach ($folder in $screenshotFolders) {
@@ -1491,6 +1557,26 @@ try {
         Write-Host "Included debug screenshots: $debugScreenshotCount"
     }
 
+    Write-Step "Collecting goblin evidence screenshots"
+    $goblinEvidenceCandidates = foreach ($folder in $goblinEvidenceFolders) {
+        if (Test-Path -LiteralPath $folder -PathType Container) {
+            Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' }
+        }
+    }
+    $goblinEvidenceScreenshots = @($goblinEvidenceCandidates |
+        Where-Object { $_.LastWriteTime -ge $sessionStart -or $_.CreationTime -ge $sessionStart } |
+        Sort-Object LastWriteTime -Descending)
+    $selectedGoblinEvidenceFolder = if ($goblinEvidenceScreenshots.Count -gt 0) { Split-Path -Parent $goblinEvidenceScreenshots[0].FullName } elseif (-not [string]::IsNullOrWhiteSpace($goblinTrackerInfo.EvidenceScreenshotFolder)) { $goblinTrackerInfo.EvidenceScreenshotFolder } else { "none" }
+    Write-Host "Selected goblin evidence folder: $selectedGoblinEvidenceFolder"
+    $goblinEvidenceScreenshotCount = Copy-DebugScreenshotsToPackage $goblinEvidenceScreenshots $goblinEvidenceSourceRoots (Join-Path $stagingRoot "Debug")
+    if ($goblinEvidenceScreenshotCount -eq 0) {
+        Write-Host "No current-session goblin evidence screenshots found."
+    }
+    else {
+        Write-Host "Included goblin evidence screenshots: $goblinEvidenceScreenshotCount"
+    }
+
     Write-Step "Generating route failure summary"
     $routeFailureSummaryPath = Join-Path $stagingRoot "route-failure-summary.txt"
     New-RouteFailureSummary $latestLog $routeFailureSummaryPath
@@ -1541,6 +1627,18 @@ try {
             "Session start: $($sessionStart.ToString('yyyy-MM-dd HH:mm:ss.fff zzz'))",
             "Session start source: $($sessionInfo.SourceKind) ($($sessionInfo.Source))",
             "Session duration: $($sessionDuration.ToString('hh\:mm\:ss'))",
+            "Goblin tracker source: $($goblinTrackerInfo.Source)",
+            "Goblin tracker goblins found: $($goblinTrackerInfo.GoblinCount)",
+            "Goblin tracker active combat time: $($goblinTrackerInfo.ActiveCombatTime)",
+            "Goblin tracker active combat time seconds: $($goblinTrackerInfo.ActiveCombatTimeSeconds)",
+            "Goblin tracker combat start time: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.CombatStartTimeLocal)) { 'none' } else { $goblinTrackerInfo.CombatStartTimeLocal })",
+            "Goblin tracker GPH: $($goblinTrackerInfo.GPH)",
+            "Goblin evidence events detected: $($goblinTrackerInfo.EvidenceEventCount)",
+            "Goblin evidence last type: $($goblinTrackerInfo.LastEvidenceType)",
+            "Goblin evidence last confidence: $($goblinTrackerInfo.LastEvidenceConfidence)",
+            "Goblin evidence last time: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastEvidenceTimeLocal)) { 'none' } else { $goblinTrackerInfo.LastEvidenceTimeLocal })",
+            "Goblin evidence screenshot folder: $selectedGoblinEvidenceFolder",
+            "Goblin evidence last screenshot: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastEvidenceScreenshotPath)) { 'none' } else { $goblinTrackerInfo.LastEvidenceScreenshotPath })",
             "Log folders searched:",
             ($logFolders | ForEach-Object { "- $_" }),
             "Selected log folder: $selectedLogFolder",
@@ -1568,6 +1666,7 @@ try {
             "- Diagnostic screenshots included: $($diagnosticScreenshots.Count)",
             "- Normal debug screenshots included: $($normalScreenshots.Count)",
             "- Debug screenshots included: $debugScreenshotCount",
+            "- Goblin evidence screenshots included: $goblinEvidenceScreenshotCount",
             "- All discovered screenshots: $($allScreenshots.Count)",
             "- Current-session screenshots: $($sessionScreenshots.Count)",
             "- Excluded stale screenshots: $excludedStaleScreenshots",
@@ -1633,6 +1732,12 @@ Write-Host "Runtime root:        $resolvedRuntimeRoot"
 Write-Host "Resolved by:         $($runtimeRootInfo.Resolution)"
 Write-Host "Session start:       $($sessionStart.ToString('yyyy-MM-dd HH:mm:ss.fff zzz'))"
 Write-Host "Session duration:    $($sessionDuration.ToString('hh\:mm\:ss'))"
+Write-Host "Goblins found:       $($goblinTrackerInfo.GoblinCount)"
+Write-Host "Goblin active time:  $($goblinTrackerInfo.ActiveCombatTime)"
+Write-Host "Goblin GPH:          $($goblinTrackerInfo.GPH)"
+Write-Host "Evidence events:     $($goblinTrackerInfo.EvidenceEventCount)"
+Write-Host "Last evidence:       $($goblinTrackerInfo.LastEvidenceType) ($($goblinTrackerInfo.LastEvidenceConfidence))"
+Write-Host "Evidence folder:     $selectedGoblinEvidenceFolder"
 Write-Host "Latest log:          $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
 Write-Host "Selected log folder: $selectedLogFolder"
 Write-Host "Screenshot folder:   $selectedScreenshotFolder"
@@ -1643,6 +1748,7 @@ Write-Host "Success screenshots: $($successScreenshots.Count)"
 Write-Host "Diagnostic screenshots: $($diagnosticScreenshots.Count)"
 Write-Host "Normal screenshots:  $($normalScreenshots.Count)"
 Write-Host "Debug screenshots:   $debugScreenshotCount"
+Write-Host "Evidence screenshots:$goblinEvidenceScreenshotCount"
 Write-Host "Stale screenshots:   $excludedStaleScreenshots excluded"
 Write-Host "Debug screenshots on:$($debugSkipInfo.AppSettingsDebugScreenshots)"
 Write-Host "Keep screenshots on: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"
