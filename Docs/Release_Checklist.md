@@ -62,5 +62,6 @@ Use this before publishing a final Windows release.
 
 - [ ] Create or update the GitHub Release for `v1.3`.
 - [ ] Use `Docs/Release_v1.3.md` as the release body.
+- [ ] Confirm the README screenshot renders from `Docs/Goblin%20Farmer%20v1.3.0.png`.
 - [ ] Upload `GoblinFarmerSetup-1.3.0.exe` and, if useful, the portable `GoblinFarmer-1.3.0-win-x64-portable.zip`.
 - [ ] Confirm the release page links to the installer asset and shows the expected release notes.
