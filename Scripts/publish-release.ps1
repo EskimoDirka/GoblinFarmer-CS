@@ -125,7 +125,6 @@ $imagesPath = Join-Path $publishDir "Images"
 $configPath = Join-Path $publishDir "Config\AppSettings.json"
 $iconPath = Join-Path $publishDir "GoblinFarmerIcon.ico"
 $debugPackageScriptPath = Join-Path $publishDir "Scripts\create-debug-package.ps1"
-$debugPackageLauncherPath = Join-Path $publishDir "Scripts\create-debug-package.bat"
 
 if (!(Test-Path $exePath)) {
     Stop-Publish "Published executable missing: $exePath"
@@ -145,10 +144,6 @@ if (!(Test-Path $iconPath)) {
 
 if (!(Test-Path $debugPackageScriptPath)) {
     Stop-Publish "Published debug package script missing: $debugPackageScriptPath"
-}
-
-if (!(Test-Path $debugPackageLauncherPath)) {
-    Stop-Publish "Published debug package launcher missing: $debugPackageLauncherPath"
 }
 
 $exeVersionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath)
@@ -185,7 +180,6 @@ Write-Host "EXE file ver:   $($exeVersionInfo.FileVersion)"
 Write-Host "Config:         $configPath"
 Write-Host "Images:         $imagesPath"
 Write-Host "Debug package:  $debugPackageScriptPath"
-Write-Host "Debug launcher: $debugPackageLauncherPath"
 Write-Host "Installer out:  $installerOutput"
 Write-Host "Install target: %LOCALAPPDATA%\Programs\GoblinFarmer"
 Write-Host ""

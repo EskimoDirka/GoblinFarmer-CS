@@ -110,7 +110,6 @@
     <None Remove="Images\Teleport Function\Map Scan Region.jpg" />
     <None Remove="Images\Teleport Function\Map X Y Coordinates.txt" />
     <None Remove="Images\Teleport Function\World Map.png" />
-    <None Remove="Scripts\create-debug-package.bat" />
     <None Remove="Scripts\create-debug-package.ps1" />
   </ItemGroup>
 
@@ -387,19 +386,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="Scripts\create-debug-package.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
   </ItemGroup>
 
   <Target Name="ValidateReleasePublishScripts" AfterTargets="Publish">
     <Error
       Condition="!Exists('$(PublishDir)Scripts\create-debug-package.ps1')"
       Text="Published debug package script missing: $(PublishDir)Scripts\create-debug-package.ps1" />
-    <Error
-      Condition="!Exists('$(PublishDir)Scripts\create-debug-package.bat')"
-      Text="Published debug package launcher missing: $(PublishDir)Scripts\create-debug-package.bat" />
   </Target>
 
   <ItemGroup>

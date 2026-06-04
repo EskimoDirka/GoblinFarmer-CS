@@ -422,53 +422,7 @@ Status: Implemented and validated with Exit Game.
 
 ## Development Automation
 
-### Publish Script
-
-Create:
-
-scripts/publish-release.ps1
-
-Requirements:
-
-* [x] Build Release.
-* [x] Publish self-contained Release.
-* [x] Publish to `artifacts\publish\GoblinFarmer`.
-* [x] Verify Images folder exists.
-* [x] Verify executable exists.
-* [x] Verify icon exists.
-* [x] Display publish summary.
-* [x] Compile Inno Setup installer when `ISCC.exe` is installed.
-
-### GitHub Sync Script
-
-Script:
-
-`Scripts\GitHub Sync.ps1`
-
-Implemented behavior:
-
-* [x] Read the release version from `GoblinFarmer.csproj`.
-* [x] Run `dotnet build`.
-* [x] Run the publish script.
-* [x] Refresh the user executable from the published output while preserving runtime folders.
-* [x] Copy the latest published executable to `GitHub Upload\GoblinFarmer.exe`.
-* [x] Create `artifacts\GoblinFarmer-<version>-win-x64-portable.zip`.
-* [x] Commit and push tracked changes when changes exist.
-* [x] Keep tag/GitHub Release creation opt-in through `-CreateGitHubRelease`.
-
-### Exe Updater Script
-
-Script:
-
-`Scripts\Exe Updater.ps1`
-
-Implemented behavior:
-
-* [x] Publish a fresh self-contained Release payload for quick local test refreshes.
-* [x] Replace project-level `GoblinFarmer.exe` handoff copies.
-* [x] Refresh the local user app folder from the publish payload.
-* [x] Preserve existing runtime config, logs, screenshots, debug packages, and scan/session metadata.
-* [x] Provide `Scripts\Exe Updater.bat` as the double-click launcher.
+Local developer automation scripts are intentionally ignored by Git. Keep `Scripts\create-debug-package.ps1` tracked as the supported troubleshooting script for users and testers, and keep `Scripts\publish-release.ps1` tracked for release publishing.
 
 ---
 

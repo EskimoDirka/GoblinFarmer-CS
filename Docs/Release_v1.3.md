@@ -23,7 +23,6 @@
 * Added form user preferences under `User` in `Config\AppSettings.json`, including combat profile and Hotkeys checkbox states
 * Demon Hunter protected UI regions now suppress unsafe injected mouse clicks without stopping key rotation
 * Included the debug package script in published and installed builds
-* Added the routine GitHub sync helper for build, publish, executable refresh, portable zip creation, commit, and push
 
 ## Notes
 
@@ -32,5 +31,3 @@ GoblinFarmer v1.3 is considered a stable release focused on reliability, launch 
 The app is designed to support flexible install paths and configurable Diablo III, Battle.net, and Images paths. After installing, use the built-in `Verify Paths` button to confirm paths for the current machine.
 
 GoblinFarmer is designed to be resolution-scalable through image recognition regions and configurable path handling. Users should still validate behavior on unusual display, DPI, or multi-monitor setups.
-
-Routine GitHub syncs do not create a tag or GitHub Release by default. Use `Scripts\GitHub Sync.ps1 -CreateGitHubRelease` only when intentionally publishing a larger app milestone.

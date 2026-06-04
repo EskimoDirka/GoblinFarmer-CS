@@ -446,3 +446,9 @@ session-info.txt
 route-failure-summary.txt
 debug-package-manifest.txt
 debug-screenshot-manifest.txt
+
+# Local developer scripts
+Scripts/*
+!Scripts/create-debug-package.ps1
+!Scripts/publish-release.ps1
+!Scripts/.gitkeep
