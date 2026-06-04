@@ -4,11 +4,15 @@
 #endif
 #define SourceExe AddBackslash(SourceDir) + "GoblinFarmer.exe"
 #define SourceDebugPackageScript AddBackslash(SourceDir) + "Scripts\create-debug-package.ps1"
+#define SourceDebugPackageLauncher AddBackslash(SourceDir) + "Scripts\Create Debug Package.bat"
 #if !FileExists(SourceExe)
 #error "Published GoblinFarmer.exe was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
 #endif
 #if !FileExists(SourceDebugPackageScript)
 #error "Published Scripts\\create-debug-package.ps1 was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
+#endif
+#if !FileExists(SourceDebugPackageLauncher)
+#error "Published Scripts\\Create Debug Package.bat was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
 #endif
 #define MyAppFileVersion GetFileVersion(SourceExe)
 #if MyAppFileVersion == ""

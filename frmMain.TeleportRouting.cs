@@ -639,6 +639,11 @@ namespace GoblinFarmer
 
         private string PortFreshHotkeyRouteLocationScan(string queuedTarget = "")
         {
+            return PortFreshHotkeyRouteLocationScan(queuedTarget, out _);
+        }
+
+        private string PortFreshHotkeyRouteLocationScan(string queuedTarget, out PortLocationDetectionResult result)
+        {
             HashSet<string> refreshNames = PortRouteBlockingRefreshNames();
             foreach (string targetName in PortLocationNamesForTarget(queuedTarget))
             {
@@ -648,8 +653,16 @@ namespace GoblinFarmer
                 }
             }
 
+            if (PortQueuedTargetLooksLikeRouteEnd(queuedTarget))
+            {
+                foreach (string routeName in PortRouteEndGuardScanNames())
+                {
+                    refreshNames.Add(routeName);
+                }
+            }
+
             Dictionary<string, string> refreshTemplates = PortCurrentLocationTemplatesForNames(refreshNames);
-            PortLocationDetectionResult result = PortDetectCurrentLocationFromTemplatesDetailed(refreshTemplates, "hotkey current-location scan", logPerf: true, PortBlockedLocationConfidence);
+            result = PortDetectCurrentLocationFromTemplatesDetailed(refreshTemplates, "hotkey current-location scan", logPerf: true, PortBlockedLocationConfidence);
             if (!string.IsNullOrWhiteSpace(result.Detected))
             {
                 AppLogger.Info($"Hotkey fresh current-location scan: raw={result.Detected}; normalized={PortNormalizeBlockingLocation(result.Detected)}; display={PortDisplayLocation(PortDetectedLocationDisplayName(result.Detected))}; confidence={result.BestConfidence:0.000}; previousConfirmed={PortDisplayLocation(portLastConfirmedLocation)}; queuedTarget={PortDisplayLocation(queuedTarget)}; templatesScanned={result.TemplateCount}");
@@ -670,6 +683,47 @@ namespace GoblinFarmer
 
             AppLogger.Info($"Hotkey fresh current-location scan did not detect a route location: best={PortDisplayLocation(result.BestName)}; confidence={result.BestConfidence:0.000}; previousConfirmed={PortDisplayLocation(portLastConfirmedLocation)}; queuedTarget={PortDisplayLocation(queuedTarget)}; templatesScanned={result.TemplateCount}");
             return "";
+        }
+
+        private bool PortQueuedTargetLooksLikeRouteEnd(string queuedTarget)
+        {
+            return string.IsNullOrWhiteSpace(queuedTarget) ||
+                PortLocationKey(queuedTarget) == PortLocationKey("Unknown");
+        }
+
+        private HashSet<string> PortRouteEndGuardScanNames()
+        {
+            HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
+            foreach ((string currentLocation, string nextLocation) in portRouteNextTeleports)
+            {
+                names.Add(currentLocation);
+                names.Add(nextLocation);
+            }
+
+            return names;
+        }
+
+        private bool PortIsKnownRouteLocation(string location)
+        {
+            string key = PortLocationKey(PortGetRouteLocationForDetectedLocation(location));
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return false;
+            }
+
+            return portRouteNextTeleports.Keys.Any(routeLocation => key == PortLocationKey(routeLocation)) ||
+                portRouteNextTeleports.Values.Any(routeLocation => key == PortLocationKey(routeLocation));
+        }
+
+        private bool PortIsFinalRouteLocation(string location)
+        {
+            string routeLocation = PortGetRouteLocationForDetectedLocation(location);
+            if (!PortIsKnownRouteLocation(routeLocation))
+            {
+                return false;
+            }
+
+            return !portRouteNextTeleports.ContainsKey(routeLocation);
         }
 
         private HashSet<string> PortRouteBlockingRefreshNames()

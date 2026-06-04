@@ -353,8 +353,9 @@ namespace GoblinFarmer
             }
 
             string queuedBefore = PortTeleportLocationForKey(portQueuedTeleportKey);
+            string previousConfirmedBeforeHotkey = portLastConfirmedLocation;
             portHotkeyFreshRawLocation = "";
-            string freshRawLocation = PortFreshHotkeyRouteLocationScan(queuedBefore);
+            string freshRawLocation = PortFreshHotkeyRouteLocationScan(queuedBefore, out PortLocationDetectionResult freshScanResult);
             if (!string.IsNullOrWhiteSpace(freshRawLocation))
             {
                 portHotkeyFreshRawLocation = freshRawLocation;
@@ -367,11 +368,36 @@ namespace GoblinFarmer
                 target = advancedTarget;
             }
 
+            bool routeEndGuardCorrectedState = false;
+            if (!routeAdvancedFromFreshScan &&
+                PortQueuedTargetLooksLikeRouteEnd(queuedBefore) &&
+                portLastTeleportKey == PortLocationKey("Pandemonium Fortress Level 2"))
+            {
+                AppLogger.Info(
+                    $"TeleportNextRouteEndGuardEvaluate: previousConfirmedLocation={PortDisplayLocation(previousConfirmedBeforeHotkey)}; " +
+                    $"queuedTargetBeforeHotkey={PortDisplayLocation(queuedBefore)}; " +
+                    $"cachedCurrentLocation={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; " +
+                    $"freshDetectedLocation={PortDisplayLocation(freshRawLocation)}; " +
+                    $"freshDisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; " +
+                    $"freshScanBest={PortDisplayLocation(freshScanResult.BestName)}; " +
+                    $"freshScanConfidence={freshScanResult.BestConfidence:0.000}; " +
+                    $"freshScanResult={(string.IsNullOrWhiteSpace(freshRawLocation) ? "NoValidRouteLocation" : "ValidRouteLocation")}");
+                routeEndGuardCorrectedState = PortTryCorrectRouteEndFromFreshHotkeyScan(
+                    freshRawLocation,
+                    queuedBefore,
+                    freshScanResult,
+                    out string correctedRouteEndTarget);
+                if (routeEndGuardCorrectedState)
+                {
+                    target = correctedRouteEndTarget;
+                }
+            }
+
             bool freshScanMatchesQueuedTarget = PortLocationMatchesForArrival(freshRawLocation, queuedBefore);
             string freshTarget = routeAdvancedFromFreshScan || freshScanMatchesQueuedTarget
                 ? ""
                 : PortNextTeleportForConfirmedLocation("", freshRawLocation);
-            if (!string.IsNullOrWhiteSpace(freshTarget))
+            if (!routeEndGuardCorrectedState && !string.IsNullOrWhiteSpace(freshTarget))
             {
                 target = freshTarget;
             }
@@ -386,6 +412,41 @@ namespace GoblinFarmer
             {
                 if (portLastTeleportKey == PortLocationKey("Pandemonium Fortress Level 2"))
                 {
+                    if (!PortFreshHotkeyScanConfirmsRouteEnd(freshRawLocation))
+                    {
+                        AppLogger.Info(
+                            $"TeleportNextRouteEndGuardSuppressed: previousConfirmedLocation={PortDisplayLocation(previousConfirmedBeforeHotkey)}; " +
+                            $"queuedTargetBeforeHotkey={PortDisplayLocation(queuedBefore)}; " +
+                            $"cachedCurrentLocation={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; " +
+                            $"freshDetectedLocation={PortDisplayLocation(freshRawLocation)}; " +
+                            $"freshDisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; " +
+                            $"freshScanBest={PortDisplayLocation(freshScanResult.BestName)}; " +
+                            $"freshScanConfidence={freshScanResult.BestConfidence:0.000}; " +
+                            $"freshScanResult={(string.IsNullOrWhiteSpace(freshRawLocation) ? "NoValidRouteLocation" : "NotFinalRouteLocation")}; " +
+                            $"routeEndAccepted=False; recomputedQueuedTarget=Unknown; reason=fresh scan did not confirm final route location");
+                        AddWorkflowStep("Teleport Next ignored: route end not confirmed");
+                        return;
+                    }
+
+                    string freshRouteEndButtonLocation = PortGetButtonLocationForDetectedLocation(freshRawLocation);
+                    if (!string.IsNullOrWhiteSpace(freshRouteEndButtonLocation))
+                    {
+                        portLastConfirmedLocation = freshRawLocation;
+                        portLastTeleportKey = PortLocationKey(freshRouteEndButtonLocation);
+                        portQueuedTeleportKey = "";
+                        portLastRouteDecisionOutput = "Unknown";
+                        PortApplyTeleportButtonColors();
+                    }
+
+                    AppLogger.Info(
+                        $"TeleportNextRouteEndGuardAccepted: previousConfirmedLocation={PortDisplayLocation(previousConfirmedBeforeHotkey)}; " +
+                        $"queuedTargetBeforeHotkey={PortDisplayLocation(queuedBefore)}; " +
+                        $"cachedCurrentLocation={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; " +
+                        $"freshDetectedLocation={PortDisplayLocation(freshRawLocation)}; " +
+                        $"freshDisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; " +
+                        $"freshScanBest={PortDisplayLocation(freshScanResult.BestName)}; " +
+                        $"freshScanConfidence={freshScanResult.BestConfidence:0.000}; " +
+                        $"freshScanResult=FinalRouteLocationConfirmed; routeEndAccepted=True; recomputedQueuedTarget=Unknown");
                     AppLogger.Info("Teleport Next hotkey reached route end; starting Make New Game flow");
                     AddWorkflowStep("Teleport Next: Make New Game");
                     _ = PortRunAutomationAsync(PortMakeNewGameFlow);
@@ -397,7 +458,7 @@ namespace GoblinFarmer
                 return;
             }
 
-            AppLogger.Info($"Teleport Next hotkey queued/next teleport: {target}; freshRawLocation={PortDisplayLocation(freshRawLocation)}; freshDisplay={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; queuedBefore={PortDisplayLocation(queuedBefore)}; routeAdvancedFromFreshScan={routeAdvancedFromFreshScan}");
+            AppLogger.Info($"Teleport Next hotkey queued/next teleport: {target}; freshRawLocation={PortDisplayLocation(freshRawLocation)}; freshDisplay={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; queuedBefore={PortDisplayLocation(queuedBefore)}; routeAdvancedFromFreshScan={routeAdvancedFromFreshScan}; routeEndGuardCorrectedState={routeEndGuardCorrectedState}");
             AddWorkflowStep($"Teleport Next: {target}");
             bool teleportStarted = !isAutomationRunning && !portCombatRunning && IsDiabloRunning();
             if (routeAdvancedFromFreshScan)

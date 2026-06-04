@@ -1,4 +1,5 @@
 param(
+    [string]$RuntimeRoot = "",
     [int]$MaxScreenshots = 10,
     [int]$MaxFailureScreenshots = 10,
     [int]$MaxSuccessScreenshots = 10,
@@ -94,17 +95,285 @@ function Read-KeyValueFile {
     return $values
 }
 
+function Resolve-FullPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    try {
+        if (Test-Path -LiteralPath $Path) {
+            return (Resolve-Path -LiteralPath $Path).Path
+        }
+
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+    catch {
+        return $Path
+    }
+}
+
+function Add-UniquePath {
+    param(
+        [System.Collections.Generic.List[string]]$Paths,
+        [string]$Path
+    )
+
+    $fullPath = Resolve-FullPath $Path
+    if ([string]::IsNullOrWhiteSpace($fullPath)) {
+        return
+    }
+
+    foreach ($existingPath in $Paths) {
+        if ([string]::Equals($existingPath, $fullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+    }
+
+    [void]$Paths.Add($fullPath)
+}
+
+function Test-SourceCheckoutRoot {
+    param([string]$Path)
+
+    return (Test-Path -LiteralPath (Join-Path $Path ".git") -PathType Container) -or
+        ($null -ne (Get-ChildItem -LiteralPath $Path -Filter "*.csproj" -File -ErrorAction SilentlyContinue | Select-Object -First 1))
+}
+
+function Get-RuntimeRootSignals {
+    param([string]$Path)
+
+    $signals = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Container)) {
+        return @()
+    }
+
+    if (Test-Path -LiteralPath (Join-Path $Path "Config\AppSettings.json") -PathType Leaf) {
+        [void]$signals.Add("Config\AppSettings.json")
+    }
+    if (Test-Path -LiteralPath (Join-Path $Path "session-info.txt") -PathType Leaf) {
+        [void]$signals.Add("session-info.txt")
+    }
+    if (Test-Path -LiteralPath (Join-Path $Path "Logs") -PathType Container) {
+        $latestLog = Get-LatestFileFromFolders @((Join-Path $Path "Logs")) @("*.log", "*.txt")
+        if ($null -ne $latestLog) {
+            [void]$signals.Add("Logs\$($latestLog.Name)")
+        }
+        else {
+            [void]$signals.Add("Logs")
+        }
+    }
+    if (Test-Path -LiteralPath (Join-Path $Path "Screenshots") -PathType Container) {
+        [void]$signals.Add("Screenshots")
+    }
+    if (Test-Path -LiteralPath (Join-Path $Path "debug-screenshots") -PathType Container) {
+        [void]$signals.Add("debug-screenshots")
+    }
+    if (Test-Path -LiteralPath (Join-Path $Path "GoblinFarmer.exe") -PathType Leaf) {
+        [void]$signals.Add("GoblinFarmer.exe")
+    }
+
+    return $signals.ToArray()
+}
+
+function Get-RuntimeRootScore {
+    param([string]$Path)
+
+    $score = 0
+    foreach ($signal in @(Get-RuntimeRootSignals $Path)) {
+        if ($signal -eq "Config\AppSettings.json" -or $signal -eq "session-info.txt") {
+            $score += 10
+        }
+        elseif ($signal -like "Logs*") {
+            $score += 8
+        }
+        elseif ($signal -eq "GoblinFarmer.exe") {
+            $score += 5
+        }
+        else {
+            $score += 3
+        }
+    }
+
+    return $score
+}
+
+function Get-BuildRuntimeRootCandidates {
+    param([string]$Root)
+
+    $paths = New-Object System.Collections.Generic.List[string]
+    foreach ($configuration in @("Debug", "Release")) {
+        $configurationRoot = Join-Path $Root "bin\$configuration"
+        if (Test-Path -LiteralPath $configurationRoot -PathType Container) {
+            Get-ChildItem -LiteralPath $configurationRoot -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -like "net*-windows" } |
+                ForEach-Object { Add-UniquePath $paths $_.FullName }
+        }
+
+        Add-UniquePath $paths (Join-Path $Root "bin\$configuration\net10.0-windows")
+    }
+
+    return $paths.ToArray()
+}
+
+function Get-NearbyRuntimeRootCandidates {
+    param(
+        [string]$ScriptRoot,
+        [string]$SourceRoot
+    )
+
+    $paths = New-Object System.Collections.Generic.List[string]
+    Add-UniquePath $paths $ScriptRoot
+    Add-UniquePath $paths $SourceRoot
+
+    foreach ($root in @($ScriptRoot, $SourceRoot)) {
+        foreach ($buildRoot in @(Get-BuildRuntimeRootCandidates $root)) {
+            Add-UniquePath $paths $buildRoot
+        }
+    }
+
+    return $paths.ToArray()
+}
+
+function Find-InferredRuntimeRoot {
+    param([string[]]$Candidates)
+
+    $best = $null
+    foreach ($candidate in $Candidates) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Container)) {
+            continue
+        }
+
+        $score = Get-RuntimeRootScore $candidate
+        if ($score -le 0) {
+            continue
+        }
+
+        $latestLog = Get-LatestFileFromFolders @((Join-Path $candidate "Logs")) @("*.log", "*.txt")
+        $latestLogTime = if ($null -ne $latestLog) { $latestLog.LastWriteTime } else { [DateTime]::MinValue }
+
+        $candidateInfo = [pscustomobject]@{
+            Path = (Resolve-FullPath $candidate)
+            Score = $score
+            LatestLogTime = $latestLogTime
+            Signals = (@(Get-RuntimeRootSignals $candidate) -join ", ")
+        }
+
+        if ($null -eq $best -or
+            $candidateInfo.Score -gt $best.Score -or
+            ($candidateInfo.Score -eq $best.Score -and $candidateInfo.LatestLogTime -gt $best.LatestLogTime)) {
+            $best = $candidateInfo
+        }
+    }
+
+    return $best
+}
+
+function Resolve-RuntimeRoot {
+    param(
+        [string]$RequestedRuntimeRoot,
+        [string]$ScriptRoot
+    )
+
+    $scriptRootFull = Resolve-FullPath $ScriptRoot
+    $scriptRootName = Split-Path -Leaf $scriptRootFull
+    $sourceRoot = $scriptRootFull
+    if ([string]::Equals($scriptRootName, "Scripts", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $sourceRoot = Resolve-FullPath (Join-Path $scriptRootFull "..")
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedRuntimeRoot)) {
+        $requestedRoot = Resolve-FullPath $RequestedRuntimeRoot
+        if (-not (Test-Path -LiteralPath $requestedRoot -PathType Container)) {
+            throw "RuntimeRoot does not exist or is not a folder: $requestedRoot"
+        }
+
+        return [pscustomobject]@{
+            RuntimeRoot = $requestedRoot
+            SourceRoot = $sourceRoot
+            Resolution = "-RuntimeRoot parameter"
+            Signals = (@(Get-RuntimeRootSignals $requestedRoot) -join ", ")
+            IsInstalledFolder = $false
+        }
+    }
+
+    if ([string]::Equals($scriptRootName, "Scripts", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $isInstalledFolder = -not (Test-SourceCheckoutRoot $sourceRoot)
+        return [pscustomobject]@{
+            RuntimeRoot = $sourceRoot
+            SourceRoot = $sourceRoot
+            Resolution = "Scripts folder parent"
+            Signals = (@(Get-RuntimeRootSignals $sourceRoot) -join ", ")
+            IsInstalledFolder = $isInstalledFolder
+        }
+    }
+
+    if (-not [string]::Equals($scriptRootName, "Scripts", [System.StringComparison]::OrdinalIgnoreCase) -and
+        (Get-RuntimeRootScore $scriptRootFull) -gt 0) {
+        return [pscustomobject]@{
+            RuntimeRoot = $scriptRootFull
+            SourceRoot = $sourceRoot
+            Resolution = "script app root"
+            Signals = (@(Get-RuntimeRootSignals $scriptRootFull) -join ", ")
+            IsInstalledFolder = (-not (Test-SourceCheckoutRoot $scriptRootFull))
+        }
+    }
+
+    $nearbyCandidates = Get-NearbyRuntimeRootCandidates $scriptRootFull $sourceRoot
+    $inferred = Find-InferredRuntimeRoot $nearbyCandidates
+    if ($null -ne $inferred) {
+        return [pscustomobject]@{
+            RuntimeRoot = $inferred.Path
+            SourceRoot = $sourceRoot
+            Resolution = "nearby runtime markers: $($inferred.Signals)"
+            Signals = $inferred.Signals
+            IsInstalledFolder = $false
+        }
+    }
+
+    return [pscustomobject]@{
+        RuntimeRoot = $sourceRoot
+        SourceRoot = $sourceRoot
+        Resolution = "source root fallback with build-output search paths"
+        Signals = ""
+        IsInstalledFolder = $false
+    }
+}
+
+function Get-PackageRuntimeRoots {
+    param(
+        [string]$RuntimeRoot,
+        [string]$SourceRoot
+    )
+
+    $paths = New-Object System.Collections.Generic.List[string]
+    Add-UniquePath $paths $RuntimeRoot
+    Add-UniquePath $paths $SourceRoot
+
+    foreach ($buildRoot in @(Get-BuildRuntimeRootCandidates $SourceRoot)) {
+        Add-UniquePath $paths $buildRoot
+    }
+
+    foreach ($buildRoot in @(Get-BuildRuntimeRootCandidates $RuntimeRoot)) {
+        Add-UniquePath $paths $buildRoot
+    }
+
+    return $paths.ToArray()
+}
+
 function Get-CurrentSessionInfo {
     param(
-        [string]$RepoRoot,
+        [string[]]$RuntimeRoots,
         [System.IO.FileInfo]$LatestLog
     )
 
-    $sessionFiles = @(
-        (Join-Path $RepoRoot "session-info.txt"),
-        (Join-Path $RepoRoot "bin\Debug\net10.0-windows\session-info.txt"),
-        (Join-Path $RepoRoot "bin\Release\net10.0-windows\session-info.txt")
-    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    $sessionPaths = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $RuntimeRoots) {
+        Add-UniquePath $sessionPaths (Join-Path $root "session-info.txt")
+    }
+
+    $sessionFiles = $sessionPaths.ToArray() | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
         ForEach-Object { Get-Item -LiteralPath $_ } |
         Sort-Object LastWriteTime -Descending
 
@@ -359,11 +628,16 @@ function Save-GitOutput {
     param(
         [string]$RepoRoot,
         [string]$OutputPath,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [string]$SkipReason = ""
     )
 
     if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot ".git") -PathType Container)) {
-        "Not a git checkout; git $($Arguments -join ' ') skipped for installed/debug-package run." | Out-File -FilePath $OutputPath -Encoding utf8
+        if ([string]::IsNullOrWhiteSpace($SkipReason)) {
+            $SkipReason = "Not a git checkout."
+        }
+
+        "$SkipReason git $($Arguments -join ' ') skipped." | Out-File -FilePath $OutputPath -Encoding utf8
         return $false
     }
 
@@ -1001,17 +1275,26 @@ if ($MaxDiagnosticScreenshots -lt 1) {
     $MaxDiagnosticScreenshots = 1
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$runtimeRootInfo = Resolve-RuntimeRoot $RuntimeRoot $PSScriptRoot
+$repoRoot = $runtimeRootInfo.SourceRoot
+$resolvedRuntimeRoot = $runtimeRootInfo.RuntimeRoot
+$packageRuntimeRoots = Get-PackageRuntimeRoots $resolvedRuntimeRoot $repoRoot
+$gitSkipReason = if ($runtimeRootInfo.IsInstalledFolder) { "Installed Scripts folder run; git metadata is not available from the release runtime." } else { "Not a git checkout at source root $repoRoot." }
 Write-Host "PSScriptRoot = $PSScriptRoot"
-Write-Host "RepoRoot     = $repoRoot"
+Write-Host "SourceRoot   = $repoRoot"
+Write-Host "RuntimeRoot  = $resolvedRuntimeRoot"
+Write-Host "Resolved by  = $($runtimeRootInfo.Resolution)"
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$packageDirectory = Join-Path $repoRoot "DebugPackages"
+$packageDirectory = Join-Path $resolvedRuntimeRoot "DebugPackages"
 $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) "GoblinFarmer_Debug_$timestamp"
 $zipPath = Join-Path $packageDirectory "GoblinFarmer_Debug_$timestamp.zip"
 $manifestPath = Join-Path $stagingRoot "debug-package-manifest.txt"
 
 Write-Host "GoblinFarmer Debug Package Generator"
-Write-Host "Repository: $repoRoot"
+Write-Host "Source root: $repoRoot"
+Write-Host "Runtime root: $resolvedRuntimeRoot"
+Write-Host "Runtime root resolution: $($runtimeRootInfo.Resolution)"
+Write-Host "Runtime root signals: $(if ([string]::IsNullOrWhiteSpace($runtimeRootInfo.Signals)) { 'none' } else { $runtimeRootInfo.Signals })"
 Write-Host "Timestamp: $timestamp"
 Write-Host "Max normal screenshots: $MaxScreenshots"
 Write-Host "Max failure screenshots: $MaxFailureScreenshots"
@@ -1031,11 +1314,20 @@ try {
     [void](Copy-PackageFile $repoRoot $stagingRoot "Docs\TEST_CHECKLIST.md" "Docs\TEST_CHECKLIST.md")
     [void](Copy-PackageFile $repoRoot $stagingRoot "Docs\TODO.md" "Docs\TODO.md")
 
-    $logFolders = @(
-        (Join-Path $repoRoot "Logs"),
-        (Join-Path $repoRoot "bin\Debug\net10.0-windows\Logs"),
-        (Join-Path $repoRoot "bin\Release\net10.0-windows\Logs")
-    )
+    Write-Step "Collecting runtime metadata"
+    $runtimeSessionInfoIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "session-info.txt" "session-info.txt"
+    $runtimeAppSettingsIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "Config\AppSettings.json" "Config\AppSettings.json"
+
+    $logFoldersList = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $packageRuntimeRoots) {
+        Add-UniquePath $logFoldersList (Join-Path $root "Logs")
+    }
+    $logFolders = $logFoldersList.ToArray()
+
+    Write-Host "Log folders searched:"
+    foreach ($folder in $logFolders) {
+        Write-Host "  $folder"
+    }
 
     Write-Step "Collecting latest log"
     $latestLog = Get-LatestFileFromFolders $logFolders @("*.log", "*.txt")
@@ -1048,8 +1340,11 @@ try {
         Get-Content -LiteralPath $latestLog.FullName |
             ForEach-Object { Convert-RetiredCombatDiagnosticLine $_ } |
             Out-File -FilePath (Join-Path $logDestinationDirectory $latestLog.Name) -Encoding utf8
-        Write-Host "Included latest log: $($latestLog.Name)"
+        Write-Host "Included latest log: $($latestLog.FullName)"
     }
+    $selectedLogFolder = if ($null -ne $latestLog) { Split-Path -Parent $latestLog.FullName } else { "none" }
+    Write-Host "Selected log folder: $selectedLogFolder"
+    Write-Host "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
 
     $debugSkipInfo = Get-DebugScreenshotSkipInfo $latestLog
     Write-Host "Debug screenshots setting from log: $($debugSkipInfo.AppSettingsDebugScreenshots)"
@@ -1060,24 +1355,21 @@ try {
         Write-Warning "Latest log contains skipped screenshot captures: DebugScreenshotSkipped=$($debugSkipInfo.SkippedByConfigCount); DiagnosticAppSettings=$($debugSkipInfo.DiagnosticSkippedByAppSettingsCount); DiagnosticKeepSetting=$($debugSkipInfo.DiagnosticSkippedByKeepSettingCount)."
     }
 
-    $sessionInfo = Get-CurrentSessionInfo $repoRoot $latestLog
+    $sessionInfo = Get-CurrentSessionInfo $packageRuntimeRoots $latestLog
     $sessionStart = [DateTime]$sessionInfo.Start
     $sessionDuration = (Get-Date) - $sessionStart
     Write-Host "Session start: $($sessionStart.ToString('yyyy-MM-dd HH:mm:ss.fff zzz'))"
     Write-Host "Session source: $($sessionInfo.SourceKind) ($($sessionInfo.Source))"
     Write-Host "Session duration: $($sessionDuration.ToString('hh\:mm\:ss'))"
 
-    $screenshotFolders = @(
-        (Join-Path $repoRoot "Screenshots"),
-        (Join-Path $repoRoot "bin\Debug\net10.0-windows\Screenshots"),
-        (Join-Path $repoRoot "bin\Release\net10.0-windows\Screenshots")
-    )
-
-    $debugScreenshotFolders = @(
-        (Join-Path $repoRoot "debug-screenshots"),
-        (Join-Path $repoRoot "bin\Debug\net10.0-windows\debug-screenshots"),
-        (Join-Path $repoRoot "bin\Release\net10.0-windows\debug-screenshots")
-    )
+    $screenshotFoldersList = New-Object System.Collections.Generic.List[string]
+    $debugScreenshotFoldersList = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $packageRuntimeRoots) {
+        Add-UniquePath $screenshotFoldersList (Join-Path $root "Screenshots")
+        Add-UniquePath $debugScreenshotFoldersList (Join-Path $root "debug-screenshots")
+    }
+    $screenshotFolders = $screenshotFoldersList.ToArray()
+    $debugScreenshotFolders = $debugScreenshotFoldersList.ToArray()
 
     Write-Step "Collecting latest screenshots"
     $allScreenshotCandidates = foreach ($folder in $screenshotFolders) {
@@ -1095,6 +1387,12 @@ try {
     Write-Host "All discovered screenshots: $($allScreenshots.Count)"
     Write-Host "Current-session screenshots: $($sessionScreenshots.Count)"
     Write-Host "Excluded stale screenshots: $excludedStaleScreenshots"
+    $latestScreenshotForFolder = @($sessionScreenshots | Select-Object -First 1)
+    if ($latestScreenshotForFolder.Count -eq 0) {
+        $latestScreenshotForFolder = @($allScreenshots | Select-Object -First 1)
+    }
+    $selectedScreenshotFolder = if ($latestScreenshotForFolder.Count -gt 0) { Split-Path -Parent $latestScreenshotForFolder[0].FullName } else { "none" }
+    Write-Host "Selected screenshot folder: $selectedScreenshotFolder"
 
     $failureGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "FAILURE" $MaxFailureScreenshots)
     $successGroups = @(Select-DiagnosticScreenshotGroups $sessionScreenshots "SUCCESS" $MaxSuccessScreenshots)
@@ -1183,6 +1481,8 @@ try {
         Where-Object { $_.LastWriteTime -ge $sessionStart -or $_.CreationTime -ge $sessionStart } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 50)
+    $selectedDebugScreenshotFolder = if ($debugScreenshots.Count -gt 0) { Split-Path -Parent $debugScreenshots[0].FullName } else { "none" }
+    Write-Host "Selected debug screenshot folder: $selectedDebugScreenshotFolder"
     $debugScreenshotCount = Copy-DebugScreenshotsToPackage $debugScreenshots $debugScreenshotFolders (Join-Path $stagingRoot "debug-screenshots")
     if ($debugScreenshotCount -eq 0) {
         Write-Warning "No current-session debug-screenshots found."
@@ -1197,8 +1497,19 @@ try {
     Write-Host "Included route failure summary: route-failure-summary.txt"
 
     Write-Step "Capturing git state"
-    $gitStatusCaptured = Save-GitOutput $repoRoot (Join-Path $stagingRoot "git-status.txt") @("status", "--short")
-    $gitLogCaptured = Save-GitOutput $repoRoot (Join-Path $stagingRoot "git-log.txt") @("log", "--oneline", "--decorate", "-n", "25")
+    $gitStatusCaptured = Save-GitOutput $repoRoot (Join-Path $stagingRoot "git-status.txt") @("status", "--short") $gitSkipReason
+    $gitLogCaptured = Save-GitOutput $repoRoot (Join-Path $stagingRoot "git-log.txt") @("log", "--oneline", "--decorate", "-n", "25") $gitSkipReason
+    $gitSkippedBecauseInstalled = $runtimeRootInfo.IsInstalledFolder -and (-not $gitStatusCaptured) -and (-not $gitLogCaptured)
+    $gitMetadataStatus = if ($gitStatusCaptured -or $gitLogCaptured) {
+        "Included"
+    }
+    elseif ($gitSkippedBecauseInstalled) {
+        "Skipped (installed folder run)"
+    }
+    else {
+        "Skipped ($gitSkipReason)"
+    }
+    Write-Host "Git metadata: $gitMetadataStatus"
 
     if (-not (Test-Path -LiteralPath $packageDirectory)) {
         New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
@@ -1220,13 +1531,26 @@ try {
         @(
             "GoblinFarmer Debug Package",
             "Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')",
-            "Repository: $repoRoot",
+            "Source root: $repoRoot",
+            "Resolved runtime root: $resolvedRuntimeRoot",
+            "Runtime root resolution: $($runtimeRootInfo.Resolution)",
+            "Runtime root signals: $(if ([string]::IsNullOrWhiteSpace($runtimeRootInfo.Signals)) { 'none' } else { $runtimeRootInfo.Signals })",
             "Package: $zipPath",
             "Package size: $PackageSizeDisplay",
             "Package size bytes: $PackageSizeBytes",
             "Session start: $($sessionStart.ToString('yyyy-MM-dd HH:mm:ss.fff zzz'))",
             "Session start source: $($sessionInfo.SourceKind) ($($sessionInfo.Source))",
             "Session duration: $($sessionDuration.ToString('hh\:mm\:ss'))",
+            "Log folders searched:",
+            ($logFolders | ForEach-Object { "- $_" }),
+            "Selected log folder: $selectedLogFolder",
+            "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
+            "Selected screenshot folder: $selectedScreenshotFolder",
+            "Selected debug screenshot folder: $selectedDebugScreenshotFolder",
+            "Runtime session-info included: $runtimeSessionInfoIncluded",
+            "Runtime AppSettings included: $runtimeAppSettingsIncluded",
+            "Git metadata included/skipped: $gitMetadataStatus",
+            "Git metadata skipped because installed folder: $gitSkippedBecauseInstalled",
             "",
             "Included files:",
             "- AGENTS.md",
@@ -1305,9 +1629,14 @@ Write-Host ""
 Write-Host "========== Debug Package Summary =========="
 Write-Host "Package path:        $zipPath"
 Write-Host "Package size:        $packageSizeDisplay ($packageSizeBytes bytes)"
+Write-Host "Runtime root:        $resolvedRuntimeRoot"
+Write-Host "Resolved by:         $($runtimeRootInfo.Resolution)"
 Write-Host "Session start:       $($sessionStart.ToString('yyyy-MM-dd HH:mm:ss.fff zzz'))"
 Write-Host "Session duration:    $($sessionDuration.ToString('hh\:mm\:ss'))"
-Write-Host "Latest log:          $(if ($null -ne $latestLog) { $latestLog.Name } else { 'none' })"
+Write-Host "Latest log:          $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
+Write-Host "Selected log folder: $selectedLogFolder"
+Write-Host "Screenshot folder:   $selectedScreenshotFolder"
+Write-Host "Debug shot folder:   $selectedDebugScreenshotFolder"
 Write-Host "Total screenshots:   $totalScreenshotCount"
 Write-Host "Failure screenshots: $($failureScreenshots.Count)"
 Write-Host "Success screenshots: $($successScreenshots.Count)"
@@ -1327,5 +1656,7 @@ Write-Host "Skipped screenshots: DebugScreenshotSkipped=$($debugSkipInfo.Skipped
 Write-Host "Latest failure type: $latestFailureType"
 Write-Host "Git status captured: $gitStatusCaptured"
 Write-Host "Git log captured:    $gitLogCaptured"
+Write-Host "Git metadata:        $gitMetadataStatus"
+Write-Host "Git skipped installed: $gitSkippedBecauseInstalled"
 Write-Host "Manifest:            debug-package-manifest.txt"
 Write-Host "==========================================="

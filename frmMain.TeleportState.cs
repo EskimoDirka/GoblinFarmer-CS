@@ -116,6 +116,56 @@ namespace GoblinFarmer
             return true;
         }
 
+        private bool PortTryCorrectRouteEndFromFreshHotkeyScan(
+            string freshRawLocation,
+            string queuedTarget,
+            PortLocationDetectionResult freshScanResult,
+            out string correctedTarget)
+        {
+            correctedTarget = "";
+            string recomputedTarget = PortNextTeleportForConfirmedLocation("", freshRawLocation);
+            if (string.IsNullOrWhiteSpace(freshRawLocation) ||
+                string.IsNullOrWhiteSpace(recomputedTarget) ||
+                !PortIsKnownRouteLocation(freshRawLocation))
+            {
+                return false;
+            }
+
+            string previousConfirmedLocation = portLastConfirmedLocation;
+            string buttonLocation = PortGetButtonLocationForDetectedLocation(freshRawLocation);
+            if (string.IsNullOrWhiteSpace(buttonLocation))
+            {
+                buttonLocation = PortGetRouteLocationForDetectedLocation(freshRawLocation);
+            }
+
+            portLastConfirmedLocation = freshRawLocation;
+            portLastTeleportKey = PortLocationKey(buttonLocation);
+            portQueuedTeleportKey = PortLocationKey(recomputedTarget);
+            portLastRouteDecisionOutput = PortDisplayLocation(recomputedTarget);
+            correctedTarget = recomputedTarget;
+
+            AppLogger.Info(
+                $"TeleportNextRouteEndGuardSuppressed: previousConfirmedLocation={PortDisplayLocation(previousConfirmedLocation)}; " +
+                $"queuedTargetBeforeHotkey={PortDisplayLocation(queuedTarget)}; " +
+                $"freshDetectedLocation={PortDisplayLocation(freshRawLocation)}; " +
+                $"freshDisplayLocation={PortDisplayLocation(PortDetectedLocationDisplayName(freshRawLocation))}; " +
+                $"freshScanBest={PortDisplayLocation(freshScanResult.BestName)}; " +
+                $"freshScanConfidence={freshScanResult.BestConfidence:0.000}; " +
+                $"freshScanResult=ValidNonFinalRouteLocation; " +
+                $"correctedCurrentLocation={PortDisplayLocation(buttonLocation)}; " +
+                $"recomputedQueuedTarget={PortDisplayLocation(recomputedTarget)}; " +
+                $"routeEndAccepted=False");
+            PortClearPreservedTeleportRetry("route-end guard corrected route state from fresh current-location scan");
+            PortApplyTeleportButtonColors();
+            return true;
+        }
+
+        private bool PortFreshHotkeyScanConfirmsRouteEnd(string freshRawLocation)
+        {
+            return !string.IsNullOrWhiteSpace(freshRawLocation) &&
+                PortIsFinalRouteLocation(freshRawLocation);
+        }
+
         private void PortPreserveTeleportRetry(string intendedLocation, string preservedCurrentKey, string preservedQueuedKey, string reason)
         {
             if (InvokeRequired)

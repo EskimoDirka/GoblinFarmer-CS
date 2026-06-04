@@ -450,5 +450,6 @@ debug-screenshot-manifest.txt
 # Local developer scripts
 Scripts/*
 !Scripts/create-debug-package.ps1
+!Scripts/Create Debug Package.bat
 !Scripts/publish-release.ps1
 !Scripts/.gitkeep
