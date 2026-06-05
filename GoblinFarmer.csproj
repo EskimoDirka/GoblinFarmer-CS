@@ -152,6 +152,7 @@
     </Content>
     <Content Include="Images\Goblin Evidence\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
     <Content Include="Images\Current Location\Ancient Waterway.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

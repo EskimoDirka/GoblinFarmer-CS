@@ -5,7 +5,8 @@ param(
     [int]$MaxSuccessScreenshots = 0,
     [int]$MaxDiagnosticScreenshots = 10,
     [switch]$IncludeSuccessScreenshots,
-    [int]$MaxGoblinEvidenceFullImages = 0
+    [int]$MaxGoblinEvidenceFullImages = 0,
+    [int]$MaxGoblinObservationDiagnosticCrops = 12
 )
 
 $ErrorActionPreference = "Stop"
@@ -483,6 +484,37 @@ function Get-GoblinTrackerInfo {
         LastEvidenceScreenshotPath = if ($values.Contains("LastGoblinEvidenceScreenshotPath")) { $values["LastGoblinEvidenceScreenshotPath"] } else { "" }
         EvidenceScreenshotFolder = if ($values.Contains("GoblinEvidenceScreenshotFolder")) { $values["GoblinEvidenceScreenshotFolder"] } else { "Debug/GoblinEvidence" }
         Source = if ($null -ne $sessionFile) { $sessionFile.FullName } else { "none" }
+    }
+}
+
+function Get-GoblinEvidenceMissingTemplateInfo {
+    param($LatestLog)
+
+    $requiredTemplates = @(
+        "Images\Goblin Evidence\Journal Kill.png",
+        "Images\Goblin Evidence\Journal Encounter.png",
+        "Images\Goblin Evidence\Minimap Goblin Icon.png"
+    )
+    $missingTemplates = New-Object System.Collections.Generic.List[string]
+    $missingTemplateLogEntries = 0
+
+    if ($null -ne $LatestLog -and (Test-Path -LiteralPath $LatestLog.FullName -PathType Leaf)) {
+        $matches = @(Select-String -LiteralPath $LatestLog.FullName -Pattern "GoblinEvidenceTemplateSetupMissing|reason=MissingTemplate|Reason=MissingTemplate" -ErrorAction SilentlyContinue)
+        $missingTemplateLogEntries = $matches.Count
+        foreach ($match in $matches) {
+            foreach ($template in $requiredTemplates) {
+                if ($match.Line.IndexOf($template, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and -not $missingTemplates.Contains($template)) {
+                    $missingTemplates.Add($template)
+                }
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Detected = $missingTemplateLogEntries -gt 0
+        LogEntries = $missingTemplateLogEntries
+        MissingTemplates = if ($missingTemplates.Count -gt 0) { [string]::Join("|", $missingTemplates.ToArray()) } else { "none" }
+        RequiredTemplates = [string]::Join("|", $requiredTemplates)
     }
 }
 
@@ -1465,6 +1497,10 @@ if ($MaxGoblinEvidenceFullImages -lt 0) {
     Write-Warning "MaxGoblinEvidenceFullImages must be at least 0. Using 0."
     $MaxGoblinEvidenceFullImages = 0
 }
+if ($MaxGoblinObservationDiagnosticCrops -lt 0) {
+    Write-Warning "MaxGoblinObservationDiagnosticCrops must be at least 0. Using 0."
+    $MaxGoblinObservationDiagnosticCrops = 0
+}
 
 $runtimeRootInfo = Resolve-RuntimeRoot $RuntimeRoot $PSScriptRoot
 $repoRoot = $runtimeRootInfo.SourceRoot
@@ -1493,6 +1529,7 @@ Write-Host "Max success screenshot groups: $MaxSuccessScreenshots"
 Write-Host "Max diagnostic screenshot groups: $MaxDiagnosticScreenshots"
 Write-Host "Include success screenshots: $($IncludeSuccessScreenshots.IsPresent)"
 Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
+Write-Host "Max goblin observation diagnostic crops: $MaxGoblinObservationDiagnosticCrops"
 
 if (Test-Path -LiteralPath $stagingRoot) {
     Remove-Item -LiteralPath $stagingRoot -Recurse -Force
@@ -1745,9 +1782,34 @@ try {
                 $_.BaseName -notlike '*_Full' -or
                 $selectedGoblinEvidenceFullImagePaths.ContainsKey($_.FullName)
         })
+    $goblinObservationDiagnosticCrops = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                $_.FullName.Replace('/', '\').IndexOf('\Debug\GoblinEvidence\ObservationDiagnostics\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+        } |
+        Sort-Object LastWriteTime -Descending)
+    $selectedGoblinObservationDiagnosticCrops = if ($MaxGoblinObservationDiagnosticCrops -gt 0) {
+        @($goblinObservationDiagnosticCrops | Select-Object -First $MaxGoblinObservationDiagnosticCrops)
+    }
+    else {
+        @()
+    }
+    $selectedGoblinObservationDiagnosticCropPaths = @{}
+    foreach ($file in $selectedGoblinObservationDiagnosticCrops) {
+        $selectedGoblinObservationDiagnosticCropPaths[$file.FullName] = $true
+    }
+    $excludedGoblinObservationDiagnosticCrops = [Math]::Max(0, $goblinObservationDiagnosticCrops.Count - $selectedGoblinObservationDiagnosticCrops.Count)
+    $goblinEvidenceScreenshots = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $isObservationDiagnosticCrop = $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                $_.FullName.Replace('/', '\').IndexOf('\Debug\GoblinEvidence\ObservationDiagnostics\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+            (-not $isObservationDiagnosticCrop) -or $selectedGoblinObservationDiagnosticCropPaths.ContainsKey($_.FullName)
+        })
     $selectedGoblinEvidenceFolder = if ($goblinEvidenceScreenshots.Count -gt 0) { Split-Path -Parent $goblinEvidenceScreenshots[0].FullName } elseif (-not [string]::IsNullOrWhiteSpace($goblinTrackerInfo.EvidenceScreenshotFolder)) { $goblinTrackerInfo.EvidenceScreenshotFolder } else { "none" }
     Write-Host "Selected goblin evidence folder: $selectedGoblinEvidenceFolder"
     Write-Host "Excluded goblin evidence full images: $excludedGoblinEvidenceFullImages"
+    Write-Host "Included goblin observation diagnostic crops: $($selectedGoblinObservationDiagnosticCrops.Count)"
+    Write-Host "Excluded goblin observation diagnostic crops: $excludedGoblinObservationDiagnosticCrops"
     $goblinEvidenceScreenshotCount = Copy-DebugScreenshotsToPackage $goblinEvidenceScreenshots $goblinEvidenceSourceRoots (Join-Path $stagingRoot "Debug")
     if ($goblinEvidenceScreenshotCount -eq 0) {
         Write-Host "No current-session goblin evidence screenshots found."
@@ -1755,6 +1817,7 @@ try {
     else {
         Write-Host "Included goblin evidence screenshots: $goblinEvidenceScreenshotCount"
     }
+    $goblinEvidenceMissingTemplateInfo = Get-GoblinEvidenceMissingTemplateInfo $latestLog
 
     Write-Step "Generating route failure summary"
     $routeFailureSummaryPath = Join-Path $stagingRoot "route-failure-summary.txt"
@@ -1846,11 +1909,13 @@ try {
             "Goblin evidence last time: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastEvidenceTimeLocal)) { 'none' } else { $goblinTrackerInfo.LastEvidenceTimeLocal })",
             "Goblin evidence screenshot folder: $selectedGoblinEvidenceFolder",
             "Goblin evidence last screenshot: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastEvidenceScreenshotPath)) { 'none' } else { $goblinTrackerInfo.LastEvidenceScreenshotPath })",
+            "Goblin evidence missing template state: detected=$($goblinEvidenceMissingTemplateInfo.Detected); logEntries=$($goblinEvidenceMissingTemplateInfo.LogEntries); missingTemplates=$($goblinEvidenceMissingTemplateInfo.MissingTemplates); requiredTemplates=$($goblinEvidenceMissingTemplateInfo.RequiredTemplates)",
             "Success screenshot package policy: $(if ($IncludeSuccessScreenshots) { 'Included when selected' } else { 'Skipped by default' })",
             "Debug.EnableSuccessScreenshots: $($successScreenshotSetting.Enabled)",
             "Debug.EnableSuccessScreenshots source: $($successScreenshotSetting.Source)",
             $successAvailabilityLine,
             "Goblin evidence full-image package policy: most recent $MaxGoblinEvidenceFullImages included; $excludedGoblinEvidenceFullImages excluded",
+            "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
             $goblinEvidenceSourceSummaryLine,
             "Log folders searched:",
             ($logFolders | ForEach-Object { "- $_" }),
@@ -1883,6 +1948,8 @@ try {
             "- Debug screenshots included: $debugScreenshotCount",
             "- Goblin evidence screenshots included: $goblinEvidenceScreenshotCount",
             "- Goblin evidence full images excluded: $excludedGoblinEvidenceFullImages",
+            "- Goblin observation diagnostic crops included: $($selectedGoblinObservationDiagnosticCrops.Count)",
+            "- Goblin observation diagnostic crops excluded: $excludedGoblinObservationDiagnosticCrops",
             "- All discovered screenshots: $($allScreenshots.Count)",
             "- Current-session screenshots: $($sessionScreenshots.Count)",
             "- Excluded stale screenshots: $excludedStaleScreenshots",
@@ -1918,6 +1985,7 @@ try {
             "- Screenshots older than the current GoblinFarmer session start are not copied",
             "- Screenshots/Success is excluded unless -IncludeSuccessScreenshots is set",
             "- Debug/GoblinEvidence/Calibration *_Full images are excluded except the most recent MaxGoblinEvidenceFullImages",
+            "- Debug/GoblinEvidence/ObservationDiagnostics image crops are limited to MaxGoblinObservationDiagnosticCrops newest files",
             "- bin folders are not copied",
             "- obj folders are not copied",
             "- source files are not copied except selected docs and manifest inputs",
@@ -1961,6 +2029,7 @@ Write-Host "Observations:        $($goblinTrackerInfo.ObservationCount)"
 Write-Host "Evidence events:     $($goblinTrackerInfo.EvidenceEventCount)"
 Write-Host "Last evidence:       $($goblinTrackerInfo.LastEvidenceType) ($($goblinTrackerInfo.LastEvidenceConfidence))"
 Write-Host "Evidence folder:     $selectedGoblinEvidenceFolder"
+Write-Host "Missing templates:   detected=$($goblinEvidenceMissingTemplateInfo.Detected); logEntries=$($goblinEvidenceMissingTemplateInfo.LogEntries)"
 Write-Host "Latest log:          $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
 Write-Host "Selected log folder: $selectedLogFolder"
 Write-Host "Screenshot folder:   $selectedScreenshotFolder"
@@ -1972,6 +2041,7 @@ Write-Host "Diagnostic screenshots: $($diagnosticScreenshots.Count)"
 Write-Host "Normal screenshots:  $($normalScreenshots.Count)"
 Write-Host "Debug screenshots:   $debugScreenshotCount"
 Write-Host "Evidence screenshots:$goblinEvidenceScreenshotCount"
+Write-Host "Observation crops:   $($selectedGoblinObservationDiagnosticCrops.Count) included; $excludedGoblinObservationDiagnosticCrops excluded"
 Write-Host "Stale screenshots:   $excludedStaleScreenshots excluded"
 Write-Host "Debug screenshots on:$($debugSkipInfo.AppSettingsDebugScreenshots)"
 Write-Host "Keep screenshots on: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"

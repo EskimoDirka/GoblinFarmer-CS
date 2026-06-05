@@ -35,6 +35,46 @@ namespace GoblinFarmer
         string Notes,
         string GoblinType = "Unknown");
 
+    internal sealed record GoblinEvidenceTemplateRequirement(
+        GoblinEvidenceType Type,
+        string Source,
+        string FileName,
+        double Threshold);
+
+    internal static class GoblinEvidenceTemplateRequirements
+    {
+        public static readonly IReadOnlyList<GoblinEvidenceTemplateRequirement> Required =
+        [
+            new(GoblinEvidenceType.JournalKill, "JournalCandidate", "Journal Kill.png", 0.90),
+            new(GoblinEvidenceType.JournalEncounter, "JournalCandidate", "Journal Encounter.png", 0.90),
+            new(GoblinEvidenceType.MinimapIcon, "MinimapCandidate", "Minimap Goblin Icon.png", 0.65),
+        ];
+
+        public static IReadOnlyList<GoblinEvidenceTemplateRequirement> MissingRequiredTemplates(string templateDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(templateDirectory))
+            {
+                return Required;
+            }
+
+            List<GoblinEvidenceTemplateRequirement> missing = [];
+            foreach (GoblinEvidenceTemplateRequirement requirement in Required)
+            {
+                if (!File.Exists(Path.Combine(templateDirectory, requirement.FileName)))
+                {
+                    missing.Add(requirement);
+                }
+            }
+
+            return missing;
+        }
+
+        public static string DisplayPath(GoblinEvidenceTemplateRequirement requirement)
+        {
+            return Path.Combine("Images", "Goblin Evidence", requirement.FileName);
+        }
+    }
+
     internal sealed record GoblinFoundRecord(
         string AreaKey,
         string DisplayLocation,

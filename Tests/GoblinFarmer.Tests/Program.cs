@@ -27,6 +27,7 @@ Run("GoblinEvidence retention breaks timestamp ties by filename", TestGoblinEvid
 Run("GoblinEvidence retention ignores missing folder", TestGoblinEvidenceRetentionMissingFolderDoesNotThrow);
 Run("GoblinEvidence retention count less than one disables cleanup", TestGoblinEvidenceRetentionCountLessThanOneDisablesCleanup);
 Run("GoblinEvidence retention deletes only inside GoblinEvidence", TestGoblinEvidenceRetentionDeletesOnlyInsideFolder);
+Run("GoblinEvidence template requirements detect missing setup", TestGoblinEvidenceTemplateRequirementsDetectMissingSetup);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverrideWins);
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
@@ -35,6 +36,7 @@ Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGa
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
+Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
 Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
 Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeepsTrueAreasSeparate);
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
@@ -640,6 +642,33 @@ static void TestGoblinEvidenceRetentionDeletesOnlyInsideFolder()
     }
 }
 
+static void TestGoblinEvidenceTemplateRequirementsDetectMissingSetup()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.GoblinEvidenceTemplateTests", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+
+    try
+    {
+        IReadOnlyList<GoblinEvidenceTemplateRequirement> allMissing = GoblinEvidenceTemplateRequirements.MissingRequiredTemplates(root);
+        AssertEqual(3, allMissing.Count, "all required Goblin Evidence templates should be reported missing from an empty folder");
+        AssertTrue(allMissing.Any(template => template.FileName == "Journal Kill.png"), "Journal Kill template should be required");
+        AssertTrue(allMissing.Any(template => template.FileName == "Journal Encounter.png"), "Journal Encounter template should be required");
+        AssertTrue(allMissing.Any(template => template.FileName == "Minimap Goblin Icon.png"), "Minimap Goblin Icon template should be required");
+
+        File.WriteAllText(Path.Combine(root, "Journal Kill.png"), "fake template for setup test");
+        IReadOnlyList<GoblinEvidenceTemplateRequirement> partiallyMissing = GoblinEvidenceTemplateRequirements.MissingRequiredTemplates(root);
+        AssertEqual(2, partiallyMissing.Count, "present template files should not be reported missing");
+        AssertFalse(partiallyMissing.Any(template => template.FileName == "Journal Kill.png"), "Journal Kill should be absent from the missing list once present");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
 static string TouchGoblinEvidenceFile(string path, DateTime lastWriteTimeUtc)
 {
     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -651,7 +680,7 @@ static string TouchGoblinEvidenceFile(string path, DateTime lastWriteTimeUtc)
 
 static void CreateRequiredImagesFolders(string imagesRoot)
 {
-    foreach (string folder in new[] { "Combat", "Current Location", "Leave Game", "Repair", "Salvage", "Start Game", "Teleport Function" })
+    foreach (string folder in new[] { "Combat", "Current Location", "Goblin Evidence", "Leave Game", "Repair", "Salvage", "Start Game", "Teleport Function" })
     {
         Directory.CreateDirectory(Path.Combine(imagesRoot, folder));
     }
@@ -926,6 +955,83 @@ static void TestDebugPackageExcludesSuccessScreenshotsByDefault()
         File.WriteAllText(path, "not a real image; package test only");
         File.SetCreationTime(path, DateTime.Now);
         File.SetLastWriteTime(path, DateTime.Now);
+    }
+}
+
+static void TestDebugPackageLimitsObservationDiagnosticCrops()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string observationDiagnostics = Path.Combine(testRoot, "Debug", "GoblinEvidence", "ObservationDiagnostics");
+    string logs = Path.Combine(testRoot, "Logs");
+    Directory.CreateDirectory(observationDiagnostics);
+    Directory.CreateDirectory(logs);
+
+    try
+    {
+        DateTime sessionStart = DateTime.Now.AddMinutes(-5);
+        File.WriteAllLines(Path.Combine(testRoot, "session-info.txt"),
+        [
+            $"SessionStartLocal={sessionStart:O}",
+            $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
+            "GoblinCount=0",
+        ]);
+        File.WriteAllText(
+            Path.Combine(logs, "GoblinFarmer.log"),
+            "GoblinEvidenceTemplateSetupMissing: missingTemplates=Images\\Goblin Evidence\\Journal Kill.png|Images\\Goblin Evidence\\Journal Encounter.png|Images\\Goblin Evidence\\Minimap Goblin Icon.png\r\n" +
+            "GoblinEvidenceScanResult: reason=MissingTemplate; missingCount=3");
+
+        for (int index = 0; index < 20; index++)
+        {
+            string label = index % 2 == 0 ? "Journal" : "Minimap";
+            string path = Path.Combine(observationDiagnostics, $"GoblinEvidenceScan_20260605_0909{index:00}_000_{label}.png");
+            File.WriteAllText(path, "not a real image; package test only");
+            DateTime timestamp = sessionStart.AddSeconds(index + 1);
+            File.SetCreationTime(path, timestamp);
+            File.SetLastWriteTime(path, timestamp);
+        }
+
+        string scriptPath = FindDebugPackageScript();
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -RuntimeRoot \"{testRoot}\" -MaxGoblinObservationDiagnosticCrops 6",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start debug package script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed. stdout={output}; stderr={error}");
+
+        string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? "";
+        AssertTrue(File.Exists(packagePath), "debug package zip should be created");
+
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        int includedObservationCrops = archive.Entries.Count(entry =>
+            entry.FullName.Replace('\\', '/').Contains("Debug/GoblinEvidence/ObservationDiagnostics", StringComparison.OrdinalIgnoreCase) &&
+            entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+        AssertEqual(6, includedObservationCrops, "debug package should include only the configured recent ObservationDiagnostics crop sample");
+
+        ZipArchiveEntry manifest = archive.GetEntry("debug-package-manifest.txt") ?? throw new InvalidOperationException("manifest missing from debug package");
+        using StreamReader reader = new(manifest.Open());
+        string manifestText = reader.ReadToEnd();
+        AssertTrue(manifestText.Contains("Goblin observation diagnostic crop package policy: most recent 6 included; 14 excluded", StringComparison.OrdinalIgnoreCase), "manifest should document observation crop package limits");
+        AssertTrue(manifestText.Contains("- Goblin observation diagnostic crops included: 6", StringComparison.OrdinalIgnoreCase), "manifest should report included observation crop count");
+        AssertTrue(manifestText.Contains("- Goblin observation diagnostic crops excluded: 14", StringComparison.OrdinalIgnoreCase), "manifest should report excluded observation crop count");
+        AssertTrue(manifestText.Contains("Goblin evidence missing template state: detected=True; logEntries=2", StringComparison.OrdinalIgnoreCase), "manifest should report missing-template state from the latest log");
+        AssertTrue(manifestText.Contains("Images\\Goblin Evidence\\Journal Kill.png", StringComparison.OrdinalIgnoreCase), "manifest should list missing required templates");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
     }
 }
 

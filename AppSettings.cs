@@ -781,7 +781,7 @@ namespace GoblinFarmer
             }
 
             int missingTemplateFolderCount = 0;
-            string[] requiredImageFolders = ["Combat", "Current Location", "Leave Game", "Repair", "Salvage", "Start Game", "Teleport Function"];
+            string[] requiredImageFolders = ["Combat", "Current Location", "Goblin Evidence", "Leave Game", "Repair", "Salvage", "Start Game", "Teleport Function"];
             foreach (string folder in requiredImageFolders)
             {
                 string path = Path.Combine(imagesRootPath, folder);

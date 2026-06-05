@@ -560,6 +560,11 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Start the GoblinEvidence scanner from combat so Observation Mode can run during normal farming.
 * [x] Add scanner/evidence-loop diagnostics for scanner start/stop, scan attempts/skips, Journal/Minimap crop paths, candidate found/not-found, and skipped reasons.
 * [x] Add a no-activate 5-second manual `X` count notification with goblin counted, area/location, goblin type, and current total.
+* [x] Add explicit Goblin Evidence template requirements for `Journal Kill.png`, `Journal Encounter.png`, and `Minimap Goblin Icon.png`.
+* [x] Add tracked `Images\Goblin Evidence\README.md` guidance so the required template folder exists in source/build/publish output without fake template images.
+* [x] Add startup/scanner missing-template diagnostics that log `GoblinEvidenceTemplateSetupMissing` once and throttle `GoblinEvidenceScanResult reason=MissingTemplate` summaries.
+* [x] Keep ObservationDiagnostics crops bounded by throttling capture and retaining only a recent runtime sample.
+* [x] Limit debug package inclusion for ObservationDiagnostics image crops and report missing-template state in `debug-package-manifest.txt`.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [x] Live-validate Western Channel Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [x] Live-validate Eastern Channel Level 1 and Eastern Channel Level 2 remain separate area keys and do not consume PF slots during close title matches.
@@ -576,13 +581,15 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate real PF1/PF2 counts remain available after Cave/Cathedral close-match checks.
 * [ ] Live-validate `JournalCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
 * [ ] Live-validate `MinimapCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
-* [ ] Live-validate the latest log contains `GoblinEvidenceScannerStartRequested`, `GoblinEvidenceScannerStarted`, `GoblinEvidenceScanAttempted`, `GoblinEvidenceCandidateCheck`, crop-path diagnostics, and `GoblinEvidenceScannerStopped` during normal combat.
-* [ ] Live-validate missing or uncalibrated Journal/Minimap evidence templates log clear `MissingTemplate` or `BelowThreshold` reasons instead of silently producing zero observations.
+* [ ] Live-validate the latest log contains `GoblinEvidenceScannerStartRequested`, `GoblinEvidenceScannerStarted`, `GoblinEvidenceScanAttempted`, crop-path diagnostics, and `GoblinEvidenceScannerStopped` during normal combat.
+* [ ] Live-validate missing Journal/Minimap evidence templates log one clear `GoblinEvidenceTemplateSetupMissing` line plus throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries instead of repeated per-scan `GoblinEvidenceCandidateCheck` spam.
+* [ ] Live-validate calibrated Journal/Minimap evidence templates produce `GoblinEvidenceCandidateCheck` results and, when confidence passes, observation candidates without changing GoblinCount.
 * [ ] Live-validate accepted manual `X` counts show the no-activate 5-second count notification without stealing Diablo focus.
 * [ ] Live-validate Automation Observation Mode reports `wouldCount=False reason=BlockedArea` in blocked locations such as WhimsyDale.
 * [ ] Live-validate Automation Observation Mode reports duplicate areas as `wouldCount=False` without consuming any additional slots.
 * [ ] Live-validate Automation Observation Mode reports PF1/PF2 eligibility against the two-count exception without changing the real count state.
 * [ ] Live-validate a generated debug package includes Goblin observation counters and last-observation metadata from `session-info.txt`.
+* [ ] Live-validate a generated missing-template debug package includes only a small recent sample from `Debug\GoblinEvidence\ObservationDiagnostics` and reports included/excluded crop counts plus missing-template state.
 * [ ] Manually validate physical `X` increments the counter once per press while GoblinFarmer is running.
 * [ ] Manually validate tracker active time advances only during combat automation and pauses while idle, in menus, waiting for game creation, waiting for Diablo launch, or paused.
 * [ ] Manually validate Reset Stats clears goblin count, tracker active time, GPH, and per-area count state, and restarts tracker timing from the reset moment if combat is active.

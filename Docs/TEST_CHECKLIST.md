@@ -69,7 +69,11 @@
 - Evidence loop logs `GoblinEvidenceScanAttempted` during eligible combat scans
 - Evidence loop logs `GoblinEvidenceScanSkipped` with a reason when combat/scanner conditions are not eligible
 - Evidence loop logs Journal/Minimap crop paths from `Debug\GoblinEvidence\ObservationDiagnostics`
-- Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and missing-template or below-threshold reasons
+- If Goblin Evidence templates are missing, startup/scanner diagnostics log one clear `GoblinEvidenceTemplateSetupMissing` line and throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries
+- Missing Goblin Evidence templates do not spam `GoblinEvidenceCandidateCheck reason=MissingTemplate` on every scan
+- VS Debug missing-template notification names the needed templates without activating over Diablo
+- Required Goblin Evidence templates are documented under `Images\Goblin Evidence`: `Journal Kill.png`, `Journal Encounter.png`, and `Minimap Goblin Icon.png`
+- Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and below-threshold reasons once templates are present
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - Blocked observation areas such as WhimsyDale log `wouldCount=False` and `reason=BlockedArea`
@@ -94,6 +98,9 @@
 - Screenshots from previous sessions are excluded from the package
 - Debug package manifest reports package size, session start, session duration, total screenshots, success screenshot availability, failure screenshots, folder totals, and stale screenshot exclusions
 - Debug package manifest reports Goblin observation counters and last-observation metadata from `session-info.txt`
+- Debug package manifest reports Goblin Evidence missing-template state from the latest log
+- Debug package includes only a small recent sample from `Debug\GoblinEvidence\ObservationDiagnostics` and reports included/excluded observation crop counts
+- GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
 
 ## Debug Manager / Session Summary

@@ -184,7 +184,8 @@ Debug tooling includes:
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
-- Count-based GoblinEvidence retention under `Debug\GoblinEvidence`, defaulting to the newest 250 files.
+- Automation Observation Mode diagnostics for Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is not enabled.
+- Count-based GoblinEvidence retention under `Debug\GoblinEvidence`, defaulting to the newest 250 files, plus bounded ObservationDiagnostics crop samples in debug packages.
 - Detailed launch, Start Game, teleport, repair, salvage, bounty, and Exit Game logs.
 
 Generate a debug package from the project root:
@@ -193,7 +194,7 @@ Generate a debug package from the project root:
 powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
 
-Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk.
+Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample so packages remain compact while still showing the latest scanner evidence.
 
 ## Release v1.3
 
