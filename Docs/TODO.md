@@ -76,7 +76,7 @@
 * [ ] Validate Demon Hunter right-hold mode: start right-hold in a safe area, hover over no-click UI, confirm no new right click is sent, UI is not clicked, Shift+Left maintenance skips unsafe injected mouse clicks without stopping combat, and logs show `combatInputMode=PhysicalCursorHeldFromSafeRegion`.
 * [ ] Validate Demon Hunter shared cursor-loop suppression: while right-hold is active over no-click UI, logs show `DemonHunterRightHeldNoClickSuppressionActive` and diagnostics show `DemonHunterRightHeld=True`.
 * [ ] Validate form preference persistence: choose Demon Hunter, toggle each Hotkeys checkbox, close/reopen the app, and confirm `User.CombatProfile=demon_hunter` plus the Hotkeys checkbox fields restore the form state.
-* [ ] Validate Witch Doctor held/channel mode: start in a safe world area, move into SkillBar/ResourceGlobe/BottomRightButtons/ExtendedRightMenu no-click regions, confirm held input stays active without UI clicks, keyboard/Hex timers continue, and logs show `WitchDoctorHeldInputNoClickSuppressionActive`.
+* [ ] Validate Witch Doctor mouse-wheel mode: select Witch Doctor, toggle combat on, confirm logs show `combatClass=witch_doctor`, `combatInputMode=MouseWheelScroll`, repeated `WitchDoctorMouseWheelScrollSent`, key loop order `2,3,1`, and no `WitchDoctorHeldInputStarted`, `PhysicalCursorHeldFromSafeRegion`, or held-left release for Witch Doctor.
 * [ ] Validate combat keyboard filtering: while combat is active, physical `1`/`2` are suppressed, injected automation key rotation continues, and logs show physical `2` suppression if pressed by the user.
 * [x] Validate physical `2` starts Exit Game only when combat is inactive.
 * [x] Validate physical `2` is suppressed during combat, logs `exitGameHotkeySuppressed=True`, and does not block injected combat key events.
@@ -425,7 +425,7 @@ Status: Implemented and validated with Exit Game.
 * [x] Compare old Python input path: combat mouse uses physical Win32 `mouse_event`, while Demon Hunter right mouse starts in a safe region and remains held.
 * [x] Align C# Demon Hunter right-hold with Python pattern by keeping the safe-started right hold active through no-click hover regions.
 * [x] Add Demon Hunter-only `DemonHunterRightHeldNoClickSuppressionActive` logging for shared cursor-loop left-click suppression while right mouse remains held.
-* [x] Add Witch Doctor-only safe-start held/channel behavior so held input stays active through no-click regions without sending new mouse clicks.
+* [x] Replace Witch Doctor held/channel behavior with mouse-wheel scrolling while preserving the `2,3,1` key loop and no-click safety logs.
 * [x] Show Demon Hunter right-held state in diagnostics so combat does not appear stopped while right-hold is active.
 * [x] Match the Python shared combat cursor loop more closely by sending extra left clicks only when the cursor handle changes from the combat-start cursor and the 120ms click gap has elapsed.
 * [x] Match old Python keyboard-hook behavior for combat-relevant number keys by suppressing physical `1`/`2` during combat while allowing injected automation key events.

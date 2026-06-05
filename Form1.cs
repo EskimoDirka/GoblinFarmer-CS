@@ -1572,6 +1572,7 @@ namespace GoblinFarmer
         private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
         private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
         private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+        private const uint MOUSEEVENTF_WHEEL = 0x0800;
 
         private void PerformMouseClick(
             DrawingPoint point,

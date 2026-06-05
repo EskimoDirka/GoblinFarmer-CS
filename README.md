@@ -152,6 +152,8 @@ GoblinFarmer expects these exact Diablo III skills and runes to be assigned to t
 | 2 | Horrify | Stalker |
 | 3 | Spirit Walk | Severance |
 
+Witch Doctor combat repeats the key loop in `2, 3, 1` order and uses mouse wheel scrolling during active combat. It does not hold left mouse down.
+
 ## Compatibility Notes
 
 GoblinFarmer is designed to support flexible install paths. Runtime paths for Diablo III, Battle.net, and image templates are configurable where applicable, and the app validates those paths before enabling automation.

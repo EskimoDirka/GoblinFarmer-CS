@@ -34,6 +34,7 @@ Run("Installed/release profile with missing paths still requires first-run setup
 Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverrideWins);
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
 Run("Demon Hunter no-click suppression diagnostic is not named as failure or stall", TestDemonHunterNoClickSuppressionDiagnosticName);
+Run("Witch Doctor combat uses mouse wheel and not held-left mode", TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode);
 Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGameClickPolicyBlocksInGameSignals);
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
@@ -806,6 +807,42 @@ static void TestDemonHunterNoClickSuppressionDiagnosticName()
     AssertEqual("Diagnostic_Combat_DemonHunterNoClickSuppressionActive", CombatDiagnosticNames.DemonHunterNoClickSuppressionScreenshotPrefix, "diagnostic screenshot prefix should use the new package/file prefix");
     AssertFalse(CombatDiagnosticNames.DemonHunterNoClickSuppressionEvent.Contains("Failure", StringComparison.OrdinalIgnoreCase), "diagnostic event should not be labeled failure");
     AssertFalse(CombatDiagnosticNames.DemonHunterNoClickSuppressionEvent.Contains("Stall", StringComparison.OrdinalIgnoreCase), "diagnostic event should not be labeled stall");
+}
+
+static void TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string combatSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Combat.cs"));
+    string stateSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+
+    AssertTrue(combatSource.Contains("PortWitchDoctorMouseWheelLoop", StringComparison.Ordinal), "Witch Doctor should run a dedicated mouse wheel loop");
+    AssertTrue(combatSource.Contains("PortRuntimeMouseWheel(-120)", StringComparison.Ordinal), "Witch Doctor should repeatedly send mouse wheel input");
+    AssertTrue(combatSource.Contains("combatInputMode=MouseWheelScroll", StringComparison.Ordinal), "Witch Doctor logs should report mouse wheel input mode");
+    AssertTrue(combatSource.Contains("keyOrder=2,3,1", StringComparison.Ordinal), "Witch Doctor key loop order should remain 2, 3, 1");
+    AssertTrue(combatSource.Contains("heldLeftMode=false", StringComparison.Ordinal), "Witch Doctor logs should explicitly report no held-left mode");
+    AssertTrue(stateSource.Contains("PortRuntimeMouseWheel", StringComparison.Ordinal), "runtime input helpers should include mouse wheel support");
+
+    AssertFalse(combatSource.Contains("PortHandleWitchDoctorCursorInput", StringComparison.Ordinal), "Witch Doctor should not use the old cursor-held input handler");
+    AssertFalse(combatSource.Contains("WitchDoctorHeldInput", StringComparison.Ordinal), "Witch Doctor should not log held-left input state");
+    AssertFalse(combatSource.Contains("WitchDoctorScrollHeldFromSafeRegion", StringComparison.Ordinal), "Witch Doctor should not enter held-from-safe-region mode");
+    AssertFalse(stateSource.Contains("portWitchDoctorHeldInputFromSafeRegion", StringComparison.Ordinal), "Witch Doctor should not track a held-left safe-region state");
+}
+
+static string FindRepositoryRootForTests()
+{
+    DirectoryInfo? directory = new(AppContext.BaseDirectory);
+    while (directory != null)
+    {
+        if (File.Exists(Path.Combine(directory.FullName, "frmMain.Combat.cs")) &&
+            File.Exists(Path.Combine(directory.FullName, "GoblinFarmer.csproj")))
+        {
+            return directory.FullName;
+        }
+
+        directory = directory.Parent;
+    }
+
+    throw new DirectoryNotFoundException("Could not locate GoblinFarmer source root from test output directory.");
 }
 
 static void TestStartGameClickPolicyBlocksInGameSignals()

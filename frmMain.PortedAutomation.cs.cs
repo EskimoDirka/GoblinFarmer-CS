@@ -92,7 +92,6 @@ namespace GoblinFarmer
         private volatile bool portRuntimeShiftHeld;
         private volatile bool portMonkSkill3Held;
         private volatile bool portDemonHunterRightHeldFromSafeRegion;
-        private volatile bool portWitchDoctorHeldInputFromSafeRegion;
         private volatile bool portDiabloWasRunning;
         private volatile bool portTeleportNextHotkeyEnabled = true;
         private volatile bool portExitGameHotkeyEnabled = true;
@@ -131,8 +130,8 @@ namespace GoblinFarmer
         private long portLastDemonHunterDecisionLogTicks;
         private long portLastDemonHunterRightHeldNoClickLogTicks;
         private long portLastDemonHunterSuppressionEvidenceTicks;
-        private long portLastWitchDoctorHeldInputNoClickLogTicks;
-        private long portLastWitchDoctorScrollSuppressedNoClickLogTicks;
+        private long portLastWitchDoctorWheelSentLogTicks;
+        private long portLastWitchDoctorWheelSkippedLogTicks;
         private long portLastLootSpamDecisionLogTicks;
         private long portLastBountyMenuCloseTicks;
         private bool? portLastCombatCursorDecisionAllowed;
@@ -1552,6 +1551,14 @@ namespace GoblinFarmer
                 {
                     portRuntimeRightMouseHeld = false;
                 }
+            }
+        }
+
+        private void PortRuntimeMouseWheel(int delta)
+        {
+            lock (portRuntimeInputLock)
+            {
+                mouse_event(MOUSEEVENTF_WHEEL, 0, 0, unchecked((uint)delta), UIntPtr.Zero);
             }
         }
 
