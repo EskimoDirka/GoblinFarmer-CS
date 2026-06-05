@@ -40,7 +40,9 @@ Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeep
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
 Run("Goblin area duplicate guard keeps default one-count areas", TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas);
+Run("Goblin area duplicate guard peek does not consume count slots", TestGoblinAreaDuplicateGuardPeekDoesNotConsumeCountSlots);
 Run("Goblin manual count block list blocks explicit no-count areas", TestGoblinManualCountBlockListBlocksExplicitNoCountAreas);
+Run("Goblin observation counters are diagnostic only", TestGoblinObservationCountersAreDiagnosticOnly);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
 Run("Goblin area detection false PF matches do not consume PF area slots", TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots);
@@ -834,6 +836,17 @@ static void TestDebugPackageExcludesSuccessScreenshotsByDefault()
             $"SessionStartLocal={sessionStart:O}",
             $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
             "GoblinCount=0",
+            "GoblinObservationCount=3",
+            "JournalObservationCount=2",
+            "MinimapObservationCount=1",
+            "EligibleObservationCount=1",
+            "BlockedObservationCount=1",
+            "DuplicateObservationCount=1",
+            "LastGoblinObservationSource=Journal",
+            "LastGoblinObservationType=Rainbow Goblin",
+            "LastGoblinObservationAreaKey=The Weeping Hollow",
+            "LastGoblinObservationWouldCount=True",
+            "LastGoblinObservationReason=Eligible",
         ]);
         File.WriteAllText(Path.Combine(logs, "GoblinFarmer.log"), "test log");
         File.WriteAllText(Path.Combine(config, "AppSettings.json"), """
@@ -893,6 +906,11 @@ static void TestDebugPackageExcludesSuccessScreenshotsByDefault()
         AssertTrue(manifestText.Contains("- Debug/GoblinEvidence: 2 files", StringComparison.OrdinalIgnoreCase), "manifest package folder totals should report included GoblinEvidence files");
         AssertTrue(manifestText.Contains("- Debug/GoblinEvidence current source: 3 files", StringComparison.OrdinalIgnoreCase), "manifest folder totals should report current GoblinEvidence source totals");
         AssertTrue(manifestText.Contains("- Goblin evidence full images excluded: 1", StringComparison.OrdinalIgnoreCase), "manifest should report excluded GoblinEvidence full images");
+        AssertTrue(manifestText.Contains("Goblin observations: 3", StringComparison.OrdinalIgnoreCase), "manifest should report Goblin observation count");
+        AssertTrue(manifestText.Contains("Goblin journal observations: 2", StringComparison.OrdinalIgnoreCase), "manifest should report Journal observation count");
+        AssertTrue(manifestText.Contains("Goblin minimap observations: 1", StringComparison.OrdinalIgnoreCase), "manifest should report Minimap observation count");
+        AssertTrue(manifestText.Contains("Goblin duplicate observations: 1", StringComparison.OrdinalIgnoreCase), "manifest should report duplicate observation count");
+        AssertTrue(manifestText.Contains("Goblin last observation: source=Journal; type=Rainbow Goblin; area=The Weeping Hollow; wouldCount=True; reason=Eligible", StringComparison.OrdinalIgnoreCase), "manifest should summarize the last Goblin observation");
         AssertTrue(manifestText.Contains("Package folder totals:", StringComparison.OrdinalIgnoreCase), "manifest should include package folder totals");
     }
     finally
@@ -1094,6 +1112,37 @@ static void TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas()
     }
 }
 
+static void TestGoblinAreaDuplicateGuardPeekDoesNotConsumeCountSlots()
+{
+    GoblinAreaDuplicateGuard guard = new();
+    string pf1 = GoblinAreaResolver.Resolve("Pandemonium Fortress Level 1").AreaKey;
+    string weeping = GoblinAreaResolver.Resolve("The Weeping Hollow").AreaKey;
+
+    GoblinAreaDuplicateGuardResult firstPfPeek = guard.Peek(pf1);
+    AssertTrue(firstPfPeek.Accepted, "PF1 first observation should be eligible");
+    AssertEqual(0, firstPfPeek.AreaCount, "PF1 first observation should report currentAreaCount=0");
+    AssertEqual(2, firstPfPeek.AreaLimit, "PF1 observation should preserve the two-count limit");
+    AssertTrue(guard.TryAccept(pf1, out GoblinAreaDuplicateGuardResult firstPfCount), "PF1 first real count should still be accepted after observation peek");
+    AssertEqual(1, firstPfCount.AreaCount, "PF1 first real count should consume only one slot");
+
+    GoblinAreaDuplicateGuardResult secondPfPeek = guard.Peek(pf1);
+    AssertTrue(secondPfPeek.Accepted, "PF1 second observation should still be eligible");
+    AssertEqual(1, secondPfPeek.AreaCount, "PF1 second observation should report the current count before consuming");
+    AssertTrue(guard.TryAccept(pf1), "PF1 second real count should still be accepted after observation peek");
+
+    GoblinAreaDuplicateGuardResult saturatedPfPeek = guard.Peek(pf1);
+    AssertFalse(saturatedPfPeek.Accepted, "PF1 observation should suppress after the real two-count limit is reached");
+    AssertEqual(2, saturatedPfPeek.AreaCount, "PF1 saturated observation should report currentAreaCount=2");
+    AssertEqual(2, saturatedPfPeek.AreaLimit, "PF1 saturated observation should report areaLimit=2");
+
+    GoblinAreaDuplicateGuardResult weepingPeek = guard.Peek(weeping);
+    AssertTrue(weepingPeek.Accepted, "default area observation should be eligible before a real count");
+    AssertEqual(0, weepingPeek.AreaCount, "default area observation should not consume a slot");
+    AssertEqual(1, weepingPeek.AreaLimit, "default area observation should report areaLimit=1");
+    AssertTrue(guard.TryAccept(weeping), "default area real count should still be accepted after observation peek");
+    AssertFalse(guard.Peek(weeping).Accepted, "default area observation should suppress after one real count");
+}
+
 static void AssertPandemoniumAreaLimit(GoblinAreaDuplicateGuard guard, string areaName)
 {
     string areaKey = GoblinAreaResolver.Resolve(areaName).AreaKey;
@@ -1153,6 +1202,56 @@ static void TestGoblinManualCountBlockListBlocksExplicitNoCountAreas()
         string areaKey = GoblinAreaResolver.Resolve(areaName).AreaKey;
         AssertFalse(GoblinManualCountBlockList.IsBlocked(areaKey), $"{areaName} should not be in the manual count block list");
     }
+}
+
+static void TestGoblinObservationCountersAreDiagnosticOnly()
+{
+    DiagnosticsSessionState session = new();
+    session.RecordGoblinObservation(new GoblinObservationRecord(
+        DateTime.UtcNow,
+        "Journal",
+        "Rainbow Goblin",
+        "The Weeping Hollow",
+        "The Weeping Hollow",
+        true,
+        "Eligible",
+        "Available",
+        1,
+        0));
+    session.RecordGoblinObservation(new GoblinObservationRecord(
+        DateTime.UtcNow,
+        "Minimap",
+        "Blood Thief",
+        "WhimsyDale",
+        "WhimsyDale",
+        false,
+        "BlockedArea",
+        "BlockedArea",
+        1,
+        0));
+    session.RecordGoblinObservation(new GoblinObservationRecord(
+        DateTime.UtcNow,
+        "Journal",
+        "Treasure Goblin",
+        "Cathedral Level 1",
+        "Cathedral Level 1",
+        false,
+        "AreaAlreadyCounted",
+        "AreaAlreadyCounted",
+        1,
+        1));
+
+    DiagnosticsSessionSnapshot snapshot = session.Snapshot(DateTime.Now);
+    AssertEqual(0, snapshot.GoblinCount, "observations should not increment GoblinCount");
+    AssertEqual(0, snapshot.GoblinFoundRecordCount, "observations should not create GoblinFound records");
+    AssertEqual(0.0, snapshot.GoblinsPerHour, "observations should not affect GPH");
+    AssertEqual(3, snapshot.GoblinObservationCount, "all observations should be tracked diagnostically");
+    AssertEqual(2, snapshot.JournalObservationCount, "journal observations should be counted separately");
+    AssertEqual(1, snapshot.MinimapObservationCount, "minimap observations should be counted separately");
+    AssertEqual(1, snapshot.EligibleObservationCount, "eligible observations should be counted separately");
+    AssertEqual(1, snapshot.BlockedObservationCount, "blocked observations should be counted separately");
+    AssertEqual(1, snapshot.DuplicateObservationCount, "duplicate observations should be counted separately");
+    AssertEqual("Cathedral Level 1", snapshot.LastGoblinObservation?.AreaKey ?? "", "last observation should be retained for diagnostics");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()

@@ -547,6 +547,19 @@ namespace GoblinFarmer
                 builder.AppendLine($"Active Combat Time: {snapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}");
                 builder.AppendLine($"GPH: {snapshot.GoblinsPerHour:0.00}");
                 builder.AppendLine();
+                builder.AppendLine("## Goblin Observations");
+                builder.AppendLine();
+                builder.AppendLine($"Goblin Observations: {snapshot.GoblinObservationCount}");
+                builder.AppendLine($"Journal Observations: {snapshot.JournalObservationCount}");
+                builder.AppendLine($"Minimap Observations: {snapshot.MinimapObservationCount}");
+                builder.AppendLine($"Eligible Observations: {snapshot.EligibleObservationCount}");
+                builder.AppendLine($"Blocked Observations: {snapshot.BlockedObservationCount}");
+                builder.AppendLine($"Duplicate Observations: {snapshot.DuplicateObservationCount}");
+                builder.AppendLine($"Last Observation: {DisplayPath(snapshot.LastGoblinObservation?.GoblinType ?? "")}");
+                builder.AppendLine($"Last Observation Area: {DisplayPath(snapshot.LastGoblinObservation?.AreaKey ?? "")}");
+                builder.AppendLine($"Last Observation Source: {DisplayPath(snapshot.LastGoblinObservation?.Source ?? "")}");
+                builder.AppendLine($"Last Observation Reason: {DisplayPath(snapshot.LastGoblinObservation?.Reason ?? "")}");
+                builder.AppendLine();
                 builder.AppendLine("## Goblin Evidence");
                 builder.AppendLine();
                 builder.AppendLine($"Events Detected: {snapshot.GoblinEvidenceEventCount}");
@@ -630,6 +643,12 @@ namespace GoblinFarmer
         private int goblinCount;
         private readonly List<GoblinEvidenceEvent> goblinEvidenceEvents = [];
         private readonly List<GoblinFoundRecord> goblinFoundRecords = [];
+        private readonly List<GoblinObservationRecord> goblinObservationRecords = [];
+        private int journalObservationCount;
+        private int minimapObservationCount;
+        private int eligibleObservationCount;
+        private int blockedObservationCount;
+        private int duplicateObservationCount;
         private int gamesCreated;
         private int teleportsAttempted;
         private int teleportsConfirmed;
@@ -686,6 +705,36 @@ namespace GoblinFarmer
                 if (!string.IsNullOrWhiteSpace(evidenceEvent.ScreenshotPath))
                 {
                     latestScreenshotPath = evidenceEvent.ScreenshotPath;
+                }
+            }
+        }
+
+        public void RecordGoblinObservation(GoblinObservationRecord record)
+        {
+            lock (syncRoot)
+            {
+                goblinObservationRecords.Add(record);
+                if (record.Source.Equals("Journal", StringComparison.OrdinalIgnoreCase))
+                {
+                    journalObservationCount++;
+                }
+                else if (record.Source.Equals("Minimap", StringComparison.OrdinalIgnoreCase))
+                {
+                    minimapObservationCount++;
+                }
+
+                if (record.Reason.Equals("Eligible", StringComparison.OrdinalIgnoreCase))
+                {
+                    eligibleObservationCount++;
+                }
+                else if (record.Reason.Equals("BlockedArea", StringComparison.OrdinalIgnoreCase))
+                {
+                    blockedObservationCount++;
+                }
+                else if (record.Reason.Equals("AreaAlreadyCounted", StringComparison.OrdinalIgnoreCase) ||
+                    record.Reason.Equals("AreaLimitReached", StringComparison.OrdinalIgnoreCase))
+                {
+                    duplicateObservationCount++;
                 }
             }
         }
@@ -782,6 +831,9 @@ namespace GoblinFarmer
                 GoblinEvidenceEvent? lastGoblinEvidence = goblinEvidenceEvents.Count > 0
                     ? goblinEvidenceEvents[^1]
                     : null;
+                GoblinObservationRecord? lastGoblinObservation = goblinObservationRecords.Count > 0
+                    ? goblinObservationRecords[^1]
+                    : null;
                 GoblinFoundRecord? lastCountedGoblin = goblinFoundRecords.LastOrDefault(record => record.Counted);
                 int countedAreaCount = goblinFoundRecords
                     .Where(record => record.Counted && !string.IsNullOrWhiteSpace(record.AreaKey))
@@ -815,6 +867,13 @@ namespace GoblinFarmer
                     latestScreenshotPath,
                     latestSessionSummaryPath,
                     lastKnownIssue,
+                    goblinObservationRecords.Count,
+                    journalObservationCount,
+                    minimapObservationCount,
+                    eligibleObservationCount,
+                    blockedObservationCount,
+                    duplicateObservationCount,
+                    lastGoblinObservation,
                     goblinEvidenceEvents.Count,
                     lastGoblinEvidence?.Type ?? GoblinEvidenceType.Unknown,
                     lastGoblinEvidence?.Confidence ?? 0,
@@ -868,6 +927,13 @@ namespace GoblinFarmer
         string LatestScreenshotPath,
         string LatestSessionSummaryPath,
         string LastKnownIssue,
+        int GoblinObservationCount,
+        int JournalObservationCount,
+        int MinimapObservationCount,
+        int EligibleObservationCount,
+        int BlockedObservationCount,
+        int DuplicateObservationCount,
+        GoblinObservationRecord? LastGoblinObservation,
         int GoblinEvidenceEventCount,
         GoblinEvidenceType LastGoblinEvidenceType,
         double LastGoblinEvidenceConfidence,

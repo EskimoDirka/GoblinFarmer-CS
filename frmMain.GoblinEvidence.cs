@@ -214,9 +214,7 @@ namespace GoblinFarmer
 
             DebugManager.Session.RecordGoblinEvidence(evidenceEvent);
             AppLogger.Info($"GoblinEvidence: Type={candidate.Type}; Confidence={candidate.Confidence:0.00}; Source={candidate.Source}; Screenshot={PortLogField(PortDisplayLocation(screenshotPath))}; Notes={PortLogField(candidate.Notes)}");
-            PortTryRecordGoblinFound(candidate.Source, candidate.GoblinType, allowUnresolvedFallback: false);
-            PortWriteSessionMetadata(logSuccess: false);
-            PortUpdateGoblinTrackerStats();
+            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType);
         }
 
         private string PortCaptureGoblinEvidenceScreenshot(GoblinEvidenceType type, DateTime timestamp)

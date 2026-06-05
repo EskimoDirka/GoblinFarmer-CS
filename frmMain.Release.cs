@@ -502,8 +502,8 @@ namespace GoblinFarmer
             Control? diagnostics = Controls.Find("tabDiagnostics", searchAllChildren: false).FirstOrDefault();
             if (!debugControlsForcedVisible && !debugMode)
             {
-                MinimumSize = new Size(934, 649);
-                ClientSize = new Size(918, 610);
+                MinimumSize = new Size(934, 779);
+                ClientSize = new Size(918, 740);
                 if (diagnostics != null)
                 {
                     Controls.Remove(diagnostics);
@@ -524,10 +524,10 @@ namespace GoblinFarmer
             SuspendLayout();
             grpGoblinTracker.SuspendLayout();
 
-            MinimumSize = new Size(Math.Max(MinimumSize.Width, 934), 779);
-            ClientSize = new Size(Math.Max(ClientSize.Width, 918), 740);
+            MinimumSize = new Size(Math.Max(MinimumSize.Width, 934), 875);
+            ClientSize = new Size(Math.Max(ClientSize.Width, 918), 836);
 
-            grpGoblinTracker.Size = new Size(311, 212);
+            grpGoblinTracker.Size = new Size(311, 304);
             lblGoblinCount.Location = new Point(12, 24);
             lblGoblinGph.Location = new Point(12, 48);
             lblGoblinActiveTime.Location = new Point(12, 72);
@@ -535,6 +535,8 @@ namespace GoblinFarmer
             lblGoblinEvidenceType.Location = new Point(12, 132);
             lblGoblinEvidenceConfidence.Location = new Point(12, 156);
             lblGoblinEvidenceTime.Location = new Point(12, 180);
+            lblGoblinObservation.Location = new Point(12, 212);
+            lblGoblinObservation.Size = new Size(287, 84);
 
             grpGoblinTracker.ResumeLayout(false);
             grpGoblinTracker.PerformLayout();

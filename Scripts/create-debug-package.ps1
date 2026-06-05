@@ -465,6 +465,17 @@ function Get-GoblinTrackerInfo {
         ActiveCombatTimeSeconds = if ($values.Contains("ActiveCombatTimeSeconds")) { $values["ActiveCombatTimeSeconds"] } else { "0" }
         CombatStartTimeLocal = if ($values.Contains("CombatStartTimeLocal")) { $values["CombatStartTimeLocal"] } else { "" }
         GPH = $gph
+        ObservationCount = if ($values.Contains("GoblinObservationCount")) { $values["GoblinObservationCount"] } else { "0" }
+        JournalObservationCount = if ($values.Contains("JournalObservationCount")) { $values["JournalObservationCount"] } else { "0" }
+        MinimapObservationCount = if ($values.Contains("MinimapObservationCount")) { $values["MinimapObservationCount"] } else { "0" }
+        EligibleObservationCount = if ($values.Contains("EligibleObservationCount")) { $values["EligibleObservationCount"] } else { "0" }
+        BlockedObservationCount = if ($values.Contains("BlockedObservationCount")) { $values["BlockedObservationCount"] } else { "0" }
+        DuplicateObservationCount = if ($values.Contains("DuplicateObservationCount")) { $values["DuplicateObservationCount"] } else { "0" }
+        LastObservationSource = if ($values.Contains("LastGoblinObservationSource")) { $values["LastGoblinObservationSource"] } else { "" }
+        LastObservationType = if ($values.Contains("LastGoblinObservationType")) { $values["LastGoblinObservationType"] } else { "" }
+        LastObservationAreaKey = if ($values.Contains("LastGoblinObservationAreaKey")) { $values["LastGoblinObservationAreaKey"] } else { "" }
+        LastObservationWouldCount = if ($values.Contains("LastGoblinObservationWouldCount")) { $values["LastGoblinObservationWouldCount"] } else { "" }
+        LastObservationReason = if ($values.Contains("LastGoblinObservationReason")) { $values["LastGoblinObservationReason"] } else { "" }
         EvidenceEventCount = if ($values.Contains("GoblinEvidenceEventCount")) { $values["GoblinEvidenceEventCount"] } else { "0" }
         LastEvidenceType = if ($values.Contains("LastGoblinEvidenceType")) { $values["LastGoblinEvidenceType"] } else { "None" }
         LastEvidenceConfidence = if ($values.Contains("LastGoblinEvidenceConfidence")) { $values["LastGoblinEvidenceConfidence"] } else { "0.00" }
@@ -1822,6 +1833,13 @@ try {
             "Goblin tracker active combat time seconds: $($goblinTrackerInfo.ActiveCombatTimeSeconds)",
             "Goblin tracker combat start time: $(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.CombatStartTimeLocal)) { 'none' } else { $goblinTrackerInfo.CombatStartTimeLocal })",
             "Goblin tracker GPH: $($goblinTrackerInfo.GPH)",
+            "Goblin observations: $($goblinTrackerInfo.ObservationCount)",
+            "Goblin journal observations: $($goblinTrackerInfo.JournalObservationCount)",
+            "Goblin minimap observations: $($goblinTrackerInfo.MinimapObservationCount)",
+            "Goblin eligible observations: $($goblinTrackerInfo.EligibleObservationCount)",
+            "Goblin blocked observations: $($goblinTrackerInfo.BlockedObservationCount)",
+            "Goblin duplicate observations: $($goblinTrackerInfo.DuplicateObservationCount)",
+            "Goblin last observation: source=$(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastObservationSource)) { 'none' } else { $goblinTrackerInfo.LastObservationSource }); type=$(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastObservationType)) { 'none' } else { $goblinTrackerInfo.LastObservationType }); area=$(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastObservationAreaKey)) { 'none' } else { $goblinTrackerInfo.LastObservationAreaKey }); wouldCount=$(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastObservationWouldCount)) { 'none' } else { $goblinTrackerInfo.LastObservationWouldCount }); reason=$(if ([string]::IsNullOrWhiteSpace($goblinTrackerInfo.LastObservationReason)) { 'none' } else { $goblinTrackerInfo.LastObservationReason })",
             "Goblin evidence events detected: $($goblinTrackerInfo.EvidenceEventCount)",
             "Goblin evidence last type: $($goblinTrackerInfo.LastEvidenceType)",
             "Goblin evidence last confidence: $($goblinTrackerInfo.LastEvidenceConfidence)",
@@ -1939,6 +1957,7 @@ Write-Host "Session duration:    $($sessionDuration.ToString('hh\:mm\:ss'))"
 Write-Host "Goblins found:       $($goblinTrackerInfo.GoblinCount)"
 Write-Host "Goblin active time:  $($goblinTrackerInfo.ActiveCombatTime)"
 Write-Host "Goblin GPH:          $($goblinTrackerInfo.GPH)"
+Write-Host "Observations:        $($goblinTrackerInfo.ObservationCount)"
 Write-Host "Evidence events:     $($goblinTrackerInfo.EvidenceEventCount)"
 Write-Host "Last evidence:       $($goblinTrackerInfo.LastEvidenceType) ($($goblinTrackerInfo.LastEvidenceConfidence))"
 Write-Host "Evidence folder:     $selectedGoblinEvidenceFolder"

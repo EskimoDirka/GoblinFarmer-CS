@@ -74,6 +74,7 @@ namespace GoblinFarmer
             lblGoblinEvidenceConfidence = new Label();
             lblGoblinEvidenceType = new Label();
             lblGoblinEvidenceLast = new Label();
+            lblGoblinObservation = new Label();
             btnResetGoblinTrackerStats = new Button();
             lblGoblinActiveTime = new Label();
             lblGoblinGph = new Label();
@@ -491,13 +492,14 @@ namespace GoblinFarmer
             grpGoblinTracker.Controls.Add(lblGoblinEvidenceConfidence);
             grpGoblinTracker.Controls.Add(lblGoblinEvidenceType);
             grpGoblinTracker.Controls.Add(lblGoblinEvidenceLast);
+            grpGoblinTracker.Controls.Add(lblGoblinObservation);
             grpGoblinTracker.Controls.Add(btnResetGoblinTrackerStats);
             grpGoblinTracker.Controls.Add(lblGoblinActiveTime);
             grpGoblinTracker.Controls.Add(lblGoblinGph);
             grpGoblinTracker.Controls.Add(lblGoblinCount);
             grpGoblinTracker.Location = new Point(12, 517);
             grpGoblinTracker.Name = "grpGoblinTracker";
-            grpGoblinTracker.Size = new Size(311, 148);
+            grpGoblinTracker.Size = new Size(311, 214);
             grpGoblinTracker.TabIndex = 13;
             grpGoblinTracker.TabStop = false;
             grpGoblinTracker.Text = "Goblin Tracker";
@@ -537,6 +539,14 @@ namespace GoblinFarmer
             lblGoblinEvidenceLast.Size = new Size(113, 15);
             lblGoblinEvidenceLast.TabIndex = 4;
             lblGoblinEvidenceLast.Text = "Last Evidence: None";
+            //
+            // lblGoblinObservation
+            //
+            lblGoblinObservation.Location = new Point(12, 144);
+            lblGoblinObservation.Name = "lblGoblinObservation";
+            lblGoblinObservation.Size = new Size(287, 63);
+            lblGoblinObservation.TabIndex = 8;
+            lblGoblinObservation.Text = "Last Observation:\r\n--\r\n--\r\n--\r\n--";
             //
             // btnResetGoblinTrackerStats
             //
@@ -646,7 +656,7 @@ namespace GoblinFarmer
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(918, 676);
+            ClientSize = new Size(918, 740);
             Controls.Add(lblEscape);
             Controls.Add(grpGoblinTracker);
             Controls.Add(grpSessionStats);
@@ -656,7 +666,7 @@ namespace GoblinFarmer
             Controls.Add(grpRoutes);
             Controls.Add(grpFlows);
             Icon = (Icon)resources.GetObject("$this.Icon");
-            MinimumSize = new Size(934, 715);
+            MinimumSize = new Size(934, 779);
             Name = "frmMain";
             Text = "GoblinFarmer";
             Load += frmMain_Load;
@@ -721,6 +731,7 @@ namespace GoblinFarmer
         private Label lblGoblinEvidenceConfidence;
         private Label lblGoblinEvidenceType;
         private Label lblGoblinEvidenceLast;
+        private Label lblGoblinObservation;
         private Button btnResetGoblinTrackerStats;
         private Label lblGoblinActiveTime;
         private Label lblGoblinGph;

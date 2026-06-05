@@ -555,6 +555,8 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Add explicit Goblin Tracker manual no-count block list and block WhimsyDale from manual `X` counts.
 * [x] Extend manual `X` false PF disambiguation to Cave Of The Moon Clan Level 1, Cathedral Level 1, and Cathedral Level 2.
 * [x] Extend the manual no-count block list to City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
+* [x] Add Automation Observation Mode for `JournalCandidate` and `MinimapCandidate` so candidates log what would count without incrementing GoblinCount, changing GPH, or consuming area-count slots.
+* [x] Include Automation Observation Mode counters and last-observation details in the UI diagnostics, session summaries, runtime `session-info.txt`, and debug package manifests.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [x] Live-validate Western Channel Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [x] Live-validate Eastern Channel Level 1 and Eastern Channel Level 2 remain separate area keys and do not consume PF slots during close title matches.
@@ -569,6 +571,12 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate Cathedral Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [ ] Live-validate Cathedral Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [ ] Live-validate real PF1/PF2 counts remain available after Cave/Cathedral close-match checks.
+* [ ] Live-validate `JournalCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
+* [ ] Live-validate `MinimapCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
+* [ ] Live-validate Automation Observation Mode reports `wouldCount=False reason=BlockedArea` in blocked locations such as WhimsyDale.
+* [ ] Live-validate Automation Observation Mode reports duplicate areas as `wouldCount=False` without consuming any additional slots.
+* [ ] Live-validate Automation Observation Mode reports PF1/PF2 eligibility against the two-count exception without changing the real count state.
+* [ ] Live-validate a generated debug package includes Goblin observation counters and last-observation metadata from `session-info.txt`.
 * [ ] Manually validate physical `X` increments the counter once per press while GoblinFarmer is running.
 * [ ] Manually validate tracker active time advances only during combat automation and pauses while idle, in menus, waiting for game creation, waiting for Diablo launch, or paused.
 * [ ] Manually validate Reset Stats clears goblin count, tracker active time, GPH, and per-area count state, and restarts tracker timing from the reset moment if combat is active.

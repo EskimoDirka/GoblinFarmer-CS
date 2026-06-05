@@ -62,6 +62,13 @@
 - Reset Stats clears goblin count, tracker active time, GPH, and per-area count state
 - New Game clears per-area count state while preserving the current session tracker statistics
 - Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
+- Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
+- `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
+- `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
+- Blocked observation areas such as WhimsyDale log `wouldCount=False` and `reason=BlockedArea`
+- Duplicate observation areas log `wouldCount=False` without consuming another area-count slot
+- PF1/PF2 observations report eligibility against `areaLimit=2` without changing real count state
+- The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
 
 ## Debug Package Evidence
 - Debug package includes latest log
@@ -79,6 +86,7 @@
 - Recent debug screenshots are included under `Screenshots\Recent`
 - Screenshots from previous sessions are excluded from the package
 - Debug package manifest reports package size, session start, session duration, total screenshots, success screenshot availability, failure screenshots, folder totals, and stale screenshot exclusions
+- Debug package manifest reports Goblin observation counters and last-observation metadata from `session-info.txt`
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
 
 ## Debug Manager / Session Summary
@@ -91,6 +99,7 @@
 - Combat active time increases only while combat is running
 - App exit writes `Sessions\Session_YYYYMMDD_HHMMSS.md`
 - Session summary includes app version/build mode, start/end/duration, latest log, latest debug package, latest screenshot/failure screenshot, latest failure type, and last known issue
+- Session summary includes observation-only counters for Goblin Observations, Journal Observations, Minimap Observations, Eligible Observations, Blocked Observations, and Duplicate Observations
 - Startup retention keeps only the newest `Debug.SessionSummaryRetentionCount` matching `Sessions\Session_*.md` files
 - Startup retention keeps only the newest `Debug.DebugPackageRetentionCount` matching `DebugPackages\GoblinFarmer_Debug_*.zip` files
 - Retention cleanup does not delete unrelated files in `Sessions\` or unrelated zip files in `DebugPackages\`

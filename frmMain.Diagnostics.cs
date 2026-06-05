@@ -32,9 +32,9 @@ namespace GoblinFarmer
                 return;
             }
 
-            int clientHeight = AppSettings.IsVsDebugProfile ? 740 : 676;
-            int minimumHeight = AppSettings.IsVsDebugProfile ? 779 : 715;
-            int diagnosticsHeight = AppSettings.IsVsDebugProfile ? 623 : 559;
+            int clientHeight = AppSettings.IsVsDebugProfile ? 836 : 676;
+            int minimumHeight = AppSettings.IsVsDebugProfile ? 875 : 715;
+            int diagnosticsHeight = AppSettings.IsVsDebugProfile ? 719 : 559;
 
             ClientSize = new Size(1350, clientHeight);
             MinimumSize = new Size(1080, minimumHeight);
@@ -203,7 +203,7 @@ namespace GoblinFarmer
             string routeState = $"CurrentKey={PortDisplayLocation(portLastTeleportKey)}; NextKey={PortDisplayLocation(portQueuedTeleportKey)}; RetryKey={PortDisplayLocation(portQueuedRetryTeleportKey)}; FailsafeBlocked={portAutomationBlockedByTeleportFailsafe}";
             string combatState = $"Running={portCombatRunning}; Stopping={portCombatStopping}; Class={PortDisplayLocation(portCombatClass)}; LootLeftDown={portLootSpamLeftClickDown}; DemonHunterRightHeld={portDemonHunterRightHeldFromSafeRegion}; RuntimeRightHeld={portRuntimeRightMouseHeld}";
             DiagnosticsSessionSnapshot sessionSnapshot = DebugManager.Session.Snapshot(DateTime.Now);
-            string goblinTracker = $"Goblins={sessionSnapshot.GoblinCount}; ActiveCombatTime={sessionSnapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}; GPH={sessionSnapshot.GoblinsPerHour:0.00}";
+            string goblinTracker = $"Goblins={sessionSnapshot.GoblinCount}; ActiveCombatTime={sessionSnapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}; GPH={sessionSnapshot.GoblinsPerHour:0.00}; Observations={sessionSnapshot.GoblinObservationCount}";
             string goblinEvidence = $"Events={sessionSnapshot.GoblinEvidenceEventCount}; Last={(sessionSnapshot.GoblinEvidenceEventCount > 0 ? sessionSnapshot.LastGoblinEvidenceType.ToString() : "None")}; Confidence={sessionSnapshot.LastGoblinEvidenceConfidence:0.00}; Time={(sessionSnapshot.LastGoblinEvidenceTime.HasValue ? sessionSnapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}";
             string appStatus = lblAppStatus.Text.Replace("App Status:", "", StringComparison.OrdinalIgnoreCase).Trim();
             string activeWorkflow = string.IsNullOrWhiteSpace(portLastWorkflowStep)

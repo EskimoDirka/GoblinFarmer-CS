@@ -199,6 +199,88 @@ namespace GoblinFarmer
             return true;
         }
 
+        private bool PortObserveGoblinCandidate(string source, string goblinType)
+        {
+            string observationSource = PortNormalizeGoblinObservationSource(source);
+            PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea(observationSource);
+            GoblinAreaResolution area = areaResult.Area;
+            goblinType = GoblinTypeNormalizer.Normalize(goblinType);
+            string areaKey = PortDisplayLocation(area.AreaKey);
+            string displayLocation = PortDisplayLocation(area.DisplayLocation);
+            string reason = "Eligible";
+            string duplicateState = "Available";
+            bool wouldCount = true;
+            GoblinAreaDuplicateGuardResult guardResult = new(true, 0, 0);
+
+            lock (portGoblinTrackerLock)
+            {
+                if (areaResult.Blocked)
+                {
+                    wouldCount = false;
+                    reason = areaResult.SuppressionReason;
+                    duplicateState = reason;
+                }
+                else if (!area.Resolved)
+                {
+                    wouldCount = false;
+                    reason = "AreaUnresolved";
+                    duplicateState = reason;
+                }
+                else
+                {
+                    guardResult = portGoblinAreaDuplicateGuard.Peek(area.AreaKey);
+                    if (GoblinManualCountBlockList.IsBlocked(area.AreaKey))
+                    {
+                        wouldCount = false;
+                        reason = "BlockedArea";
+                        duplicateState = reason;
+                    }
+                    else if (!guardResult.Accepted)
+                    {
+                        wouldCount = false;
+                        reason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                        duplicateState = reason;
+                    }
+                }
+
+                GoblinObservationRecord observation = new(
+                    DateTime.UtcNow,
+                    observationSource,
+                    goblinType,
+                    area.AreaKey,
+                    area.DisplayLocation,
+                    wouldCount,
+                    reason,
+                    duplicateState,
+                    guardResult.AreaLimit,
+                    guardResult.AreaCount);
+                DebugManager.Session.RecordGoblinObservation(observation);
+            }
+
+            AppLogger.Info($"GoblinTracker: GoblinObservationCandidate source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} wouldCount={wouldCount} reason={reason}");
+            AppLogger.Info($"GoblinTracker: GoblinObservationSummary source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState} areaLimit={guardResult.AreaLimit} currentAreaCount={guardResult.AreaCount}");
+            PortWriteSessionMetadata(logSuccess: false);
+            PortUpdateGoblinTrackerStats();
+            return wouldCount;
+        }
+
+        private static string PortNormalizeGoblinObservationSource(string source)
+        {
+            if (string.Equals(source, "JournalCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Journal";
+            }
+
+            if (string.Equals(source, "MinimapCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Minimap", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Minimap";
+            }
+
+            return string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim();
+        }
+
         private PortGoblinTrackerAreaResolution PortResolveCurrentGoblinArea(string source)
         {
             string rawLocation = "";
@@ -323,6 +405,17 @@ namespace GoblinFarmer
             lblGoblinEvidenceType.Text = $"Evidence Type: {(snapshot.GoblinEvidenceEventCount > 0 ? snapshot.LastGoblinEvidenceType.ToString() : "None")}";
             lblGoblinEvidenceConfidence.Text = $"Evidence Confidence: {snapshot.LastGoblinEvidenceConfidence:0.00}";
             lblGoblinEvidenceTime.Text = $"Evidence Time: {(snapshot.LastGoblinEvidenceTime.HasValue ? snapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}";
+            lblGoblinObservation.Text = PortGoblinObservationLabel(snapshot.LastGoblinObservation);
+        }
+
+        private static string PortGoblinObservationLabel(GoblinObservationRecord? observation)
+        {
+            if (observation == null)
+            {
+                return "Last Observation:\r\n--\r\n--\r\n--\r\n--";
+            }
+
+            return $"Last Observation:\r\n{observation.GoblinType}\r\n{PortDisplayLocation(observation.AreaKey)}\r\n{observation.Source}\r\n{observation.Reason}";
         }
 
         private sealed record PortGoblinTrackerAreaResolution(
@@ -366,6 +459,14 @@ namespace GoblinFarmer
             AppLogger.Info($"Last Counted Area: {PortDisplayLocation(diagnosticsSnapshot.LastCountedGoblinAreaKey)}");
             AppLogger.Info($"Active Combat Time: {diagnosticsSnapshot.GoblinActiveCombatTime:hh\\:mm\\:ss}");
             AppLogger.Info($"GPH: {diagnosticsSnapshot.GoblinsPerHour:0.00}");
+            AppLogger.Info("Goblin Observations");
+            AppLogger.Info("-------------------");
+            AppLogger.Info($"Goblin Observations: {diagnosticsSnapshot.GoblinObservationCount}");
+            AppLogger.Info($"Journal Observations: {diagnosticsSnapshot.JournalObservationCount}");
+            AppLogger.Info($"Minimap Observations: {diagnosticsSnapshot.MinimapObservationCount}");
+            AppLogger.Info($"Eligible Observations: {diagnosticsSnapshot.EligibleObservationCount}");
+            AppLogger.Info($"Blocked Observations: {diagnosticsSnapshot.BlockedObservationCount}");
+            AppLogger.Info($"Duplicate Observations: {diagnosticsSnapshot.DuplicateObservationCount}");
             AppLogger.Info("Goblin Evidence");
             AppLogger.Info("---------------");
             AppLogger.Info($"Events Detected: {diagnosticsSnapshot.GoblinEvidenceEventCount}");
@@ -403,6 +504,17 @@ namespace GoblinFarmer
                     $"CombatStartTimeLocal={(snapshot.GoblinCombatStartTime.HasValue ? snapshot.GoblinCombatStartTime.Value.ToString("O") : "")}",
                     $"CombatStartTimeUtc={(snapshot.GoblinCombatStartTime.HasValue ? snapshot.GoblinCombatStartTime.Value.ToUniversalTime().ToString("O") : "")}",
                     $"GPH={snapshot.GoblinsPerHour:0.00}",
+                    $"GoblinObservationCount={snapshot.GoblinObservationCount}",
+                    $"JournalObservationCount={snapshot.JournalObservationCount}",
+                    $"MinimapObservationCount={snapshot.MinimapObservationCount}",
+                    $"EligibleObservationCount={snapshot.EligibleObservationCount}",
+                    $"BlockedObservationCount={snapshot.BlockedObservationCount}",
+                    $"DuplicateObservationCount={snapshot.DuplicateObservationCount}",
+                    $"LastGoblinObservationSource={snapshot.LastGoblinObservation?.Source ?? ""}",
+                    $"LastGoblinObservationType={snapshot.LastGoblinObservation?.GoblinType ?? ""}",
+                    $"LastGoblinObservationAreaKey={snapshot.LastGoblinObservation?.AreaKey ?? ""}",
+                    $"LastGoblinObservationWouldCount={(snapshot.LastGoblinObservation != null ? snapshot.LastGoblinObservation.WouldCount.ToString() : "")}",
+                    $"LastGoblinObservationReason={snapshot.LastGoblinObservation?.Reason ?? ""}",
                     $"GoblinEvidenceEventCount={snapshot.GoblinEvidenceEventCount}",
                     $"LastGoblinEvidenceType={(snapshot.GoblinEvidenceEventCount > 0 ? snapshot.LastGoblinEvidenceType.ToString() : "None")}",
                     $"LastGoblinEvidenceConfidence={snapshot.LastGoblinEvidenceConfidence:0.00}",

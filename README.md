@@ -18,6 +18,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Monk, Demon Hunter, and Witch Doctor combat support.
 - Location-aware Goblin Tracker with `X` hotkey counting, per-area duplicate protection, active-combat-time GPH, live UI stats, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and debug package generation.
+- Visual Studio Debug layout that keeps the expanded Goblin Tracker evidence and Last Observation fields visible while normal release launches stay compact.
 - Runtime configuration for Diablo III, Battle.net, image templates, launch timings, diagnostic behavior, and VS Debug project-root config persistence.
 - Self-contained Windows release publishing plus optional Inno Setup installer packaging.
 - Dynamic app title and synchronized installer/application versioning.
@@ -95,7 +96,9 @@ Some non-spawn route and event areas are excluded from manual Goblin Tracker cou
 
 The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
 
-Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized and counted as `Gelatinous Sire`.
+Automation Observation Mode watches Journal and Minimap goblin candidates and records what the automation would have counted. It uses the same area resolution, blocked-area, duplicate, and PF1/PF2 exception rules, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots.
+
+Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
 Current found list: Gem Hoarder, Malevolent Tormentor, Treasure Goblin, Rainbow Goblin, Insufferable Miscreant, Blood Thief, Odious Collector, Gelatinous Sire.
 
@@ -107,6 +110,11 @@ The main window shows:
 Goblins: 0
 GPH: 0.00
 Active Time: 00:00:00
+Last Observation:
+--
+--
+--
+--
 ```
 
 GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the count, tracker active time, GPH, and the in-memory counted-area duplicate guard; if combat is currently running, tracker active time restarts from the reset moment. Starting a new game clears only the counted-area guard so the same area can be counted again in the next game.
@@ -164,6 +172,8 @@ The Hotkeys group in the app shows the available hotkeys and includes checkboxes
 ## Debug Mode
 
 Debug Mode is off by default for normal release use. When enabled from Settings, it shows diagnostic controls and debug-only views such as the route state inspector and screenshot options, and it enables Keep Debug Screenshots by default until the user turns screenshot retention off. Visual Studio Debug runs force debug evidence internally, so those settings are not shown as editable options there. Success screenshots remain disabled unless `Debug.EnableSuccessScreenshots` is explicitly set to `true`.
+
+Visual Studio Debug uses a taller diagnostic window so the Goblin Tracker evidence and Last Observation fields remain readable. Release-user launches stay compact and show diagnostics only after Debug Mode is enabled.
 
 Debug tooling includes:
 

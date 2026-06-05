@@ -44,6 +44,18 @@ namespace GoblinFarmer
         bool Counted,
         string SuppressionReason);
 
+    internal sealed record GoblinObservationRecord(
+        DateTime TimestampUtc,
+        string Source,
+        string GoblinType,
+        string AreaKey,
+        string DisplayLocation,
+        bool WouldCount,
+        string Reason,
+        string DuplicateState,
+        int AreaLimit,
+        int CurrentAreaCount);
+
     internal readonly record struct GoblinAreaResolution(
         string RawLocation,
         string AreaKey,
@@ -617,6 +629,18 @@ namespace GoblinFarmer
             countedAreaKeys[areaKey] = updatedCount;
             result = new GoblinAreaDuplicateGuardResult(true, updatedCount, limit);
             return true;
+        }
+
+        public GoblinAreaDuplicateGuardResult Peek(string areaKey)
+        {
+            if (string.IsNullOrWhiteSpace(areaKey))
+            {
+                return new GoblinAreaDuplicateGuardResult(true, 0, 0);
+            }
+
+            int limit = AreaLimit(areaKey);
+            countedAreaKeys.TryGetValue(areaKey, out int currentCount);
+            return new GoblinAreaDuplicateGuardResult(currentCount < limit, currentCount, limit);
         }
 
         public int Reset()
