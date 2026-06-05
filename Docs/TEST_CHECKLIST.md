@@ -35,6 +35,19 @@
 
 ## Goblin Tracker
 - Default resolved areas allow one goblin count per area per game
+- Manual `X` logs `AreaDetectionAmbiguous` when PF and known channel/cavern title-template matches are extremely close
+- Manual `X` uses route context to select Western Channel Level 1/2 or Eastern Channel Level 1/2 from Ancient Waterway context instead of consuming PF slots
+- Manual `X` uses route context to select Caverns of Frost Level 1/2 from Battlefields context instead of consuming PF slots
+- Unresolved PF-leading ambiguity suppresses the count with `GoblinCountSuppressed reason=AmbiguousAreaDetection`
+- Manual `X` in WhimsyDale suppresses with `GoblinCountSuppressed areaKey=WhimsyDale reason=BlockedArea source=ManualHotkey`
+- Repeated manual `X` in WhimsyDale remains blocked
+- WhimsyDale manual-count blocking does not increment the counter and does not consume an area-count slot
+- Western Channel Level 1 counts once and suppresses the second press as the same area
+- Western Channel Level 2 counts once and suppresses the second press as the same area
+- Eastern Channel Level 1 counts once and suppresses the second press as the same area
+- Eastern Channel Level 2 counts once and suppresses the second press as the same area
+- Caverns of Frost Level 1 counts once and suppresses the second press as the same area
+- Caverns of Frost Level 2 counts once and suppresses the second press as the same area
 - Pandemonium Fortress Level 1 accepts goblin counts 1 and 2 in the same game
 - Pandemonium Fortress Level 1 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Pandemonium Fortress Level 2 accepts goblin counts 1 and 2 in the same game

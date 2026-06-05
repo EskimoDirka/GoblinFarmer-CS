@@ -52,6 +52,14 @@ namespace GoblinFarmer
         public bool Resolved => !string.IsNullOrWhiteSpace(AreaKey);
     }
 
+    internal readonly record struct GoblinAreaDetectionDisambiguationResult(
+        bool Ambiguous,
+        bool Blocked,
+        string SelectedLocation,
+        string AmbiguityGroup,
+        string Reason,
+        double Delta);
+
     internal static class GoblinAreaResolver
     {
         private static readonly Dictionary<string, string> CanonicalAreas = BuildCanonicalAreas();
@@ -155,6 +163,186 @@ namespace GoblinFarmer
             }
 
             return string.Join(" ", normalizedKey.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(part => char.ToUpperInvariant(part[0]) + part[1..].ToLowerInvariant()));
+        }
+    }
+
+    internal static class GoblinAreaDetectionDisambiguator
+    {
+        private const double AmbiguousDeltaThreshold = 0.025;
+        private const double AmbiguousCandidateMinimumConfidence = 0.90;
+
+        public static GoblinAreaDetectionDisambiguationResult Disambiguate(
+            string bestName,
+            double bestConfidence,
+            string secondName,
+            double secondConfidence,
+            string routeContext)
+        {
+            double delta = bestConfidence - secondConfidence;
+            string ambiguityGroup = AmbiguityGroup(bestName, secondName);
+            if (string.IsNullOrWhiteSpace(ambiguityGroup) ||
+                bestConfidence < AmbiguousCandidateMinimumConfidence ||
+                secondConfidence < AmbiguousCandidateMinimumConfidence ||
+                delta < 0 ||
+                delta > AmbiguousDeltaThreshold)
+            {
+                return new GoblinAreaDetectionDisambiguationResult(false, false, bestName, "", "NotAmbiguous", delta);
+            }
+
+            string selected = SelectFromRouteContext(bestName, secondName, routeContext);
+            if (!string.IsNullOrWhiteSpace(selected))
+            {
+                return new GoblinAreaDetectionDisambiguationResult(true, false, selected, ambiguityGroup, "RouteContext", delta);
+            }
+
+            if (!IsPandemonium(bestName) && IsPandemonium(secondName))
+            {
+                return new GoblinAreaDetectionDisambiguationResult(true, false, bestName, ambiguityGroup, "BestNonPandemonium", delta);
+            }
+
+            return new GoblinAreaDetectionDisambiguationResult(true, true, "", ambiguityGroup, "AmbiguousAreaDetection", delta);
+        }
+
+        private static string SelectFromRouteContext(string bestName, string secondName, string routeContext)
+        {
+            string contextKey = GoblinAreaResolver.NormalizedKey(routeContext);
+            if (string.IsNullOrWhiteSpace(contextKey))
+            {
+                return "";
+            }
+
+            if (contextKey == GoblinAreaResolver.NormalizedKey(bestName))
+            {
+                return bestName;
+            }
+
+            if (contextKey == GoblinAreaResolver.NormalizedKey(secondName))
+            {
+                return secondName;
+            }
+
+            if (IsAncientWaterwayContext(routeContext))
+            {
+                if (IsChannel(bestName))
+                {
+                    return bestName;
+                }
+
+                if (IsChannel(secondName))
+                {
+                    return secondName;
+                }
+            }
+
+            if (IsBattlefieldsContext(routeContext))
+            {
+                if (IsCavernsOfFrost(bestName))
+                {
+                    return bestName;
+                }
+
+                if (IsCavernsOfFrost(secondName))
+                {
+                    return secondName;
+                }
+            }
+
+            return "";
+        }
+
+        private static string AmbiguityGroup(string first, string second)
+        {
+            if (SameLevel(first, second, 1) && HasPandemoniumAndChannel(first, second))
+            {
+                return "ChannelVsPandemonium";
+            }
+
+            if (SameLevel(first, second, 2) && HasPandemoniumAndChannel(first, second))
+            {
+                return "ChannelVsPandemonium";
+            }
+
+            if (SameLevel(first, second, 1) && HasPandemoniumAndCaverns(first, second))
+            {
+                return "CavernsVsPandemonium";
+            }
+
+            if (SameLevel(first, second, 2) && HasPandemoniumAndCaverns(first, second))
+            {
+                return "CavernsVsPandemonium";
+            }
+
+            return "";
+        }
+
+        private static bool SameLevel(string first, string second, int level)
+        {
+            return GoblinAreaResolver.NormalizedKey(first).EndsWith($"level {level}", StringComparison.OrdinalIgnoreCase) &&
+                GoblinAreaResolver.NormalizedKey(second).EndsWith($"level {level}", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasPandemoniumAndChannel(string first, string second)
+        {
+            return (IsPandemonium(first) && IsChannel(second)) ||
+                (IsPandemonium(second) && IsChannel(first));
+        }
+
+        private static bool HasPandemoniumAndCaverns(string first, string second)
+        {
+            return (IsPandemonium(first) && IsCavernsOfFrost(second)) ||
+                (IsPandemonium(second) && IsCavernsOfFrost(first));
+        }
+
+        private static bool IsPandemonium(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Pandemonium Fortress Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Pandemonium Fortress Level 2");
+        }
+
+        private static bool IsChannel(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Western Channel Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Western Channel Level 2") ||
+                key == GoblinAreaResolver.NormalizedKey("Eastern Channel Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Eastern Channel Level 2");
+        }
+
+        private static bool IsCavernsOfFrost(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Caverns of Frost Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Caverns of Frost Level 2");
+        }
+
+        private static bool IsAncientWaterwayContext(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Ancient Waterway") ||
+                IsChannel(location);
+        }
+
+        private static bool IsBattlefieldsContext(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Battlefields") ||
+                key == GoblinAreaResolver.NormalizedKey("The Battlefields") ||
+                key == GoblinAreaResolver.NormalizedKey("Fields of Slaughter") ||
+                IsCavernsOfFrost(location);
+        }
+    }
+
+    internal static class GoblinManualCountBlockList
+    {
+        private static readonly HashSet<string> BlockedAreaKeys = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "WhimsyDale",
+        };
+
+        public static bool IsBlocked(string areaKey)
+        {
+            return !string.IsNullOrWhiteSpace(areaKey) && BlockedAreaKeys.Contains(areaKey);
         }
     }
 

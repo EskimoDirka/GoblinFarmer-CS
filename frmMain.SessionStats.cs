@@ -87,7 +87,8 @@ namespace GoblinFarmer
 
         private bool PortTryRecordGoblinFound(string source, string goblinType, bool allowUnresolvedFallback)
         {
-            GoblinAreaResolution area = PortResolveCurrentGoblinArea(source);
+            PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea(source);
+            GoblinAreaResolution area = areaResult.Area;
             source = string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim();
             goblinType = GoblinTypeNormalizer.Normalize(goblinType);
             string rawLocation = PortDisplayLocation(area.RawLocation);
@@ -99,6 +100,27 @@ namespace GoblinFarmer
 
             lock (portGoblinTrackerLock)
             {
+                if (areaResult.Blocked)
+                {
+                    suppressionReason = areaResult.SuppressionReason;
+                    GoblinFoundRecord suppressedRecord = new(
+                        area.AreaKey,
+                        area.DisplayLocation,
+                        goblinType,
+                        source,
+                        DateTime.UtcNow,
+                        false,
+                        suppressionReason);
+                    DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                    AppLogger.Info($"GoblinTracker: GoblinCountSuppressed reason={suppressionReason} best='{PortLogField(areaResult.BestName)}' bestConfidence={areaResult.BestConfidence:0.000} second='{PortLogField(areaResult.SecondName)}' secondConfidence={areaResult.SecondConfidence:0.000} delta={areaResult.Delta:0.000} ambiguityGroup={PortLogField(areaResult.AmbiguityGroup)} source='{PortLogField(source)}'");
+                    if (source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PortShowSplash("Goblin count skipped: ambiguous area", 2500);
+                    }
+
+                    return false;
+                }
+
                 if (!area.Resolved)
                 {
                     if (!allowUnresolvedFallback)
@@ -118,6 +140,23 @@ namespace GoblinFarmer
                     }
 
                     AppLogger.Info($"GoblinTracker: Area unresolved source='{PortLogField(source)}'; rawLocation='{PortLogField(rawLocation)}'; falling back to existing count behavior");
+                }
+                else if (source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase) &&
+                    GoblinManualCountBlockList.IsBlocked(area.AreaKey))
+                {
+                    suppressionReason = "BlockedArea";
+                    GoblinFoundRecord suppressedRecord = new(
+                        area.AreaKey,
+                        area.DisplayLocation,
+                        goblinType,
+                        source,
+                        DateTime.UtcNow,
+                        false,
+                        suppressionReason);
+                    DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                    AppLogger.Info($"GoblinTracker: GoblinCountSuppressed areaKey={areaKey} reason={suppressionReason} source={PortLogField(source)} rawLocation='{PortLogField(rawLocation)}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}'");
+                    PortShowSplash("Goblin count skipped: blocked area", 2500);
+                    return false;
                 }
                 else if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey, out guardResult))
                 {
@@ -160,14 +199,66 @@ namespace GoblinFarmer
             return true;
         }
 
-        private GoblinAreaResolution PortResolveCurrentGoblinArea(string source)
+        private PortGoblinTrackerAreaResolution PortResolveCurrentGoblinArea(string source)
         {
             string rawLocation = "";
+            string bestName = "";
+            double bestConfidence = 0;
+            string secondName = "";
+            double secondConfidence = 0;
+            double delta = 0;
+            string ambiguityGroup = "";
+            string disambiguationReason = "";
             try
             {
                 if (IsDiabloRunning())
                 {
-                    rawLocation = PortDetectCurrentLocation();
+                    if (source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PortLocationDetectionResult detection = PortDetectCurrentLocationFromTemplatesDetailed(
+                            portCurrentLocationTemplates,
+                            "goblin tracker manual current-location detection",
+                            logPerf: true,
+                            PortCurrentLocationConfidence);
+                        rawLocation = detection.Detected;
+                        bestName = detection.BestName;
+                        bestConfidence = detection.BestConfidence;
+                        secondName = detection.SecondName;
+                        secondConfidence = detection.SecondConfidence;
+                        string routeContext = PortGoblinTrackerAreaRouteContext();
+                        GoblinAreaDetectionDisambiguationResult disambiguation = GoblinAreaDetectionDisambiguator.Disambiguate(
+                            detection.BestName,
+                            detection.BestConfidence,
+                            detection.SecondName,
+                            detection.SecondConfidence,
+                            routeContext);
+                        if (disambiguation.Ambiguous)
+                        {
+                            delta = disambiguation.Delta;
+                            ambiguityGroup = disambiguation.AmbiguityGroup;
+                            disambiguationReason = disambiguation.Reason;
+                            rawLocation = disambiguation.SelectedLocation;
+                            AppLogger.Info($"GoblinTracker: AreaDetectionAmbiguous source={PortLogField(source)} best='{PortLogField(detection.BestName)}' bestConfidence={detection.BestConfidence:0.000} second='{PortLogField(detection.SecondName)}' secondConfidence={detection.SecondConfidence:0.000} delta={disambiguation.Delta:0.000} ambiguityGroup={PortLogField(disambiguation.AmbiguityGroup)} selected='{PortLogField(disambiguation.SelectedLocation)}' reason={PortLogField(disambiguation.Reason)} routeContext='{PortLogField(routeContext)}' currentButton='{PortLogField(PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey)))}' nextButton='{PortLogField(PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey)))}'");
+                            if (disambiguation.Blocked)
+                            {
+                                return new PortGoblinTrackerAreaResolution(
+                                    new GoblinAreaResolution("", "", ""),
+                                    true,
+                                    "AmbiguousAreaDetection",
+                                    bestName,
+                                    bestConfidence,
+                                    secondName,
+                                    secondConfidence,
+                                    delta,
+                                    ambiguityGroup,
+                                    disambiguationReason);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        rawLocation = PortDetectCurrentLocation();
+                    }
                 }
             }
             catch (Exception ex)
@@ -182,7 +273,28 @@ namespace GoblinFarmer
 
             GoblinAreaResolution resolution = GoblinAreaResolver.Resolve(rawLocation);
             AppLogger.Info($"GoblinTracker: Area resolved rawLocation='{PortLogField(PortDisplayLocation(resolution.RawLocation))}' areaKey='{PortLogField(PortDisplayLocation(resolution.AreaKey))}' source='{PortLogField(source)}' resolved={resolution.Resolved}");
-            return resolution;
+            return new PortGoblinTrackerAreaResolution(
+                resolution,
+                false,
+                "",
+                bestName,
+                bestConfidence,
+                secondName,
+                secondConfidence,
+                delta,
+                ambiguityGroup,
+                disambiguationReason);
+        }
+
+        private string PortGoblinTrackerAreaRouteContext()
+        {
+            string context = PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation);
+            if (!string.IsNullOrWhiteSpace(context))
+            {
+                return context;
+            }
+
+            return portLastConfirmedLocation;
         }
 
         private void PortResetGoblinAreaDuplicateGuard(string reason)
@@ -213,6 +325,18 @@ namespace GoblinFarmer
             lblGoblinEvidenceConfidence.Text = $"Evidence Confidence: {snapshot.LastGoblinEvidenceConfidence:0.00}";
             lblGoblinEvidenceTime.Text = $"Evidence Time: {(snapshot.LastGoblinEvidenceTime.HasValue ? snapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}";
         }
+
+        private sealed record PortGoblinTrackerAreaResolution(
+            GoblinAreaResolution Area,
+            bool Blocked,
+            string SuppressionReason,
+            string BestName,
+            double BestConfidence,
+            string SecondName,
+            double SecondConfidence,
+            double Delta,
+            string AmbiguityGroup,
+            string DisambiguationReason);
 
         private void PortLogSessionSummary()
         {

@@ -40,6 +40,10 @@ Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeep
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
 Run("Goblin area duplicate guard keeps default one-count areas", TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas);
+Run("Goblin manual count block list blocks only WhimsyDale", TestGoblinManualCountBlockListBlocksOnlyWhimsyDale);
+Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
+Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
+Run("Goblin area detection false PF matches do not consume PF area slots", TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots);
 Run("Goblin tracker records allow unknown manual fallback and reset cleanly", TestGoblinTrackerRecordsAllowUnknownManualFallbackAndReset);
 
 if (failures > 0)
@@ -1064,9 +1068,12 @@ static void TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas()
         "City Of Caldeum",
         "Ruined Cistern",
         "Ancient Waterway",
+        "Western Channel Level 1",
         "Western Channel Level 2",
+        "Eastern Channel Level 1",
         "Eastern Channel Level 2",
         "Cave Of The Moon Clan Level 2",
+        "Caverns of Frost Level 1",
         "Caverns of Frost Level 2",
         "Black Canyon Mines",
         "Battlefields",
@@ -1100,6 +1107,181 @@ static void AssertPandemoniumAreaLimit(GoblinAreaDuplicateGuard guard, string ar
     AssertFalse(guard.TryAccept(areaKey, out GoblinAreaDuplicateGuardResult third), $"{areaName} third count should be suppressed");
     AssertEqual(2, third.AreaCount, $"{areaName} third count should report the capped areaCount=2");
     AssertEqual(2, third.AreaLimit, $"{areaName} third count should report areaLimit=2");
+}
+
+static void TestGoblinManualCountBlockListBlocksOnlyWhimsyDale()
+{
+    string whimsyDale = GoblinAreaResolver.Resolve("Whimsydale").AreaKey;
+    AssertEqual("WhimsyDale", whimsyDale, "WhimsyDale alias should resolve to the canonical area key");
+    AssertTrue(GoblinManualCountBlockList.IsBlocked(whimsyDale), "WhimsyDale should be blocked from manual goblin counts");
+    AssertTrue(GoblinManualCountBlockList.IsBlocked("whimsydale"), "WhimsyDale block list should be case-insensitive");
+
+    string[] countableAreas =
+    [
+        "Western Channel Level 1",
+        "Western Channel Level 2",
+        "Eastern Channel Level 1",
+        "Eastern Channel Level 2",
+        "Caverns of Frost Level 1",
+        "Caverns of Frost Level 2",
+        "Pandemonium Fortress Level 1",
+        "Pandemonium Fortress Level 2",
+        "Cathedral Level 1",
+    ];
+
+    foreach (string areaName in countableAreas)
+    {
+        string areaKey = GoblinAreaResolver.Resolve(areaName).AreaKey;
+        AssertFalse(GoblinManualCountBlockList.IsBlocked(areaKey), $"{areaName} should not be in the manual count block list");
+    }
+}
+
+static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()
+{
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 1",
+        0.999,
+        "Western Channel Level 1",
+        0.996,
+        "Ancient Waterway",
+        "Western Channel Level 1",
+        "ChannelVsPandemonium");
+
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 2",
+        0.999,
+        "Western Channel Level 2",
+        0.991,
+        "Ancient Waterway",
+        "Western Channel Level 2",
+        "ChannelVsPandemonium");
+
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 1",
+        1.000,
+        "Caverns of Frost Level 1",
+        0.995,
+        "Battlefields",
+        "Caverns of Frost Level 1",
+        "CavernsVsPandemonium");
+
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 2",
+        0.999,
+        "Caverns of Frost Level 2",
+        0.995,
+        "Battlefields",
+        "Caverns of Frost Level 2",
+        "CavernsVsPandemonium");
+
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 1",
+        0.997,
+        "Western Channel Level 1",
+        0.994,
+        "Pandemonium Fortress Level 1",
+        "Pandemonium Fortress Level 1",
+        "ChannelVsPandemonium");
+}
+
+static void TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity()
+{
+    GoblinAreaDetectionDisambiguationResult result = GoblinAreaDetectionDisambiguator.Disambiguate(
+        "Pandemonium Fortress Level 1",
+        0.999,
+        "Western Channel Level 1",
+        0.996,
+        "");
+
+    AssertTrue(result.Ambiguous, "known close PF/channel pair should be marked ambiguous");
+    AssertTrue(result.Blocked, "unresolved PF-leading ambiguity should block rather than count");
+    AssertEqual("", result.SelectedLocation, "blocked ambiguity should not select an area");
+    AssertEqual("AmbiguousAreaDetection", result.Reason, "blocked ambiguity should explain suppression");
+
+    result = GoblinAreaDetectionDisambiguator.Disambiguate(
+        "Western Channel Level 2",
+        0.999,
+        "Pandemonium Fortress Level 2",
+        0.991,
+        "");
+
+    AssertTrue(result.Ambiguous, "known close channel/PF pair should be marked ambiguous");
+    AssertFalse(result.Blocked, "non-PF best match should remain countable");
+    AssertEqual("Western Channel Level 2", result.SelectedLocation, "non-PF best match should be preserved");
+    AssertEqual("BestNonPandemonium", result.Reason, "non-PF best disambiguation should be explicit");
+}
+
+static void TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots()
+{
+    GoblinAreaDuplicateGuard guard = new();
+
+    AcceptDisambiguatedArea(
+        guard,
+        "Pandemonium Fortress Level 1",
+        0.999,
+        "Western Channel Level 1",
+        0.996,
+        "Ancient Waterway",
+        "Western Channel Level 1");
+    AssertFalse(guard.TryAccept("Western Channel Level 1"), "disambiguated Western Channel Level 1 should suppress second same-area press");
+
+    AcceptDisambiguatedArea(
+        guard,
+        "Pandemonium Fortress Level 1",
+        1.000,
+        "Caverns of Frost Level 1",
+        0.995,
+        "Battlefields",
+        "Caverns of Frost Level 1");
+    AssertFalse(guard.TryAccept("Caverns of Frost Level 1"), "disambiguated Caverns Level 1 should suppress second same-area press");
+
+    AssertTrue(guard.TryAccept("Pandemonium Fortress Level 1"), "false PF1 matches should not consume PF1 first slot");
+    AssertTrue(guard.TryAccept("Pandemonium Fortress Level 1"), "false PF1 matches should not consume PF1 second slot");
+    AssertFalse(guard.TryAccept("Pandemonium Fortress Level 1"), "PF1 third count should still be suppressed");
+}
+
+static void AssertDisambiguates(
+    string bestName,
+    double bestConfidence,
+    string secondName,
+    double secondConfidence,
+    string routeContext,
+    string expectedSelected,
+    string expectedGroup)
+{
+    GoblinAreaDetectionDisambiguationResult result = GoblinAreaDetectionDisambiguator.Disambiguate(
+        bestName,
+        bestConfidence,
+        secondName,
+        secondConfidence,
+        routeContext);
+
+    AssertTrue(result.Ambiguous, "known close PF ambiguity should be marked ambiguous");
+    AssertFalse(result.Blocked, "route context should resolve the ambiguity");
+    AssertEqual(expectedSelected, result.SelectedLocation, "route context should select the expected real area");
+    AssertEqual(expectedGroup, result.AmbiguityGroup, "ambiguity group should identify the confusing title family");
+    AssertEqual("RouteContext", result.Reason, "route context should be the disambiguation reason");
+}
+
+static void AcceptDisambiguatedArea(
+    GoblinAreaDuplicateGuard guard,
+    string bestName,
+    double bestConfidence,
+    string secondName,
+    double secondConfidence,
+    string routeContext,
+    string expectedSelected)
+{
+    GoblinAreaDetectionDisambiguationResult result = GoblinAreaDetectionDisambiguator.Disambiguate(
+        bestName,
+        bestConfidence,
+        secondName,
+        secondConfidence,
+        routeContext);
+
+    AssertFalse(result.Blocked, "test setup should disambiguate instead of block");
+    AssertEqual(expectedSelected, result.SelectedLocation, "test setup selected area mismatch");
+    AssertTrue(guard.TryAccept(result.SelectedLocation), $"{expectedSelected} first count should be accepted");
 }
 
 static void TestGoblinTrackerRecordsAllowUnknownManualFallbackAndReset()

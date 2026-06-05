@@ -548,8 +548,18 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Include Goblin Tracker count, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 * [x] Add explicit Goblin Tracker area-count overrides for Pandemonium Fortress Level 1 and Pandemonium Fortress Level 2 so each can count twice per game.
 * [x] Keep all non-Pandemonium Fortress Goblin Tracker areas capped at one count per game.
-* [ ] Live-validate Pandemonium Fortress Level 1 accepts counts 1 and 2, then suppresses count 3 with `reason=AreaLimitReached`.
-* [ ] Live-validate Pandemonium Fortress Level 2 accepts counts 1 and 2, then suppresses count 3 with `reason=AreaLimitReached`.
+* [x] Fix manual `X` false PF counts caused by very close current-location title matches against Western/Eastern Channel and Caverns of Frost templates.
+* [x] Add `AreaDetectionAmbiguous` / `AmbiguousAreaDetection` diagnostics for known PF/channel/cavern manual-count ambiguity.
+* [x] Add explicit Goblin Tracker manual no-count block list and block WhimsyDale from manual `X` counts.
+* [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
+* [x] Live-validate Western Channel Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
+* [x] Live-validate Eastern Channel Level 1 and Eastern Channel Level 2 remain separate area keys and do not consume PF slots during close title matches.
+* [x] Live-validate Caverns of Frost Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
+* [x] Live-validate Caverns of Frost Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
+* [x] Live-validate Pandemonium Fortress Level 1 accepts counts 1 and 2, then suppresses count 3 with `reason=AreaLimitReached`.
+* [x] Live-validate Pandemonium Fortress Level 2 accepts counts 1 and 2, then suppresses count 3 with `reason=AreaLimitReached`.
+* [ ] Live-validate WhimsyDale manual `X` suppresses with `reason=BlockedArea`, does not increment the counter, and does not consume an area-count slot.
+* [ ] Live-validate repeated WhimsyDale manual `X` remains blocked with `reason=BlockedArea`.
 * [ ] Manually validate physical `X` increments the counter once per press while GoblinFarmer is running.
 * [ ] Manually validate tracker active time advances only during combat automation and pauses while idle, in menus, waiting for game creation, waiting for Diablo launch, or paused.
 * [ ] Manually validate Reset Stats clears goblin count, tracker active time, GPH, and per-area count state, and restarts tracker timing from the reset moment if combat is active.
