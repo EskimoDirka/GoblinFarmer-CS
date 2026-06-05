@@ -16,7 +16,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Hotkey route blocking for known unsafe or incorrect location transitions.
 - Make New Game, Exit Game, repair, salvage, and town workflow helpers.
 - Monk, Demon Hunter, and Witch Doctor combat support.
-- Location-aware Goblin Tracker with `X` hotkey counting, per-area duplicate protection, active-combat-time GPH, live UI stats, and reset support.
+- Location-aware Goblin Tracker with `X` hotkey counting, per-area duplicate protection, active-combat-time GPH, live UI stats, accepted-count notifications, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and debug package generation.
 - Visual Studio Debug layout that keeps the expanded Goblin Tracker evidence and Last Observation fields visible while normal release launches stay compact.
 - Runtime configuration for Diablo III, Battle.net, image templates, launch timings, diagnostic behavior, and VS Debug project-root config persistence.
@@ -96,7 +96,7 @@ Some non-spawn route and event areas are excluded from manual Goblin Tracker cou
 
 The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
 
-Automation Observation Mode watches Journal and Minimap goblin candidates and records what the automation would have counted. It uses the same area resolution, blocked-area, duplicate, and PF1/PF2 exception rules, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots.
+Automation Observation Mode watches Journal and Minimap goblin candidates during combat and records what the automation would have counted. It uses the same area resolution, blocked-area, duplicate, and PF1/PF2 exception rules, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots. Debug logs include scanner start/stop, scan attempts/skips, candidate checks, and throttled Journal/Minimap diagnostic crop paths.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
@@ -118,6 +118,8 @@ Last Observation:
 ```
 
 GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the count, tracker active time, GPH, and the in-memory counted-area duplicate guard; if combat is currently running, tracker active time restarts from the reset moment. Starting a new game clears only the counted-area guard so the same area can be counted again in the next game.
+
+Accepted manual `X` counts show a no-activate notification for 5 seconds with the counted area, goblin type, and current total.
 
 ## Combat Profile Skill Setup
 

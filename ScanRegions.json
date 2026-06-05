@@ -26,5 +26,9 @@
   "SalvageConfirmationButton": {
     "Image": "Salvage Confirmation Scan Region.png",
     "Region": "1104,474,69,53"
+  },
+  "BattleNetD3Tab": {
+    "Image": "Battlenet D3 Tab Scan Region.png",
+    "Region": "120,76,81,76"
   }
 }

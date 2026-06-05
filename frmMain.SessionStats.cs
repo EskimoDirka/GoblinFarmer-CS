@@ -194,6 +194,12 @@ namespace GoblinFarmer
                 AppLogger.Info($"GoblinTracker: Count accepted rawLocation='{PortLogField(rawLocation)}' areaKey='{PortLogField(areaKey)}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' total={total}");
             }
 
+            if (source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase))
+            {
+                string notificationArea = area.Resolved ? displayLocation : "Unknown area";
+                PortShowSplash($"Goblin counted\r\n{notificationArea}\r\nType: {goblinType}\r\nTotal: {total}", 5000);
+            }
+
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;

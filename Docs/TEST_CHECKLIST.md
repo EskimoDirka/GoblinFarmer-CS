@@ -62,7 +62,14 @@
 - Reset Stats clears goblin count, tracker active time, GPH, and per-area count state
 - New Game clears per-area count state while preserving the current session tracker statistics
 - Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
+- Accepted manual `X` counts show a no-activate notification for 5 seconds with goblin counted, area/location, goblin type or `Unknown`, and current total
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
+- Combat start logs `GoblinEvidenceScannerStartRequested` and `GoblinEvidenceScannerStarted`
+- Combat stop logs `GoblinEvidenceScannerStopped`
+- Evidence loop logs `GoblinEvidenceScanAttempted` during eligible combat scans
+- Evidence loop logs `GoblinEvidenceScanSkipped` with a reason when combat/scanner conditions are not eligible
+- Evidence loop logs Journal/Minimap crop paths from `Debug\GoblinEvidence\ObservationDiagnostics`
+- Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and missing-template or below-threshold reasons
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - Blocked observation areas such as WhimsyDale log `wouldCount=False` and `reason=BlockedArea`

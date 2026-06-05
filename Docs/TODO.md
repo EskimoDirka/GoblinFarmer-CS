@@ -557,6 +557,9 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Extend the manual no-count block list to City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
 * [x] Add Automation Observation Mode for `JournalCandidate` and `MinimapCandidate` so candidates log what would count without incrementing GoblinCount, changing GPH, or consuming area-count slots.
 * [x] Include Automation Observation Mode counters and last-observation details in the UI diagnostics, session summaries, runtime `session-info.txt`, and debug package manifests.
+* [x] Start the GoblinEvidence scanner from combat so Observation Mode can run during normal farming.
+* [x] Add scanner/evidence-loop diagnostics for scanner start/stop, scan attempts/skips, Journal/Minimap crop paths, candidate found/not-found, and skipped reasons.
+* [x] Add a no-activate 5-second manual `X` count notification with goblin counted, area/location, goblin type, and current total.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [x] Live-validate Western Channel Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [x] Live-validate Eastern Channel Level 1 and Eastern Channel Level 2 remain separate area keys and do not consume PF slots during close title matches.
@@ -573,6 +576,9 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate real PF1/PF2 counts remain available after Cave/Cathedral close-match checks.
 * [ ] Live-validate `JournalCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
 * [ ] Live-validate `MinimapCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
+* [ ] Live-validate the latest log contains `GoblinEvidenceScannerStartRequested`, `GoblinEvidenceScannerStarted`, `GoblinEvidenceScanAttempted`, `GoblinEvidenceCandidateCheck`, crop-path diagnostics, and `GoblinEvidenceScannerStopped` during normal combat.
+* [ ] Live-validate missing or uncalibrated Journal/Minimap evidence templates log clear `MissingTemplate` or `BelowThreshold` reasons instead of silently producing zero observations.
+* [ ] Live-validate accepted manual `X` counts show the no-activate 5-second count notification without stealing Diablo focus.
 * [ ] Live-validate Automation Observation Mode reports `wouldCount=False reason=BlockedArea` in blocked locations such as WhimsyDale.
 * [ ] Live-validate Automation Observation Mode reports duplicate areas as `wouldCount=False` without consuming any additional slots.
 * [ ] Live-validate Automation Observation Mode reports PF1/PF2 eligibility against the two-count exception without changing the real count state.

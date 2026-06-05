@@ -40,6 +40,7 @@ namespace GoblinFarmer
             PortLockCursorToDiablo();
             CancellationToken combatToken = portCombatCts.Token;
             PortStartCombatMenuWatcher(combatToken);
+            PortStartGoblinEvidenceScanner(combatToken);
 
             if (portCombatClass == "witch_doctor")
             {

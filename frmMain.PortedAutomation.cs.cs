@@ -1136,6 +1136,8 @@ namespace GoblinFarmer
                         portSplashLabel.Text = message;
                     }
 
+                    int lineCount = message.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Length;
+                    portSplashForm.Height = lineCount > 2 ? 154 : 92;
                     PortPositionSplash();
                     portSplashForm.Show();
                     portSplashTimer.Start();
