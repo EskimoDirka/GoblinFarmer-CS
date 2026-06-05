@@ -72,10 +72,16 @@
 - If Goblin Evidence templates are missing, startup/scanner diagnostics log one clear `GoblinEvidenceTemplateSetupMissing` line and throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries
 - Missing Goblin Evidence templates do not spam `GoblinEvidenceCandidateCheck reason=MissingTemplate` on every scan
 - VS Debug missing-template notification names the needed templates without activating over Diablo
-- Required Goblin Evidence templates are documented under `Images\Goblin Evidence`: `Journal Kill.png`, `Journal Encounter.png`, and `Minimap Goblin Icon.png`
+- Goblin Evidence template discovery accepts `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and `<Goblin Type> Minimap.png`
+- Combined `Engaged & Killed Journal` templates are accepted
+- Invalid Goblin Evidence template names log a clear setup warning without scan spam
+- Journal ObservationDiagnostics crops use the calibrated `64,736,645,417` reference region
+- Minimap ObservationDiagnostics crops use the calibrated `2108,66,421,423` reference region
+- `GoblinEvidenceScanResult source=Journal` and `source=Minimap` include `scanRegion`, `screenRegion`, template count, matched goblin type, and confidence
 - Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and below-threshold reasons once templates are present
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
+- Observation candidates report the matched goblin type when a Journal or Minimap template passes confidence
 - Blocked observation areas such as WhimsyDale log `wouldCount=False` and `reason=BlockedArea`
 - Duplicate observation areas log `wouldCount=False` without consuming another area-count slot
 - PF1/PF2 observations report eligibility against `areaLimit=2` without changing real count state

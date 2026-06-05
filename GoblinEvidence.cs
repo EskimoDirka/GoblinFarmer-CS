@@ -35,43 +35,215 @@ namespace GoblinFarmer
         string Notes,
         string GoblinType = "Unknown");
 
+    internal static class GoblinEvidenceScanRegions
+    {
+        public static readonly System.Drawing.Rectangle JournalReferenceRegion = new(64, 736, 645, 417);
+        public static readonly System.Drawing.Rectangle MinimapReferenceRegion = new(2108, 66, 421, 423);
+    }
+
+    internal enum GoblinEvidenceTemplateKind
+    {
+        Unknown,
+        JournalEngaged,
+        JournalKilled,
+        JournalEngagedAndKilled,
+        Minimap,
+    }
+
     internal sealed record GoblinEvidenceTemplateRequirement(
         GoblinEvidenceType Type,
         string Source,
         string FileName,
-        double Threshold);
+        double Threshold,
+        string GoblinType,
+        GoblinEvidenceTemplateKind Kind);
+
+    internal sealed record GoblinEvidenceInvalidTemplate(
+        string FileName,
+        string Reason);
+
+    internal sealed record GoblinEvidenceTemplateCatalog(
+        IReadOnlyList<GoblinEvidenceTemplateRequirement> Templates,
+        IReadOnlyList<GoblinEvidenceInvalidTemplate> InvalidTemplates)
+    {
+        public bool HasJournalTemplates => Templates.Any(template => template.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase));
+
+        public bool HasMinimapTemplates => Templates.Any(template => template.Source.Equals("MinimapCandidate", StringComparison.OrdinalIgnoreCase));
+
+        public bool HasUsableTemplates => Templates.Count > 0;
+    }
 
     internal static class GoblinEvidenceTemplateRequirements
     {
-        public static readonly IReadOnlyList<GoblinEvidenceTemplateRequirement> Required =
-        [
-            new(GoblinEvidenceType.JournalKill, "JournalCandidate", "Journal Kill.png", 0.90),
-            new(GoblinEvidenceType.JournalEncounter, "JournalCandidate", "Journal Encounter.png", 0.90),
-            new(GoblinEvidenceType.MinimapIcon, "MinimapCandidate", "Minimap Goblin Icon.png", 0.65),
-        ];
+        public const double JournalThreshold = 0.90;
+        public const double MinimapThreshold = 0.65;
 
-        public static IReadOnlyList<GoblinEvidenceTemplateRequirement> MissingRequiredTemplates(string templateDirectory)
+        public static GoblinEvidenceTemplateCatalog DiscoverTemplates(string templateDirectory)
         {
             if (string.IsNullOrWhiteSpace(templateDirectory))
             {
-                return Required;
+                return new GoblinEvidenceTemplateCatalog(
+                    [],
+                    [new GoblinEvidenceInvalidTemplate("", "TemplateDirectoryMissing")]);
             }
 
-            List<GoblinEvidenceTemplateRequirement> missing = [];
-            foreach (GoblinEvidenceTemplateRequirement requirement in Required)
+            if (!Directory.Exists(templateDirectory))
             {
-                if (!File.Exists(Path.Combine(templateDirectory, requirement.FileName)))
-                {
-                    missing.Add(requirement);
-                }
+                return new GoblinEvidenceTemplateCatalog(
+                    [],
+                    [new GoblinEvidenceInvalidTemplate(templateDirectory, "TemplateDirectoryMissing")]);
             }
 
-            return missing;
+            List<GoblinEvidenceTemplateRequirement> templates = [];
+            List<GoblinEvidenceInvalidTemplate> invalidTemplates = [];
+            foreach (FileInfo file in new DirectoryInfo(templateDirectory).EnumerateFiles("*.png", SearchOption.TopDirectoryOnly).OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                if (TryParseTemplate(file.Name, out GoblinEvidenceTemplateRequirement? template, out string invalidReason))
+                {
+                    templates.Add(template!);
+                    continue;
+                }
+
+                invalidTemplates.Add(new GoblinEvidenceInvalidTemplate(file.Name, invalidReason));
+            }
+
+            return new GoblinEvidenceTemplateCatalog(templates, invalidTemplates);
         }
 
         public static string DisplayPath(GoblinEvidenceTemplateRequirement requirement)
         {
             return Path.Combine("Images", "Goblin Evidence", requirement.FileName);
+        }
+
+        public static string NamingGuidance()
+        {
+            return "<Goblin Type> Engaged Journal.png | <Goblin Type> Killed Journal.png | <Goblin Type> Engaged & Killed Journal.png | <Goblin Type> Minimap.png";
+        }
+
+        private static bool TryParseTemplate(
+            string fileName,
+            out GoblinEvidenceTemplateRequirement? template,
+            out string invalidReason)
+        {
+            template = null;
+            invalidReason = "";
+            string baseName = Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrWhiteSpace(baseName))
+            {
+                invalidReason = "EmptyFileName";
+                return false;
+            }
+
+            if (TryParseTemplateSuffix(
+                baseName,
+                " Engaged & Killed Journal",
+                GoblinEvidenceTemplateKind.JournalEngagedAndKilled,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplateSuffix(
+                baseName,
+                " Engaged Journal",
+                GoblinEvidenceTemplateKind.JournalEngaged,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplateSuffix(
+                baseName,
+                " Killed Journal",
+                GoblinEvidenceTemplateKind.JournalKilled,
+                GoblinEvidenceType.JournalKill,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplateSuffix(
+                baseName,
+                " Minimap",
+                GoblinEvidenceTemplateKind.Minimap,
+                GoblinEvidenceType.MinimapIcon,
+                "MinimapCandidate",
+                MinimapThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            invalidReason = "UnsupportedNamePattern";
+            return false;
+        }
+
+        private static bool TryParseTemplateSuffix(
+            string baseName,
+            string suffix,
+            GoblinEvidenceTemplateKind kind,
+            GoblinEvidenceType evidenceType,
+            string source,
+            double threshold,
+            out GoblinEvidenceTemplateRequirement? template,
+            out string invalidReason)
+        {
+            template = null;
+            invalidReason = "";
+            if (!baseName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string goblinType = baseName[..^suffix.Length].Trim();
+            if (string.IsNullOrWhiteSpace(goblinType))
+            {
+                invalidReason = "MissingGoblinType";
+                return false;
+            }
+
+            if (!GoblinTypeNormalizer.IsKnownGoblinType(goblinType))
+            {
+                invalidReason = $"UnknownGoblinType:{goblinType}";
+                return false;
+            }
+
+            template = new GoblinEvidenceTemplateRequirement(
+                evidenceType,
+                source,
+                $"{baseName}.png",
+                threshold,
+                GoblinTypeNormalizer.Normalize(goblinType),
+                kind);
+            return true;
         }
     }
 
@@ -536,6 +708,8 @@ namespace GoblinFarmer
             }
 
             AddAlias(types, "Gelatinous Spawn", "Gelatinous Sire");
+            AddAlias(types, "Menagerist Goblin", "Menagerist");
+            AddAlias(types, "Oddius Collector", "Odious Collector");
             return types;
         }
 

@@ -560,9 +560,14 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Start the GoblinEvidence scanner from combat so Observation Mode can run during normal farming.
 * [x] Add scanner/evidence-loop diagnostics for scanner start/stop, scan attempts/skips, Journal/Minimap crop paths, candidate found/not-found, and skipped reasons.
 * [x] Add a no-activate 5-second manual `X` count notification with goblin counted, area/location, goblin type, and current total.
-* [x] Add explicit Goblin Evidence template requirements for `Journal Kill.png`, `Journal Encounter.png`, and `Minimap Goblin Icon.png`.
-* [x] Add tracked `Images\Goblin Evidence\README.md` guidance so the required template folder exists in source/build/publish output without fake template images.
+* [x] Replace the generic Goblin Evidence template placeholders with per-goblin template discovery under `Images\Goblin Evidence`.
+* [x] Support `Engaged Journal`, `Killed Journal`, `Engaged & Killed Journal`, and `Minimap` Goblin Evidence filename patterns.
+* [x] Add tracked `Images\Goblin Evidence\README.md` guidance for the per-goblin folder structure.
 * [x] Add startup/scanner missing-template diagnostics that log `GoblinEvidenceTemplateSetupMissing` once and throttle `GoblinEvidenceScanResult reason=MissingTemplate` summaries.
+* [x] Log invalid Goblin Evidence template names without scan spam.
+* [x] Normalize Goblin Evidence template aliases such as `Menagerist Goblin`, `Gelatinous Spawn`, and `Oddius Collector` to canonical Goblin Tracker types.
+* [x] Consolidate Observation Mode Journal/Minimap scan regions onto the calibrated GoblinEvidence reference regions.
+* [x] Log per-source GoblinEvidence scan results with `source`, `scanRegion`, `screenRegion`, matched goblin type, and confidence.
 * [x] Keep ObservationDiagnostics crops bounded by throttling capture and retaining only a recent runtime sample.
 * [x] Limit debug package inclusion for ObservationDiagnostics image crops and report missing-template state in `debug-package-manifest.txt`.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
@@ -582,8 +587,9 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate `JournalCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
 * [ ] Live-validate `MinimapCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
 * [ ] Live-validate the latest log contains `GoblinEvidenceScannerStartRequested`, `GoblinEvidenceScannerStarted`, `GoblinEvidenceScanAttempted`, crop-path diagnostics, and `GoblinEvidenceScannerStopped` during normal combat.
-* [ ] Live-validate missing Journal/Minimap evidence templates log one clear `GoblinEvidenceTemplateSetupMissing` line plus throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries instead of repeated per-scan `GoblinEvidenceCandidateCheck` spam.
-* [ ] Live-validate calibrated Journal/Minimap evidence templates produce `GoblinEvidenceCandidateCheck` results and, when confidence passes, observation candidates without changing GoblinCount.
+* [ ] Live-validate missing or invalid Journal/Minimap evidence template setup logs one clear `GoblinEvidenceTemplateSetupMissing` or `GoblinEvidenceTemplateSetupWarning` line plus throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries instead of repeated per-scan `GoblinEvidenceCandidateCheck` spam.
+* [ ] Live-validate calibrated per-goblin Journal/Minimap evidence templates produce `GoblinEvidenceCandidateCheck` results and, when confidence passes, typed observation candidates without changing GoblinCount.
+* [ ] Live-validate `GoblinEvidenceScanResult source=Minimap scanRegion=2108,66,421,423` and matching ObservationDiagnostics minimap crop framing in a live run.
 * [ ] Live-validate accepted manual `X` counts show the no-activate 5-second count notification without stealing Diablo focus.
 * [ ] Live-validate Automation Observation Mode reports `wouldCount=False reason=BlockedArea` in blocked locations such as WhimsyDale.
 * [ ] Live-validate Automation Observation Mode reports duplicate areas as `wouldCount=False` without consuming any additional slots.

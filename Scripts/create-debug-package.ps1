@@ -490,21 +490,25 @@ function Get-GoblinTrackerInfo {
 function Get-GoblinEvidenceMissingTemplateInfo {
     param($LatestLog)
 
-    $requiredTemplates = @(
-        "Images\Goblin Evidence\Journal Kill.png",
-        "Images\Goblin Evidence\Journal Encounter.png",
-        "Images\Goblin Evidence\Minimap Goblin Icon.png"
-    )
-    $missingTemplates = New-Object System.Collections.Generic.List[string]
+    $templateSetupGuidance = "<Goblin Type> Engaged Journal.png | <Goblin Type> Killed Journal.png | <Goblin Type> Engaged & Killed Journal.png | <Goblin Type> Minimap.png"
+    $templateIssues = New-Object System.Collections.Generic.List[string]
     $missingTemplateLogEntries = 0
 
     if ($null -ne $LatestLog -and (Test-Path -LiteralPath $LatestLog.FullName -PathType Leaf)) {
-        $matches = @(Select-String -LiteralPath $LatestLog.FullName -Pattern "GoblinEvidenceTemplateSetupMissing|reason=MissingTemplate|Reason=MissingTemplate" -ErrorAction SilentlyContinue)
+        $matches = @(Select-String -LiteralPath $LatestLog.FullName -Pattern "GoblinEvidenceTemplateSetupMissing|GoblinEvidenceTemplateSetupWarning|reason=MissingTemplate|Reason=MissingTemplate" -ErrorAction SilentlyContinue)
         $missingTemplateLogEntries = $matches.Count
         foreach ($match in $matches) {
-            foreach ($template in $requiredTemplates) {
-                if ($match.Line.IndexOf($template, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and -not $missingTemplates.Contains($template)) {
-                    $missingTemplates.Add($template)
+            $invalidMatch = [regex]::Match($match.Line, "invalidTemplates=(?<value>[^;]+)")
+            if ($invalidMatch.Success) {
+                $invalidValue = $invalidMatch.Groups["value"].Value.Trim().Trim("'").Trim('"')
+                if (-not [string]::IsNullOrWhiteSpace($invalidValue) -and $invalidValue -ne "none" -and -not $templateIssues.Contains($invalidValue)) {
+                    $templateIssues.Add($invalidValue)
+                }
+            }
+
+            foreach ($legacyTemplate in @("Images\Goblin Evidence\Journal Kill.png", "Images\Goblin Evidence\Journal Encounter.png", "Images\Goblin Evidence\Minimap Goblin Icon.png")) {
+                if ($match.Line.IndexOf($legacyTemplate, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and -not $templateIssues.Contains($legacyTemplate)) {
+                    $templateIssues.Add($legacyTemplate)
                 }
             }
         }
@@ -513,8 +517,8 @@ function Get-GoblinEvidenceMissingTemplateInfo {
     return [pscustomobject]@{
         Detected = $missingTemplateLogEntries -gt 0
         LogEntries = $missingTemplateLogEntries
-        MissingTemplates = if ($missingTemplates.Count -gt 0) { [string]::Join("|", $missingTemplates.ToArray()) } else { "none" }
-        RequiredTemplates = [string]::Join("|", $requiredTemplates)
+        MissingTemplates = if ($templateIssues.Count -gt 0) { [string]::Join("|", $templateIssues.ToArray()) } else { "none" }
+        RequiredTemplates = $templateSetupGuidance
     }
 }
 

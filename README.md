@@ -96,7 +96,7 @@ Some non-spawn route and event areas are excluded from manual Goblin Tracker cou
 
 The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
 
-Automation Observation Mode watches Journal and Minimap goblin candidates during combat and records what the automation would have counted. It uses the same area resolution, blocked-area, duplicate, and PF1/PF2 exception rules, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots. Debug logs include scanner start/stop, scan attempts/skips, candidate checks, and throttled Journal/Minimap diagnostic crop paths.
+Automation Observation Mode watches Journal and Minimap goblin candidates during combat and records what the automation would have counted. It discovers per-goblin templates from `Images\Goblin Evidence` using names such as `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and `<Goblin Type> Minimap.png`, then reports the matched goblin type when possible. It uses the same area resolution, blocked-area, duplicate, and PF1/PF2 exception rules, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots. Debug logs include scanner start/stop, scan attempts/skips, candidate checks, calibrated Journal/Minimap scan regions, and throttled diagnostic crop paths.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
@@ -184,7 +184,7 @@ Debug tooling includes:
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
-- Automation Observation Mode diagnostics for Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is not enabled.
+- Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is not enabled.
 - Count-based GoblinEvidence retention under `Debug\GoblinEvidence`, defaulting to the newest 250 files, plus bounded ObservationDiagnostics crop samples in debug packages.
 - Detailed launch, Start Game, teleport, repair, salvage, bounty, and Exit Game logs.
 

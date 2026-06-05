@@ -27,7 +27,9 @@ Run("GoblinEvidence retention breaks timestamp ties by filename", TestGoblinEvid
 Run("GoblinEvidence retention ignores missing folder", TestGoblinEvidenceRetentionMissingFolderDoesNotThrow);
 Run("GoblinEvidence retention count less than one disables cleanup", TestGoblinEvidenceRetentionCountLessThanOneDisablesCleanup);
 Run("GoblinEvidence retention deletes only inside GoblinEvidence", TestGoblinEvidenceRetentionDeletesOnlyInsideFolder);
-Run("GoblinEvidence template requirements detect missing setup", TestGoblinEvidenceTemplateRequirementsDetectMissingSetup);
+Run("GoblinEvidence template discovery accepts per-goblin evidence files", TestGoblinEvidenceTemplateDiscoveryAcceptsPerGoblinEvidenceFiles);
+Run("GoblinEvidence template discovery finds source image set", TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet);
+Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverrideWins);
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
@@ -642,23 +644,29 @@ static void TestGoblinEvidenceRetentionDeletesOnlyInsideFolder()
     }
 }
 
-static void TestGoblinEvidenceTemplateRequirementsDetectMissingSetup()
+static void TestGoblinEvidenceTemplateDiscoveryAcceptsPerGoblinEvidenceFiles()
 {
     string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.GoblinEvidenceTemplateTests", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(root);
 
     try
     {
-        IReadOnlyList<GoblinEvidenceTemplateRequirement> allMissing = GoblinEvidenceTemplateRequirements.MissingRequiredTemplates(root);
-        AssertEqual(3, allMissing.Count, "all required Goblin Evidence templates should be reported missing from an empty folder");
-        AssertTrue(allMissing.Any(template => template.FileName == "Journal Kill.png"), "Journal Kill template should be required");
-        AssertTrue(allMissing.Any(template => template.FileName == "Journal Encounter.png"), "Journal Encounter template should be required");
-        AssertTrue(allMissing.Any(template => template.FileName == "Minimap Goblin Icon.png"), "Minimap Goblin Icon template should be required");
+        File.WriteAllText(Path.Combine(root, "Menagerist Goblin Engaged Journal.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Blood Thief Engaged & Killed Journal.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Gilded Baron Minimap.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Oddius Collector Killed Journal.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Unsupported Evidence.png"), "fake invalid template for discovery test");
 
-        File.WriteAllText(Path.Combine(root, "Journal Kill.png"), "fake template for setup test");
-        IReadOnlyList<GoblinEvidenceTemplateRequirement> partiallyMissing = GoblinEvidenceTemplateRequirements.MissingRequiredTemplates(root);
-        AssertEqual(2, partiallyMissing.Count, "present template files should not be reported missing");
-        AssertFalse(partiallyMissing.Any(template => template.FileName == "Journal Kill.png"), "Journal Kill should be absent from the missing list once present");
+        GoblinEvidenceTemplateCatalog catalog = GoblinEvidenceTemplateRequirements.DiscoverTemplates(root);
+
+        AssertEqual(4, catalog.Templates.Count, "valid per-goblin evidence templates should be discovered");
+        AssertEqual(1, catalog.InvalidTemplates.Count, "unsupported template names should be reported invalid");
+        AssertTrue(catalog.HasJournalTemplates, "journal templates should be detected");
+        AssertTrue(catalog.HasMinimapTemplates, "minimap templates should be detected");
+        AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Menagerist" && template.Kind == GoblinEvidenceTemplateKind.JournalEngaged), "Menagerist Goblin alias should normalize to Menagerist");
+        AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled), "combined engaged/killed journal templates should be accepted");
+        AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Gilded Baron" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "minimap templates should be accepted");
+        AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Odious Collector" && template.Kind == GoblinEvidenceTemplateKind.JournalKilled), "Oddius typo should normalize to Odious Collector");
     }
     finally
     {
@@ -667,6 +675,29 @@ static void TestGoblinEvidenceTemplateRequirementsDetectMissingSetup()
             Directory.Delete(root, recursive: true);
         }
     }
+}
+
+static void TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet()
+{
+    string scriptPath = FindDebugPackageScript();
+    string repoRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)!.FullName;
+    string evidenceDirectory = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+
+    GoblinEvidenceTemplateCatalog catalog = GoblinEvidenceTemplateRequirements.DiscoverTemplates(evidenceDirectory);
+
+    AssertTrue(catalog.Templates.Count >= 20, "source Goblin Evidence folder should contain the new per-goblin template set");
+    AssertEqual(0, catalog.InvalidTemplates.Count, "source Goblin Evidence template names should all parse cleanly");
+    AssertTrue(catalog.HasJournalTemplates, "source Goblin Evidence folder should include journal templates");
+    AssertTrue(catalog.HasMinimapTemplates, "source Goblin Evidence folder should include minimap templates");
+    AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled), "source templates should accept combined Blood Thief journal evidence");
+    AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Gilded Baron" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Gilded Baron minimap evidence");
+    AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Menagerist" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Menagerist minimap evidence");
+}
+
+static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()
+{
+    AssertEqual(new Rectangle(64, 736, 645, 417), GoblinEvidenceScanRegions.JournalReferenceRegion, "journal observation scan region should match the calibrated GoblinEvidence journal region");
+    AssertEqual(new Rectangle(2108, 66, 421, 423), GoblinEvidenceScanRegions.MinimapReferenceRegion, "minimap observation scan region should match the calibrated GoblinEvidence minimap region");
 }
 
 static string TouchGoblinEvidenceFile(string path, DateTime lastWriteTimeUtc)
@@ -977,7 +1008,7 @@ static void TestDebugPackageLimitsObservationDiagnosticCrops()
         ]);
         File.WriteAllText(
             Path.Combine(logs, "GoblinFarmer.log"),
-            "GoblinEvidenceTemplateSetupMissing: missingTemplates=Images\\Goblin Evidence\\Journal Kill.png|Images\\Goblin Evidence\\Journal Encounter.png|Images\\Goblin Evidence\\Minimap Goblin Icon.png\r\n" +
+            "GoblinEvidenceTemplateSetupWarning: templateCount=3; invalidTemplateCount=1; invalidTemplates=Unsupported Evidence.png:UnsupportedNamePattern\r\n" +
             "GoblinEvidenceScanResult: reason=MissingTemplate; missingCount=3");
 
         for (int index = 0; index < 20; index++)
@@ -1024,7 +1055,8 @@ static void TestDebugPackageLimitsObservationDiagnosticCrops()
         AssertTrue(manifestText.Contains("- Goblin observation diagnostic crops included: 6", StringComparison.OrdinalIgnoreCase), "manifest should report included observation crop count");
         AssertTrue(manifestText.Contains("- Goblin observation diagnostic crops excluded: 14", StringComparison.OrdinalIgnoreCase), "manifest should report excluded observation crop count");
         AssertTrue(manifestText.Contains("Goblin evidence missing template state: detected=True; logEntries=2", StringComparison.OrdinalIgnoreCase), "manifest should report missing-template state from the latest log");
-        AssertTrue(manifestText.Contains("Images\\Goblin Evidence\\Journal Kill.png", StringComparison.OrdinalIgnoreCase), "manifest should list missing required templates");
+        AssertTrue(manifestText.Contains("Unsupported Evidence.png:UnsupportedNamePattern", StringComparison.OrdinalIgnoreCase), "manifest should list invalid per-goblin evidence template issues");
+        AssertTrue(manifestText.Contains("<Goblin Type> Engaged & Killed Journal.png", StringComparison.OrdinalIgnoreCase), "manifest should list per-goblin evidence naming guidance");
     }
     finally
     {

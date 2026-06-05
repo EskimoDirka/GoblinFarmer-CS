@@ -12,11 +12,11 @@ namespace GoblinFarmer
         private static readonly TimeSpan GoblinEvidenceDiagnosticCropCooldown = TimeSpan.FromSeconds(60);
         // Minimap calibration region derived from real calibration capture using ShareX measurements at 2560x1440.
         // May require future scaling adjustments for different resolutions/UI scales.
-        private static readonly Rectangle GoblinEvidenceCalibrationMinimapReferenceRegion = new(2108, 66, 421, 423);
+        private static readonly Rectangle GoblinEvidenceCalibrationMinimapReferenceRegion = GoblinEvidenceScanRegions.MinimapReferenceRegion;
         // Journal calibration region derived from ShareX measurements at 2560x1440.
         // Sized to capture the Diablo journal/event feed area used for future goblin evidence detection.
         // May require scaling adjustments for different resolutions or UI scales.
-        private static readonly Rectangle GoblinEvidenceCalibrationJournalReferenceRegion = new(64, 736, 645, 417);
+        private static readonly Rectangle GoblinEvidenceCalibrationJournalReferenceRegion = GoblinEvidenceScanRegions.JournalReferenceRegion;
         private readonly object portGoblinEvidenceLock = new();
         private readonly Dictionary<GoblinEvidenceType, DateTime> portLastGoblinEvidenceByType = new();
         private readonly Dictionary<GoblinEvidenceType, DateTime> portLastGoblinEvidenceMissingTemplateLogByType = new();
@@ -27,6 +27,7 @@ namespace GoblinFarmer
         private int portGoblinEvidenceMissingTemplateSetupLogged;
         private int portGoblinEvidenceMissingTemplateNotificationShown;
         private int portGoblinEvidenceTemplateReadyLogged;
+        private int portGoblinEvidenceTemplateWarningLogged;
         private long portLastGoblinEvidenceDiagnosticCropTicks;
         private long portLastGoblinEvidenceMissingTemplateScanSummaryTicks;
 
@@ -130,17 +131,18 @@ namespace GoblinFarmer
                 "GoblinEvidenceScanAttempted",
                 $"Eligible; journalCropPath={PortLogField(PortDisplayLocation(journalCropPath))}; minimapCropPath={PortLogField(PortDisplayLocation(minimapCropPath))}");
 
-            IReadOnlyList<GoblinEvidenceTemplateRequirement> missingTemplates = PortMissingGoblinEvidenceTemplates();
-            if (missingTemplates.Count > 0)
+            GoblinEvidenceTemplateCatalog templateCatalog = PortGoblinEvidenceTemplateCatalog();
+            if (!templateCatalog.HasUsableTemplates)
             {
-                PortLogGoblinEvidenceMissingTemplateSetup("ScannerScan", missingTemplates, notifyIfMissing: true);
-                PortLogGoblinEvidenceMissingTemplateScanSummary(missingTemplates);
+                PortLogGoblinEvidenceTemplateSetupMissing("ScannerScan", templateCatalog, notifyIfMissing: true);
+                PortLogGoblinEvidenceMissingTemplateScanSummary(templateCatalog);
                 PortCleanupOldGoblinEvidenceObservationDiagnostics();
                 return;
             }
 
+            PortLogGoblinEvidenceTemplateSetupWarning("ScannerScan", templateCatalog);
             int candidateCount = 0;
-            foreach (GoblinEvidenceCandidate candidate in PortDetectGoblinEvidenceCandidates())
+            foreach (GoblinEvidenceCandidate candidate in PortDetectGoblinEvidenceCandidates(templateCatalog))
             {
                 candidateCount++;
                 PortRecordGoblinEvidence(candidate);
@@ -160,154 +162,117 @@ namespace GoblinFarmer
             PortCleanupOldGoblinEvidenceObservationDiagnostics();
         }
 
-        private IEnumerable<GoblinEvidenceCandidate> PortDetectGoblinEvidenceCandidates()
+        private IEnumerable<GoblinEvidenceCandidate> PortDetectGoblinEvidenceCandidates(GoblinEvidenceTemplateCatalog templateCatalog)
         {
-            GoblinEvidenceCandidate? journalKill = PortDetectJournalKillEvidence();
-            if (journalKill != null)
+            foreach (IGrouping<string, GoblinEvidenceTemplateRequirement> sourceGroup in templateCatalog.Templates.GroupBy(template => template.Source, StringComparer.OrdinalIgnoreCase))
             {
-                yield return journalKill;
-            }
+                IReadOnlyList<GoblinEvidenceTemplateRequirement> templates = sourceGroup.ToList();
+                Rectangle scanRegion = PortGoblinEvidenceRegionForSource(sourceGroup.Key);
+                GoblinEvidenceCandidate? candidate = PortDetectBestGoblinEvidenceTemplate(templates, scanRegion);
+                PortLogGoblinEvidenceSourceScanResult(sourceGroup.Key, scanRegion, candidate, templates.Count);
 
-            GoblinEvidenceCandidate? journalEncounter = PortDetectJournalEncounterEvidence();
-            if (journalEncounter != null)
-            {
-                yield return journalEncounter;
-            }
-
-            GoblinEvidenceCandidate? minimapIcon = PortDetectMinimapGoblinEvidence();
-            if (minimapIcon != null)
-            {
-                yield return minimapIcon;
+                if (candidate != null)
+                {
+                    yield return candidate;
+                }
             }
         }
 
-        private GoblinEvidenceCandidate? PortDetectJournalKillEvidence()
+        private Rectangle PortGoblinEvidenceRegionForSource(string source)
         {
-            // TODO: Replace template placeholder with calibrated journal kill region/assets.
-            GoblinEvidenceTemplateRequirement template = PortGoblinEvidenceTemplateRequirement(GoblinEvidenceType.JournalKill);
-            return PortDetectGoblinEvidenceTemplate(
-                template.Type,
-                template.Source,
-                Img("Goblin Evidence", template.FileName),
-                PortGoblinEvidenceJournalRegion(),
-                template.Threshold,
-                "Template placeholder for a goblin kill journal entry.");
+            return string.Equals(source, "MinimapCandidate", StringComparison.OrdinalIgnoreCase)
+                ? PortGoblinEvidenceMinimapRegion()
+                : PortGoblinEvidenceJournalRegion();
         }
 
-        private GoblinEvidenceCandidate? PortDetectJournalEncounterEvidence()
+        private GoblinEvidenceCandidate? PortDetectBestGoblinEvidenceTemplate(
+            IReadOnlyList<GoblinEvidenceTemplateRequirement> templates,
+            Rectangle referenceRegion)
         {
-            // TODO: Replace template placeholder with calibrated journal encounter region/assets.
-            GoblinEvidenceTemplateRequirement template = PortGoblinEvidenceTemplateRequirement(GoblinEvidenceType.JournalEncounter);
-            return PortDetectGoblinEvidenceTemplate(
-                template.Type,
-                template.Source,
-                Img("Goblin Evidence", template.FileName),
-                PortGoblinEvidenceJournalRegion(),
-                template.Threshold,
-                "Template placeholder for a goblin encounter journal entry.");
-        }
-
-        private GoblinEvidenceCandidate? PortDetectMinimapGoblinEvidence()
-        {
-            // TODO: Add calibrated minimap icon template(s) and tighten this region per resolution.
-            GoblinEvidenceTemplateRequirement template = PortGoblinEvidenceTemplateRequirement(GoblinEvidenceType.MinimapIcon);
-            return PortDetectGoblinEvidenceTemplate(
-                template.Type,
-                template.Source,
-                Img("Goblin Evidence", template.FileName),
-                PortGoblinEvidenceMinimapRegion(),
-                template.Threshold,
-                "Template placeholder for a possible goblin minimap icon.");
-        }
-
-        private GoblinEvidenceTemplateRequirement PortGoblinEvidenceTemplateRequirement(GoblinEvidenceType type)
-        {
-            return GoblinEvidenceTemplateRequirements.Required.First(requirement => requirement.Type == type);
-        }
-
-        private GoblinEvidenceCandidate? PortDetectGoblinEvidenceTemplate(
-            GoblinEvidenceType type,
-            string source,
-            string imagePath,
-            Rectangle referenceRegion,
-            double threshold,
-            string notes)
-        {
-            if (!File.Exists(imagePath))
+            GoblinEvidenceTemplateRequirement? bestTemplate = null;
+            string bestImagePath = "";
+            double bestConfidence = 0;
+            foreach (GoblinEvidenceTemplateRequirement template in templates)
             {
-                PortLogGoblinEvidenceMissingTemplate(type, source, imagePath, referenceRegion);
-                PortLogGoblinEvidenceDetectorDiagnostic(
-                    type,
-                    source,
-                    "Skipped",
-                    "MissingTemplate",
-                    imagePath,
-                    referenceRegion,
-                    threshold,
-                    0,
-                    force: false);
+                string imagePath = Img("Goblin Evidence", template.FileName);
+                if (!File.Exists(imagePath))
+                {
+                    continue;
+                }
+
+                double confidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion);
+                if (bestTemplate == null || confidence > bestConfidence)
+                {
+                    bestTemplate = template;
+                    bestImagePath = imagePath;
+                    bestConfidence = confidence;
+                }
+            }
+
+            if (bestTemplate == null)
+            {
                 return null;
             }
 
-            double confidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion);
-            if (confidence < threshold)
+            if (bestConfidence < bestTemplate.Threshold)
             {
                 PortLogGoblinEvidenceDetectorDiagnostic(
-                    type,
-                    source,
+                    bestTemplate,
                     "NotFound",
                     "BelowThreshold",
-                    imagePath,
+                    bestImagePath,
                     referenceRegion,
-                    threshold,
-                    confidence,
+                    bestConfidence,
                     force: false);
                 return null;
             }
 
             PortLogGoblinEvidenceDetectorDiagnostic(
-                type,
-                source,
+                bestTemplate,
                 "Found",
                 "ConfidenceMet",
-                imagePath,
+                bestImagePath,
                 referenceRegion,
-                threshold,
-                confidence,
+                bestConfidence,
                 force: true);
-            return new GoblinEvidenceCandidate(type, confidence, source, notes);
+            return new GoblinEvidenceCandidate(
+                bestTemplate.Type,
+                bestConfidence,
+                bestTemplate.Source,
+                $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}",
+                bestTemplate.GoblinType);
         }
 
         private Rectangle PortGoblinEvidenceJournalRegion()
         {
-            // TODO: Calibrate against the in-game journal kill/encounter message area.
-            return PortReferenceRegion(120, 120, 980, 420);
+            return GoblinEvidenceCalibrationJournalReferenceRegion;
         }
 
         private Rectangle PortGoblinEvidenceMinimapRegion()
         {
-            // TODO: Calibrate against the minimap bounds for each supported Diablo resolution.
-            return PortReferenceRegion(1940, 70, 560, 430);
+            return GoblinEvidenceCalibrationMinimapReferenceRegion;
         }
 
         private void PortValidateGoblinEvidenceTemplateSetup(string context, bool notifyIfMissing)
         {
-            IReadOnlyList<GoblinEvidenceTemplateRequirement> missingTemplates = PortMissingGoblinEvidenceTemplates();
-            if (missingTemplates.Count > 0)
+            GoblinEvidenceTemplateCatalog templateCatalog = PortGoblinEvidenceTemplateCatalog();
+            if (!templateCatalog.HasUsableTemplates)
             {
-                PortLogGoblinEvidenceMissingTemplateSetup(context, missingTemplates, notifyIfMissing);
+                PortLogGoblinEvidenceTemplateSetupMissing(context, templateCatalog, notifyIfMissing);
                 return;
             }
 
             if (Interlocked.Exchange(ref portGoblinEvidenceTemplateReadyLogged, 1) == 0)
             {
-                AppLogger.Info($"GoblinEvidenceTemplateSetupReady: context={context}; requiredCount={GoblinEvidenceTemplateRequirements.Required.Count}; folder={PortLogField(PortGoblinEvidenceTemplateDirectory())}");
+                AppLogger.Info($"GoblinEvidenceTemplateSetupReady: context={context}; templateCount={templateCatalog.Templates.Count}; journalTemplateCount={templateCatalog.Templates.Count(template => template.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase))}; minimapTemplateCount={templateCatalog.Templates.Count(template => template.Source.Equals("MinimapCandidate", StringComparison.OrdinalIgnoreCase))}; invalidTemplateCount={templateCatalog.InvalidTemplates.Count}; folder={PortLogField(PortGoblinEvidenceTemplateDirectory())}; naming={PortLogField(GoblinEvidenceTemplateRequirements.NamingGuidance())}");
             }
+
+            PortLogGoblinEvidenceTemplateSetupWarning(context, templateCatalog);
         }
 
-        private IReadOnlyList<GoblinEvidenceTemplateRequirement> PortMissingGoblinEvidenceTemplates()
+        private GoblinEvidenceTemplateCatalog PortGoblinEvidenceTemplateCatalog()
         {
-            return GoblinEvidenceTemplateRequirements.MissingRequiredTemplates(PortGoblinEvidenceTemplateDirectory());
+            return GoblinEvidenceTemplateRequirements.DiscoverTemplates(PortGoblinEvidenceTemplateDirectory());
         }
 
         private string PortGoblinEvidenceTemplateDirectory()
@@ -316,33 +281,49 @@ namespace GoblinFarmer
             return Path.GetDirectoryName(markerPath) ?? Path.Combine(AppContext.BaseDirectory, "Images", "Goblin Evidence");
         }
 
-        private void PortLogGoblinEvidenceMissingTemplateSetup(
+        private void PortLogGoblinEvidenceTemplateSetupMissing(
             string context,
-            IReadOnlyList<GoblinEvidenceTemplateRequirement> missingTemplates,
+            GoblinEvidenceTemplateCatalog templateCatalog,
             bool notifyIfMissing)
         {
-            if (missingTemplates.Count == 0)
-            {
-                return;
-            }
-
             if (Interlocked.Exchange(ref portGoblinEvidenceMissingTemplateSetupLogged, 1) == 0)
             {
-                string missing = string.Join("|", missingTemplates.Select(GoblinEvidenceTemplateRequirements.DisplayPath));
-                string required = string.Join("|", GoblinEvidenceTemplateRequirements.Required.Select(GoblinEvidenceTemplateRequirements.DisplayPath));
-                AppLogger.Info($"GoblinEvidenceTemplateSetupMissing: context={context}; missingCount={missingTemplates.Count}; missingTemplates={PortLogField(missing)}; requiredTemplates={PortLogField(required)}; folder={PortLogField(PortGoblinEvidenceTemplateDirectory())}; guidance={PortLogField("Add manually calibrated PNG templates. Use Ctrl+Shift+G Calibration or ObservationDiagnostics crops as references only; do not auto-create templates from random crops.")}");
+                string invalid = PortGoblinEvidenceInvalidTemplateSummary(templateCatalog);
+                AppLogger.Info($"GoblinEvidenceTemplateSetupMissing: context={context}; templateCount={templateCatalog.Templates.Count}; invalidTemplateCount={templateCatalog.InvalidTemplates.Count}; invalidTemplates={PortLogField(invalid)}; folder={PortLogField(PortGoblinEvidenceTemplateDirectory())}; naming={PortLogField(GoblinEvidenceTemplateRequirements.NamingGuidance())}; guidance={PortLogField("Add manually calibrated per-goblin PNG templates. Use Ctrl+Shift+G Calibration or ObservationDiagnostics crops as references only; do not auto-create templates from random crops.")}");
             }
 
             if (notifyIfMissing &&
                 DebugManager.IsVisualStudioDebugSession &&
                 Interlocked.Exchange(ref portGoblinEvidenceMissingTemplateNotificationShown, 1) == 0)
             {
-                string missingNames = string.Join(", ", missingTemplates.Select(template => template.FileName));
-                PortShowSplash($"Goblin Evidence templates missing\r\n{missingNames}\r\nUse Ctrl+Shift+G for capture references", 7000);
+                PortShowSplash($"Goblin Evidence templates missing\r\nAdd per-goblin Journal/Minimap PNGs\r\nUse Ctrl+Shift+G for capture references", 7000);
             }
         }
 
-        private void PortLogGoblinEvidenceMissingTemplateScanSummary(IReadOnlyList<GoblinEvidenceTemplateRequirement> missingTemplates)
+        private void PortLogGoblinEvidenceTemplateSetupWarning(string context, GoblinEvidenceTemplateCatalog templateCatalog)
+        {
+            if (templateCatalog.InvalidTemplates.Count == 0 && templateCatalog.HasJournalTemplates && templateCatalog.HasMinimapTemplates)
+            {
+                return;
+            }
+
+            if (Interlocked.Exchange(ref portGoblinEvidenceTemplateWarningLogged, 1) != 0)
+            {
+                return;
+            }
+
+            string invalid = PortGoblinEvidenceInvalidTemplateSummary(templateCatalog);
+            AppLogger.Info($"GoblinEvidenceTemplateSetupWarning: context={context}; templateCount={templateCatalog.Templates.Count}; journalTemplates={templateCatalog.HasJournalTemplates}; minimapTemplates={templateCatalog.HasMinimapTemplates}; invalidTemplateCount={templateCatalog.InvalidTemplates.Count}; invalidTemplates={PortLogField(invalid)}; folder={PortLogField(PortGoblinEvidenceTemplateDirectory())}; naming={PortLogField(GoblinEvidenceTemplateRequirements.NamingGuidance())}");
+        }
+
+        private string PortGoblinEvidenceInvalidTemplateSummary(GoblinEvidenceTemplateCatalog templateCatalog)
+        {
+            return templateCatalog.InvalidTemplates.Count == 0
+                ? "none"
+                : string.Join("|", templateCatalog.InvalidTemplates.Select(template => $"{template.FileName}:{template.Reason}"));
+        }
+
+        private void PortLogGoblinEvidenceMissingTemplateScanSummary(GoblinEvidenceTemplateCatalog templateCatalog)
         {
             long nowTicks = DateTime.Now.Ticks;
             long lastTicks = Interlocked.Read(ref portLastGoblinEvidenceMissingTemplateScanSummaryTicks);
@@ -352,8 +333,7 @@ namespace GoblinFarmer
             }
 
             Interlocked.Exchange(ref portLastGoblinEvidenceMissingTemplateScanSummaryTicks, nowTicks);
-            string missing = string.Join("|", missingTemplates.Select(GoblinEvidenceTemplateRequirements.DisplayPath));
-            AppLogger.Info($"GoblinEvidenceScanResult: candidateFound=False; reason=MissingTemplate; missingCount={missingTemplates.Count}; missingTemplates={PortLogField(missing)}; diagnosticCropsContinue=True; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            AppLogger.Info($"GoblinEvidenceScanResult: candidateFound=False; reason=MissingTemplate; templateCount={templateCatalog.Templates.Count}; invalidTemplateCount={templateCatalog.InvalidTemplates.Count}; invalidTemplates={PortLogField(PortGoblinEvidenceInvalidTemplateSummary(templateCatalog))}; diagnosticCropsContinue=True; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
         }
 
         private void PortLogGoblinEvidenceMissingTemplate(
@@ -396,18 +376,16 @@ namespace GoblinFarmer
         }
 
         private void PortLogGoblinEvidenceDetectorDiagnostic(
-            GoblinEvidenceType type,
-            string source,
+            GoblinEvidenceTemplateRequirement template,
             string result,
             string reason,
             string imagePath,
             Rectangle referenceRegion,
-            double threshold,
             double confidence,
             bool force)
         {
             DateTime now = DateTime.Now;
-            string key = $"{type}|{result}|{reason}";
+            string key = $"{template.Source}|{template.Type}|{template.Kind}|{template.GoblinType}|{result}|{reason}";
             if (!force)
             {
                 lock (portGoblinEvidenceLock)
@@ -422,7 +400,32 @@ namespace GoblinFarmer
                 }
             }
 
-            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={type}; source={source}; result={result}; reason={reason}; confidence={confidence:0.000}; threshold={threshold:0.000}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; referenceRegion={FormatRectangle(referenceRegion)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={template.Type}; source={template.Source}; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; result={result}; reason={reason}; confidence={confidence:0.000}; threshold={template.Threshold:0.000}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+        }
+
+        private void PortLogGoblinEvidenceSourceScanResult(
+            string source,
+            Rectangle referenceRegion,
+            GoblinEvidenceCandidate? candidate,
+            int templateCount)
+        {
+            string observationSource = PortNormalizeGoblinObservationSource(source);
+            bool candidateFound = candidate != null;
+            string goblinType = candidateFound ? candidate!.GoblinType : "None";
+            double confidence = candidateFound ? candidate!.Confidence : 0;
+            AppLogger.Info($"GoblinEvidenceScanResult source={observationSource} scanRegion={FormatRectangle(referenceRegion)} screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)} candidateFound={candidateFound} templateCount={templateCount} goblinType={PortLogField(goblinType)} confidence={confidence:0.000}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+        }
+
+        private string PortGoblinEvidenceScreenRegionForLog(Rectangle referenceRegion)
+        {
+            if (!PortTryGetDiabloRect(out RECT diabloRect))
+            {
+                return "Unavailable";
+            }
+
+            Rectangle screenRegion = PortScaleReferenceRectangle(referenceRegion, diabloRect);
+            screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
+            return FormatRectangle(screenRegion);
         }
 
         private bool PortShouldCaptureGoblinEvidenceDiagnosticCrops(DateTime now)
@@ -444,15 +447,15 @@ namespace GoblinFarmer
             {
                 if (!PortTryGetDiabloRect(out RECT diabloRect))
                 {
-                    AppLogger.Info($"GoblinEvidenceCropSkipped: label={label}; reason=DiabloRectUnavailable; referenceRegion={FormatRectangle(referenceRegion)}");
-                    return "";
-                }
+                AppLogger.Info($"GoblinEvidenceCropSkipped: label={label}; reason=DiabloRectUnavailable; scanRegion={FormatRectangle(referenceRegion)}");
+                return "";
+            }
 
                 Rectangle screenRegion = PortScaleReferenceRectangle(referenceRegion, diabloRect);
                 screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
                 if (screenRegion.Width <= 0 || screenRegion.Height <= 0)
                 {
-                    AppLogger.Info($"GoblinEvidenceCropSkipped: label={label}; reason=InvalidScreenRegion; referenceRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
+                    AppLogger.Info($"GoblinEvidenceCropSkipped: label={label}; reason=InvalidScreenRegion; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
                     return "";
                 }
 
@@ -468,7 +471,7 @@ namespace GoblinFarmer
                     Bottom = screenRegion.Bottom,
                 };
                 string savedPath = PortCaptureScreenRectangleToFile(captureRect, path, $"GoblinEvidenceScan:{safeLabel}");
-                AppLogger.Info($"GoblinEvidenceCropSaved: label={safeLabel}; path={PortLogField(PortDisplayLocation(savedPath))}; referenceRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
+                AppLogger.Info($"GoblinEvidenceCropSaved: label={safeLabel}; path={PortLogField(PortDisplayLocation(savedPath))}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
                 return savedPath;
             }
             catch (Exception ex)
