@@ -39,6 +39,7 @@ Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGa
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
+Run("Debug package limits failure and debug screenshots by default", TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault);
 Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
 Run("Debug package limits goblin evidence event screenshots", TestDebugPackageLimitsGoblinEvidenceEventScreenshots);
 Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
@@ -52,6 +53,7 @@ Run("Goblin manual count block list blocks explicit no-count areas", TestGoblinM
 Run("Goblin observation counters are diagnostic only", TestGoblinObservationCountersAreDiagnosticOnly);
 Run("Goblin observation type reuse requires recent matching area", TestGoblinObservationTypeReuseRequiresRecentMatchingArea);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
+Run("Goblin area detection uses strong route-context runner-up", TestGoblinAreaDetectionUsesStrongRouteContextRunnerUp);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
 Run("Goblin area detection false PF matches do not consume PF area slots", TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots);
 Run("Goblin tracker records allow unknown manual fallback and reset cleanly", TestGoblinTrackerRecordsAllowUnknownManualFallbackAndReset);
@@ -1056,6 +1058,97 @@ static void TestDebugPackageExcludesSuccessScreenshotsByDefault()
     }
 }
 
+static void TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string screenshots = Path.Combine(testRoot, "Screenshots");
+    string debugScreenshots = Path.Combine(testRoot, "debug-screenshots");
+    string logs = Path.Combine(testRoot, "Logs");
+    Directory.CreateDirectory(screenshots);
+    Directory.CreateDirectory(debugScreenshots);
+    Directory.CreateDirectory(logs);
+
+    try
+    {
+        DateTime sessionStart = DateTime.Now.AddMinutes(-10);
+        File.WriteAllLines(Path.Combine(testRoot, "session-info.txt"),
+        [
+            $"SessionStartLocal={sessionStart:O}",
+            $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
+            "GoblinCount=0",
+        ]);
+        File.WriteAllText(Path.Combine(logs, "GoblinFarmer.log"), "test log");
+
+        for (int index = 0; index < 5; index++)
+        {
+            DateTime timestamp = sessionStart.AddSeconds(index + 1);
+            Touch(Path.Combine(screenshots, $"2026-06-05_140{index:000}_000_Failure_Teleport_TeleportInterrupted_Diablo.png"), timestamp);
+            Touch(Path.Combine(screenshots, $"2026-06-05_140{index:000}_000_Failure_Teleport_TeleportInterrupted_App.png"), timestamp);
+        }
+
+        for (int index = 0; index < 7; index++)
+        {
+            DateTime timestamp = sessionStart.AddSeconds(index + 1);
+            Touch(Path.Combine(debugScreenshots, $"20260605_140{index:000}_000_Teleport_TeleportInterrupted.png"), timestamp);
+        }
+
+        string scriptPath = FindDebugPackageScript();
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -RuntimeRoot \"{testRoot}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start debug package script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed. stdout={output}; stderr={error}");
+
+        string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? "";
+        AssertTrue(File.Exists(packagePath), "debug package zip should be created");
+
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        int includedFailureScreenshots = archive.Entries.Count(entry =>
+            entry.FullName.Replace('\\', '/').Contains("Screenshots/Failure", StringComparison.OrdinalIgnoreCase) &&
+            entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+        int includedDebugScreenshots = archive.Entries.Count(entry =>
+            entry.FullName.Replace('\\', '/').StartsWith("debug-screenshots/", StringComparison.OrdinalIgnoreCase) &&
+            entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+
+        AssertEqual(6, includedFailureScreenshots, "default debug package should include only the latest three failure screenshot groups");
+        AssertEqual(4, includedDebugScreenshots, "default debug package should include only the capped current-session debug screenshot sample");
+
+        ZipArchiveEntry manifest = archive.GetEntry("debug-package-manifest.txt") ?? throw new InvalidOperationException("manifest missing from debug package");
+        using StreamReader reader = new(manifest.Open());
+        string manifestText = reader.ReadToEnd();
+        AssertTrue(manifestText.Contains("Failure screenshot package policy: most recent 3 groups included; 4 files excluded", StringComparison.OrdinalIgnoreCase), "manifest should document default failure screenshot cap and exclusions");
+        AssertTrue(manifestText.Contains("- Failure screenshots included: 6", StringComparison.OrdinalIgnoreCase), "manifest should report included failure screenshots");
+        AssertTrue(manifestText.Contains("- Failure screenshots excluded: 4", StringComparison.OrdinalIgnoreCase), "manifest should report excluded failure screenshots");
+        AssertTrue(manifestText.Contains("Debug screenshot package policy: most recent 4 files included from current session", StringComparison.OrdinalIgnoreCase), "manifest should document debug screenshot cap");
+        AssertTrue(manifestText.Contains("- Debug screenshots included: 4", StringComparison.OrdinalIgnoreCase), "manifest should report included debug screenshots");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    static void Touch(string path, DateTime timestamp)
+    {
+        File.WriteAllText(path, "not a real image; package test only");
+        File.SetCreationTime(path, timestamp);
+        File.SetLastWriteTime(path, timestamp);
+    }
+}
+
 static void TestDebugPackageLimitsObservationDiagnosticCrops()
 {
     string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
@@ -1667,6 +1760,31 @@ static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRou
         "Cathedral Level 2",
         "Cathedral Level 2",
         "CathedralVsPandemonium");
+}
+
+static void TestGoblinAreaDetectionUsesStrongRouteContextRunnerUp()
+{
+    GoblinAreaDetectionDisambiguationResult result = GoblinAreaDetectionDisambiguator.Disambiguate(
+        "Pandemonium Fortress Level 1",
+        0.960,
+        "Western Channel Level 1",
+        0.887,
+        "Ancient Waterway");
+
+    AssertTrue(result.Ambiguous, "strong channel runner-up should be treated as route-context resolvable");
+    AssertFalse(result.Blocked, "Ancient Waterway route context should resolve the PF/channel false positive");
+    AssertEqual("Western Channel Level 1", result.SelectedLocation, "route context should select Western Channel Level 1");
+    AssertEqual("RouteContext", result.Reason, "strong runner-up correction should be explicit");
+
+    result = GoblinAreaDetectionDisambiguator.Disambiguate(
+        "Pandemonium Fortress Level 1",
+        0.960,
+        "Western Channel Level 1",
+        0.650,
+        "Ancient Waterway");
+
+    AssertFalse(result.Ambiguous, "weak runner-up should not be corrected by route context alone");
+    AssertEqual("Pandemonium Fortress Level 1", result.SelectedLocation, "weak runner-up case should leave the best match unchanged");
 }
 
 static void TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity()

@@ -96,7 +96,7 @@ Some non-spawn route and event areas are excluded from manual Goblin Tracker cou
 
 The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
 
-Automation Observation Mode watches Journal and Minimap goblin candidates during combat and records what the automation would have counted. It discovers per-goblin templates from `Images\Goblin Evidence` using names such as `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and tight `<Goblin Type> Minimap.png` icon crops, then reports the matched goblin type when possible. Journal evidence is primary when both Journal and Minimap match in the same scan. It uses the same safer area resolution, blocked-area, duplicate, and two-count exception rules as manual `X`, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots. Accepted manual `X` notifications can reuse a recent same-area observed goblin type; without a recent matching observation they continue to show `Unknown`. Debug logs include scanner start/stop, scan attempts/skips, candidate checks with match points, calibrated Journal/Minimap scan regions, journal template diagnostics, and throttled diagnostic crop paths.
+Automation Observation Mode watches Journal and Minimap goblin candidates during combat and records what the automation would have counted. It discovers per-goblin templates from `Images\Goblin Evidence` using names such as `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and tight `<Goblin Type> Minimap.png` icon crops, then reports the matched goblin type when possible. Journal evidence is primary when both Journal and Minimap match in the same scan. It uses the same safer area resolution, blocked-area, duplicate, and two-count exception rules as manual `X`, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots. Accepted manual `X` notifications run a current observation refresh and can reuse a recent same-area observed goblin type; without a matching observation they continue to show `Unknown`. Debug logs include scanner start/stop, scan attempts/skips, candidate checks with match points, calibrated Journal/Minimap scan regions, journal template diagnostics, and throttled diagnostic crop paths.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
@@ -114,7 +114,7 @@ Last Observation:
 --
 --
 --
---
+No current observation
 ```
 
 GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the count, tracker active time, GPH, and the in-memory counted-area duplicate guard; if combat is currently running, tracker active time restarts from the reset moment. Starting a new game clears only the counted-area guard so the same area can be counted again in the next game.
@@ -178,6 +178,8 @@ During an active teleport arrival-confirmation wait, the combat hotkey and physi
 ## Debug Mode
 
 Debug Mode is off by default for normal release use. When enabled from Settings, it shows diagnostic controls and debug-only views such as the route state inspector and screenshot options, and it enables Keep Debug Screenshots by default until the user turns screenshot retention off. Visual Studio Debug runs force debug evidence internally, so those settings are not shown as editable options there. Success screenshots remain disabled unless `Debug.EnableSuccessScreenshots` is explicitly set to `true`.
+
+Debug packages keep evidence useful but bounded by default: success screenshots are excluded unless explicitly requested, failure screenshot groups and current-session `debug-screenshots` are capped to recent samples, and Goblin Evidence crops/event screenshots use their own retention and package limits. The package manifest reports included and excluded screenshot counts and sizes.
 
 Visual Studio Debug uses a taller diagnostic window so the Goblin Tracker evidence and Last Observation fields remain readable. Release-user launches stay compact and show diagnostics only after Debug Mode is enabled.
 

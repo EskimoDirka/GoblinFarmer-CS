@@ -74,6 +74,7 @@ namespace GoblinFarmer
 
         private void PortIncrementGoblinCount()
         {
+            PortTryRefreshGoblinObservationForManualHotkey();
             PortTryRecordGoblinFound("ManualHotkey", "Unknown", allowUnresolvedFallback: true);
         }
 
@@ -267,6 +268,9 @@ namespace GoblinFarmer
                 {
                     portLastGoblinObservationForManualCount = observation;
                 }
+
+                portDisplayedGoblinObservation = observation;
+                portDisplayedGoblinObservationStatus = "";
             }
 
             AppLogger.Info($"GoblinTracker: GoblinObservationCandidate source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} wouldCount={wouldCount} reason={reason}");
@@ -454,14 +458,34 @@ namespace GoblinFarmer
             lblGoblinEvidenceType.Text = $"Evidence Type: {(snapshot.GoblinEvidenceEventCount > 0 ? snapshot.LastGoblinEvidenceType.ToString() : "None")}";
             lblGoblinEvidenceConfidence.Text = $"Evidence Confidence: {snapshot.LastGoblinEvidenceConfidence:0.00}";
             lblGoblinEvidenceTime.Text = $"Evidence Time: {(snapshot.LastGoblinEvidenceTime.HasValue ? snapshot.LastGoblinEvidenceTime.Value.ToString("HH:mm:ss") : "--")}";
-            lblGoblinObservation.Text = PortGoblinObservationLabel(snapshot.LastGoblinObservation);
+            GoblinObservationRecord? displayedObservation;
+            string displayedObservationStatus;
+            lock (portGoblinTrackerLock)
+            {
+                displayedObservation = portDisplayedGoblinObservation;
+                displayedObservationStatus = portDisplayedGoblinObservationStatus;
+            }
+
+            lblGoblinObservation.Text = PortGoblinObservationLabel(displayedObservation, displayedObservationStatus);
         }
 
-        private static string PortGoblinObservationLabel(GoblinObservationRecord? observation)
+        private void PortMarkGoblinObservationNoCurrent(string reason)
+        {
+            lock (portGoblinTrackerLock)
+            {
+                portDisplayedGoblinObservation = null;
+                portDisplayedGoblinObservationStatus = string.IsNullOrWhiteSpace(reason) ? "NoCandidate" : reason.Trim();
+            }
+
+            PortUpdateGoblinTrackerStats();
+        }
+
+        private static string PortGoblinObservationLabel(GoblinObservationRecord? observation, string status)
         {
             if (observation == null)
             {
-                return "Last Observation:\r\n--\r\n--\r\n--\r\n--";
+                string displayStatus = string.IsNullOrWhiteSpace(status) ? "No current observation" : PortDisplayLocation(status);
+                return $"Last Observation:\r\n--\r\n--\r\n--\r\n{displayStatus}";
             }
 
             return $"Last Observation:\r\n{observation.GoblinType}\r\n{PortDisplayLocation(observation.AreaKey)}\r\n{observation.Source}\r\n{observation.Reason}";

@@ -400,6 +400,8 @@ namespace GoblinFarmer
     {
         private const double AmbiguousDeltaThreshold = 0.025;
         private const double AmbiguousCandidateMinimumConfidence = 0.90;
+        private const double RouteContextCandidateMinimumConfidence = 0.80;
+        private const double RouteContextDeltaThreshold = 0.15;
 
         public static GoblinAreaDetectionDisambiguationResult Disambiguate(
             string bestName,
@@ -412,9 +414,7 @@ namespace GoblinFarmer
             string ambiguityGroup = AmbiguityGroup(bestName, secondName);
             if (string.IsNullOrWhiteSpace(ambiguityGroup) ||
                 bestConfidence < AmbiguousCandidateMinimumConfidence ||
-                secondConfidence < AmbiguousCandidateMinimumConfidence ||
-                delta < 0 ||
-                delta > AmbiguousDeltaThreshold)
+                delta < 0)
             {
                 return new GoblinAreaDetectionDisambiguationResult(false, false, bestName, "", "NotAmbiguous", delta);
             }
@@ -422,7 +422,19 @@ namespace GoblinFarmer
             string selected = SelectFromRouteContext(bestName, secondName, routeContext);
             if (!string.IsNullOrWhiteSpace(selected))
             {
-                return new GoblinAreaDetectionDisambiguationResult(true, false, selected, ambiguityGroup, "RouteContext", delta);
+                double selectedConfidence = CandidateConfidence(selected, bestName, bestConfidence, secondName, secondConfidence);
+                if (selectedConfidence >= RouteContextCandidateMinimumConfidence &&
+                    (string.Equals(GoblinAreaResolver.NormalizedKey(selected), GoblinAreaResolver.NormalizedKey(bestName), StringComparison.OrdinalIgnoreCase) ||
+                        delta <= RouteContextDeltaThreshold))
+                {
+                    return new GoblinAreaDetectionDisambiguationResult(true, false, selected, ambiguityGroup, "RouteContext", delta);
+                }
+            }
+
+            if (secondConfidence < AmbiguousCandidateMinimumConfidence ||
+                delta > AmbiguousDeltaThreshold)
+            {
+                return new GoblinAreaDetectionDisambiguationResult(false, false, bestName, "", "NotAmbiguous", delta);
             }
 
             if (!IsPandemonium(bestName) && IsPandemonium(secondName))
@@ -504,6 +516,27 @@ namespace GoblinFarmer
             }
 
             return "";
+        }
+
+        private static double CandidateConfidence(
+            string selected,
+            string bestName,
+            double bestConfidence,
+            string secondName,
+            double secondConfidence)
+        {
+            string selectedKey = GoblinAreaResolver.NormalizedKey(selected);
+            if (selectedKey == GoblinAreaResolver.NormalizedKey(bestName))
+            {
+                return bestConfidence;
+            }
+
+            if (selectedKey == GoblinAreaResolver.NormalizedKey(secondName))
+            {
+                return secondConfidence;
+            }
+
+            return 0;
         }
 
         private static string AmbiguityGroup(string first, string second)

@@ -54,6 +54,8 @@ namespace GoblinFarmer
         private readonly GoblinAreaDuplicateGuard portGoblinAreaDuplicateGuard = new();
         private static readonly TimeSpan PortManualGoblinObservationTypeReuseWindow = TimeSpan.FromSeconds(20);
         private GoblinObservationRecord? portLastGoblinObservationForManualCount;
+        private GoblinObservationRecord? portDisplayedGoblinObservation;
+        private string portDisplayedGoblinObservationStatus = "";
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;

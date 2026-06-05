@@ -66,6 +66,7 @@
 - Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
 - Accepted manual `X` counts show a no-activate notification for 5 seconds with goblin counted, area/location, goblin type or `Unknown`, and current total
 - Accepted manual `X` notifications reuse a recent same-area Observation Mode goblin type within the safe short window
+- Accepted manual `X` runs a current observation refresh before showing the notification, without automatic counting or area-slot consumption
 - Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
 - Combat start logs `GoblinEvidenceScannerStartRequested` and `GoblinEvidenceScannerStarted`
@@ -83,6 +84,7 @@
 - Journal ObservationDiagnostics crops use the calibrated `64,736,645,417` reference region
 - Minimap ObservationDiagnostics crops use the calibrated `2108,66,421,423` reference region
 - `GoblinEvidenceScanResult source=Journal` and `source=Minimap` include `scanRegion`, `screenRegion`, template count, template name, matched goblin type, best confidence, and match point
+- `GoblinEvidenceScanResult source=Journal` includes the best template name, best confidence, threshold, match point, template size, template coverage percentage, and `journalDiagnosis` even when no candidate passes threshold
 - Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and below-threshold reasons once templates are present
 - `GoblinEvidenceCandidateCheck source=Minimap` includes template name, goblin type, calibrated scan region, best confidence, threshold, match point, screen match point, and template size
 - `GoblinEvidenceCandidateCheck source=Journal` includes template coverage percentage and `journalDiagnosis`, including full-region-template guidance when applicable
@@ -94,7 +96,9 @@
 - Duplicate observation areas log `wouldCount=False` without consuming another area-count slot
 - PF1/PF2/Stinging Winds observations report eligibility against `areaLimit=2` without changing real count state
 - Observation Mode uses manual `X` route-context disambiguation and does not report PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan
+- Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
+- The Goblin Tracker UI clears Last Observation to a no-current/no-candidate state after scans or manual refreshes that find no current goblin evidence
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
 
@@ -105,7 +109,9 @@
 - Screenshot manifest pairs success/failure Diablo and App screenshots by timestamp, workflow, and action
 - Screenshot manifest includes only current-session screenshots
 - Failure screenshots are included by default
+- Failure screenshots are limited to a small recent default sample; package manifest reports included/excluded counts and included/excluded/available failure screenshot sizes
 - Debug screenshots are included according to the active debug screenshot settings
+- Current-session `debug-screenshots` files are capped by the debug package generator default
 - Success screenshots are disabled by default in normal Release, installed app, and VS Debug
 - Success screenshots are excluded from packages by default
 - Success screenshots are included in packages only with explicit `-IncludeSuccessScreenshots`
