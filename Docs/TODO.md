@@ -549,7 +549,8 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Add main UI Goblin Tracker stats and Reset Stats button.
 * [x] Include Goblin Tracker count, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 * [x] Add explicit Goblin Tracker area-count overrides for Pandemonium Fortress Level 1 and Pandemonium Fortress Level 2 so each can count twice per game.
-* [x] Keep all non-Pandemonium Fortress Goblin Tracker areas capped at one count per game.
+* [x] Add Stinging Winds to the explicit Goblin Tracker two-count-per-game override list.
+* [x] Keep all non-Pandemonium Fortress/non-Stinging Winds Goblin Tracker areas capped at one count per game.
 * [x] Fix manual `X` false PF counts caused by very close current-location title matches against Western/Eastern Channel and Caverns of Frost templates.
 * [x] Add `AreaDetectionAmbiguous` / `AmbiguousAreaDetection` diagnostics for known PF/channel/cavern manual-count ambiguity.
 * [x] Add explicit Goblin Tracker manual no-count block list and block WhimsyDale from manual `X` counts.
@@ -560,6 +561,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Start the GoblinEvidence scanner from combat so Observation Mode can run during normal farming.
 * [x] Add scanner/evidence-loop diagnostics for scanner start/stop, scan attempts/skips, Journal/Minimap crop paths, candidate found/not-found, and skipped reasons.
 * [x] Add a no-activate 5-second manual `X` count notification with goblin counted, area/location, goblin type, and current total.
+* [x] Reuse a recent same-area Observation Mode goblin type in accepted manual `X` notifications while preserving `Unknown` for stale or different-area observations.
 * [x] Replace the generic Goblin Evidence template placeholders with per-goblin template discovery under `Images\Goblin Evidence`.
 * [x] Support `Engaged Journal`, `Killed Journal`, `Engaged & Killed Journal`, and `Minimap` Goblin Evidence filename patterns.
 * [x] Add tracked `Images\Goblin Evidence\README.md` guidance for the per-goblin folder structure.
@@ -570,9 +572,13 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Log per-source GoblinEvidence scan results with `source`, `scanRegion`, `screenRegion`, matched goblin type, and confidence.
 * [x] Verify discovery loads all 10 updated tight minimap goblin-icon templates.
 * [x] Add minimap/template match diagnostics for template name, goblin type, normalized source, best confidence, threshold, scan region, match point, screen match point, and template size.
+* [x] Route Observation Mode area resolution through the same PF ambiguity disambiguation used by manual `X` so Cathedral/channel/cavern/Moon Clan contexts do not become false PF observations.
+* [x] Add journal candidate diagnostics for template coverage and full-region-template diagnosis before changing journal thresholds.
 * [x] Keep Journal template matches primary when Journal and Minimap evidence both match in the same scan.
 * [x] Keep ObservationDiagnostics crops bounded by throttling capture and retaining only a recent runtime sample.
 * [x] Limit debug package inclusion for ObservationDiagnostics image crops and report missing-template state in `debug-package-manifest.txt`.
+* [x] Limit direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots by count and size, and report included/excluded/oversized counts in `debug-package-manifest.txt`.
+* [x] Allow combat hotkey and physical `2` Exit Game hotkey to cancel active arrival-confirmation waits with `ArrivalConfirmationCancelled` diagnostics.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [x] Live-validate Western Channel Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [x] Live-validate Eastern Channel Level 1 and Eastern Channel Level 2 remain separate area keys and do not consume PF slots during close title matches.
@@ -596,6 +602,12 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate matching ObservationDiagnostics minimap crop framing in a live run.
 * [ ] If tight minimap icon matching is unreliable after one or two targeted tuning passes, document the failing template(s) and prepare a future color-matching fallback for the goblin minimap marker within the calibrated minimap region.
 * [ ] Live-validate accepted manual `X` counts show the no-activate 5-second count notification without stealing Diablo focus.
+* [ ] Live-validate accepted manual `X` notifications show the observed goblin type when a recent same-area observation exists, and remain `Unknown` without one.
+* [ ] Live-validate Observation Mode no longer reports PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan.
+* [ ] Live-validate Stinging Winds accepts manual goblin counts 1 and 2 in the same game and suppresses count 3 with `AreaLimitReached`.
+* [ ] Live-validate combat hotkey cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=CombatHotkey`.
+* [ ] Live-validate physical `2` cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`.
+* [ ] Live-validate journal candidate checks include `templateCoveragePct` and `journalDiagnosis`; if full-region journal templates remain below threshold, capture cropped journal text-line templates before lowering thresholds.
 * [ ] Live-validate Automation Observation Mode reports `wouldCount=False reason=BlockedArea` in blocked locations such as WhimsyDale.
 * [ ] Live-validate Automation Observation Mode reports duplicate areas as `wouldCount=False` without consuming any additional slots.
 * [ ] Live-validate Automation Observation Mode reports PF1/PF2 eligibility against the two-count exception without changing the real count state.

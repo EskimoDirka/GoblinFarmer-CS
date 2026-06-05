@@ -6,6 +6,8 @@ param(
     [int]$MaxDiagnosticScreenshots = 10,
     [switch]$IncludeSuccessScreenshots,
     [int]$MaxGoblinEvidenceFullImages = 0,
+    [int]$MaxGoblinEvidenceEventScreenshots = 3,
+    [long]$MaxGoblinEvidenceEventScreenshotBytes = 1048576,
     [int]$MaxGoblinObservationDiagnosticCrops = 12
 )
 
@@ -1501,6 +1503,14 @@ if ($MaxGoblinEvidenceFullImages -lt 0) {
     Write-Warning "MaxGoblinEvidenceFullImages must be at least 0. Using 0."
     $MaxGoblinEvidenceFullImages = 0
 }
+if ($MaxGoblinEvidenceEventScreenshots -lt 0) {
+    Write-Warning "MaxGoblinEvidenceEventScreenshots must be at least 0. Using 0."
+    $MaxGoblinEvidenceEventScreenshots = 0
+}
+if ($MaxGoblinEvidenceEventScreenshotBytes -lt 0) {
+    Write-Warning "MaxGoblinEvidenceEventScreenshotBytes must be at least 0. Using 0."
+    $MaxGoblinEvidenceEventScreenshotBytes = 0
+}
 if ($MaxGoblinObservationDiagnosticCrops -lt 0) {
     Write-Warning "MaxGoblinObservationDiagnosticCrops must be at least 0. Using 0."
     $MaxGoblinObservationDiagnosticCrops = 0
@@ -1533,6 +1543,8 @@ Write-Host "Max success screenshot groups: $MaxSuccessScreenshots"
 Write-Host "Max diagnostic screenshot groups: $MaxDiagnosticScreenshots"
 Write-Host "Include success screenshots: $($IncludeSuccessScreenshots.IsPresent)"
 Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
+Write-Host "Max goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots"
+Write-Host "Max goblin evidence event screenshot bytes: $MaxGoblinEvidenceEventScreenshotBytes"
 Write-Host "Max goblin observation diagnostic crops: $MaxGoblinObservationDiagnosticCrops"
 
 if (Test-Path -LiteralPath $stagingRoot) {
@@ -1786,6 +1798,38 @@ try {
                 $_.BaseName -notlike '*_Full' -or
                 $selectedGoblinEvidenceFullImagePaths.ContainsKey($_.FullName)
         })
+    $goblinEvidenceEventScreenshots = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $normalizedFullName = $_.FullName.Replace('/', '\')
+            $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                $_.BaseName -like 'GoblinEvidence_*' -and
+                $normalizedFullName.IndexOf('\Debug\GoblinEvidence\ObservationDiagnostics\', [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                (Split-Path -Parent $normalizedFullName).EndsWith('\Debug\GoblinEvidence', [System.StringComparison]::OrdinalIgnoreCase)
+        } |
+        Sort-Object LastWriteTime -Descending)
+    $eligibleGoblinEvidenceEventScreenshots = @($goblinEvidenceEventScreenshots |
+        Where-Object { $MaxGoblinEvidenceEventScreenshotBytes -eq 0 -or $_.Length -le $MaxGoblinEvidenceEventScreenshotBytes })
+    $oversizedGoblinEvidenceEventScreenshots = [Math]::Max(0, $goblinEvidenceEventScreenshots.Count - $eligibleGoblinEvidenceEventScreenshots.Count)
+    $selectedGoblinEvidenceEventScreenshots = if ($MaxGoblinEvidenceEventScreenshots -gt 0) {
+        @($eligibleGoblinEvidenceEventScreenshots | Select-Object -First $MaxGoblinEvidenceEventScreenshots)
+    }
+    else {
+        @()
+    }
+    $selectedGoblinEvidenceEventScreenshotPaths = @{}
+    foreach ($file in $selectedGoblinEvidenceEventScreenshots) {
+        $selectedGoblinEvidenceEventScreenshotPaths[$file.FullName] = $true
+    }
+    $excludedGoblinEvidenceEventScreenshots = [Math]::Max(0, $goblinEvidenceEventScreenshots.Count - $selectedGoblinEvidenceEventScreenshots.Count)
+    $goblinEvidenceScreenshots = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $normalizedFullName = $_.FullName.Replace('/', '\')
+            $isGoblinEvidenceEventScreenshot = $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                $_.BaseName -like 'GoblinEvidence_*' -and
+                $normalizedFullName.IndexOf('\Debug\GoblinEvidence\ObservationDiagnostics\', [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                (Split-Path -Parent $normalizedFullName).EndsWith('\Debug\GoblinEvidence', [System.StringComparison]::OrdinalIgnoreCase)
+            (-not $isGoblinEvidenceEventScreenshot) -or $selectedGoblinEvidenceEventScreenshotPaths.ContainsKey($_.FullName)
+        })
     $goblinObservationDiagnosticCrops = @($goblinEvidenceScreenshots |
         Where-Object {
             $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
@@ -1812,6 +1856,9 @@ try {
     $selectedGoblinEvidenceFolder = if ($goblinEvidenceScreenshots.Count -gt 0) { Split-Path -Parent $goblinEvidenceScreenshots[0].FullName } elseif (-not [string]::IsNullOrWhiteSpace($goblinTrackerInfo.EvidenceScreenshotFolder)) { $goblinTrackerInfo.EvidenceScreenshotFolder } else { "none" }
     Write-Host "Selected goblin evidence folder: $selectedGoblinEvidenceFolder"
     Write-Host "Excluded goblin evidence full images: $excludedGoblinEvidenceFullImages"
+    Write-Host "Included goblin evidence event screenshots: $($selectedGoblinEvidenceEventScreenshots.Count)"
+    Write-Host "Excluded goblin evidence event screenshots: $excludedGoblinEvidenceEventScreenshots"
+    Write-Host "Oversized goblin evidence event screenshots excluded: $oversizedGoblinEvidenceEventScreenshots"
     Write-Host "Included goblin observation diagnostic crops: $($selectedGoblinObservationDiagnosticCrops.Count)"
     Write-Host "Excluded goblin observation diagnostic crops: $excludedGoblinObservationDiagnosticCrops"
     $goblinEvidenceScreenshotCount = Copy-DebugScreenshotsToPackage $goblinEvidenceScreenshots $goblinEvidenceSourceRoots (Join-Path $stagingRoot "Debug")
@@ -1919,6 +1966,7 @@ try {
             "Debug.EnableSuccessScreenshots source: $($successScreenshotSetting.Source)",
             $successAvailabilityLine,
             "Goblin evidence full-image package policy: most recent $MaxGoblinEvidenceFullImages included; $excludedGoblinEvidenceFullImages excluded",
+            "Goblin evidence event screenshot package policy: most recent $MaxGoblinEvidenceEventScreenshots included when <= $MaxGoblinEvidenceEventScreenshotBytes bytes; $excludedGoblinEvidenceEventScreenshots excluded; $oversizedGoblinEvidenceEventScreenshots oversized",
             "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
             $goblinEvidenceSourceSummaryLine,
             "Log folders searched:",
@@ -1952,6 +2000,9 @@ try {
             "- Debug screenshots included: $debugScreenshotCount",
             "- Goblin evidence screenshots included: $goblinEvidenceScreenshotCount",
             "- Goblin evidence full images excluded: $excludedGoblinEvidenceFullImages",
+            "- Goblin evidence event screenshots included: $($selectedGoblinEvidenceEventScreenshots.Count)",
+            "- Goblin evidence event screenshots excluded: $excludedGoblinEvidenceEventScreenshots",
+            "- Goblin evidence event screenshots oversized: $oversizedGoblinEvidenceEventScreenshots",
             "- Goblin observation diagnostic crops included: $($selectedGoblinObservationDiagnosticCrops.Count)",
             "- Goblin observation diagnostic crops excluded: $excludedGoblinObservationDiagnosticCrops",
             "- All discovered screenshots: $($allScreenshots.Count)",
@@ -1989,6 +2040,7 @@ try {
             "- Screenshots older than the current GoblinFarmer session start are not copied",
             "- Screenshots/Success is excluded unless -IncludeSuccessScreenshots is set",
             "- Debug/GoblinEvidence/Calibration *_Full images are excluded except the most recent MaxGoblinEvidenceFullImages",
+            "- Debug/GoblinEvidence/GoblinEvidence_* event screenshots are limited to MaxGoblinEvidenceEventScreenshots newest files and MaxGoblinEvidenceEventScreenshotBytes",
             "- Debug/GoblinEvidence/ObservationDiagnostics image crops are limited to MaxGoblinObservationDiagnosticCrops newest files",
             "- bin folders are not copied",
             "- obj folders are not copied",

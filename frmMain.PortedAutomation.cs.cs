@@ -52,6 +52,8 @@ namespace GoblinFarmer
         private readonly Dictionary<Button, Color> portButtonDefaultForeColors = new();
         private readonly object portGoblinTrackerLock = new();
         private readonly GoblinAreaDuplicateGuard portGoblinAreaDuplicateGuard = new();
+        private static readonly TimeSpan PortManualGoblinObservationTypeReuseWindow = TimeSpan.FromSeconds(20);
+        private GoblinObservationRecord? portLastGoblinObservationForManualCount;
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
@@ -77,9 +79,11 @@ namespace GoblinFarmer
         private string portLastBlockingDisplayLocation = "";
         private string portHotkeyFreshRawLocation = "";
         private string portTeleportWaitingConfirmationKey = "";
+        private string portArrivalConfirmationCancelReason = "";
         private volatile bool portTeleportRetryFailedOrInterrupted;
         private volatile bool portTeleportAlreadyHereNotified;
         private volatile bool portTeleportWaitingForConfirmation;
+        private volatile bool portArrivalConfirmationCancelRequested;
         private volatile bool portAutomationBlockedByTeleportFailsafe;
         private volatile bool portSuppressSkill1KeyUp;
         private volatile bool portSuppressSkill2KeyUp;
@@ -556,6 +560,21 @@ namespace GoblinFarmer
             return arrived;
         }
 
+        private bool PortCancelArrivalConfirmationWait(string reason)
+        {
+            if (!portTeleportWaitingForConfirmation)
+            {
+                return false;
+            }
+
+            reason = string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason.Trim();
+            portArrivalConfirmationCancelReason = reason;
+            portArrivalConfirmationCancelRequested = true;
+            AppLogger.Info($"ArrivalConfirmationCancelled reason={PortLogField(reason)} requestedTarget={PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey))} automationRunning={isAutomationRunning} combatActive={portCombatRunning} combatStopping={portCombatStopping}");
+            portAutomationCts?.Cancel();
+            return true;
+        }
+
         private async Task PortRunAutomationAsync(Func<CancellationToken, bool> work)
         {
             if (isAutomationRunning || portCombatRunning)
@@ -856,6 +875,8 @@ namespace GoblinFarmer
             {
                 portTeleportWaitingForConfirmation = true;
                 portTeleportWaitingConfirmationKey = PortLocationKey(displayName);
+                portArrivalConfirmationCancelRequested = false;
+                portArrivalConfirmationCancelReason = "";
                 try
                 {
                     arrived = PortWaitForSpecificLocation(displayName, token, AppSettings.Teleport.TeleportConfirmationTimeoutMs, out confirmedAfter);
@@ -864,6 +885,8 @@ namespace GoblinFarmer
                 {
                     portTeleportWaitingForConfirmation = false;
                     portTeleportWaitingConfirmationKey = "";
+                    portArrivalConfirmationCancelRequested = false;
+                    portArrivalConfirmationCancelReason = "";
                 }
             }
 

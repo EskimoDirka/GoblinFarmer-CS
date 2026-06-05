@@ -235,6 +235,19 @@ namespace GoblinFarmer
                     return new IntPtr(1);
                 }
 
+                if (isSkill2 && keyDown && portTeleportWaitingForConfirmation && portExitGameHotkeyEnabled)
+                {
+                    if (!portSkill2CombatHandled)
+                    {
+                        portSkill2CombatHandled = true;
+                        portSuppressSkill2KeyUp = true;
+                        AppLogger.Info("Exit Game hotkey interrupting arrival confirmation wait: injected=false; automationHotkey=2; source=Hotkey2");
+                        BeginInvoke(new Action(() => PortCancelArrivalConfirmationWait("ExitGameHotkey")));
+                    }
+
+                    return new IntPtr(1);
+                }
+
                 if (isSkill1 && portCombatRunning)
                 {
                     if (keyDown && !portSkill1TeleportHandled)

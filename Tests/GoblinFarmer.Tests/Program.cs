@@ -40,14 +40,17 @@ Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalP
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
 Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
+Run("Debug package limits goblin evidence event screenshots", TestDebugPackageLimitsGoblinEvidenceEventScreenshots);
 Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
 Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeepsTrueAreasSeparate);
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
+Run("Goblin area duplicate guard allows Stinging Winds twice only", TestGoblinAreaDuplicateGuardAllowsStingingWindsTwiceOnly);
 Run("Goblin area duplicate guard keeps default one-count areas", TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas);
 Run("Goblin area duplicate guard peek does not consume count slots", TestGoblinAreaDuplicateGuardPeekDoesNotConsumeCountSlots);
 Run("Goblin manual count block list blocks explicit no-count areas", TestGoblinManualCountBlockListBlocksExplicitNoCountAreas);
 Run("Goblin observation counters are diagnostic only", TestGoblinObservationCountersAreDiagnosticOnly);
+Run("Goblin observation type reuse requires recent matching area", TestGoblinObservationTypeReuseRequiresRecentMatchingArea);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
 Run("Goblin area detection false PF matches do not consume PF area slots", TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots);
@@ -1131,6 +1134,87 @@ static void TestDebugPackageLimitsObservationDiagnosticCrops()
     }
 }
 
+static void TestDebugPackageLimitsGoblinEvidenceEventScreenshots()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string goblinEvidence = Path.Combine(testRoot, "Debug", "GoblinEvidence");
+    string logs = Path.Combine(testRoot, "Logs");
+    string config = Path.Combine(testRoot, "Config");
+    Directory.CreateDirectory(goblinEvidence);
+    Directory.CreateDirectory(logs);
+    Directory.CreateDirectory(config);
+
+    try
+    {
+        DateTime sessionStart = DateTime.Now.AddMinutes(-10);
+        File.WriteAllLines(Path.Combine(testRoot, "session-info.txt"),
+        [
+            $"SessionStartLocal={sessionStart:O}",
+            $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
+            "GoblinCount=0",
+        ]);
+        File.WriteAllText(Path.Combine(logs, "GoblinFarmer.log"), "test log");
+        File.WriteAllText(Path.Combine(config, "AppSettings.json"), """
+            {
+              "Debug": {
+                "EnableSuccessScreenshots": false
+              }
+            }
+            """);
+
+        for (int index = 0; index < 8; index++)
+        {
+            string path = Path.Combine(goblinEvidence, $"GoblinEvidence_20260605_1212{index:00}_MinimapIcon.png");
+            File.WriteAllText(path, "not a real image; package test only");
+            DateTime timestamp = sessionStart.AddSeconds(index + 1);
+            File.SetCreationTime(path, timestamp);
+            File.SetLastWriteTime(path, timestamp);
+        }
+
+        string scriptPath = FindDebugPackageScript();
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -RuntimeRoot \"{testRoot}\" -MaxGoblinEvidenceEventScreenshots 2",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start debug package script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed. stdout={output}; stderr={error}");
+
+        string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? "";
+        AssertTrue(File.Exists(packagePath), "debug package zip should be created");
+
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        int includedEventScreenshots = archive.Entries.Count(entry =>
+            entry.FullName.Replace('\\', '/').Contains("Debug/GoblinEvidence/GoblinEvidence_", StringComparison.OrdinalIgnoreCase) &&
+            entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+        AssertEqual(2, includedEventScreenshots, "debug package should include only the configured recent goblin evidence event screenshot sample");
+
+        ZipArchiveEntry manifest = archive.GetEntry("debug-package-manifest.txt") ?? throw new InvalidOperationException("manifest missing from debug package");
+        using StreamReader reader = new(manifest.Open());
+        string manifestText = reader.ReadToEnd();
+        AssertTrue(manifestText.Contains("Goblin evidence event screenshot package policy: most recent 2 included when <= 1048576 bytes; 6 excluded; 0 oversized", StringComparison.OrdinalIgnoreCase), "manifest should document event screenshot package limits");
+        AssertTrue(manifestText.Contains("- Goblin evidence event screenshots included: 2", StringComparison.OrdinalIgnoreCase), "manifest should report included event screenshot count");
+        AssertTrue(manifestText.Contains("- Goblin evidence event screenshots excluded: 6", StringComparison.OrdinalIgnoreCase), "manifest should report excluded event screenshot count");
+        AssertTrue(manifestText.Contains("- Goblin evidence event screenshots oversized: 0", StringComparison.OrdinalIgnoreCase), "manifest should report oversized event screenshot count");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
+    }
+}
+
 static void TestDebugPackageIncludesSuccessScreenshotsWithOptIn()
 {
     string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
@@ -1278,6 +1362,22 @@ static void TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly()
     AssertTrue(guard.TryAccept(pf1), "reset should clear PF1 area count state");
     AssertTrue(guard.TryAccept(pf1), "reset should allow PF1 second count again");
     AssertFalse(guard.TryAccept(pf1), "reset should still suppress PF1 third count");
+}
+
+static void TestGoblinAreaDuplicateGuardAllowsStingingWindsTwiceOnly()
+{
+    GoblinAreaDuplicateGuard guard = new();
+    string stingingWinds = GoblinAreaResolver.Resolve("Stinging Winds").AreaKey;
+
+    AssertTrue(guard.TryAccept(stingingWinds, out GoblinAreaDuplicateGuardResult first), "Stinging Winds first count should be accepted");
+    AssertEqual(1, first.AreaCount, "Stinging Winds first count should report areaCount=1");
+    AssertEqual(2, first.AreaLimit, "Stinging Winds should report areaLimit=2");
+    AssertTrue(guard.TryAccept(stingingWinds, out GoblinAreaDuplicateGuardResult second), "Stinging Winds second count should be accepted");
+    AssertEqual(2, second.AreaCount, "Stinging Winds second count should report areaCount=2");
+    AssertEqual(2, second.AreaLimit, "Stinging Winds should keep areaLimit=2");
+    AssertFalse(guard.TryAccept(stingingWinds, out GoblinAreaDuplicateGuardResult third), "Stinging Winds third count should be suppressed");
+    AssertEqual(2, third.AreaCount, "Stinging Winds third count should report capped areaCount=2");
+    AssertEqual(2, third.AreaLimit, "Stinging Winds third count should report areaLimit=2");
 }
 
 static void TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas()
@@ -1454,6 +1554,44 @@ static void TestGoblinObservationCountersAreDiagnosticOnly()
     AssertEqual(1, snapshot.BlockedObservationCount, "blocked observations should be counted separately");
     AssertEqual(1, snapshot.DuplicateObservationCount, "duplicate observations should be counted separately");
     AssertEqual("Cathedral Level 1", snapshot.LastGoblinObservation?.AreaKey ?? "", "last observation should be retained for diagnostics");
+}
+
+static void TestGoblinObservationTypeReuseRequiresRecentMatchingArea()
+{
+    DateTime now = DateTime.UtcNow;
+    TimeSpan window = TimeSpan.FromSeconds(20);
+    GoblinObservationRecord matchingObservation = new(
+        now.AddSeconds(-3),
+        "Minimap",
+        "Treasure Goblin",
+        "Southern Highlands",
+        "Southern Highlands",
+        true,
+        "Eligible",
+        "Available",
+        1,
+        0);
+
+    AssertEqual(
+        "Treasure Goblin",
+        GoblinObservationTypeReuse.ResolveForManualCount("Unknown", "Southern Highlands", matchingObservation, now, window),
+        "recent same-area observation should provide the manual notification goblin type");
+
+    AssertEqual(
+        "Unknown",
+        GoblinObservationTypeReuse.ResolveForManualCount("Unknown", "The Weeping Hollow", matchingObservation, now, window),
+        "observation from another area should not be reused");
+
+    GoblinObservationRecord staleObservation = matchingObservation with { TimestampUtc = now.AddSeconds(-30) };
+    AssertEqual(
+        "Unknown",
+        GoblinObservationTypeReuse.ResolveForManualCount("Unknown", "Southern Highlands", staleObservation, now, window),
+        "stale observation should not be reused");
+
+    AssertEqual(
+        "Rainbow Goblin",
+        GoblinObservationTypeReuse.ResolveForManualCount("Rainbow Goblin", "Southern Highlands", matchingObservation, now, window),
+        "known manual goblin type should win over observation reuse");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()

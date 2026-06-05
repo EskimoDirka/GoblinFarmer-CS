@@ -464,7 +464,25 @@ namespace GoblinFarmer
                 }
             }
 
-            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={template.Type}; source={PortNormalizeGoblinObservationSource(template.Source)}; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; result={result}; reason={reason}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; templateName={PortLogField(template.FileName)}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; templateSize={FormatSize(match.TemplateSize)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            double templateCoverage = 0;
+            if (referenceRegion.Width > 0 && referenceRegion.Height > 0 && match.TemplateSize.Width > 0 && match.TemplateSize.Height > 0)
+            {
+                templateCoverage = (match.TemplateSize.Width * match.TemplateSize.Height * 100.0) / (referenceRegion.Width * referenceRegion.Height);
+            }
+
+            string journalDiagnosis = "None";
+            if (PortNormalizeGoblinObservationSource(template.Source).Equals("Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                bool fullRegionTemplate = referenceRegion.Width > 0 &&
+                    referenceRegion.Height > 0 &&
+                    match.TemplateSize.Width >= referenceRegion.Width * 0.85 &&
+                    match.TemplateSize.Height >= referenceRegion.Height * 0.85;
+                journalDiagnosis = fullRegionTemplate
+                    ? "FullRegionTemplate; if journal observations remain zero, capture cropped text-line templates or lower threshold only after crop review"
+                    : "CroppedTemplate; if confidence stays below threshold, compare timing and crop visibility";
+            }
+
+            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={template.Type}; source={PortNormalizeGoblinObservationSource(template.Source)}; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; result={result}; reason={reason}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; templateName={PortLogField(template.FileName)}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; templateSize={FormatSize(match.TemplateSize)}; templateCoveragePct={templateCoverage:0.0}; journalDiagnosis={PortLogField(journalDiagnosis)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
         }
 
         private void PortLogGoblinEvidenceSourceScanResult(

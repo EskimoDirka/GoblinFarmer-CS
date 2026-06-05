@@ -92,6 +92,7 @@ namespace GoblinFarmer
             GoblinAreaResolution area = areaResult.Area;
             source = string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim();
             goblinType = GoblinTypeNormalizer.Normalize(goblinType);
+            goblinType = PortResolveGoblinTypeForManualCount(source, goblinType, area.AreaKey);
             string rawLocation = PortDisplayLocation(area.RawLocation);
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
@@ -262,6 +263,10 @@ namespace GoblinFarmer
                     guardResult.AreaLimit,
                     guardResult.AreaCount);
                 DebugManager.Session.RecordGoblinObservation(observation);
+                if (area.Resolved)
+                {
+                    portLastGoblinObservationForManualCount = observation;
+                }
             }
 
             AppLogger.Info($"GoblinTracker: GoblinObservationCandidate source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} wouldCount={wouldCount} reason={reason}");
@@ -302,11 +307,14 @@ namespace GoblinFarmer
             {
                 if (IsDiabloRunning())
                 {
-                    if (source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase))
+                    if (PortShouldUseGoblinTrackerDetailedAreaResolution(source))
                     {
+                        string flow = source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase)
+                            ? "goblin tracker manual current-location detection"
+                            : $"goblin tracker {PortNormalizeGoblinObservationSource(source).ToLowerInvariant()} current-location detection";
                         PortLocationDetectionResult detection = PortDetectCurrentLocationFromTemplatesDetailed(
                             portCurrentLocationTemplates,
-                            "goblin tracker manual current-location detection",
+                            flow,
                             logPerf: true,
                             PortCurrentLocationConfidence);
                         rawLocation = detection.Detected;
@@ -373,6 +381,40 @@ namespace GoblinFarmer
                 delta,
                 ambiguityGroup,
                 disambiguationReason);
+        }
+
+        private static bool PortShouldUseGoblinTrackerDetailedAreaResolution(string source)
+        {
+            return source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase) ||
+                source.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                source.Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
+                source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase) ||
+                source.Equals("MinimapCandidate", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string PortResolveGoblinTypeForManualCount(string source, string goblinType, string areaKey)
+        {
+            if (!source.Equals("ManualHotkey", StringComparison.OrdinalIgnoreCase))
+            {
+                return goblinType;
+            }
+
+            DateTime nowUtc = DateTime.UtcNow;
+            GoblinObservationRecord? observation = portLastGoblinObservationForManualCount;
+            string resolvedType = GoblinObservationTypeReuse.ResolveForManualCount(
+                goblinType,
+                areaKey,
+                observation,
+                nowUtc,
+                PortManualGoblinObservationTypeReuseWindow);
+
+            if (!string.Equals(resolvedType, goblinType, StringComparison.OrdinalIgnoreCase))
+            {
+                double ageSeconds = observation == null ? -1 : Math.Max(0, (nowUtc - observation.TimestampUtc).TotalSeconds);
+                AppLogger.Info($"GoblinTracker: Manual count reused recent observation type goblinType={PortLogField(resolvedType)} areaKey={PortLogField(PortDisplayLocation(areaKey))} observationSource={PortLogField(observation?.Source ?? "")} observationAgeSeconds={ageSeconds:0.0} maxAgeSeconds={PortManualGoblinObservationTypeReuseWindow.TotalSeconds:0}");
+            }
+
+            return resolvedType;
         }
 
         private string PortGoblinTrackerAreaRouteContext()

@@ -311,9 +311,21 @@ namespace GoblinFarmer
             Stopwatch sw = Stopwatch.StartNew();
             while (sw.ElapsedMilliseconds < timeoutMs)
             {
+                if (portArrivalConfirmationCancelRequested)
+                {
+                    string cancelReason = string.IsNullOrWhiteSpace(portArrivalConfirmationCancelReason)
+                        ? "Unknown"
+                        : portArrivalConfirmationCancelReason;
+                    AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: arrival confirmation cancelled after {scans} scans in {perf.ElapsedMilliseconds}ms; reason={cancelReason}");
+                    return false;
+                }
+
                 if (token.IsCancellationRequested)
                 {
-                    AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: cancelled after {scans} scans in {perf.ElapsedMilliseconds}ms");
+                    string cancelReason = string.IsNullOrWhiteSpace(portArrivalConfirmationCancelReason)
+                        ? "TokenCancellation"
+                        : portArrivalConfirmationCancelReason;
+                    AppLogger.Info($"PERF PortWaitForSpecificLocation {targetLocation}: cancelled after {scans} scans in {perf.ElapsedMilliseconds}ms; reason={cancelReason}");
                     return false;
                 }
 

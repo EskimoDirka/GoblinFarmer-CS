@@ -14,6 +14,7 @@ namespace GoblinFarmer
         /// </summary>
         private void PortToggleCombat()
         {
+            PortCancelArrivalConfirmationWait("CombatHotkey");
             if (portCombatRunning)
             {
                 AppLogger.Info($"Combat stop requested by combat hotkey: key=backtick; combatActive={portCombatRunning}; combatStopping={portCombatStopping}");

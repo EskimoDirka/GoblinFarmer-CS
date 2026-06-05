@@ -88,7 +88,7 @@ After combat stops, Teleport Next is available as soon as combat is marked stopp
 
 ## Goblin Tracker
 
-The Goblin Tracker is a counter foundation with resolved-area duplicate protection. Press `X` while GoblinFarmer is running to add one goblin for the current detected area; a second count in the same resolved area is suppressed for normal areas. Pandemonium Fortress Level 1 and Pandemonium Fortress Level 2 are explicit exceptions and allow up to two counts per game before further counts are suppressed.
+The Goblin Tracker is a counter foundation with resolved-area duplicate protection. Press `X` while GoblinFarmer is running to add one goblin for the current detected area; a second count in the same resolved area is suppressed for normal areas. Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds are explicit exceptions and allow up to two counts per game before further counts are suppressed.
 
 Manual `X` detection guards against known close title-template matches where Pandemonium Fortress can look nearly identical to Western/Eastern Channel, Caverns of Frost, Moon Clan cave, or Cathedral titles. When that happens, GoblinFarmer uses the current route context to select the real area, or suppresses unresolved ambiguity instead of consuming the wrong PF count slot.
 
@@ -96,7 +96,7 @@ Some non-spawn route and event areas are excluded from manual Goblin Tracker cou
 
 The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
 
-Automation Observation Mode watches Journal and Minimap goblin candidates during combat and records what the automation would have counted. It discovers per-goblin templates from `Images\Goblin Evidence` using names such as `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and tight `<Goblin Type> Minimap.png` icon crops, then reports the matched goblin type when possible. Journal evidence is primary when both Journal and Minimap match in the same scan. It uses the same area resolution, blocked-area, duplicate, and PF1/PF2 exception rules, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots. Debug logs include scanner start/stop, scan attempts/skips, candidate checks with match points, calibrated Journal/Minimap scan regions, and throttled diagnostic crop paths.
+Automation Observation Mode watches Journal and Minimap goblin candidates during combat and records what the automation would have counted. It discovers per-goblin templates from `Images\Goblin Evidence` using names such as `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and tight `<Goblin Type> Minimap.png` icon crops, then reports the matched goblin type when possible. Journal evidence is primary when both Journal and Minimap match in the same scan. It uses the same safer area resolution, blocked-area, duplicate, and two-count exception rules as manual `X`, but automatic counting is not enabled yet; observations do not change GoblinCount, GPH, active time, or counted-area slots. Accepted manual `X` notifications can reuse a recent same-area observed goblin type; without a recent matching observation they continue to show `Unknown`. Debug logs include scanner start/stop, scan attempts/skips, candidate checks with match points, calibrated Journal/Minimap scan regions, journal template diagnostics, and throttled diagnostic crop paths.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
@@ -119,7 +119,7 @@ Last Observation:
 
 GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the count, tracker active time, GPH, and the in-memory counted-area duplicate guard; if combat is currently running, tracker active time restarts from the reset moment. Starting a new game clears only the counted-area guard so the same area can be counted again in the next game.
 
-Accepted manual `X` counts show a no-activate notification for 5 seconds with the counted area, goblin type, and current total.
+Accepted manual `X` counts show a no-activate notification for 5 seconds with the counted area, goblin type when known, and current total.
 
 ## Combat Profile Skill Setup
 
@@ -172,6 +172,8 @@ Default visible hotkeys:
 - `Up Arrow`: Kadala
 
 The Hotkeys group in the app shows the available hotkeys and includes checkboxes for the default physical hotkey paths. Combat-state and teleport safeguards can suppress hotkeys when using them would be unsafe; these stability protections are not user preferences.
+
+During an active teleport arrival-confirmation wait, the combat hotkey and physical `2` Exit Game hotkey cancel the wait and leave the normal interrupted-teleport recovery path in control.
 
 ## Debug Mode
 

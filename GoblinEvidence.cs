@@ -873,9 +873,52 @@ namespace GoblinFarmer
         private static int AreaLimit(string areaKey)
         {
             return areaKey.Equals("Pandemonium Fortress Level 1", StringComparison.OrdinalIgnoreCase) ||
-                areaKey.Equals("Pandemonium Fortress Level 2", StringComparison.OrdinalIgnoreCase)
+                areaKey.Equals("Pandemonium Fortress Level 2", StringComparison.OrdinalIgnoreCase) ||
+                areaKey.Equals("Stinging Winds", StringComparison.OrdinalIgnoreCase)
                     ? 2
                     : 1;
+        }
+    }
+
+    internal static class GoblinObservationTypeReuse
+    {
+        public static string ResolveForManualCount(
+            string requestedGoblinType,
+            string manualAreaKey,
+            GoblinObservationRecord? observation,
+            DateTime nowUtc,
+            TimeSpan maxAge)
+        {
+            string normalizedRequested = GoblinTypeNormalizer.Normalize(requestedGoblinType);
+            if (!string.Equals(normalizedRequested, "Unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalizedRequested;
+            }
+
+            if (observation == null ||
+                string.IsNullOrWhiteSpace(manualAreaKey) ||
+                string.IsNullOrWhiteSpace(observation.AreaKey))
+            {
+                return "Unknown";
+            }
+
+            if (nowUtc - observation.TimestampUtc > maxAge)
+            {
+                return "Unknown";
+            }
+
+            if (!string.Equals(
+                GoblinAreaResolver.NormalizedKey(manualAreaKey),
+                GoblinAreaResolver.NormalizedKey(observation.AreaKey),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return "Unknown";
+            }
+
+            string observedType = GoblinTypeNormalizer.Normalize(observation.GoblinType);
+            return string.Equals(observedType, "Unknown", StringComparison.OrdinalIgnoreCase)
+                ? "Unknown"
+                : observedType;
         }
     }
 }

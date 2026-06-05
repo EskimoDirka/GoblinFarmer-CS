@@ -58,11 +58,15 @@
 - Pandemonium Fortress Level 1 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Pandemonium Fortress Level 2 accepts goblin counts 1 and 2 in the same game
 - Pandemonium Fortress Level 2 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
+- Stinging Winds accepts goblin counts 1 and 2 in the same game
+- Stinging Winds suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Sewers of Caldeum, Ruined Cistern, Channel, Cave, Cathedral, and Battlefields subregions still resolve separately where expected and remain capped at one count per area per game unless explicitly blocked from manual counts
 - Reset Stats clears goblin count, tracker active time, GPH, and per-area count state
 - New Game clears per-area count state while preserving the current session tracker statistics
 - Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
 - Accepted manual `X` counts show a no-activate notification for 5 seconds with goblin counted, area/location, goblin type or `Unknown`, and current total
+- Accepted manual `X` notifications reuse a recent same-area Observation Mode goblin type within the safe short window
+- Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
 - Combat start logs `GoblinEvidenceScannerStartRequested` and `GoblinEvidenceScannerStarted`
 - Combat stop logs `GoblinEvidenceScannerStopped`
@@ -81,14 +85,18 @@
 - `GoblinEvidenceScanResult source=Journal` and `source=Minimap` include `scanRegion`, `screenRegion`, template count, template name, matched goblin type, best confidence, and match point
 - Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and below-threshold reasons once templates are present
 - `GoblinEvidenceCandidateCheck source=Minimap` includes template name, goblin type, calibrated scan region, best confidence, threshold, match point, screen match point, and template size
+- `GoblinEvidenceCandidateCheck source=Journal` includes template coverage percentage and `journalDiagnosis`, including full-region-template guidance when applicable
 - Journal matches remain primary when Journal and Minimap evidence both match in the same scan; Minimap is logged as supporting evidence in that case
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - Observation candidates report the matched goblin type when a Journal or Minimap template passes confidence
 - Blocked observation areas such as WhimsyDale log `wouldCount=False` and `reason=BlockedArea`
 - Duplicate observation areas log `wouldCount=False` without consuming another area-count slot
-- PF1/PF2 observations report eligibility against `areaLimit=2` without changing real count state
+- PF1/PF2/Stinging Winds observations report eligibility against `areaLimit=2` without changing real count state
+- Observation Mode uses manual `X` route-context disambiguation and does not report PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
+- Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
+- Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
 
 ## Debug Package Evidence
 - Debug package includes latest log
@@ -110,6 +118,7 @@
 - Debug package manifest reports Goblin Evidence missing-template state from the latest log
 - Debug package includes only a small recent sample from `Debug\GoblinEvidence\ObservationDiagnostics` and reports included/excluded observation crop counts
 - GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
+- Direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots are bounded by count and size; manifest reports included, excluded, and oversized event screenshot counts
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
 
 ## Debug Manager / Session Summary
