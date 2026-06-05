@@ -89,9 +89,9 @@ After combat stops, Teleport Next is available as soon as combat is marked stopp
 
 The Goblin Tracker is a counter foundation with resolved-area duplicate protection. Press `X` while GoblinFarmer is running to add one goblin for the current detected area; a second count in the same resolved area is suppressed for normal areas. Pandemonium Fortress Level 1 and Pandemonium Fortress Level 2 are explicit exceptions and allow up to two counts per game before further counts are suppressed.
 
-Manual `X` detection guards against known close title-template matches where Pandemonium Fortress can look nearly identical to Western/Eastern Channel or Caverns of Frost titles. When that happens, GoblinFarmer uses the current route context to select the channel/cavern area, or suppresses unresolved ambiguity instead of consuming the wrong PF count slot.
+Manual `X` detection guards against known close title-template matches where Pandemonium Fortress can look nearly identical to Western/Eastern Channel, Caverns of Frost, Moon Clan cave, or Cathedral titles. When that happens, GoblinFarmer uses the current route context to select the real area, or suppresses unresolved ambiguity instead of consuming the wrong PF count slot.
 
-WhimsyDale is excluded from manual Goblin Tracker counts. Pressing `X` there logs a blocked-area suppression and does not increase the counter or consume an area-count slot.
+Some non-spawn route and event areas are excluded from manual Goblin Tracker counts, including WhimsyDale, City of Caldeum subareas that should not count, Ancient Waterway, and The Bridge Of Korsikk. Pressing `X` there logs a blocked-area suppression and does not increase the counter or consume an area-count slot.
 
 The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
 

@@ -40,7 +40,7 @@ Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeep
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
 Run("Goblin area duplicate guard keeps default one-count areas", TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas);
-Run("Goblin manual count block list blocks only WhimsyDale", TestGoblinManualCountBlockListBlocksOnlyWhimsyDale);
+Run("Goblin manual count block list blocks explicit no-count areas", TestGoblinManualCountBlockListBlocksExplicitNoCountAreas);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
 Run("Goblin area detection false PF matches do not consume PF area slots", TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots);
@@ -1109,24 +1109,43 @@ static void AssertPandemoniumAreaLimit(GoblinAreaDuplicateGuard guard, string ar
     AssertEqual(2, third.AreaLimit, $"{areaName} third count should report areaLimit=2");
 }
 
-static void TestGoblinManualCountBlockListBlocksOnlyWhimsyDale()
+static void TestGoblinManualCountBlockListBlocksExplicitNoCountAreas()
 {
-    string whimsyDale = GoblinAreaResolver.Resolve("Whimsydale").AreaKey;
-    AssertEqual("WhimsyDale", whimsyDale, "WhimsyDale alias should resolve to the canonical area key");
-    AssertTrue(GoblinManualCountBlockList.IsBlocked(whimsyDale), "WhimsyDale should be blocked from manual goblin counts");
-    AssertTrue(GoblinManualCountBlockList.IsBlocked("whimsydale"), "WhimsyDale block list should be case-insensitive");
+    string[] blockedAreas =
+    [
+        "Whimsydale",
+        "City Of Caldeum",
+        "City of Caldeum",
+        "Gates of Caldeum",
+        "Caldeum Bazaar",
+        "Flooded Causeway",
+        "Ancient Waterway",
+        "The Bridge Of Korsikk",
+    ];
+
+    foreach (string areaName in blockedAreas)
+    {
+        string areaKey = GoblinAreaResolver.Resolve(areaName).AreaKey;
+        AssertTrue(GoblinManualCountBlockList.IsBlocked(areaKey), $"{areaName} should be blocked from manual goblin counts");
+        AssertTrue(GoblinManualCountBlockList.IsBlocked(areaName.ToLowerInvariant()), $"{areaName} block list check should be case-insensitive");
+    }
 
     string[] countableAreas =
     [
+        "Sewers of Caldeum",
+        "Ruined Cistern",
         "Western Channel Level 1",
         "Western Channel Level 2",
         "Eastern Channel Level 1",
         "Eastern Channel Level 2",
+        "Cave Of The Moon Clan Level 1",
+        "Cave Of The Moon Clan Level 2",
         "Caverns of Frost Level 1",
         "Caverns of Frost Level 2",
         "Pandemonium Fortress Level 1",
         "Pandemonium Fortress Level 2",
         "Cathedral Level 1",
+        "Cathedral Level 2",
     ];
 
     foreach (string areaName in countableAreas)
@@ -1182,6 +1201,33 @@ static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRou
         "Pandemonium Fortress Level 1",
         "Pandemonium Fortress Level 1",
         "ChannelVsPandemonium");
+
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 1",
+        1.000,
+        "Cave Of The Moon Clan Level 1",
+        0.998,
+        "Southern Highlands",
+        "Cave Of The Moon Clan Level 1",
+        "MoonClanVsPandemonium");
+
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 1",
+        0.999,
+        "Cathedral Level 1",
+        0.988,
+        "Cathedral Level 1",
+        "Cathedral Level 1",
+        "CathedralVsPandemonium");
+
+    AssertDisambiguates(
+        "Pandemonium Fortress Level 2",
+        0.999,
+        "Cathedral Level 2",
+        0.987,
+        "Cathedral Level 2",
+        "Cathedral Level 2",
+        "CathedralVsPandemonium");
 }
 
 static void TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity()
@@ -1209,6 +1255,17 @@ static void TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity()
     AssertFalse(result.Blocked, "non-PF best match should remain countable");
     AssertEqual("Western Channel Level 2", result.SelectedLocation, "non-PF best match should be preserved");
     AssertEqual("BestNonPandemonium", result.Reason, "non-PF best disambiguation should be explicit");
+
+    result = GoblinAreaDetectionDisambiguator.Disambiguate(
+        "Pandemonium Fortress Level 1",
+        1.000,
+        "Cave Of The Moon Clan Level 1",
+        0.998,
+        "");
+
+    AssertTrue(result.Ambiguous, "known close Moon Clan/PF pair should be marked ambiguous");
+    AssertTrue(result.Blocked, "unresolved PF-leading Moon Clan ambiguity should block rather than count");
+    AssertEqual("AmbiguousAreaDetection", result.Reason, "blocked Moon Clan ambiguity should explain suppression");
 }
 
 static void TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots()
@@ -1235,9 +1292,42 @@ static void TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniu
         "Caverns of Frost Level 1");
     AssertFalse(guard.TryAccept("Caverns of Frost Level 1"), "disambiguated Caverns Level 1 should suppress second same-area press");
 
+    AcceptDisambiguatedArea(
+        guard,
+        "Pandemonium Fortress Level 1",
+        1.000,
+        "Cave Of The Moon Clan Level 1",
+        0.998,
+        "Southern Highlands",
+        "Cave Of The Moon Clan Level 1");
+    AssertFalse(guard.TryAccept("Cave Of The Moon Clan Level 1"), "disambiguated Moon Clan Level 1 should suppress second same-area press");
+
+    AcceptDisambiguatedArea(
+        guard,
+        "Pandemonium Fortress Level 1",
+        0.999,
+        "Cathedral Level 1",
+        0.988,
+        "Cathedral Level 1",
+        "Cathedral Level 1");
+    AssertFalse(guard.TryAccept("Cathedral Level 1"), "disambiguated Cathedral Level 1 should suppress second same-area press");
+
+    AcceptDisambiguatedArea(
+        guard,
+        "Pandemonium Fortress Level 2",
+        0.999,
+        "Cathedral Level 2",
+        0.987,
+        "Cathedral Level 2",
+        "Cathedral Level 2");
+    AssertFalse(guard.TryAccept("Cathedral Level 2"), "disambiguated Cathedral Level 2 should suppress second same-area press");
+
     AssertTrue(guard.TryAccept("Pandemonium Fortress Level 1"), "false PF1 matches should not consume PF1 first slot");
     AssertTrue(guard.TryAccept("Pandemonium Fortress Level 1"), "false PF1 matches should not consume PF1 second slot");
     AssertFalse(guard.TryAccept("Pandemonium Fortress Level 1"), "PF1 third count should still be suppressed");
+    AssertTrue(guard.TryAccept("Pandemonium Fortress Level 2"), "false PF2 matches should not consume PF2 first slot");
+    AssertTrue(guard.TryAccept("Pandemonium Fortress Level 2"), "false PF2 matches should not consume PF2 second slot");
+    AssertFalse(guard.TryAccept("Pandemonium Fortress Level 2"), "PF2 third count should still be suppressed");
 }
 
 static void AssertDisambiguates(

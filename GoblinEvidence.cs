@@ -247,6 +247,32 @@ namespace GoblinFarmer
                 }
             }
 
+            if (IsSouthernHighlandsContext(routeContext))
+            {
+                if (IsMoonClanCave(bestName))
+                {
+                    return bestName;
+                }
+
+                if (IsMoonClanCave(secondName))
+                {
+                    return secondName;
+                }
+            }
+
+            if (IsCathedralContext(routeContext))
+            {
+                if (IsCathedral(bestName))
+                {
+                    return bestName;
+                }
+
+                if (IsCathedral(secondName))
+                {
+                    return secondName;
+                }
+            }
+
             return "";
         }
 
@@ -272,6 +298,26 @@ namespace GoblinFarmer
                 return "CavernsVsPandemonium";
             }
 
+            if (SameLevel(first, second, 1) && HasPandemoniumAndMoonClanCave(first, second))
+            {
+                return "MoonClanVsPandemonium";
+            }
+
+            if (SameLevel(first, second, 2) && HasPandemoniumAndMoonClanCave(first, second))
+            {
+                return "MoonClanVsPandemonium";
+            }
+
+            if (SameLevel(first, second, 1) && HasPandemoniumAndCathedral(first, second))
+            {
+                return "CathedralVsPandemonium";
+            }
+
+            if (SameLevel(first, second, 2) && HasPandemoniumAndCathedral(first, second))
+            {
+                return "CathedralVsPandemonium";
+            }
+
             return "";
         }
 
@@ -291,6 +337,18 @@ namespace GoblinFarmer
         {
             return (IsPandemonium(first) && IsCavernsOfFrost(second)) ||
                 (IsPandemonium(second) && IsCavernsOfFrost(first));
+        }
+
+        private static bool HasPandemoniumAndMoonClanCave(string first, string second)
+        {
+            return (IsPandemonium(first) && IsMoonClanCave(second)) ||
+                (IsPandemonium(second) && IsMoonClanCave(first));
+        }
+
+        private static bool HasPandemoniumAndCathedral(string first, string second)
+        {
+            return (IsPandemonium(first) && IsCathedral(second)) ||
+                (IsPandemonium(second) && IsCathedral(first));
         }
 
         private static bool IsPandemonium(string location)
@@ -316,6 +374,22 @@ namespace GoblinFarmer
                 key == GoblinAreaResolver.NormalizedKey("Caverns of Frost Level 2");
         }
 
+        private static bool IsMoonClanCave(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Cave Of The Moon Clan Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Cave Of The Moon Clan Level 2");
+        }
+
+        private static bool IsCathedral(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Cathedral") ||
+                key == GoblinAreaResolver.NormalizedKey("Cathedral Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Cathedral Level 2") ||
+                key == GoblinAreaResolver.NormalizedKey("Cathedral Level 3");
+        }
+
         private static bool IsAncientWaterwayContext(string location)
         {
             string key = GoblinAreaResolver.NormalizedKey(location);
@@ -331,18 +405,36 @@ namespace GoblinFarmer
                 key == GoblinAreaResolver.NormalizedKey("Fields of Slaughter") ||
                 IsCavernsOfFrost(location);
         }
+
+        private static bool IsSouthernHighlandsContext(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Southern Highlands") ||
+                IsMoonClanCave(location);
+        }
+
+        private static bool IsCathedralContext(string location)
+        {
+            return IsCathedral(location);
+        }
     }
 
     internal static class GoblinManualCountBlockList
     {
         private static readonly HashSet<string> BlockedAreaKeys = new(StringComparer.OrdinalIgnoreCase)
         {
-            "WhimsyDale",
+            GoblinAreaResolver.NormalizedKey("Ancient Waterway"),
+            GoblinAreaResolver.NormalizedKey("Caldeum Bazaar"),
+            GoblinAreaResolver.NormalizedKey("City of Caldeum"),
+            GoblinAreaResolver.NormalizedKey("Flooded Causeway"),
+            GoblinAreaResolver.NormalizedKey("Gates of Caldeum"),
+            GoblinAreaResolver.NormalizedKey("The Bridge Of Korsikk"),
+            GoblinAreaResolver.NormalizedKey("WhimsyDale"),
         };
 
         public static bool IsBlocked(string areaKey)
         {
-            return !string.IsNullOrWhiteSpace(areaKey) && BlockedAreaKeys.Contains(areaKey);
+            return !string.IsNullOrWhiteSpace(areaKey) && BlockedAreaKeys.Contains(GoblinAreaResolver.NormalizedKey(areaKey));
         }
     }
 

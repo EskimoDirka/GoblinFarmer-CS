@@ -66,6 +66,8 @@
 * [x] Add config-controlled repair settle and polling interval settings.
 * [x] Reduce default post-New-Tristram repair settle to 50ms after reviewing debug package timings.
 * [x] Accept latest repair timing as good enough after reviewing a debug package; preserve reliability over further speed changes.
+* [ ] Investigate repeated New Tristram repair workflow cancellations where the blacksmith menu did not become visible after one or two sent clicks.
+* [ ] Investigate slow salvage confirmation behavior; latest package showed salvage eventually completed 37 slots but took about 38 seconds after the repair button click.
 
 ### Testing
 
@@ -551,6 +553,8 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Fix manual `X` false PF counts caused by very close current-location title matches against Western/Eastern Channel and Caverns of Frost templates.
 * [x] Add `AreaDetectionAmbiguous` / `AmbiguousAreaDetection` diagnostics for known PF/channel/cavern manual-count ambiguity.
 * [x] Add explicit Goblin Tracker manual no-count block list and block WhimsyDale from manual `X` counts.
+* [x] Extend manual `X` false PF disambiguation to Cave Of The Moon Clan Level 1, Cathedral Level 1, and Cathedral Level 2.
+* [x] Extend the manual no-count block list to City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [x] Live-validate Western Channel Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [x] Live-validate Eastern Channel Level 1 and Eastern Channel Level 2 remain separate area keys and do not consume PF slots during close title matches.
@@ -560,6 +564,11 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Live-validate Pandemonium Fortress Level 2 accepts counts 1 and 2, then suppresses count 3 with `reason=AreaLimitReached`.
 * [ ] Live-validate WhimsyDale manual `X` suppresses with `reason=BlockedArea`, does not increment the counter, and does not consume an area-count slot.
 * [ ] Live-validate repeated WhimsyDale manual `X` remains blocked with `reason=BlockedArea`.
+* [ ] Live-validate City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk manual `X` suppress with `reason=BlockedArea`.
+* [ ] Live-validate Cave Of The Moon Clan Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
+* [ ] Live-validate Cathedral Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
+* [ ] Live-validate Cathedral Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
+* [ ] Live-validate real PF1/PF2 counts remain available after Cave/Cathedral close-match checks.
 * [ ] Manually validate physical `X` increments the counter once per press while GoblinFarmer is running.
 * [ ] Manually validate tracker active time advances only during combat automation and pauses while idle, in menus, waiting for game creation, waiting for Diablo launch, or paused.
 * [ ] Manually validate Reset Stats clears goblin count, tracker active time, GPH, and per-area count state, and restarts tracker timing from the reset moment if combat is active.

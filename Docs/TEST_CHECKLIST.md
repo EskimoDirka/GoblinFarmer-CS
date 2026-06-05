@@ -35,13 +35,19 @@
 
 ## Goblin Tracker
 - Default resolved areas allow one goblin count per area per game
-- Manual `X` logs `AreaDetectionAmbiguous` when PF and known channel/cavern title-template matches are extremely close
+- Manual `X` logs `AreaDetectionAmbiguous` when PF and known channel/cavern, Moon Clan, or Cathedral title-template matches are extremely close
 - Manual `X` uses route context to select Western Channel Level 1/2 or Eastern Channel Level 1/2 from Ancient Waterway context instead of consuming PF slots
 - Manual `X` uses route context to select Caverns of Frost Level 1/2 from Battlefields context instead of consuming PF slots
+- Manual `X` uses route context to select Cave Of The Moon Clan Level 1 from Southern Highlands context instead of consuming PF1 slots
+- Manual `X` uses route context to select Cathedral Level 1/2 from exact Cathedral level context instead of consuming PF slots
 - Unresolved PF-leading ambiguity suppresses the count with `GoblinCountSuppressed reason=AmbiguousAreaDetection`
 - Manual `X` in WhimsyDale suppresses with `GoblinCountSuppressed areaKey=WhimsyDale reason=BlockedArea source=ManualHotkey`
 - Repeated manual `X` in WhimsyDale remains blocked
-- WhimsyDale manual-count blocking does not increment the counter and does not consume an area-count slot
+- City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk suppress with `GoblinCountSuppressed`, `reason=BlockedArea`, and `source=ManualHotkey`
+- Manual-count blocked areas do not increment the counter and do not consume an area-count slot
+- Cave Of The Moon Clan Level 1 counts once and suppresses the second press as the same area
+- Cathedral Level 1 counts once and suppresses the second press as the same area
+- Cathedral Level 2 counts once and suppresses the second press as the same area
 - Western Channel Level 1 counts once and suppresses the second press as the same area
 - Western Channel Level 2 counts once and suppresses the second press as the same area
 - Eastern Channel Level 1 counts once and suppresses the second press as the same area
@@ -52,7 +58,7 @@
 - Pandemonium Fortress Level 1 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Pandemonium Fortress Level 2 accepts goblin counts 1 and 2 in the same game
 - Pandemonium Fortress Level 2 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
-- Cathedral, Caldeum, Ancient Waterway, Channel, Cave, and Battlefields subregions still resolve separately where expected and remain capped at one count per area per game
+- Sewers of Caldeum, Ruined Cistern, Channel, Cave, Cathedral, and Battlefields subregions still resolve separately where expected and remain capped at one count per area per game unless explicitly blocked from manual counts
 - Reset Stats clears goblin count, tracker active time, GPH, and per-area count state
 - New Game clears per-area count state while preserving the current session tracker statistics
 - Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
