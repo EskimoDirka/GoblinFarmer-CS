@@ -152,7 +152,7 @@ GoblinFarmer expects these exact Diablo III skills and runes to be assigned to t
 | 2 | Horrify | Stalker |
 | 3 | Spirit Walk | Severance |
 
-Witch Doctor combat repeats the key loop in `2, 3, 1` order, uses mouse wheel scrolling during active combat, and sends discrete left-click pulses only when the Diablo cursor changes. It does not hold left or right mouse down.
+Witch Doctor combat starts the `2, 3, 1` key loop, mouse-wheel loop, and cursor-change left-click loop together. It uses mouse wheel scrolling during active combat and sends discrete left-click pulses only when the Diablo cursor changes. It does not hold left or right mouse down.
 
 ## Compatibility Notes
 

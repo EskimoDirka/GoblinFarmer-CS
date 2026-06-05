@@ -132,6 +132,7 @@ namespace GoblinFarmer
         private long portLastDemonHunterSuppressionEvidenceTicks;
         private long portLastWitchDoctorWheelSentLogTicks;
         private long portLastWitchDoctorWheelSkippedLogTicks;
+        private long portLastWitchDoctorCursorLeftClickCheckLogTicks;
         private long portLastWitchDoctorCursorLeftClickSentLogTicks;
         private long portLastWitchDoctorCursorLeftClickSkippedLogTicks;
         private long portLastLootSpamDecisionLogTicks;

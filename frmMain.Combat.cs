@@ -300,8 +300,8 @@ namespace GoblinFarmer
                     return;
                 }
 
-                bool scrollSafe = PortWitchDoctorMouseWheelIsSafe(out string wheelSkipReason);
-                PortHandleWitchDoctorMouseWheelInput(scrollSafe, wheelSkipReason);
+                bool scrollSafe = PortWitchDoctorMouseWheelIsSafe();
+                PortHandleWitchDoctorMouseWheelInput(scrollSafe);
                 PortSleep(token, 90);
             }
 
@@ -310,7 +310,7 @@ namespace GoblinFarmer
 
         private void PortWitchDoctorCursorLeftClickLoop(CancellationToken token)
         {
-            AppLogger.Info($"WitchDoctorCursorChangeLeftClickLoopStarted: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; heldLeftMode=false; heldRightMode=false; keyLoopOrder=2,3,1; {PortCombatInputContext()}");
+            AppLogger.Info($"WitchDoctorCursorChangeLeftClickLoopStarted: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; clickSendMethod=suppressed; heldLeftMode=false; heldRightMode=false; keyLoopOrder=2,3,1; {PortCombatInputContext()}");
 
             while (!token.IsCancellationRequested && portCombatRunning && portCombatClass == "witch_doctor")
             {
@@ -323,22 +323,25 @@ namespace GoblinFarmer
                 bool clickSafe = PortCombatClickIsSafe();
                 if (!clickSafe)
                 {
-                    bool cursorChanged = PortCombatCursorChanged(out string skipReason);
-                    PortLogWitchDoctorCursorChangeLeftClickSkipped(skipReason, cursorChanged);
+                    bool unsafeCursorChanged = PortCombatCursorChanged(out string unsafeSkipReason);
+                    PortLogWitchDoctorCursorChangeLeftClickCheck(unsafeCursorChanged);
+                    PortLogWitchDoctorCursorChangeLeftClickSkipped(unsafeSkipReason, unsafeCursorChanged);
                     PortSleep(token, 90);
                     continue;
                 }
 
-                if (PortCombatCursorShouldSendClick(out string leftClickSkipReason, out bool leftClickCursorChanged))
+                bool shouldClick = PortCombatCursorShouldSendClick(out string skipReason, out bool cursorChanged);
+                PortLogWitchDoctorCursorChangeLeftClickCheck(cursorChanged);
+                if (shouldClick)
                 {
                     PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
                     Thread.Sleep(10);
                     PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
-                    PortLogWitchDoctorCursorChangeLeftClickSent(leftClickCursorChanged);
+                    PortLogWitchDoctorCursorChangeLeftClickSent(cursorChanged);
                 }
                 else
                 {
-                    PortLogWitchDoctorCursorChangeLeftClickSkipped(leftClickSkipReason, leftClickCursorChanged);
+                    PortLogWitchDoctorCursorChangeLeftClickSkipped(skipReason, cursorChanged);
                 }
 
                 PortSleep(token, 90);
@@ -783,7 +786,6 @@ namespace GoblinFarmer
                 return false;
             }
 
-            skipReason = "cursor changed but click unsafe";
             return true;
         }
 
@@ -814,35 +816,25 @@ namespace GoblinFarmer
             AppLogger.Info($"DemonHunterRightHeldNoClickSuppressionActive: combatInputMode=PhysicalCursorHeldFromSafeRegion; clickSendMethod=left-suppressed-right-held; rightDown=true; leftClickSent=false; rightReleased=false; combatRunning={portCombatRunning}; combatClass={portCombatClass}; {PortCombatInputContext()}");
         }
 
-        private bool PortWitchDoctorMouseWheelIsSafe(out string skipReason)
-        {
-            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
-            if (!diagnostics.DiabloActive || !diagnostics.ForegroundIsDiablo)
-            {
-                skipReason = "Diablo inactive or not foreground";
-                return false;
-            }
-
-            if (!diagnostics.CursorInsideDiablo)
-            {
-                skipReason = "cursor outside Diablo";
-                return false;
-            }
-
-            skipReason = "";
-            return true;
-        }
-
-        private void PortHandleWitchDoctorMouseWheelInput(bool scrollSafe, string skipReason)
+        private void PortHandleWitchDoctorMouseWheelInput(bool scrollSafe)
         {
             if (!scrollSafe)
             {
-                PortLogWitchDoctorMouseWheelSkipped(skipReason);
+                PortLogWitchDoctorMouseWheelSkippedNoClickRegion();
                 return;
             }
 
             PortRuntimeMouseWheel(-120);
             PortLogWitchDoctorMouseWheelSent();
+        }
+
+        private bool PortWitchDoctorMouseWheelIsSafe()
+        {
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            return diagnostics.DiabloActive &&
+                diagnostics.ForegroundIsDiablo &&
+                diagnostics.HasCursor &&
+                diagnostics.CursorInsideDiablo;
         }
 
         private void PortLogWitchDoctorMouseWheelSent()
@@ -858,7 +850,7 @@ namespace GoblinFarmer
             AppLogger.Info($"WitchDoctorMouseWheelScrollSent: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; wheelScrollSent=true; wheelScrollSkipped=false; wheelDelta=-120; heldLeftMode=false; heldRightMode=false; leftDown={portRuntimeLeftMouseHeld}; rightDown={portRuntimeRightMouseHeld}; noHeldLeftState=True; noHeldRightState=True; {PortCombatInputContext()}");
         }
 
-        private void PortLogWitchDoctorMouseWheelSkipped(string reason)
+        private void PortLogWitchDoctorMouseWheelSkippedNoClickRegion()
         {
             long nowTicks = DateTime.UtcNow.Ticks;
             long lastLogTicks = Interlocked.Read(ref portLastWitchDoctorWheelSkippedLogTicks);
@@ -870,7 +862,32 @@ namespace GoblinFarmer
             Interlocked.Exchange(ref portLastWitchDoctorWheelSkippedLogTicks, nowTicks);
             PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
             string noClickRegionName = diagnostics.InsideNoClickRegion ? diagnostics.NoClickRegionName : "";
-            AppLogger.Info($"WitchDoctorMouseWheelScrollSkipped: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; wheelScrollSent=false; wheelScrollSkipped=true; skipReason={PortLogField(reason)}; noClickRegionName={noClickRegionName}; heldLeftMode=false; heldRightMode=false; leftDown={portRuntimeLeftMouseHeld}; rightDown={portRuntimeRightMouseHeld}; noHeldLeftState=True; noHeldRightState=True; {PortCombatInputContext()}");
+            string skipReason = !diagnostics.DiabloActive
+                ? "DiabloInactive"
+                : !diagnostics.ForegroundIsDiablo
+                    ? "ForegroundNotDiablo"
+                    : !diagnostics.HasCursor
+                        ? "CursorUnavailable"
+                        : !diagnostics.CursorInsideDiablo
+                            ? "CursorOutsideDiablo"
+                            : diagnostics.InsideNoClickRegion
+                                ? "NoClickRegion"
+                                : "UnsafeCursor";
+            AppLogger.Info($"WitchDoctorMouseWheelScrollSkipped: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; wheelScrollSent=false; wheelScrollSkipped=true; skipReason={skipReason}; noClickRegionName={noClickRegionName}; heldLeftMode=false; heldRightMode=false; leftDown={portRuntimeLeftMouseHeld}; rightDown={portRuntimeRightMouseHeld}; noHeldLeftState=True; noHeldRightState=True; {PortCombatInputContext()}");
+        }
+
+        private void PortLogWitchDoctorCursorChangeLeftClickCheck(bool cursorChanged)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long lastLogTicks = Interlocked.Read(ref portLastWitchDoctorCursorLeftClickCheckLogTicks);
+            if (nowTicks - lastLogTicks < TimeSpan.FromSeconds(1).Ticks)
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref portLastWitchDoctorCursorLeftClickCheckLogTicks, nowTicks);
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            AppLogger.Info($"WitchDoctorCursorChangeLeftClickCheck: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; clickSendMethod=suppressed; heldLeftMode=false; heldRightMode=false; cursorChanged={cursorChanged}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; currentCursorHandle=0x{diagnostics.CursorHandle.ToInt64():X}; leftDown={portRuntimeLeftMouseHeld}; rightDown={portRuntimeRightMouseHeld}; {PortCombatInputContext()}");
         }
 
         private void PortLogWitchDoctorCursorChangeLeftClickSent(bool cursorChanged)
@@ -883,7 +900,8 @@ namespace GoblinFarmer
             }
 
             Interlocked.Exchange(ref portLastWitchDoctorCursorLeftClickSentLogTicks, nowTicks);
-            AppLogger.Info($"WitchDoctorCursorChangeLeftClickSent: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; clickSendMethod=mouse_event; leftClickSent=true; leftClickSkipped=false; heldLeftMode=false; heldRightMode=false; cursorChanged={cursorChanged}; rightDown={portRuntimeRightMouseHeld}; leftDown={portRuntimeLeftMouseHeld}; noHeldLeftState=True; noHeldRightState=True; {PortCombatInputContext()}");
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            AppLogger.Info($"WitchDoctorCursorChangeLeftClickSent: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; clickSendMethod=mouse_event; mouseEventSequence=LEFTDOWN,LEFTUP; leftClickSent=true; leftClickSkipped=false; heldLeftMode=false; heldRightMode=false; cursorChanged={cursorChanged}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; currentCursorHandle=0x{diagnostics.CursorHandle.ToInt64():X}; noClickRegionName=; blockReason=; leftDown={portRuntimeLeftMouseHeld}; rightDown={portRuntimeRightMouseHeld}; noHeldLeftState=True; noHeldRightState=True; {PortCombatInputContext()}");
         }
 
         private void PortLogWitchDoctorCursorChangeLeftClickSkipped(string reason, bool cursorChanged)
@@ -897,9 +915,11 @@ namespace GoblinFarmer
 
             Interlocked.Exchange(ref portLastWitchDoctorCursorLeftClickSkippedLogTicks, nowTicks);
             PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            string blockReason = diagnostics.InsideNoClickRegion
+                ? diagnostics.NoClickRegionName
+                : reason;
             string noClickRegionName = diagnostics.InsideNoClickRegion ? diagnostics.NoClickRegionName : "";
-            string blockReason = diagnostics.InsideNoClickRegion ? diagnostics.NoClickRegionName : reason;
-            AppLogger.Info($"WitchDoctorCursorChangeLeftClickSkipped: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; clickSendMethod=suppressed; leftClickSent=false; leftClickSkipped=true; heldLeftMode=false; heldRightMode=false; cursorChanged={cursorChanged}; skipReason={PortLogField(reason)}; blockReason={PortLogField(blockReason)}; noClickRegionName={PortLogField(noClickRegionName)}; blocked={!diagnostics.Safe}; rightDown={portRuntimeRightMouseHeld}; leftDown={portRuntimeLeftMouseHeld}; noHeldLeftState=True; noHeldRightState=True; {PortCombatInputContext()}");
+            AppLogger.Info($"WitchDoctorCursorChangeLeftClickSkipped: combatClass=witch_doctor; combatInputMode=MouseWheelScroll; clickSendMethod=suppressed; leftClickSent=false; leftClickSkipped=true; heldLeftMode=false; heldRightMode=false; cursorChanged={cursorChanged}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; currentCursorHandle=0x{diagnostics.CursorHandle.ToInt64():X}; blockReason={PortLogField(blockReason)}; noClickRegionName={PortLogField(noClickRegionName)}; noClickRegionIndex={diagnostics.NoClickRegionIndex}; blocked={!diagnostics.Safe}; leftDown={portRuntimeLeftMouseHeld}; rightDown={portRuntimeRightMouseHeld}; noHeldLeftState=True; noHeldRightState=True; {PortCombatInputContext()}");
         }
 
         private bool PortDemonHunterMomentumReady()
