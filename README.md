@@ -50,11 +50,15 @@ On first launch, GoblinFarmer attempts to discover the required runtime paths. I
 - Battle.net executable: `Battle.net.exe`
 - Images template folder: usually the bundled `Images` folder beside the app
 
+Diablo III discovery checks common install locations on fixed local drives, including drive-root installs such as `D:\Diablo III\Diablo III.exe`. It prefers `Diablo III64.exe` when present, otherwise uses `Diablo III.exe`, and does not select `Diablo III Launcher.exe`.
+
 Automation stays disabled until the required paths and template folders validate successfully. Paths can also be reviewed and changed later from the Settings area in the app.
 
 The selected combat profile and Hotkeys checkbox states are saved in `Config\AppSettings.json` under `User` and restored when GoblinFarmer starts. Visual Studio Debug runs use the project-level `Config\AppSettings.json` directly so form or rebuild changes do not reset developer paths; release and installed runs use the app-local copy beside the executable.
 
 When config defaults are added later, GoblinFarmer preserves existing Diablo III, Battle.net, and custom Images paths instead of replacing them with blank/default values.
+
+GoblinFarmer does not enable automation unless the Diablo III executable path is valid. If Diablo III is missing and cannot be auto-discovered, the app stays in `Setup Required` instead of showing `Idle`.
 
 After install, use the built-in `Verify Paths` button to confirm the Diablo III, Battle.net, and Images paths for the current machine.
 
@@ -217,6 +221,27 @@ Build from the project root:
 ```powershell
 dotnet build GoblinFarmer.csproj
 ```
+
+## Local Source Uploads
+
+Local developer checkouts can keep private ChatGPT source-upload helpers under `Scripts\Local Tools\`. Those helpers and their timestamped ZIP output under `ChatGPT Uploads\` are intentionally ignored by Git; the user-facing debug package launcher remains tracked separately under `Scripts\`.
+
+## Git Sync Helper
+
+`Scripts\Git Commit Push.bat` is a safe local helper for reviewing, committing, and optionally pushing repository changes from Windows Explorer. It shows the current branch and full `git status`, waits for confirmation before running `git add -A`, refuses blank commit messages, and only pushes after the commit succeeds and the user confirms the push.
+
+Usage:
+
+```text
+Double-click Scripts\Git Commit Push.bat
+```
+
+Example workflow:
+
+1. Review the displayed branch and git status.
+2. Press any key to stage all changes.
+3. Enter a commit message.
+4. Choose whether to push the commit to the current tracked branch.
 
 ## Release Build
 

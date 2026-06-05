@@ -21,6 +21,9 @@ namespace GoblinFarmer
         private static bool vsDebugProjectRootConfigUsed;
         private static string appSettingsPathResolution = "startup";
         private static RuntimePathPreservationResult lastRuntimePathPreservation;
+        private static RuntimeDiscoveryResult lastRuntimeDiscoveryResult;
+        private static string rawDiabloExecutablePathLoaded = "";
+        private static bool rawDiabloExecutablePathWasBlank = true;
 
         public enum DebugDefaultsProfile
         {
@@ -68,6 +71,9 @@ namespace GoblinFarmer
             appSettingsPathResolution = pathResolution.Reason;
             firstRunSetupSuppressed = ShouldSuppressFirstRunSetup(CurrentDebugDefaultsProfile);
             lastRuntimePathPreservation = default;
+            lastRuntimeDiscoveryResult = default;
+            rawDiabloExecutablePathLoaded = "";
+            rawDiabloExecutablePathWasBlank = true;
             AppLogger.Info(
                 "AppSettings path resolved: " +
                 $"path={configPath}; " +
@@ -82,6 +88,7 @@ namespace GoblinFarmer
                 {
                     settings = SettingsModel.Default();
                     settings.Normalize();
+                    RecordRawLoadedDiabloPath(settings.Runtime.DiabloExecutablePath);
                     ApplyReleaseDebugPersistenceDefaults();
                     persistedDebugSettings = settings.Debug.Clone();
                     File.WriteAllText(configPath, JsonSerializer.Serialize(settings, JsonOptions));
@@ -97,6 +104,8 @@ namespace GoblinFarmer
                     bool hasSavedUserPreferences = HasSavedUserPreferences(json);
                     SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(json, JsonOptions);
                     settings = loaded ?? SettingsModel.Default();
+                    settings.Normalize();
+                    RecordRawLoadedDiabloPath(settings.Runtime.DiabloExecutablePath);
                     bool shouldSaveLoadedSettings = loaded == null;
                     if (!hasSavedDebugScreenshotsPreference)
                     {
@@ -118,7 +127,6 @@ namespace GoblinFarmer
                         AppLogger.Info("AppSettings missing one or more User preferences; using defaults for missing values.");
                     }
 
-                    settings.Normalize();
                     ApplyReleaseDebugPersistenceDefaults();
                     persistedDebugSettings = settings.Debug.Clone();
                     if (shouldSaveLoadedSettings)
@@ -134,6 +142,7 @@ namespace GoblinFarmer
             {
                 settings = SettingsModel.Default();
                 settings.Normalize();
+                RecordRawLoadedDiabloPath(settings.Runtime.DiabloExecutablePath);
                 ApplyReleaseDebugPersistenceDefaults();
                 persistedDebugSettings = settings.Debug.Clone();
                 ApplyDebugDefaultsProfile();
@@ -494,24 +503,6 @@ namespace GoblinFarmer
                 }
             }
 
-            if (!ExecutableExists(settings.Runtime.DiabloExecutablePath))
-            {
-                string discoveredDiablo = DiscoverDiabloExecutable();
-                if (!string.IsNullOrWhiteSpace(discoveredDiablo))
-                {
-                    settings.Runtime.DiabloExecutablePath = discoveredDiablo;
-                }
-            }
-
-            if (!ExecutableExists(settings.Runtime.BattleNetExecutablePath))
-            {
-                string discoveredBattleNet = DiscoverBattleNetExecutable();
-                if (!string.IsNullOrWhiteSpace(discoveredBattleNet))
-                {
-                    settings.Runtime.BattleNetExecutablePath = discoveredBattleNet;
-                }
-            }
-
             settings.Normalize();
         }
 
@@ -560,6 +551,17 @@ namespace GoblinFarmer
             DebugManager.ApplyReleaseUserDefaultsIfPreferenceUnsaved(settings.Debug);
         }
 
+        private static void RecordRawLoadedDiabloPath(string path)
+        {
+            rawDiabloExecutablePathLoaded = path ?? "";
+            rawDiabloExecutablePathWasBlank = string.IsNullOrWhiteSpace(rawDiabloExecutablePathLoaded);
+            AppLogger.Info(
+                "AppSettings raw Diablo path loaded: " +
+                $"configPath={configPath}; " +
+                $"rawDiabloPath={rawDiabloExecutablePathLoaded}; " +
+                $"diabloPathBlank={rawDiabloExecutablePathWasBlank}");
+        }
+
         internal static LaunchProfileSnapshot ResolveLaunchProfileForTests(string? explicitProfile, bool debuggerAttached, bool debugBuild, string? explicitConfigPath, string baseDirectory)
         {
             DebugDefaultsProfile profile = ResolveDebugDefaultsProfile(explicitProfile, debuggerAttached, debugBuild);
@@ -582,18 +584,7 @@ namespace GoblinFarmer
 
         public static string ResolveRuntimePath(string path)
         {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return "";
-            }
-
-            string expanded = Environment.ExpandEnvironmentVariables(path.Trim());
-            if (Path.IsPathRooted(expanded))
-            {
-                return Path.GetFullPath(expanded);
-            }
-
-            return Path.GetFullPath(Path.Combine(RuntimeRootPath, expanded));
+            return ResolveRuntimePath(path, RuntimeRootPath);
         }
 
         private static string RuntimeRootPath
@@ -644,14 +635,57 @@ namespace GoblinFarmer
 
         public static bool DiscoverMissingRuntimePaths()
         {
-            bool changed = false;
+            lastRuntimeDiscoveryResult = DiscoverMissingRuntimePathsCore(
+                settings,
+                RuntimeRootPath,
+                DiscoverDiabloExecutable,
+                DiscoverBattleNetExecutable);
 
-            if (!ExecutableExists(Runtime.DiabloExecutablePath))
+            if (lastRuntimeDiscoveryResult.Changed)
             {
-                string discoveredDiablo = DiscoverDiabloExecutable();
+                Save();
+            }
+
+            return lastRuntimeDiscoveryResult.Changed;
+        }
+
+        internal static RuntimeDiscoveryResult DiscoverMissingRuntimePathsForTests(
+            SettingsModel target,
+            string runtimeRootPath,
+            Func<string> diabloDiscoverer,
+            Func<string> battleNetDiscoverer)
+        {
+            return DiscoverMissingRuntimePathsCore(target, runtimeRootPath, diabloDiscoverer, battleNetDiscoverer);
+        }
+
+        private static RuntimeDiscoveryResult DiscoverMissingRuntimePathsCore(
+            SettingsModel target,
+            string runtimeRootPath,
+            Func<string> diabloDiscoverer,
+            Func<string> battleNetDiscoverer)
+        {
+            bool changed = false;
+            bool diabloDiscoveryRan = false;
+            bool diabloDiscoveryFound = false;
+            bool battleNetDiscoveryRan = false;
+            bool battleNetDiscoveryFound = false;
+
+            target.Normalize();
+
+            if (!ExecutableExists(target.Runtime.DiabloExecutablePath, runtimeRootPath))
+            {
+                diabloDiscoveryRan = true;
+                AppLogger.Info(
+                    "Diablo III executable discovery started: " +
+                    $"configPath={configPath}; " +
+                    $"rawDiabloPathLoaded={rawDiabloExecutablePathLoaded}; " +
+                    $"diabloPathBlank={rawDiabloExecutablePathWasBlank}");
+
+                string discoveredDiablo = diabloDiscoverer();
                 if (!string.IsNullOrWhiteSpace(discoveredDiablo))
                 {
-                    Runtime.DiabloExecutablePath = discoveredDiablo;
+                    target.Runtime.DiabloExecutablePath = discoveredDiablo;
+                    diabloDiscoveryFound = true;
                     AppLogger.Info($"Discovered Diablo III executable: {discoveredDiablo}");
                     changed = true;
                 }
@@ -661,12 +695,14 @@ namespace GoblinFarmer
                 }
             }
 
-            if (!ExecutableExists(Runtime.BattleNetExecutablePath))
+            if (!ExecutableExists(target.Runtime.BattleNetExecutablePath, runtimeRootPath))
             {
-                string discoveredBattleNet = DiscoverBattleNetExecutable();
+                battleNetDiscoveryRan = true;
+                string discoveredBattleNet = battleNetDiscoverer();
                 if (!string.IsNullOrWhiteSpace(discoveredBattleNet))
                 {
-                    Runtime.BattleNetExecutablePath = discoveredBattleNet;
+                    target.Runtime.BattleNetExecutablePath = discoveredBattleNet;
+                    battleNetDiscoveryFound = true;
                     AppLogger.Info($"Discovered Battle.net executable: {discoveredBattleNet}");
                     changed = true;
                 }
@@ -676,20 +712,58 @@ namespace GoblinFarmer
                 }
             }
 
-            if (changed)
-            {
-                Save();
-            }
+            AppLogger.Info(
+                "Runtime path auto-discovery summary: " +
+                $"changed={changed}; " +
+                $"diabloAutoDiscoveryRan={diabloDiscoveryRan}; " +
+                $"diabloAutoDiscoveryFound={diabloDiscoveryFound}; " +
+                $"battleNetAutoDiscoveryRan={battleNetDiscoveryRan}; " +
+                $"battleNetAutoDiscoveryFound={battleNetDiscoveryFound}; " +
+                $"finalDiabloPath={target.Runtime.DiabloExecutablePath}");
 
-            return changed;
+            return new RuntimeDiscoveryResult(
+                changed,
+                diabloDiscoveryRan,
+                diabloDiscoveryFound,
+                battleNetDiscoveryRan,
+                battleNetDiscoveryFound);
         }
 
         public static bool RequiredRuntimeConfigurationIsValid(out string message)
         {
+            RuntimeConfigurationValidationResult result = ValidateRuntimeConfiguration(settings, RuntimeRootPath);
+            message = result.Message;
+            AppLogger.Info(
+                "Runtime configuration check: " +
+                $"valid={result.Valid}; " +
+                $"setupBlockedByMissingPath={!result.Valid}; " +
+                $"diabloMissing={result.DiabloMissing}; " +
+                $"battleNetMissing={result.BattleNetMissing}; " +
+                $"imagesMissing={result.ImagesMissing}; " +
+                $"missingTemplateFolderCount={result.MissingTemplateFolderCount}; " +
+                $"configPath={configPath}; " +
+                $"rawDiabloPathLoaded={rawDiabloExecutablePathLoaded}; " +
+                $"diabloPathBlank={rawDiabloExecutablePathWasBlank}; " +
+                $"diabloAutoDiscoveryRan={lastRuntimeDiscoveryResult.DiabloDiscoveryRan}; " +
+                $"diabloAutoDiscoveryFound={lastRuntimeDiscoveryResult.DiabloDiscoveryFound}; " +
+                $"vsDebugProjectRootConfigUsed={vsDebugProjectRootConfigUsed}; " +
+                $"message={message.Replace(Environment.NewLine, " | ")}");
+            return result.Valid;
+        }
+
+        internal static RuntimeConfigurationValidationResult ValidateRuntimeConfigurationForTests(SettingsModel target, string runtimeRootPath)
+        {
+            return ValidateRuntimeConfiguration(target, runtimeRootPath);
+        }
+
+        private static RuntimeConfigurationValidationResult ValidateRuntimeConfiguration(SettingsModel target, string runtimeRootPath)
+        {
             List<string> errors = [];
-            bool diabloMissing = !ExecutableExists(Runtime.DiabloExecutablePath);
-            bool battleNetMissing = !ExecutableExists(Runtime.BattleNetExecutablePath);
-            bool imagesMissing = !Directory.Exists(ImagesRootPath);
+            target.Normalize();
+            bool diabloMissing = !ExecutableExists(target.Runtime.DiabloExecutablePath, runtimeRootPath);
+            bool battleNetMissing = !ExecutableExists(target.Runtime.BattleNetExecutablePath, runtimeRootPath);
+            string imagesRootPath = ResolveRuntimePath(target.Runtime.ImagesRoot, runtimeRootPath);
+            bool imagesMissing = !Directory.Exists(imagesRootPath);
 
             if (diabloMissing)
             {
@@ -703,14 +777,14 @@ namespace GoblinFarmer
 
             if (imagesMissing)
             {
-                errors.Add($"Images folder is missing: {ImagesRootPath}");
+                errors.Add($"Images folder is missing: {imagesRootPath}");
             }
 
             int missingTemplateFolderCount = 0;
             string[] requiredImageFolders = ["Combat", "Current Location", "Leave Game", "Repair", "Salvage", "Start Game", "Teleport Function"];
             foreach (string folder in requiredImageFolders)
             {
-                string path = Path.Combine(ImagesRootPath, folder);
+                string path = Path.Combine(imagesRootPath, folder);
                 if (!Directory.Exists(path))
                 {
                     missingTemplateFolderCount++;
@@ -718,22 +792,26 @@ namespace GoblinFarmer
                 }
             }
 
-            message = string.Join(Environment.NewLine, errors);
-            AppLogger.Info(
-                "Runtime configuration check: " +
-                $"valid={errors.Count == 0}; " +
-                $"setupBlockedByMissingPath={errors.Count > 0}; " +
-                $"diabloMissing={diabloMissing}; " +
-                $"battleNetMissing={battleNetMissing}; " +
-                $"imagesMissing={imagesMissing}; " +
-                $"missingTemplateFolderCount={missingTemplateFolderCount}; " +
-                $"configPath={configPath}; " +
-                $"vsDebugProjectRootConfigUsed={vsDebugProjectRootConfigUsed}; " +
-                $"message={message.Replace(Environment.NewLine, " | ")}");
-            return errors.Count == 0;
+            return new RuntimeConfigurationValidationResult(
+                errors.Count == 0,
+                string.Join(Environment.NewLine, errors),
+                diabloMissing,
+                battleNetMissing,
+                imagesMissing,
+                missingTemplateFolderCount);
+        }
+
+        internal static string ResolveStartupAppStatusForTests(bool requiredRuntimeConfigurationIsValid)
+        {
+            return requiredRuntimeConfigurationIsValid ? "Idle" : "Setup Required";
         }
 
         public static bool ExecutableExists(string path)
+        {
+            return ExecutableExists(path, RuntimeRootPath);
+        }
+
+        private static bool ExecutableExists(string path, string runtimeRootPath)
         {
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -742,7 +820,7 @@ namespace GoblinFarmer
 
             try
             {
-                string resolved = ResolveRuntimePath(path);
+                string resolved = ResolveRuntimePath(path, runtimeRootPath);
                 return File.Exists(resolved) && resolved.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
             }
             catch
@@ -751,9 +829,25 @@ namespace GoblinFarmer
             }
         }
 
+        private static string ResolveRuntimePath(string path, string runtimeRootPath)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return "";
+            }
+
+            string expanded = Environment.ExpandEnvironmentVariables(path.Trim());
+            if (Path.IsPathRooted(expanded))
+            {
+                return Path.GetFullPath(expanded);
+            }
+
+            return Path.GetFullPath(Path.Combine(runtimeRootPath, expanded));
+        }
+
         private static string DiscoverDiabloExecutable()
         {
-            string[] candidates =
+            List<string> configuredRoots =
             [
                 RegistryString(@"HKEY_LOCAL_MACHINE\SOFTWARE\Blizzard Entertainment\Diablo III", "InstallPath"),
                 RegistryString(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Blizzard Entertainment\Diablo III", "InstallPath"),
@@ -764,7 +858,8 @@ namespace GoblinFarmer
                 @"C:\Program Files (x86)\Diablo III",
             ];
 
-            return FindFirstExecutableCandidate(candidates, ["Diablo III64.exe", "Diablo III.exe"]);
+            IReadOnlyList<string> candidateRoots = BuildDiabloCandidateRoots(configuredRoots, EnumerateFixedDriveRootPaths());
+            return FindFirstDiabloExecutableCandidate(candidateRoots);
         }
 
         private static string DiscoverBattleNetExecutable()
@@ -823,6 +918,173 @@ namespace GoblinFarmer
             return "";
         }
 
+        internal static IReadOnlyList<string> BuildDiabloCandidateRootsForTests(IEnumerable<string> configuredRoots, IEnumerable<string> fixedDriveRoots)
+        {
+            return BuildDiabloCandidateRoots(configuredRoots, fixedDriveRoots);
+        }
+
+        internal static string FindFirstDiabloExecutableCandidateForTests(IEnumerable<string> candidateRoots)
+        {
+            return FindFirstDiabloExecutableCandidate(candidateRoots);
+        }
+
+        private static IReadOnlyList<string> BuildDiabloCandidateRoots(IEnumerable<string> configuredRoots, IEnumerable<string> fixedDriveRoots)
+        {
+            List<string> roots = [];
+            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+
+            AddConfiguredRoots(configuredRoots);
+            foreach (string driveRoot in fixedDriveRoots)
+            {
+                if (string.IsNullOrWhiteSpace(driveRoot))
+                {
+                    continue;
+                }
+
+                string root = Path.GetFullPath(Environment.ExpandEnvironmentVariables(driveRoot.Trim()));
+                AddRoot(Path.Combine(root, "Diablo III"));
+                AddRoot(Path.Combine(root, "Games", "Diablo III"));
+                AddRoot(Path.Combine(root, "Battle.net", "Diablo III"));
+                AddRoot(Path.Combine(root, "Program Files", "Diablo III"));
+                AddRoot(Path.Combine(root, "Program Files (x86)", "Diablo III"));
+            }
+
+            return roots;
+
+            void AddConfiguredRoots(IEnumerable<string> values)
+            {
+                foreach (string value in values)
+                {
+                    AddRoot(value);
+                }
+            }
+
+            void AddRoot(string value)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    return;
+                }
+
+                try
+                {
+                    string expanded = Environment.ExpandEnvironmentVariables(value.Trim());
+                    string fullPath = Path.GetFullPath(expanded);
+                    if (seen.Add(fullPath))
+                    {
+                        roots.Add(fullPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error($"Invalid Diablo III discovery candidate root skipped: {value}", ex);
+                }
+            }
+        }
+
+        private static IReadOnlyList<string> EnumerateFixedDriveRootPaths()
+        {
+            List<string> roots = [];
+            try
+            {
+                foreach (DriveInfo drive in DriveInfo.GetDrives())
+                {
+                    if (drive.DriveType != DriveType.Fixed)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (!drive.IsReady)
+                        {
+                            continue;
+                        }
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    roots.Add(drive.RootDirectory.FullName);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to enumerate fixed drives for Diablo III discovery.", ex);
+            }
+
+            return roots;
+        }
+
+        private static string FindFirstDiabloExecutableCandidate(IEnumerable<string> candidateRoots)
+        {
+            string[] preferredRelativePaths =
+            [
+                Path.Combine("x64", "Diablo III64.exe"),
+                "Diablo III64.exe",
+                "Diablo III.exe",
+            ];
+
+            List<string> roots = candidateRoots
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => Path.GetFullPath(Environment.ExpandEnvironmentVariables(value.Trim())))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (string rootOrFile in roots)
+            {
+                bool directFile = File.Exists(rootOrFile);
+                bool directoryExists = Directory.Exists(rootOrFile);
+                AppLogger.Info(
+                    "Diablo III discovery candidate root checked: " +
+                    $"root={rootOrFile}; " +
+                    $"directoryExists={directoryExists}; " +
+                    $"directFile={directFile}");
+            }
+
+            foreach (string relativePath in preferredRelativePaths)
+            {
+                foreach (string rootOrFile in roots)
+                {
+                    string candidate = ResolveDiabloExecutableCandidate(rootOrFile, relativePath);
+                    if (string.IsNullOrWhiteSpace(candidate))
+                    {
+                        continue;
+                    }
+
+                    if (IsAllowedDiabloGameExecutable(candidate) && File.Exists(candidate))
+                    {
+                        string selected = Path.GetFullPath(candidate);
+                        AppLogger.Info($"Diablo III discovery selected executable: path={selected}; relativeCandidate={relativePath}");
+                        return selected;
+                    }
+                }
+            }
+
+            AppLogger.Info("Diablo III discovery selected executable: path=; result=not_found");
+            return "";
+        }
+
+        private static string ResolveDiabloExecutableCandidate(string rootOrFile, string relativePath)
+        {
+            if (File.Exists(rootOrFile))
+            {
+                return Path.GetFileName(rootOrFile).Equals(Path.GetFileName(relativePath), StringComparison.OrdinalIgnoreCase)
+                    ? rootOrFile
+                    : "";
+            }
+
+            return Path.Combine(rootOrFile, relativePath);
+        }
+
+        private static bool IsAllowedDiabloGameExecutable(string path)
+        {
+            string fileName = Path.GetFileName(path);
+            return fileName.Equals("Diablo III64.exe", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("Diablo III.exe", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void LogLoadedValues(string configPath)
         {
             AppLogger.Info(
@@ -832,6 +1094,10 @@ namespace GoblinFarmer
                 $"ConfigPathResolution={appSettingsPathResolution}; " +
                 $"VsDebugProjectRootConfigUsed={vsDebugProjectRootConfigUsed}; " +
                 $"RuntimeRootPath={RuntimeRootPath}; " +
+                $"RawDiabloPathLoaded={rawDiabloExecutablePathLoaded}; " +
+                $"DiabloPathBlank={rawDiabloExecutablePathWasBlank}; " +
+                $"DiabloAutoDiscoveryRan={lastRuntimeDiscoveryResult.DiabloDiscoveryRan}; " +
+                $"DiabloAutoDiscoveryFound={lastRuntimeDiscoveryResult.DiabloDiscoveryFound}; " +
                 $"PreservedDiabloPath={lastRuntimePathPreservation.DiabloPathPreserved}; " +
                 $"PreservedBattleNetPath={lastRuntimePathPreservation.BattleNetPathPreserved}; " +
                 $"PreservedImagesRoot={lastRuntimePathPreservation.ImagesRootPreserved}; " +
@@ -905,6 +1171,21 @@ namespace GoblinFarmer
             bool DiabloPathPreserved,
             bool BattleNetPathPreserved,
             bool ImagesRootPreserved);
+
+        internal readonly record struct RuntimeDiscoveryResult(
+            bool Changed,
+            bool DiabloDiscoveryRan,
+            bool DiabloDiscoveryFound,
+            bool BattleNetDiscoveryRan,
+            bool BattleNetDiscoveryFound);
+
+        internal readonly record struct RuntimeConfigurationValidationResult(
+            bool Valid,
+            string Message,
+            bool DiabloMissing,
+            bool BattleNetMissing,
+            bool ImagesMissing,
+            int MissingTemplateFolderCount);
 
         internal sealed class SettingsModel
         {

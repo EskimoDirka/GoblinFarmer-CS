@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Text.Json;
 using GoblinFarmer;
 
 int failures = 0;
@@ -12,6 +13,13 @@ Run("Initial safe-wait timeout stops only when Python would stop", TestInitialSa
 Run("Default AppSettings path/debug profile are launch-surface neutral", TestAppSettingsLaunchParityDefaults);
 Run("VS Debug/dev profile suppresses first-run setup and forces internal debug defaults", TestVsDebugDevProfileDefaults);
 Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectRootConfigPreferred);
+Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
+Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
+Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
+Run("Diablo discovery ignores launcher executable", TestDiabloDiscoveryIgnoresLauncherExecutable);
+Run("Diablo discovery prefers 64-bit executable", TestDiabloDiscoveryPrefers64BitExecutable);
+Run("Diablo discovery stays bounded to known roots", TestDiabloDiscoveryStaysBoundedToKnownRoots);
+Run("Configured valid Diablo path wins over discovery", TestConfiguredValidDiabloPathWinsOverDiscovery);
 Run("DebugManager profile helpers separate VS, release debug, and normal release", TestDebugManagerProfileHelpers);
 Run("DebugManager retention cleanup only deletes matching artifacts", TestDebugManagerRetentionCleanupFilters);
 Run("GoblinEvidence retention keeps newest 250 files", TestGoblinEvidenceRetentionKeepsNewest250Files);
@@ -123,8 +131,15 @@ static void TestVsDebugProjectRootConfigPreferred()
     string projectConfigDirectory = Path.Combine(root, "Config");
     string binDirectory = Path.Combine(root, "bin", "Debug", "net10.0-windows");
     string binConfigDirectory = Path.Combine(binDirectory, "Config");
+    string diabloPath = Path.Combine(root, "Diablo III", "Diablo III64.exe");
+    string battleNetPath = Path.Combine(root, "Battle.net", "Battle.net.exe");
     Directory.CreateDirectory(projectConfigDirectory);
     Directory.CreateDirectory(binConfigDirectory);
+    Directory.CreateDirectory(Path.GetDirectoryName(diabloPath)!);
+    Directory.CreateDirectory(Path.GetDirectoryName(battleNetPath)!);
+    File.WriteAllText(diabloPath, "fake exe for config test");
+    File.WriteAllText(battleNetPath, "fake exe for config test");
+    CreateRequiredImagesFolders(Path.Combine(root, "Images"));
 
     try
     {
@@ -134,12 +149,14 @@ static void TestVsDebugProjectRootConfigPreferred()
         File.WriteAllText(projectConfigPath, """
             {
               "Runtime": {
-                "DiabloExecutablePath": "D:\\Games\\Diablo III\\Diablo III64.exe",
-                "BattleNetExecutablePath": "D:\\Games\\Battle.net\\Battle.net.exe",
+                "DiabloExecutablePath": "%DIABLO_PATH%",
+                "BattleNetExecutablePath": "%BATTLENET_PATH%",
                 "ImagesRoot": "Images"
               }
             }
-            """);
+            """
+            .Replace("%DIABLO_PATH%", EscapeJsonPath(diabloPath))
+            .Replace("%BATTLENET_PATH%", EscapeJsonPath(battleNetPath)));
         File.WriteAllText(binConfigPath, """
             {
               "Runtime": {
@@ -159,6 +176,205 @@ static void TestVsDebugProjectRootConfigPreferred()
 
         AssertEqual(Path.GetFullPath(projectConfigPath), snapshot.ConfigPath, "VS Debug should prefer project-root AppSettings over stale bin config");
         AssertTrue(snapshot.VsDebugProjectRootConfigUsed, "snapshot should record that project-root config was used");
+
+        AppSettings.SettingsModel? loaded = JsonSerializer.Deserialize<AppSettings.SettingsModel>(File.ReadAllText(snapshot.ConfigPath));
+        AssertTrue(loaded != null, "project-root AppSettings should deserialize");
+        loaded!.Normalize();
+        AssertEqual(diabloPath, loaded.Runtime.DiabloExecutablePath, "VS Debug should load Diablo path from project-root AppSettings");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestMissingDiabloPathKeepsStartupInSetupRequired()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.ConfigTests", Guid.NewGuid().ToString("N"));
+    string battleNetPath = Path.Combine(root, "Battle.net", "Battle.net.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(battleNetPath)!);
+    File.WriteAllText(battleNetPath, "fake exe for config test");
+    CreateRequiredImagesFolders(Path.Combine(root, "Images"));
+
+    try
+    {
+        AppSettings.SettingsModel model = AppSettings.SettingsModel.Default();
+        model.Runtime.DiabloExecutablePath = "";
+        model.Runtime.BattleNetExecutablePath = battleNetPath;
+        model.Runtime.ImagesRoot = "Images";
+
+        AppSettings.RuntimeConfigurationValidationResult validation = AppSettings.ValidateRuntimeConfigurationForTests(model, root);
+
+        AssertFalse(validation.Valid, "runtime validation should fail when Diablo is missing even if Battle.net and Images are valid");
+        AssertTrue(validation.DiabloMissing, "validation should report Diablo missing");
+        AssertFalse(validation.BattleNetMissing, "Battle.net should be valid in this scenario");
+        AssertFalse(validation.ImagesMissing, "Images should be valid in this scenario");
+        AssertEqual("Setup Required", AppSettings.ResolveStartupAppStatusForTests(validation.Valid), "missing Diablo should produce Setup Required status");
+        AssertFalse(AppSettings.ResolveStartupAppStatusForTests(validation.Valid) == "Idle", "missing Diablo should not allow Idle status");
+        AssertTrue(AppSettings.ShouldRequireFirstRunSetup(AppSettings.DebugDefaultsProfile.VsDebug, validation.Valid), "VS Debug should still require setup when Diablo is missing");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.ConfigTests", Guid.NewGuid().ToString("N"));
+    string discoveredDiabloPath = Path.Combine(root, "Diablo III", "Diablo III64.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(discoveredDiabloPath)!);
+    File.WriteAllText(discoveredDiabloPath, "fake exe for discovery test");
+
+    try
+    {
+        AppSettings.SettingsModel model = AppSettings.SettingsModel.Default();
+        model.Runtime.DiabloExecutablePath = "";
+        model.Runtime.BattleNetExecutablePath = "";
+        model.Runtime.ImagesRoot = "Images";
+
+        AppSettings.RuntimeDiscoveryResult result = AppSettings.DiscoverMissingRuntimePathsForTests(
+            model,
+            root,
+            () => discoveredDiabloPath,
+            () => "");
+
+        AssertTrue(result.DiabloDiscoveryRan, "blank Diablo path should run Diablo auto-discovery");
+        AssertTrue(result.DiabloDiscoveryFound, "fake discovery should report Diablo found");
+        AssertEqual(discoveredDiabloPath, model.Runtime.DiabloExecutablePath, "discovered Diablo path should be applied to active settings");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestDiabloDiscoveryFindsCustomDriveRootInstall()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.DriveTests", Guid.NewGuid().ToString("N"));
+    string diabloPath = Path.Combine(root, "Diablo III", "Diablo III.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(diabloPath)!);
+    File.WriteAllText(diabloPath, "fake exe for discovery test");
+
+    try
+    {
+        IReadOnlyList<string> candidateRoots = AppSettings.BuildDiabloCandidateRootsForTests([], [root]);
+        string selected = AppSettings.FindFirstDiabloExecutableCandidateForTests(candidateRoots);
+
+        AssertEqual(Path.GetFullPath(diabloPath), selected, "custom drive root Diablo III install should be discovered");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestDiabloDiscoveryIgnoresLauncherExecutable()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.DriveTests", Guid.NewGuid().ToString("N"));
+    string launcherPath = Path.Combine(root, "Diablo III", "Diablo III Launcher.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(launcherPath)!);
+    File.WriteAllText(launcherPath, "launcher should be ignored");
+
+    try
+    {
+        IReadOnlyList<string> candidateRoots = AppSettings.BuildDiabloCandidateRootsForTests([], [root]);
+        string selected = AppSettings.FindFirstDiabloExecutableCandidateForTests(candidateRoots);
+
+        AssertEqual("", selected, "Diablo III Launcher.exe should never be selected as the game executable");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestDiabloDiscoveryPrefers64BitExecutable()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.DriveTests", Guid.NewGuid().ToString("N"));
+    string x86Path = Path.Combine(root, "Diablo III", "Diablo III.exe");
+    string x64Path = Path.Combine(root, "Diablo III", "x64", "Diablo III64.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(x86Path)!);
+    Directory.CreateDirectory(Path.GetDirectoryName(x64Path)!);
+    File.WriteAllText(x86Path, "fake 32-bit exe for discovery test");
+    File.WriteAllText(x64Path, "fake 64-bit exe for discovery test");
+
+    try
+    {
+        IReadOnlyList<string> candidateRoots = AppSettings.BuildDiabloCandidateRootsForTests([], [root]);
+        string selected = AppSettings.FindFirstDiabloExecutableCandidateForTests(candidateRoots);
+
+        AssertEqual(Path.GetFullPath(x64Path), selected, "Diablo III64.exe should be preferred when both game executables exist");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestDiabloDiscoveryStaysBoundedToKnownRoots()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.DriveTests", Guid.NewGuid().ToString("N"));
+    string nestedPath = Path.Combine(root, "Unlisted", "Deep", "Diablo III64.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(nestedPath)!);
+    File.WriteAllText(nestedPath, "fake exe outside bounded roots");
+
+    try
+    {
+        IReadOnlyList<string> candidateRoots = AppSettings.BuildDiabloCandidateRootsForTests([], [root]);
+        string selected = AppSettings.FindFirstDiabloExecutableCandidateForTests(candidateRoots);
+
+        AssertEqual("", selected, "discovery should not recursively scan arbitrary drive folders");
+        AssertFalse(candidateRoots.Any(path => path.Contains(Path.Combine("Unlisted", "Deep"), StringComparison.OrdinalIgnoreCase)), "candidate roots should stay bounded to known locations");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestConfiguredValidDiabloPathWinsOverDiscovery()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.DriveTests", Guid.NewGuid().ToString("N"));
+    string configuredPath = Path.Combine(root, "Configured", "Diablo III.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(configuredPath)!);
+    File.WriteAllText(configuredPath, "configured fake exe");
+
+    try
+    {
+        AppSettings.SettingsModel model = AppSettings.SettingsModel.Default();
+        model.Runtime.DiabloExecutablePath = configuredPath;
+        model.Runtime.BattleNetExecutablePath = "";
+
+        AppSettings.RuntimeDiscoveryResult result = AppSettings.DiscoverMissingRuntimePathsForTests(
+            model,
+            root,
+            () => throw new InvalidOperationException("Diablo discovery should not run when configured path is valid."),
+            () => "");
+
+        AssertFalse(result.DiabloDiscoveryRan, "valid configured Diablo path should win without running discovery");
+        AssertEqual(configuredPath, model.Runtime.DiabloExecutablePath, "configured Diablo path should remain unchanged");
     }
     finally
     {
@@ -180,6 +396,7 @@ static void TestDebugManagerProfileHelpers()
     AssertTrue(debug.EnableDebugScreenshots, "VS defaults should enable screenshots in memory");
     AssertFalse(debug.EnableSuccessScreenshots, "success screenshots should remain disabled by default even in VS defaults");
     AssertTrue(DebugManager.ShouldSuppressFirstRunSetup(AppSettings.DebugDefaultsProfile.VsDebug), "VS defaults should suppress first-run setup");
+    AssertTrue(AppSettings.ShouldRequireFirstRunSetup(AppSettings.DebugDefaultsProfile.VsDebug, requiredRuntimeConfigurationIsValid: false), "VS Debug should still require setup when required paths are invalid");
     AssertFalse(DebugManager.ShouldShowDynamicDebugControls(AppSettings.DebugDefaultsProfile.VsDebug), "VS defaults should hide dynamic debug controls");
 
     debug = new AppSettings.DebugSettings();
@@ -410,6 +627,19 @@ static string TouchGoblinEvidenceFile(string path, DateTime lastWriteTimeUtc)
     File.SetCreationTimeUtc(path, lastWriteTimeUtc);
     File.SetLastWriteTimeUtc(path, lastWriteTimeUtc);
     return path;
+}
+
+static void CreateRequiredImagesFolders(string imagesRoot)
+{
+    foreach (string folder in new[] { "Combat", "Current Location", "Leave Game", "Repair", "Salvage", "Start Game", "Teleport Function" })
+    {
+        Directory.CreateDirectory(Path.Combine(imagesRoot, folder));
+    }
+}
+
+static string EscapeJsonPath(string path)
+{
+    return path.Replace(@"\", @"\\");
 }
 
 static void TestReleaseProfileRequiresSetupWhenMissingPaths()

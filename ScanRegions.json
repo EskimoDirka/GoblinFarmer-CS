@@ -1,0 +1,10 @@
+{
+  "StartGameButton": {
+    "Image": "Start Game Scan Region.png",
+    "Region": "207,660,220,58"
+  },
+  "LeaveGameButton": {
+    "Image": "Leave Game Scan Region.png",
+    "Region": "230,608,181,65"
+  }
+}

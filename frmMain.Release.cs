@@ -168,25 +168,20 @@ namespace GoblinFarmer
 
         private bool PortEnsureRequiredConfiguration()
         {
-            bool requiredConfigurationIsValid = AppSettings.RequiredRuntimeConfigurationIsValid(out string _);
+            bool requiredConfigurationIsValid = AppSettings.RequiredRuntimeConfigurationIsValid(out string validationMessage);
             if (!AppSettings.ShouldRequireFirstRunSetup(AppSettings.CurrentDebugDefaultsProfile, requiredConfigurationIsValid))
             {
-                if (AppSettings.FirstRunSetupSuppressed)
-                {
-                    AppLogger.Info(
-                        "First-run setup suppressed for VS/dev profile: " +
-                        $"DebugDefaultsProfile={AppSettings.CurrentDebugDefaultsProfile}; " +
-                        $"DebugMode={AppSettings.Debug.DebugMode}; " +
-                        $"KeepDebugScreenshots={AppSettings.Debug.EnableDebugScreenshots}; " +
-                        $"ConfigPath={AppSettings.ConfigPath}");
-                }
-                else
-                {
-                    AppLogger.Info("Runtime configuration validated.");
-                }
+                AppLogger.Info("Runtime configuration validated.");
 
                 return true;
             }
+
+            AppLogger.Info(
+                "Runtime configuration invalid; setup required: " +
+                $"DebugDefaultsProfile={AppSettings.CurrentDebugDefaultsProfile}; " +
+                $"FirstRunSetupSuppressed={AppSettings.FirstRunSetupSuppressed}; " +
+                $"ConfigPath={AppSettings.ConfigPath}; " +
+                $"Validation={validationMessage.Replace(Environment.NewLine, " | ")}");
 
             return PortShowSettingsDialog(firstRun: true) &&
                 AppSettings.RequiredRuntimeConfigurationIsValid(out _);

@@ -60,7 +60,7 @@ namespace GoblinFarmer
 
         public static bool ShouldRequireFirstRunSetup(AppSettings.DebugDefaultsProfile profile, bool requiredRuntimeConfigurationIsValid)
         {
-            return !ShouldSuppressFirstRunSetup(profile) && !requiredRuntimeConfigurationIsValid;
+            return !requiredRuntimeConfigurationIsValid;
         }
 
         public static void ApplyVisualStudioDebugDefaults(AppSettings.DebugSettings debug)

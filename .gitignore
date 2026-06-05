@@ -434,6 +434,7 @@ Screenshots/
 DebugPackages/
 Sessions/
 debug-screenshots/
+ChatGPT Uploads/
 
 # Keep the sanitized release publish profile, but continue ignoring per-user
 # publish profile data and ad hoc local profiles.
@@ -449,7 +450,9 @@ debug-screenshot-manifest.txt
 
 # Local developer scripts
 Scripts/*
+Scripts/Local Tools/
 !Scripts/create-debug-package.ps1
 !Scripts/Create Debug Package.bat
+!Scripts/Git Commit Push.bat
 !Scripts/publish-release.ps1
 !Scripts/.gitkeep

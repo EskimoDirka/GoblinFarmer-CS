@@ -240,7 +240,7 @@ namespace GoblinFarmer
             if (!PortEnsureRequiredConfiguration())
             {
                 PortSetAutomationControlsEnabled(false);
-                PortSetAppStatus("Setup Required");
+                PortSetAppStatus(AppSettings.ResolveStartupAppStatusForTests(requiredRuntimeConfigurationIsValid: false));
                 AddWorkflowStep("First-run setup required");
                 return;
             }
@@ -257,6 +257,7 @@ namespace GoblinFarmer
 
             portRuntimeStartupComplete = true;
             PortSetAutomationControlsEnabled(true);
+            PortSetAppStatus(AppSettings.ResolveStartupAppStatusForTests(requiredRuntimeConfigurationIsValid: true));
             _ = PortScanRegions;
             PortLoadCoordinates();
             PortLoadImageCaches();

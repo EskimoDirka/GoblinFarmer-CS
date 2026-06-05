@@ -39,7 +39,7 @@ namespace GoblinFarmer
 
             SetDiabloStatus("Unknown");
             SetCombatStatus("Idle");
-            SetAppStatus("Idle");
+            SetAppStatus("Starting");
         }
 
         // Windows API imports =========================================
