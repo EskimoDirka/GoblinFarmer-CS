@@ -13,7 +13,7 @@ GoblinFarmer includes combat helpers for Monk, Demon Hunter, and Witch Doctor pr
 
 - Monk: uses the current Monk combat loop and safety checks.
 - Demon Hunter: supports right-hold behavior from safe world areas, keeps key rotation running while protected UI clicks are suppressed, and skips unsafe Shift+Left maintenance clicks instead of stopping combat.
-- Witch Doctor: uses mouse wheel scrolling as the repeated mouse action, keeps the `2, 3, 1` key loop running, and sends only discrete cursor-change right-click pulses. It does not use held-left/channel mouse mode or held-right mode.
+- Witch Doctor: uses mouse wheel scrolling as the repeated mouse action, keeps the `2, 3, 1` key loop running, and sends only discrete cursor-change left-click pulses. It does not use held-left/channel mouse mode or held-right mode.
 
 ## Combat Profile Skill Setup
 

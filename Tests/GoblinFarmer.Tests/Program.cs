@@ -814,15 +814,19 @@ static void TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode()
     string repoRoot = FindRepositoryRootForTests();
     string combatSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Combat.cs"));
     string stateSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    int witchDoctorLoopStart = combatSource.IndexOf("private void PortWitchDoctorCursorLeftClickLoop", StringComparison.Ordinal);
+    int witchDoctorLoopEnd = combatSource.IndexOf("private bool PortCombatShouldContinue", StringComparison.Ordinal);
+    AssertTrue(witchDoctorLoopStart >= 0 && witchDoctorLoopEnd > witchDoctorLoopStart, "Witch Doctor cursor-change left-click loop should be present");
+    string witchDoctorCursorLoopSource = combatSource[witchDoctorLoopStart..witchDoctorLoopEnd];
 
     AssertTrue(combatSource.Contains("PortWitchDoctorMouseWheelLoop", StringComparison.Ordinal), "Witch Doctor should run a dedicated mouse wheel loop");
-    AssertTrue(combatSource.Contains("PortWitchDoctorCursorRightClickLoop", StringComparison.Ordinal), "Witch Doctor should run a dedicated cursor-change right-click loop");
+    AssertTrue(combatSource.Contains("PortWitchDoctorCursorLeftClickLoop", StringComparison.Ordinal), "Witch Doctor should run a dedicated cursor-change left-click loop");
     AssertTrue(combatSource.Contains("PortRuntimeMouseWheel(-120)", StringComparison.Ordinal), "Witch Doctor should repeatedly send mouse wheel input");
-    AssertTrue(combatSource.Contains("PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN)", StringComparison.Ordinal), "Witch Doctor cursor-change input should send a right-click down pulse");
-    AssertTrue(combatSource.Contains("PortRuntimeMouseUp(MOUSEEVENTF_RIGHTUP)", StringComparison.Ordinal), "Witch Doctor cursor-change input should send a right-click up pulse");
+    AssertTrue(witchDoctorCursorLoopSource.Contains("PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN)", StringComparison.Ordinal), "Witch Doctor cursor-change input should send a left-click down pulse");
+    AssertTrue(witchDoctorCursorLoopSource.Contains("PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP)", StringComparison.Ordinal), "Witch Doctor cursor-change input should send a left-click up pulse");
     AssertTrue(combatSource.Contains("combatInputMode=MouseWheelScroll", StringComparison.Ordinal), "Witch Doctor logs should report mouse wheel input mode");
-    AssertTrue(combatSource.Contains("WitchDoctorCursorChangeRightClickSent", StringComparison.Ordinal), "Witch Doctor should log sent cursor-change right-click pulses");
-    AssertTrue(combatSource.Contains("WitchDoctorCursorChangeRightClickSkipped", StringComparison.Ordinal), "Witch Doctor should log skipped cursor-change right-click pulses");
+    AssertTrue(combatSource.Contains("WitchDoctorCursorChangeLeftClickSent", StringComparison.Ordinal), "Witch Doctor should log sent cursor-change left-click pulses");
+    AssertTrue(combatSource.Contains("WitchDoctorCursorChangeLeftClickSkipped", StringComparison.Ordinal), "Witch Doctor should log skipped cursor-change left-click pulses");
     AssertTrue(combatSource.Contains("keyOrder=2,3,1", StringComparison.Ordinal), "Witch Doctor key loop order should remain 2, 3, 1");
     AssertTrue(combatSource.Contains("heldLeftMode=false", StringComparison.Ordinal), "Witch Doctor logs should explicitly report no held-left mode");
     AssertTrue(combatSource.Contains("heldRightMode=false", StringComparison.Ordinal), "Witch Doctor logs should explicitly report no held-right mode");
@@ -832,6 +836,10 @@ static void TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode()
     AssertFalse(combatSource.Contains("PortHandleWitchDoctorCursorInput", StringComparison.Ordinal), "Witch Doctor should not use the old cursor-held input handler");
     AssertFalse(combatSource.Contains("WitchDoctorHeldInput", StringComparison.Ordinal), "Witch Doctor should not log held-left input state");
     AssertFalse(combatSource.Contains("WitchDoctorScrollHeldFromSafeRegion", StringComparison.Ordinal), "Witch Doctor should not enter held-from-safe-region mode");
+    AssertFalse(combatSource.Contains("WitchDoctorCursorChangeRightClick", StringComparison.Ordinal), "Witch Doctor should not log cursor-change right-click pulses");
+    AssertFalse(combatSource.Contains("PortWitchDoctorCursorRightClickLoop", StringComparison.Ordinal), "Witch Doctor should not run a cursor-change right-click loop");
+    AssertFalse(witchDoctorCursorLoopSource.Contains("PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN)", StringComparison.Ordinal), "Witch Doctor cursor-change input should not send right-click down");
+    AssertFalse(witchDoctorCursorLoopSource.Contains("PortRuntimeMouseUp(MOUSEEVENTF_RIGHTUP)", StringComparison.Ordinal), "Witch Doctor cursor-change input should not send right-click up");
     AssertFalse(stateSource.Contains("portWitchDoctorHeldInputFromSafeRegion", StringComparison.Ordinal), "Witch Doctor should not track a held-left safe-region state");
 }
 
