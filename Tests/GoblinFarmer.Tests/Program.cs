@@ -35,8 +35,11 @@ Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGa
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
+Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
 Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeepsTrueAreasSeparate);
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
+Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
+Run("Goblin area duplicate guard keeps default one-count areas", TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas);
 Run("Goblin tracker records allow unknown manual fallback and reset cleanly", TestGoblinTrackerRecordsAllowUnknownManualFallbackAndReset);
 
 if (failures > 0)
@@ -388,6 +391,8 @@ static void TestConfiguredValidDiabloPathWinsOverDiscovery()
 static void TestDebugManagerProfileHelpers()
 {
     AppSettings.DebugSettings debug = new();
+    AssertFalse(debug.EnableSuccessScreenshots, "default config should disable success screenshots");
+
     DebugManager.ApplyVisualStudioDebugDefaults(debug);
 
     AssertTrue(debug.DebugMode, "VS defaults should force debug mode in memory");
@@ -399,12 +404,21 @@ static void TestDebugManagerProfileHelpers()
     AssertTrue(AppSettings.ShouldRequireFirstRunSetup(AppSettings.DebugDefaultsProfile.VsDebug, requiredRuntimeConfigurationIsValid: false), "VS Debug should still require setup when required paths are invalid");
     AssertFalse(DebugManager.ShouldShowDynamicDebugControls(AppSettings.DebugDefaultsProfile.VsDebug), "VS defaults should hide dynamic debug controls");
 
+    debug = new AppSettings.DebugSettings { EnableSuccessScreenshots = true };
+    DebugManager.ApplyVisualStudioDebugDefaults(debug);
+    AssertTrue(debug.EnableSuccessScreenshots, "VS defaults should preserve an explicit success screenshot config value");
+
     debug = new AppSettings.DebugSettings();
     DebugManager.ApplyReleaseUserDefaultsIfPreferenceUnsaved(debug);
     AssertFalse(debug.DebugMode, "normal release should stay quiet by default");
     AssertFalse(debug.EnableDebugScreenshots, "normal release should not capture screenshots by default");
     AssertFalse(debug.EnableSuccessScreenshots, "normal release should not capture success screenshots by default");
 
+    debug = new AppSettings.DebugSettings { EnableSuccessScreenshots = true };
+    DebugManager.ApplyReleaseUserDefaultsIfPreferenceUnsaved(debug);
+    AssertTrue(debug.EnableSuccessScreenshots, "normal release defaults should preserve an explicit success screenshot config value");
+
+    debug = new AppSettings.DebugSettings();
     DebugManager.ApplyReleaseDebugModePreference(true, debug);
     AssertTrue(debug.DebugModePreferenceSaved, "release debug mode should mark user preference saved");
     AssertTrue(debug.DebugMode, "release debug mode should enable debug mode");
@@ -857,6 +871,7 @@ static void TestDebugPackageExcludesSuccessScreenshotsByDefault()
 
         using ZipArchive archive = ZipFile.OpenRead(packagePath);
         AssertFalse(archive.Entries.Any(entry => entry.FullName.Contains("Screenshots/Success", StringComparison.OrdinalIgnoreCase) || entry.FullName.Contains("Screenshots\\Success", StringComparison.OrdinalIgnoreCase)), "success screenshots should be excluded by default");
+        AssertFalse(archive.Entries.Any(entry => entry.FullName.Contains("_Success_", StringComparison.OrdinalIgnoreCase)), "success-category screenshots should not be included in any package folder by default");
         AssertTrue(archive.Entries.Any(entry => entry.FullName.Contains("Screenshots/Failure", StringComparison.OrdinalIgnoreCase) || entry.FullName.Contains("Screenshots\\Failure", StringComparison.OrdinalIgnoreCase)), "failure screenshots should remain included");
         AssertFalse(archive.Entries.Any(entry => entry.FullName.EndsWith("_Full.png", StringComparison.OrdinalIgnoreCase)), "GoblinEvidence full images should remain excluded by default");
         AssertTrue(archive.Entries.Any(entry =>
@@ -875,6 +890,88 @@ static void TestDebugPackageExcludesSuccessScreenshotsByDefault()
         AssertTrue(manifestText.Contains("- Debug/GoblinEvidence current source: 3 files", StringComparison.OrdinalIgnoreCase), "manifest folder totals should report current GoblinEvidence source totals");
         AssertTrue(manifestText.Contains("- Goblin evidence full images excluded: 1", StringComparison.OrdinalIgnoreCase), "manifest should report excluded GoblinEvidence full images");
         AssertTrue(manifestText.Contains("Package folder totals:", StringComparison.OrdinalIgnoreCase), "manifest should include package folder totals");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    static void Touch(string path)
+    {
+        File.WriteAllText(path, "not a real image; package test only");
+        File.SetCreationTime(path, DateTime.Now);
+        File.SetLastWriteTime(path, DateTime.Now);
+    }
+}
+
+static void TestDebugPackageIncludesSuccessScreenshotsWithOptIn()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string screenshots = Path.Combine(testRoot, "Screenshots");
+    string logs = Path.Combine(testRoot, "Logs");
+    string config = Path.Combine(testRoot, "Config");
+    Directory.CreateDirectory(screenshots);
+    Directory.CreateDirectory(logs);
+    Directory.CreateDirectory(config);
+
+    try
+    {
+        DateTime sessionStart = DateTime.Now.AddMinutes(-5);
+        File.WriteAllLines(Path.Combine(testRoot, "session-info.txt"),
+        [
+            $"SessionStartLocal={sessionStart:O}",
+            $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
+            "GoblinCount=0",
+        ]);
+        File.WriteAllText(Path.Combine(logs, "GoblinFarmer.log"), "test log");
+        File.WriteAllText(Path.Combine(config, "AppSettings.json"), """
+            {
+              "Debug": {
+                "EnableSuccessScreenshots": true
+              }
+            }
+            """);
+
+        Touch(Path.Combine(screenshots, "2026-06-04_120000_000_Success_StartGame_StartGameClicked_Diablo.png"));
+        Touch(Path.Combine(screenshots, "2026-06-04_120000_000_Success_StartGame_StartGameClicked_App.png"));
+        Touch(Path.Combine(screenshots, "2026-06-04_120001_000_Failure_StartGame_StartGameVerificationFailed_Diablo.png"));
+        Touch(Path.Combine(screenshots, "2026-06-04_120001_000_Failure_StartGame_StartGameVerificationFailed_App.png"));
+
+        string scriptPath = FindDebugPackageScript();
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -RuntimeRoot \"{testRoot}\" -IncludeSuccessScreenshots -MaxFailureScreenshots 5 -MaxDiagnosticScreenshots 1",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start debug package script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed. stdout={output}; stderr={error}");
+
+        string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? "";
+        AssertTrue(File.Exists(packagePath), "debug package zip should be created");
+
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        AssertTrue(archive.Entries.Any(entry => entry.FullName.Contains("Screenshots/Success", StringComparison.OrdinalIgnoreCase) || entry.FullName.Contains("Screenshots\\Success", StringComparison.OrdinalIgnoreCase)), "success screenshots should be included only when explicitly requested");
+        AssertTrue(archive.Entries.Any(entry => entry.FullName.Contains("_Success_", StringComparison.OrdinalIgnoreCase)), "success-category screenshot files should be present after opt-in");
+        AssertTrue(archive.Entries.Any(entry => entry.FullName.Contains("Screenshots/Failure", StringComparison.OrdinalIgnoreCase) || entry.FullName.Contains("Screenshots\\Failure", StringComparison.OrdinalIgnoreCase)), "failure screenshots should remain included with success opt-in");
+
+        ZipArchiveEntry manifest = archive.GetEntry("debug-package-manifest.txt") ?? throw new InvalidOperationException("manifest missing from debug package");
+        using StreamReader reader = new(manifest.Open());
+        string manifestText = reader.ReadToEnd();
+        AssertTrue(manifestText.Contains("Success screenshot package policy: Included when selected", StringComparison.OrdinalIgnoreCase), "manifest should document success screenshot opt-in policy");
+        AssertTrue(manifestText.Contains("Success screenshots included by opt-in: count=2", StringComparison.OrdinalIgnoreCase), "manifest should report included success screenshots after opt-in");
+        AssertTrue(manifestText.Contains("- Success screenshots included: 2", StringComparison.OrdinalIgnoreCase), "manifest included-file counts should report success screenshots");
     }
     finally
     {
@@ -943,6 +1040,66 @@ static void TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets()
     AssertTrue(guard.TryAccept(cathedralLevel2), "different resolved area should be accepted");
     AssertEqual(2, guard.Reset(), "reset should report cleared counted areas");
     AssertTrue(guard.TryAccept(cathedralLevel1), "reset should allow the same area again");
+}
+
+static void TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly()
+{
+    GoblinAreaDuplicateGuard guard = new();
+
+    AssertPandemoniumAreaLimit(guard, "Pandemonium Fortress Level 1");
+    AssertPandemoniumAreaLimit(guard, "Pandemonium Fortress Level 2");
+    AssertEqual(2, guard.Reset(), "reset should report both PF area keys");
+
+    string pf1 = GoblinAreaResolver.Resolve("Pandemonium Fortress Level 1").AreaKey;
+    AssertTrue(guard.TryAccept(pf1), "reset should clear PF1 area count state");
+    AssertTrue(guard.TryAccept(pf1), "reset should allow PF1 second count again");
+    AssertFalse(guard.TryAccept(pf1), "reset should still suppress PF1 third count");
+}
+
+static void TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas()
+{
+    string[] defaultOneCountAreas =
+    [
+        "Cathedral Level 1",
+        "City Of Caldeum",
+        "Ruined Cistern",
+        "Ancient Waterway",
+        "Western Channel Level 2",
+        "Eastern Channel Level 2",
+        "Cave Of The Moon Clan Level 2",
+        "Caverns of Frost Level 2",
+        "Black Canyon Mines",
+        "Battlefields",
+        "Rakkis Crossing",
+    ];
+
+    foreach (string areaName in defaultOneCountAreas)
+    {
+        GoblinAreaDuplicateGuard guard = new();
+        string areaKey = GoblinAreaResolver.Resolve(areaName).AreaKey;
+
+        AssertTrue(guard.TryAccept(areaKey, out GoblinAreaDuplicateGuardResult first), $"{areaName} first count should be accepted");
+        AssertEqual(1, first.AreaCount, $"{areaName} first count should report areaCount=1");
+        AssertEqual(1, first.AreaLimit, $"{areaName} should keep default areaLimit=1");
+        AssertFalse(guard.TryAccept(areaKey, out GoblinAreaDuplicateGuardResult second), $"{areaName} second count should be suppressed");
+        AssertEqual(1, second.AreaCount, $"{areaName} suppressed count should report the current areaCount=1");
+        AssertEqual(1, second.AreaLimit, $"{areaName} suppressed count should report areaLimit=1");
+    }
+}
+
+static void AssertPandemoniumAreaLimit(GoblinAreaDuplicateGuard guard, string areaName)
+{
+    string areaKey = GoblinAreaResolver.Resolve(areaName).AreaKey;
+
+    AssertTrue(guard.TryAccept(areaKey, out GoblinAreaDuplicateGuardResult first), $"{areaName} first count should be accepted");
+    AssertEqual(1, first.AreaCount, $"{areaName} first count should report areaCount=1");
+    AssertEqual(2, first.AreaLimit, $"{areaName} should report areaLimit=2");
+    AssertTrue(guard.TryAccept(areaKey, out GoblinAreaDuplicateGuardResult second), $"{areaName} second count should be accepted");
+    AssertEqual(2, second.AreaCount, $"{areaName} second count should report areaCount=2");
+    AssertEqual(2, second.AreaLimit, $"{areaName} should keep areaLimit=2");
+    AssertFalse(guard.TryAccept(areaKey, out GoblinAreaDuplicateGuardResult third), $"{areaName} third count should be suppressed");
+    AssertEqual(2, third.AreaCount, $"{areaName} third count should report the capped areaCount=2");
+    AssertEqual(2, third.AreaLimit, $"{areaName} third count should report areaLimit=2");
 }
 
 static void TestGoblinTrackerRecordsAllowUnknownManualFallbackAndReset()

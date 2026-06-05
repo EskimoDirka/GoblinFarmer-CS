@@ -33,13 +33,28 @@
 - Failed teleport does not advance route
 - Failure screenshots include both Diablo and GoblinFarmer app evidence
 
+## Goblin Tracker
+- Default resolved areas allow one goblin count per area per game
+- Pandemonium Fortress Level 1 accepts goblin counts 1 and 2 in the same game
+- Pandemonium Fortress Level 1 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
+- Pandemonium Fortress Level 2 accepts goblin counts 1 and 2 in the same game
+- Pandemonium Fortress Level 2 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
+- Cathedral, Caldeum, Ancient Waterway, Channel, Cave, and Battlefields subregions still resolve separately where expected and remain capped at one count per area per game
+- Reset Stats clears goblin count, tracker active time, GPH, and per-area count state
+- New Game clears per-area count state while preserving the current session tracker statistics
+- Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
+
 ## Debug Package Evidence
 - Debug package includes latest log
 - Debug package includes `route-failure-summary.txt`
 - Debug package includes `debug-screenshot-manifest.txt`
 - Screenshot manifest pairs success/failure Diablo and App screenshots by timestamp, workflow, and action
 - Screenshot manifest includes only current-session screenshots
+- Failure screenshots are included by default
+- Debug screenshots are included according to the active debug screenshot settings
+- Success screenshots are disabled by default in normal Release, installed app, and VS Debug
 - Success screenshots are excluded from packages by default
+- Success screenshots are included in packages only with explicit `-IncludeSuccessScreenshots`
 - If `Debug.EnableSuccessScreenshots=true`, package manifest reports available success screenshot count and total size without automatically including them
 - Failure screenshots are included under `Screenshots\Failure`
 - Recent debug screenshots are included under `Screenshots\Recent`

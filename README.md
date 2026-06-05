@@ -16,7 +16,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Hotkey route blocking for known unsafe or incorrect location transitions.
 - Make New Game, Exit Game, repair, salvage, and town workflow helpers.
 - Monk, Demon Hunter, and Witch Doctor combat support.
-- Location-aware Goblin Tracker with `X` hotkey counting, same-area duplicate protection, active-combat-time GPH, live UI stats, and reset support.
+- Location-aware Goblin Tracker with `X` hotkey counting, per-area duplicate protection, active-combat-time GPH, live UI stats, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and debug package generation.
 - Runtime configuration for Diablo III, Battle.net, image templates, launch timings, diagnostic behavior, and VS Debug project-root config persistence.
 - Self-contained Windows release publishing plus optional Inno Setup installer packaging.
@@ -87,7 +87,7 @@ After combat stops, Teleport Next is available as soon as combat is marked stopp
 
 ## Goblin Tracker
 
-The Goblin Tracker is a counter foundation with resolved-area duplicate protection. Press `X` while GoblinFarmer is running to add one goblin for the current detected area; a second count in the same resolved area is suppressed because Diablo III can only spawn one goblin per area in a game. The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
+The Goblin Tracker is a counter foundation with resolved-area duplicate protection. Press `X` while GoblinFarmer is running to add one goblin for the current detected area; a second count in the same resolved area is suppressed for normal areas. Pandemonium Fortress Level 1 and Pandemonium Fortress Level 2 are explicit exceptions and allow up to two counts per game before further counts are suppressed. The counter does not require combat to be active. If the current area cannot be resolved, the manual hotkey falls back to the existing count behavior and logs the unresolved area.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized and counted as `Gelatinous Sire`.
 
@@ -157,11 +157,11 @@ The Hotkeys group in the app shows the available hotkeys and includes checkboxes
 
 ## Debug Mode
 
-Debug Mode is off by default for normal release use. When enabled from Settings, it shows diagnostic controls and debug-only views such as the route state inspector and screenshot options, and it enables Keep Debug Screenshots by default until the user turns screenshot retention off. Visual Studio Debug runs force debug evidence internally, so those settings are not shown as editable options there.
+Debug Mode is off by default for normal release use. When enabled from Settings, it shows diagnostic controls and debug-only views such as the route state inspector and screenshot options, and it enables Keep Debug Screenshots by default until the user turns screenshot retention off. Visual Studio Debug runs force debug evidence internally, so those settings are not shown as editable options there. Success screenshots remain disabled unless `Debug.EnableSuccessScreenshots` is explicitly set to `true`.
 
 Debug tooling includes:
 
-- Paired Diablo/app screenshots for major workflow success and failure milestones.
+- Paired Diablo/app screenshots for failure milestones by default, with success milestone capture only when explicitly enabled.
 - Optional debug screenshot retention.
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
@@ -174,6 +174,8 @@ Generate a debug package from the project root:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
+
+Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk.
 
 ## Release v1.3
 

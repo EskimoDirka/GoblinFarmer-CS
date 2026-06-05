@@ -69,7 +69,6 @@ namespace GoblinFarmer
             debug.ShowDiagnosticOverlay = true;
             debug.ShowRouteInspector = true;
             debug.EnableDebugScreenshots = true;
-            debug.EnableSuccessScreenshots = false;
             debug.EnableMissingAssetPrompts = true;
             debug.EnableVerboseLogging = true;
         }
@@ -85,7 +84,6 @@ namespace GoblinFarmer
             debug.ShowDiagnosticOverlay = false;
             debug.ShowRouteInspector = false;
             debug.EnableDebugScreenshots = false;
-            debug.EnableSuccessScreenshots = false;
             debug.EnableMissingAssetPrompts = false;
             debug.EnableVerboseLogging = false;
         }

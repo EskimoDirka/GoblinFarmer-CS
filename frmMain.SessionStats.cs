@@ -95,6 +95,7 @@ namespace GoblinFarmer
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
             string suppressionReason = "";
             int total = 0;
+            GoblinAreaDuplicateGuardResult guardResult = new(true, 0, 0);
 
             lock (portGoblinTrackerLock)
             {
@@ -118,9 +119,9 @@ namespace GoblinFarmer
 
                     AppLogger.Info($"GoblinTracker: Area unresolved source='{PortLogField(source)}'; rawLocation='{PortLogField(rawLocation)}'; falling back to existing count behavior");
                 }
-                else if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey))
+                else if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey, out guardResult))
                 {
-                    suppressionReason = "AreaAlreadyCounted";
+                    suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
                     GoblinFoundRecord suppressedRecord = new(
                         area.AreaKey,
                         area.DisplayLocation,
@@ -130,7 +131,7 @@ namespace GoblinFarmer
                         false,
                         suppressionReason);
                     DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
-                    AppLogger.Info($"GoblinTracker: Duplicate suppressed rawLocation='{PortLogField(rawLocation)}' areaKey='{PortLogField(areaKey)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' reason='{suppressionReason}'");
+                    AppLogger.Info($"GoblinTracker: GoblinCountSuppressed areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={suppressionReason} rawLocation='{PortLogField(rawLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}'");
                     return false;
                 }
 
@@ -145,7 +146,15 @@ namespace GoblinFarmer
                 total = DebugManager.Session.RecordGoblinFound(countedRecord);
             }
 
-            AppLogger.Info($"GoblinTracker: Count accepted rawLocation='{PortLogField(rawLocation)}' areaKey='{PortLogField(areaKey)}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' total={total}");
+            if (area.Resolved)
+            {
+                AppLogger.Info($"GoblinTracker: GoblinCountAccepted areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} rawLocation='{PortLogField(rawLocation)}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' total={total}");
+            }
+            else
+            {
+                AppLogger.Info($"GoblinTracker: Count accepted rawLocation='{PortLogField(rawLocation)}' areaKey='{PortLogField(areaKey)}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}' total={total}");
+            }
+
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;

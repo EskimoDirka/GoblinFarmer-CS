@@ -605,6 +605,18 @@ function Get-DiagnosticScreenshotInfo {
     }
 }
 
+function Test-SuccessScreenshotFile {
+    param([System.IO.FileInfo]$File)
+
+    $info = Get-DiagnosticScreenshotInfo $File
+    if ($info.Outcome -eq "SUCCESS") {
+        return $true
+    }
+
+    $fullName = $File.FullName.Replace('/', '\')
+    return $fullName -match '\\Screenshots\\Success\\'
+}
+
 function Select-DiagnosticScreenshotGroups {
     param(
         [System.IO.FileInfo[]]$Files,
@@ -1431,6 +1443,9 @@ if ($MaxSuccessScreenshots -lt 0) {
     Write-Warning "MaxSuccessScreenshots must be at least 0. Using 0."
     $MaxSuccessScreenshots = 0
 }
+if ($IncludeSuccessScreenshots -and $MaxSuccessScreenshots -eq 0) {
+    $MaxSuccessScreenshots = $MaxScreenshots
+}
 if ($MaxDiagnosticScreenshots -lt 1) {
     Write-Warning "MaxDiagnosticScreenshots must be at least 1. Using 1."
     $MaxDiagnosticScreenshots = 1
@@ -1603,7 +1618,8 @@ try {
     $normalScreenshots = @($sessionScreenshots |
         Where-Object {
             $info = Get-DiagnosticScreenshotInfo $_
-            $info.Outcome -eq "DEBUG" -and
+            -not (Test-SuccessScreenshotFile $_) -and
+                $info.Outcome -eq "DEBUG" -and
                 -not (Test-RetiredDemonHunterSuppressionScreenshot $info) -and
                 -not $selectedPairKeys.ContainsKey($info.PairKey)
         } |
@@ -1641,7 +1657,7 @@ try {
         }
 
         if (-not $IncludeSuccessScreenshots -or $MaxSuccessScreenshots -eq 0) {
-            Write-Host "Success screenshots skipped by package policy. Use -IncludeSuccessScreenshots with -MaxSuccessScreenshots to include debug-only success evidence."
+            Write-Host "Success screenshots skipped by package policy. Use -IncludeSuccessScreenshots to include debug-only success evidence."
         }
         elseif ($successCount -eq 0) {
             Write-Warning "No success screenshots found."
@@ -1772,6 +1788,15 @@ try {
     else {
         ""
     }
+    $successAvailabilityLine = if ($successScreenshots.Count -gt 0) {
+        "Success screenshots included by opt-in: count=$($successScreenshots.Count); available=$($availableSuccessScreenshots.Count); totalSize=$availableSuccessScreenshotSizeDisplay; totalSizeBytes=$availableSuccessScreenshotSizeBytes"
+    }
+    elseif ($availableSuccessScreenshots.Count -gt 0) {
+        "Success screenshots available but excluded by default: count=$($availableSuccessScreenshots.Count); totalSize=$availableSuccessScreenshotSizeDisplay; totalSizeBytes=$availableSuccessScreenshotSizeBytes"
+    }
+    else {
+        "Success screenshots available but excluded by default: none"
+    }
     $buildManifestLines = {
         param(
             [long]$PackageSizeBytes,
@@ -1806,7 +1831,7 @@ try {
             "Success screenshot package policy: $(if ($IncludeSuccessScreenshots) { 'Included when selected' } else { 'Skipped by default' })",
             "Debug.EnableSuccessScreenshots: $($successScreenshotSetting.Enabled)",
             "Debug.EnableSuccessScreenshots source: $($successScreenshotSetting.Source)",
-            "$(if ($successScreenshotSetting.Enabled -and $availableSuccessScreenshots.Count -gt 0) { "Success screenshots available but excluded by default: count=$($availableSuccessScreenshots.Count); totalSize=$availableSuccessScreenshotSizeDisplay; totalSizeBytes=$availableSuccessScreenshotSizeBytes" } else { "Success screenshots available but excluded by default: none" })",
+            $successAvailabilityLine,
             "Goblin evidence full-image package policy: most recent $MaxGoblinEvidenceFullImages included; $excludedGoblinEvidenceFullImages excluded",
             $goblinEvidenceSourceSummaryLine,
             "Log folders searched:",

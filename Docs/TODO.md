@@ -546,9 +546,14 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Optionally write a goblin history log.
 * [x] Add main UI Goblin Tracker stats and Reset Stats button.
 * [x] Include Goblin Tracker count, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
+* [x] Add explicit Goblin Tracker area-count overrides for Pandemonium Fortress Level 1 and Pandemonium Fortress Level 2 so each can count twice per game.
+* [x] Keep all non-Pandemonium Fortress Goblin Tracker areas capped at one count per game.
+* [ ] Live-validate Pandemonium Fortress Level 1 accepts counts 1 and 2, then suppresses count 3 with `reason=AreaLimitReached`.
+* [ ] Live-validate Pandemonium Fortress Level 2 accepts counts 1 and 2, then suppresses count 3 with `reason=AreaLimitReached`.
 * [ ] Manually validate physical `X` increments the counter once per press while GoblinFarmer is running.
 * [ ] Manually validate tracker active time advances only during combat automation and pauses while idle, in menus, waiting for game creation, waiting for Diablo launch, or paused.
-* [ ] Manually validate Reset Stats clears goblin count, tracker active time, and GPH, and restarts tracker timing from the reset moment if combat is active.
+* [ ] Manually validate Reset Stats clears goblin count, tracker active time, GPH, and per-area count state, and restarts tracker timing from the reset moment if combat is active.
+* [ ] Manually validate New Game clears per-area count state so the same resolved areas can count again in the next game.
 * [ ] Manually validate a generated debug package includes Goblin Tracker metadata from `session-info.txt`.
 
 ### Asset Validator

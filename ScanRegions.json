@@ -6,5 +6,25 @@
   "LeaveGameButton": {
     "Image": "Leave Game Scan Region.png",
     "Region": "230,608,181,65"
+  },
+  "BlacksmithMenu": {
+    "Image": "Blacksmith Menu Scan Region.png",
+    "Region": "240,154,232,54"
+  },
+  "RepairMenu": {
+    "Image": "Repair Menu Scan Region.png",
+    "Region": "285,155,142,55"
+  },
+  "SalvageButton": {
+    "Image": "Salvage Button Scan Region.png",
+    "Region": "155,324,130,130"
+  },
+  "SalvageTab": {
+    "Image": "Salvage Tab Scan Region.png",
+    "Region": "638,556,83,178"
+  },
+  "SalvageConfirmationButton": {
+    "Image": "Salvage Confirmation Scan Region.png",
+    "Region": "1104,474,69,53"
   }
 }

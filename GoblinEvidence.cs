@@ -301,20 +301,42 @@ namespace GoblinFarmer
         }
     }
 
+    internal readonly record struct GoblinAreaDuplicateGuardResult(
+        bool Accepted,
+        int AreaCount,
+        int AreaLimit);
+
     internal sealed class GoblinAreaDuplicateGuard
     {
-        private readonly HashSet<string> countedAreaKeys = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, int> countedAreaKeys = new(StringComparer.OrdinalIgnoreCase);
 
         public int Count => countedAreaKeys.Count;
 
         public bool TryAccept(string areaKey)
         {
+            return TryAccept(areaKey, out _);
+        }
+
+        public bool TryAccept(string areaKey, out GoblinAreaDuplicateGuardResult result)
+        {
             if (string.IsNullOrWhiteSpace(areaKey))
             {
+                result = new GoblinAreaDuplicateGuardResult(true, 0, 0);
                 return true;
             }
 
-            return countedAreaKeys.Add(areaKey);
+            int limit = AreaLimit(areaKey);
+            countedAreaKeys.TryGetValue(areaKey, out int currentCount);
+            if (currentCount >= limit)
+            {
+                result = new GoblinAreaDuplicateGuardResult(false, currentCount, limit);
+                return false;
+            }
+
+            int updatedCount = currentCount + 1;
+            countedAreaKeys[areaKey] = updatedCount;
+            result = new GoblinAreaDuplicateGuardResult(true, updatedCount, limit);
+            return true;
         }
 
         public int Reset()
@@ -322,6 +344,14 @@ namespace GoblinFarmer
             int cleared = countedAreaKeys.Count;
             countedAreaKeys.Clear();
             return cleared;
+        }
+
+        private static int AreaLimit(string areaKey)
+        {
+            return areaKey.Equals("Pandemonium Fortress Level 1", StringComparison.OrdinalIgnoreCase) ||
+                areaKey.Equals("Pandemonium Fortress Level 2", StringComparison.OrdinalIgnoreCase)
+                    ? 2
+                    : 1;
         }
     }
 }
