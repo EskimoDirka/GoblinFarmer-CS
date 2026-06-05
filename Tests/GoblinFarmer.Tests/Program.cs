@@ -816,10 +816,17 @@ static void TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode()
     string stateSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
 
     AssertTrue(combatSource.Contains("PortWitchDoctorMouseWheelLoop", StringComparison.Ordinal), "Witch Doctor should run a dedicated mouse wheel loop");
+    AssertTrue(combatSource.Contains("PortWitchDoctorCursorRightClickLoop", StringComparison.Ordinal), "Witch Doctor should run a dedicated cursor-change right-click loop");
     AssertTrue(combatSource.Contains("PortRuntimeMouseWheel(-120)", StringComparison.Ordinal), "Witch Doctor should repeatedly send mouse wheel input");
+    AssertTrue(combatSource.Contains("PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN)", StringComparison.Ordinal), "Witch Doctor cursor-change input should send a right-click down pulse");
+    AssertTrue(combatSource.Contains("PortRuntimeMouseUp(MOUSEEVENTF_RIGHTUP)", StringComparison.Ordinal), "Witch Doctor cursor-change input should send a right-click up pulse");
     AssertTrue(combatSource.Contains("combatInputMode=MouseWheelScroll", StringComparison.Ordinal), "Witch Doctor logs should report mouse wheel input mode");
+    AssertTrue(combatSource.Contains("WitchDoctorCursorChangeRightClickSent", StringComparison.Ordinal), "Witch Doctor should log sent cursor-change right-click pulses");
+    AssertTrue(combatSource.Contains("WitchDoctorCursorChangeRightClickSkipped", StringComparison.Ordinal), "Witch Doctor should log skipped cursor-change right-click pulses");
     AssertTrue(combatSource.Contains("keyOrder=2,3,1", StringComparison.Ordinal), "Witch Doctor key loop order should remain 2, 3, 1");
     AssertTrue(combatSource.Contains("heldLeftMode=false", StringComparison.Ordinal), "Witch Doctor logs should explicitly report no held-left mode");
+    AssertTrue(combatSource.Contains("heldRightMode=false", StringComparison.Ordinal), "Witch Doctor logs should explicitly report no held-right mode");
+    AssertTrue(combatSource.Contains("cursorChanged=", StringComparison.Ordinal), "Witch Doctor right-click logs should include cursor change state");
     AssertTrue(stateSource.Contains("PortRuntimeMouseWheel", StringComparison.Ordinal), "runtime input helpers should include mouse wheel support");
 
     AssertFalse(combatSource.Contains("PortHandleWitchDoctorCursorInput", StringComparison.Ordinal), "Witch Doctor should not use the old cursor-held input handler");
