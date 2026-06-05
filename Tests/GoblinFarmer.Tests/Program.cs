@@ -689,6 +689,7 @@ static void TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet()
     AssertEqual(0, catalog.InvalidTemplates.Count, "source Goblin Evidence template names should all parse cleanly");
     AssertTrue(catalog.HasJournalTemplates, "source Goblin Evidence folder should include journal templates");
     AssertTrue(catalog.HasMinimapTemplates, "source Goblin Evidence folder should include minimap templates");
+    AssertEqual(10, catalog.Templates.Count(template => template.Kind == GoblinEvidenceTemplateKind.Minimap), "all 10 updated minimap icon templates should be discovered");
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled), "source templates should accept combined Blood Thief journal evidence");
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Gilded Baron" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Gilded Baron minimap evidence");
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Menagerist" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Menagerist minimap evidence");

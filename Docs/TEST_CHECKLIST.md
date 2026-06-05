@@ -75,10 +75,13 @@
 - Goblin Evidence template discovery accepts `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and `<Goblin Type> Minimap.png`
 - Combined `Engaged & Killed Journal` templates are accepted
 - Invalid Goblin Evidence template names log a clear setup warning without scan spam
+- All 10 tight minimap goblin-icon PNG templates under `Images\Goblin Evidence` are discovered as Minimap templates
 - Journal ObservationDiagnostics crops use the calibrated `64,736,645,417` reference region
 - Minimap ObservationDiagnostics crops use the calibrated `2108,66,421,423` reference region
-- `GoblinEvidenceScanResult source=Journal` and `source=Minimap` include `scanRegion`, `screenRegion`, template count, matched goblin type, and confidence
+- `GoblinEvidenceScanResult source=Journal` and `source=Minimap` include `scanRegion`, `screenRegion`, template count, template name, matched goblin type, best confidence, and match point
 - Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and below-threshold reasons once templates are present
+- `GoblinEvidenceCandidateCheck source=Minimap` includes template name, goblin type, calibrated scan region, best confidence, threshold, match point, screen match point, and template size
+- Journal matches remain primary when Journal and Minimap evidence both match in the same scan; Minimap is logged as supporting evidence in that case
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - Observation candidates report the matched goblin type when a Journal or Minimap template passes confidence

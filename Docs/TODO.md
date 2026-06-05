@@ -568,6 +568,9 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Normalize Goblin Evidence template aliases such as `Menagerist Goblin`, `Gelatinous Spawn`, and `Oddius Collector` to canonical Goblin Tracker types.
 * [x] Consolidate Observation Mode Journal/Minimap scan regions onto the calibrated GoblinEvidence reference regions.
 * [x] Log per-source GoblinEvidence scan results with `source`, `scanRegion`, `screenRegion`, matched goblin type, and confidence.
+* [x] Verify discovery loads all 10 updated tight minimap goblin-icon templates.
+* [x] Add minimap/template match diagnostics for template name, goblin type, normalized source, best confidence, threshold, scan region, match point, screen match point, and template size.
+* [x] Keep Journal template matches primary when Journal and Minimap evidence both match in the same scan.
 * [x] Keep ObservationDiagnostics crops bounded by throttling capture and retaining only a recent runtime sample.
 * [x] Limit debug package inclusion for ObservationDiagnostics image crops and report missing-template state in `debug-package-manifest.txt`.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
@@ -589,7 +592,9 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate the latest log contains `GoblinEvidenceScannerStartRequested`, `GoblinEvidenceScannerStarted`, `GoblinEvidenceScanAttempted`, crop-path diagnostics, and `GoblinEvidenceScannerStopped` during normal combat.
 * [ ] Live-validate missing or invalid Journal/Minimap evidence template setup logs one clear `GoblinEvidenceTemplateSetupMissing` or `GoblinEvidenceTemplateSetupWarning` line plus throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries instead of repeated per-scan `GoblinEvidenceCandidateCheck` spam.
 * [ ] Live-validate calibrated per-goblin Journal/Minimap evidence templates produce `GoblinEvidenceCandidateCheck` results and, when confidence passes, typed observation candidates without changing GoblinCount.
-* [ ] Live-validate `GoblinEvidenceScanResult source=Minimap scanRegion=2108,66,421,423` and matching ObservationDiagnostics minimap crop framing in a live run.
+* [ ] Live-validate `GoblinEvidenceScanResult source=Minimap scanRegion=2108,66,421,423` logs template name, best confidence, threshold, and match point for tight minimap icon templates.
+* [ ] Live-validate matching ObservationDiagnostics minimap crop framing in a live run.
+* [ ] If tight minimap icon matching is unreliable after one or two targeted tuning passes, document the failing template(s) and prepare a future color-matching fallback for the goblin minimap marker within the calibrated minimap region.
 * [ ] Live-validate accepted manual `X` counts show the no-activate 5-second count notification without stealing Diablo focus.
 * [ ] Live-validate Automation Observation Mode reports `wouldCount=False reason=BlockedArea` in blocked locations such as WhimsyDale.
 * [ ] Live-validate Automation Observation Mode reports duplicate areas as `wouldCount=False` without consuming any additional slots.

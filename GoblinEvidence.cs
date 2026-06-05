@@ -35,6 +35,12 @@ namespace GoblinFarmer
         string Notes,
         string GoblinType = "Unknown");
 
+    internal readonly record struct GoblinEvidenceTemplateMatch(
+        double Confidence,
+        System.Drawing.Point MatchPoint,
+        System.Drawing.Point ScreenMatchPoint,
+        System.Drawing.Size TemplateSize);
+
     internal static class GoblinEvidenceScanRegions
     {
         public static readonly System.Drawing.Rectangle JournalReferenceRegion = new(64, 736, 645, 417);

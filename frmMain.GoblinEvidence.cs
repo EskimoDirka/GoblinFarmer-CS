@@ -164,7 +164,14 @@ namespace GoblinFarmer
 
         private IEnumerable<GoblinEvidenceCandidate> PortDetectGoblinEvidenceCandidates(GoblinEvidenceTemplateCatalog templateCatalog)
         {
-            foreach (IGrouping<string, GoblinEvidenceTemplateRequirement> sourceGroup in templateCatalog.Templates.GroupBy(template => template.Source, StringComparer.OrdinalIgnoreCase))
+            List<IGrouping<string, GoblinEvidenceTemplateRequirement>> sourceGroups = templateCatalog.Templates
+                .GroupBy(template => template.Source, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => string.Equals(group.Key, "JournalCandidate", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ToList();
+
+            GoblinEvidenceCandidate? primaryJournalCandidate = null;
+            List<GoblinEvidenceCandidate> supportingCandidates = [];
+            foreach (IGrouping<string, GoblinEvidenceTemplateRequirement> sourceGroup in sourceGroups)
             {
                 IReadOnlyList<GoblinEvidenceTemplateRequirement> templates = sourceGroup.ToList();
                 Rectangle scanRegion = PortGoblinEvidenceRegionForSource(sourceGroup.Key);
@@ -173,8 +180,26 @@ namespace GoblinFarmer
 
                 if (candidate != null)
                 {
-                    yield return candidate;
+                    if (string.Equals(sourceGroup.Key, "JournalCandidate", StringComparison.OrdinalIgnoreCase))
+                    {
+                        primaryJournalCandidate = candidate;
+                    }
+                    else
+                    {
+                        supportingCandidates.Add(candidate);
+                    }
                 }
+            }
+
+            if (primaryJournalCandidate != null)
+            {
+                yield return primaryJournalCandidate;
+                yield break;
+            }
+
+            foreach (GoblinEvidenceCandidate candidate in supportingCandidates)
+            {
+                yield return candidate;
             }
         }
 
@@ -191,7 +216,7 @@ namespace GoblinFarmer
         {
             GoblinEvidenceTemplateRequirement? bestTemplate = null;
             string bestImagePath = "";
-            double bestConfidence = 0;
+            GoblinEvidenceTemplateMatch bestMatch = new(0, Point.Empty, Point.Empty, Size.Empty);
             foreach (GoblinEvidenceTemplateRequirement template in templates)
             {
                 string imagePath = Img("Goblin Evidence", template.FileName);
@@ -200,12 +225,12 @@ namespace GoblinFarmer
                     continue;
                 }
 
-                double confidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion);
-                if (bestTemplate == null || confidence > bestConfidence)
+                GoblinEvidenceTemplateMatch match = PortBestGoblinEvidenceTemplateMatchInDiabloRegion(imagePath, referenceRegion);
+                if (bestTemplate == null || match.Confidence > bestMatch.Confidence)
                 {
                     bestTemplate = template;
                     bestImagePath = imagePath;
-                    bestConfidence = confidence;
+                    bestMatch = match;
                 }
             }
 
@@ -214,7 +239,7 @@ namespace GoblinFarmer
                 return null;
             }
 
-            if (bestConfidence < bestTemplate.Threshold)
+            if (bestMatch.Confidence < bestTemplate.Threshold)
             {
                 PortLogGoblinEvidenceDetectorDiagnostic(
                     bestTemplate,
@@ -222,7 +247,7 @@ namespace GoblinFarmer
                     "BelowThreshold",
                     bestImagePath,
                     referenceRegion,
-                    bestConfidence,
+                    bestMatch,
                     force: false);
                 return null;
             }
@@ -233,14 +258,53 @@ namespace GoblinFarmer
                 "ConfidenceMet",
                 bestImagePath,
                 referenceRegion,
-                bestConfidence,
+                bestMatch,
                 force: true);
             return new GoblinEvidenceCandidate(
                 bestTemplate.Type,
-                bestConfidence,
+                bestMatch.Confidence,
                 bestTemplate.Source,
-                $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}",
+                $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}",
                 bestTemplate.GoblinType);
+        }
+
+        private GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatchInDiabloRegion(string imagePath, Rectangle referenceRegion)
+        {
+            if (!File.Exists(imagePath) || !PortTryGetDiabloRect(out RECT rect))
+            {
+                return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, Size.Empty);
+            }
+
+            Rectangle screenRegion = PortScaleReferenceRectangle(referenceRegion, rect);
+            screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
+            if (screenRegion.Width <= 0 || screenRegion.Height <= 0)
+            {
+                return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, Size.Empty);
+            }
+
+            using Bitmap screenshot = new(screenRegion.Width, screenRegion.Height);
+            using (Graphics graphics = Graphics.FromImage(screenshot))
+            {
+                graphics.CopyFromScreen(screenRegion.Left, screenRegion.Top, 0, 0, screenshot.Size);
+            }
+
+            using OpenCvSharp.Mat rawScreenMat = OpenCvSharp.Extensions.BitmapConverter.ToMat(screenshot);
+            using OpenCvSharp.Mat screenMat = new();
+            OpenCvSharp.Cv2.CvtColor(rawScreenMat, screenMat, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
+
+            using OpenCvSharp.Mat templateMat = OpenCvSharp.Cv2.ImRead(imagePath, OpenCvSharp.ImreadModes.Color);
+            if (templateMat.Empty() || templateMat.Width > screenMat.Width || templateMat.Height > screenMat.Height)
+            {
+                return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, new Size(templateMat.Width, templateMat.Height));
+            }
+
+            using OpenCvSharp.Mat result = new();
+            OpenCvSharp.Cv2.MatchTemplate(screenMat, templateMat, result, OpenCvSharp.TemplateMatchModes.CCoeffNormed);
+            OpenCvSharp.Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out OpenCvSharp.Point maxLoc);
+            Point matchPoint = new(maxLoc.X, maxLoc.Y);
+            Point screenMatchPoint = new(screenRegion.Left + maxLoc.X, screenRegion.Top + maxLoc.Y);
+            Size templateSize = new(templateMat.Width, templateMat.Height);
+            return new GoblinEvidenceTemplateMatch(maxVal, matchPoint, screenMatchPoint, templateSize);
         }
 
         private Rectangle PortGoblinEvidenceJournalRegion()
@@ -381,7 +445,7 @@ namespace GoblinFarmer
             string reason,
             string imagePath,
             Rectangle referenceRegion,
-            double confidence,
+            GoblinEvidenceTemplateMatch match,
             bool force)
         {
             DateTime now = DateTime.Now;
@@ -400,7 +464,7 @@ namespace GoblinFarmer
                 }
             }
 
-            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={template.Type}; source={template.Source}; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; result={result}; reason={reason}; confidence={confidence:0.000}; threshold={template.Threshold:0.000}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={template.Type}; source={PortNormalizeGoblinObservationSource(template.Source)}; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; result={result}; reason={reason}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; templateName={PortLogField(template.FileName)}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; templateSize={FormatSize(match.TemplateSize)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
         }
 
         private void PortLogGoblinEvidenceSourceScanResult(
@@ -413,7 +477,47 @@ namespace GoblinFarmer
             bool candidateFound = candidate != null;
             string goblinType = candidateFound ? candidate!.GoblinType : "None";
             double confidence = candidateFound ? candidate!.Confidence : 0;
-            AppLogger.Info($"GoblinEvidenceScanResult source={observationSource} scanRegion={FormatRectangle(referenceRegion)} screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)} candidateFound={candidateFound} templateCount={templateCount} goblinType={PortLogField(goblinType)} confidence={confidence:0.000}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            string templateName = "None";
+            string matchPoint = "None";
+            string threshold = "None";
+            if (candidateFound)
+            {
+                templateName = PortExtractGoblinEvidenceNoteValue(candidate!.Notes, "Template");
+                matchPoint = PortExtractGoblinEvidenceNoteValue(candidate!.Notes, "MatchPoint");
+                threshold = PortExtractGoblinEvidenceNoteValue(candidate!.Notes, "Threshold");
+            }
+
+            AppLogger.Info($"GoblinEvidenceScanResult source={observationSource} scanRegion={FormatRectangle(referenceRegion)} screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)} candidateFound={candidateFound} templateCount={templateCount} templateName={PortLogField(templateName)} goblinType={PortLogField(goblinType)} bestConfidence={confidence:0.000} threshold={PortLogField(threshold)} matchPoint={PortLogField(matchPoint)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+        }
+
+        private static string PortExtractGoblinEvidenceNoteValue(string notes, string key)
+        {
+            if (string.IsNullOrWhiteSpace(notes) || string.IsNullOrWhiteSpace(key))
+            {
+                return "None";
+            }
+
+            foreach (string part in notes.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                int separator = part.IndexOf('=');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                string partKey = part[..separator].Trim();
+                if (string.Equals(partKey, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return part[(separator + 1)..].Trim();
+                }
+            }
+
+            return "None";
+        }
+
+        private static string FormatSize(Size size)
+        {
+            return $"{size.Width}x{size.Height}";
         }
 
         private string PortGoblinEvidenceScreenRegionForLog(Rectangle referenceRegion)
