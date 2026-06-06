@@ -563,6 +563,8 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Add a no-activate 5-second manual `X` count notification with goblin counted, area/location, goblin type, and current total.
 * [x] Reuse a recent same-area Observation Mode goblin type in accepted manual `X` notifications while preserving `Unknown` for stale or different-area observations.
 * [x] Run a current observation refresh before accepted manual `X` notifications so same-area evidence that appears at count time can supply the goblin type without enabling automatic counting.
+* [x] Skip the manual `X` evidence refresh when a recent same-area Last Observation already has a reusable goblin type.
+* [x] Prefer Minimap evidence first for manual `X` notification refreshes to reduce notification delay while keeping the normal Observation Mode scanner Journal-primary.
 * [x] Clear the Goblin Tracker Last Observation UI to a no-current/no-candidate state when evidence scans run and find no candidate.
 * [x] Replace the generic Goblin Evidence template placeholders with per-goblin template discovery under `Images\Goblin Evidence`.
 * [x] Support `Engaged Journal`, `Killed Journal`, `Engaged & Killed Journal`, and `Minimap` Goblin Evidence filename patterns.
@@ -607,10 +609,12 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate matching ObservationDiagnostics minimap crop framing in a live run.
 * [ ] If tight minimap icon matching is unreliable after one or two targeted tuning passes, document the failing template(s) and prepare a future color-matching fallback for the goblin minimap marker within the calibrated minimap region.
 * [ ] Live-validate accepted manual `X` counts show the no-activate 5-second count notification without stealing Diablo focus.
-* [ ] Live-validate accepted manual `X` notifications show the observed goblin type when the pre-count refresh or a recent same-area observation exists, and remain `Unknown` without one.
-* [ ] Live-validate Last Observation displays no-current/no-candidate after a scan or manual refresh finds no goblin evidence instead of leaving stale type/area text visible.
+* [x] Live-validate accepted manual `X` notifications show the observed goblin type when the pre-count refresh or a recent same-area observation exists, and remain `Unknown` without one.
+* [x] Live-validate Last Observation displays no-current/no-candidate after a scan or manual refresh finds no goblin evidence instead of leaving stale type/area text visible.
 * [ ] Live-validate Observation Mode no longer reports PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan.
-* [ ] Live-validate Observation Mode no longer reports PF1 for Western Channel Level 1 when route context is Ancient Waterway and the channel title is a strong runner-up.
+* [x] Live-validate Observation Mode no longer reports PF1 for Western Channel Level 1 when route context is Ancient Waterway and the channel title is a strong runner-up.
+* [ ] Live-retest manual `X` notification latency after the recent-observation skip and Minimap-first manual refresh changes.
+* [ ] Investigate the Sewers of Caldeum / Menagerist live miss where the manual count worked but notification type and Last Observation data were absent.
 * [ ] Live-validate Stinging Winds accepts manual goblin counts 1 and 2 in the same game and suppresses count 3 with `AreaLimitReached`.
 * [ ] Live-validate combat hotkey cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=CombatHotkey`.
 * [ ] Live-validate physical `2` cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`.

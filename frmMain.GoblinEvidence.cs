@@ -292,27 +292,45 @@ namespace GoblinFarmer
                 }
 
                 PortLogGoblinEvidenceTemplateSetupWarning("ManualHotkeyRefresh", templateCatalog);
-                int candidateCount = 0;
-                foreach (GoblinEvidenceCandidate candidate in PortDetectGoblinEvidenceCandidates(templateCatalog))
+                GoblinEvidenceCandidate? candidate = PortDetectManualHotkeyRefreshGoblinEvidenceCandidate(templateCatalog);
+                if (candidate == null)
                 {
-                    candidateCount++;
-                    PortRecordGoblinEvidence(candidate, forceObservation: true);
-                    break;
-                }
-
-                if (candidateCount == 0)
-                {
-                    AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=False; reason=NoCandidate; source=ManualHotkey; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+                    AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=False; reason=NoCandidate; source=ManualHotkey; refreshOrder=MinimapThenJournal; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
                     PortMarkGoblinObservationNoCurrent("No current observation");
                     return;
                 }
 
-                AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=True; candidateCount={candidateCount}; source=ManualHotkey; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+                PortRecordGoblinEvidence(candidate, forceObservation: true);
+                AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=True; candidateCount=1; source=ManualHotkey; refreshOrder=MinimapThenJournal; candidateSource={PortLogField(candidate.Source)}; goblinType={PortLogField(candidate.GoblinType)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
             }
             catch (Exception ex)
             {
                 AppLogger.Error("Goblin evidence manual refresh failed.", ex);
             }
+        }
+
+        private GoblinEvidenceCandidate? PortDetectManualHotkeyRefreshGoblinEvidenceCandidate(GoblinEvidenceTemplateCatalog templateCatalog)
+        {
+            foreach (string source in new[] { "MinimapCandidate", "JournalCandidate" })
+            {
+                IReadOnlyList<GoblinEvidenceTemplateRequirement> templates = templateCatalog.Templates
+                    .Where(template => template.Source.Equals(source, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (templates.Count == 0)
+                {
+                    continue;
+                }
+
+                Rectangle scanRegion = PortGoblinEvidenceRegionForSource(source);
+                GoblinEvidenceDetectionResult detection = PortDetectBestGoblinEvidenceTemplate(templates, scanRegion);
+                PortLogGoblinEvidenceSourceScanResult(source, scanRegion, detection, templates.Count);
+                if (detection.Candidate != null)
+                {
+                    return detection.Candidate;
+                }
+            }
+
+            return null;
         }
 
         private GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatchInDiabloRegion(string imagePath, Rectangle referenceRegion)

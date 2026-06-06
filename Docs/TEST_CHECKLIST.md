@@ -67,6 +67,8 @@
 - Accepted manual `X` counts show a no-activate notification for 5 seconds with goblin counted, area/location, goblin type or `Unknown`, and current total
 - Accepted manual `X` notifications reuse a recent same-area Observation Mode goblin type within the safe short window
 - Accepted manual `X` runs a current observation refresh before showing the notification, without automatic counting or area-slot consumption
+- Accepted manual `X` skips the evidence refresh when a recent same-area Last Observation already has a reusable goblin type
+- Manual `X` notification refresh checks Minimap evidence before Journal evidence to keep count notifications responsive; normal Observation Mode scans remain Journal-primary
 - Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
 - Combat start logs `GoblinEvidenceScannerStartRequested` and `GoblinEvidenceScannerStarted`
