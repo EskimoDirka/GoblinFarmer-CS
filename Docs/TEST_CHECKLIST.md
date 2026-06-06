@@ -24,6 +24,7 @@
 - Black Canyon Mines allows Battlefields
 - Caverns of Frost Level 1 blocks Teleport Next
 - Caverns of Frost Level 2 allows Rakkis Crossing
+- If the player walks to the queued Rakkis Crossing destination before pressing Teleport Next, the hotkey updates route/button state and starts Pandemonium Fortress Level 1 in the same press
 - Each successful teleport confirmation captures paired Diablo/App success screenshots
 - Route blocks/failures capture paired Diablo/App failure screenshots
 
@@ -61,8 +62,9 @@
 - Stinging Winds accepts goblin counts 1 and 2 in the same game
 - Stinging Winds suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Sewers of Caldeum, Ruined Cistern, Channel, Cave, Cathedral, and Battlefields subregions still resolve separately where expected and remain capped at one count per area per game unless explicitly blocked from manual counts
-- Reset Stats clears goblin count, tracker active time, GPH, and per-area count state
-- New Game clears per-area count state while preserving the current session tracker statistics
+- Cathedral Level 3 remains a default one-count area; a second manual `X` in the same game should suppress as a duplicate unless the log shows a different resolved area key or unknown fallback
+- Reset Stats clears goblin count, tracker active time, GPH, per-area count state, Goblin Evidence cooldowns, and Last Observation/manual observation state
+- New Game clears per-area count state and Goblin Evidence observation/cooldown state while preserving the current session tracker statistics
 - Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
 - Accepted manual `X` counts show a no-activate notification for 5 seconds with goblin counted, area/location, goblin type or `Unknown`, and current total
 - Accepted manual `X` notifications reuse a recent same-area Observation Mode goblin type within the safe short window
@@ -79,7 +81,7 @@
 - If Goblin Evidence templates are missing, startup/scanner diagnostics log one clear `GoblinEvidenceTemplateSetupMissing` line and throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries
 - Missing Goblin Evidence templates do not spam `GoblinEvidenceCandidateCheck reason=MissingTemplate` on every scan
 - VS Debug missing-template notification names the needed templates without activating over Diablo
-- Goblin Evidence template discovery accepts `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, and `<Goblin Type> Minimap.png`
+- Goblin Evidence template discovery accepts `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, optional-suffix journal names such as `<Goblin Type> Engaged.png` and `<Goblin Type> Killed.png`, prefix journal names such as `Engaged <Goblin Type> Journal.png`, and `<Goblin Type> Minimap.png`
 - Combined `Engaged & Killed Journal` templates are accepted
 - Invalid Goblin Evidence template names log a clear setup warning without scan spam
 - All 10 tight minimap goblin-icon PNG templates under `Images\Goblin Evidence` are discovered as Minimap templates

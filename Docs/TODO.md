@@ -24,6 +24,7 @@
 * [x] Add Cave Of The Moon Clan Level 1 to Teleport Next hotkey blocking with the raw location name in logs/notifications.
 * [x] Add Caverns of Frost Level 1 to Teleport Next hotkey blocking while keeping Caverns of Frost Level 2 allowed to Rakkis Crossing.
 * [x] Add Teleport Next route advancement when the fresh hotkey scan already matches the queued route destination.
+* [x] Continue Teleport Next from an already-reached queued destination to that destination's next route target in the same hotkey press when a next target exists.
 * [x] Fix Teleport Next already-at-queued-destination path so it starts the following route teleport instead of only updating button colors.
 * [x] Include queued-target templates in the Teleport Next fresh hotkey scan so already-at-queued detection does not return `Unknown` for normal route destinations.
 * [x] Add `AlreadyAtQueuedDestinationCheck` diagnostics before the already-at skip/advance branch.
@@ -34,6 +35,7 @@
 * [x] Validate Teleport Next from Caverns of Frost Level 2 still allows Rakkis Crossing.
 * [ ] Validate Teleport Next blocks from WhimsyDale and the notification/logs display `WhimsyDale`.
 * [x] Validate Teleport Next route advancement logs `AlreadyAtQueuedDestinationDetected`, skips the queued destination, and actually starts teleporting to `newRequestedTarget`.
+* [ ] Live-validate walking from Battlefields to Rakkis Crossing, then pressing Teleport Next, updates route/button state and starts Pandemonium Fortress Level 1 without requiring a second hotkey press.
 * [x] Validate manual teleport buttons remain allowed and log `source=Button`, `ignoreBlocking=True`, and blocking skipped.
 * [x] Verify release-facing route logic matches Project_Status.md.
 
@@ -568,6 +570,8 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Clear the Goblin Tracker Last Observation UI to a no-current/no-candidate state when evidence scans run and find no candidate.
 * [x] Replace the generic Goblin Evidence template placeholders with per-goblin template discovery under `Images\Goblin Evidence`.
 * [x] Support `Engaged Journal`, `Killed Journal`, `Engaged & Killed Journal`, and `Minimap` Goblin Evidence filename patterns.
+* [x] Support cropped journal template names with optional `Journal` suffix, such as `<Goblin Type> Engaged.png` and `<Goblin Type> Killed.png`.
+* [x] Support prefix-form cropped journal template names, such as `Engaged <Goblin Type> Journal.png` and `Killed <Goblin Type> Journal.png`.
 * [x] Add tracked `Images\Goblin Evidence\README.md` guidance for the per-goblin folder structure.
 * [x] Add startup/scanner missing-template diagnostics that log `GoblinEvidenceTemplateSetupMissing` once and throttle `GoblinEvidenceScanResult reason=MissingTemplate` summaries.
 * [x] Log invalid Goblin Evidence template names without scan spam.
@@ -586,6 +590,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Limit direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots by count and size, and report included/excluded/oversized counts in `debug-package-manifest.txt`.
 * [x] Limit default debug package inclusion of large failure screenshot groups and `debug-screenshots`; manifest reports included/excluded failure screenshot counts and sizes.
 * [x] Allow combat hotkey and physical `2` Exit Game hotkey to cancel active arrival-confirmation waits with `ArrivalConfirmationCancelled` diagnostics.
+* [x] Clear Goblin Evidence cooldowns and Last Observation/manual observation state when New Game or Reset Stats clears the Goblin Tracker area duplicate guard.
 * [x] Live-validate Western Channel Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [x] Live-validate Western Channel Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [x] Live-validate Eastern Channel Level 1 and Eastern Channel Level 2 remain separate area keys and do not consume PF slots during close title matches.
@@ -605,6 +610,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate the latest log contains `GoblinEvidenceScannerStartRequested`, `GoblinEvidenceScannerStarted`, `GoblinEvidenceScanAttempted`, crop-path diagnostics, and `GoblinEvidenceScannerStopped` during normal combat.
 * [ ] Live-validate missing or invalid Journal/Minimap evidence template setup logs one clear `GoblinEvidenceTemplateSetupMissing` or `GoblinEvidenceTemplateSetupWarning` line plus throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries instead of repeated per-scan `GoblinEvidenceCandidateCheck` spam.
 * [ ] Live-validate calibrated per-goblin Journal/Minimap evidence templates produce `GoblinEvidenceCandidateCheck` results and, when confidence passes, typed observation candidates without changing GoblinCount.
+* [ ] Live-validate the newly cropped journal templates are discovered and can produce `JournalCandidate` observations while the journal scan region remains `64,736,645,417`.
 * [ ] Live-validate `GoblinEvidenceScanResult source=Minimap scanRegion=2108,66,421,423` logs template name, best confidence, threshold, and match point for tight minimap icon templates.
 * [ ] Live-validate matching ObservationDiagnostics minimap crop framing in a live run.
 * [ ] If tight minimap icon matching is unreliable after one or two targeted tuning passes, document the failing template(s) and prepare a future color-matching fallback for the goblin minimap marker within the calibrated minimap region.
@@ -613,8 +619,10 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Live-validate Last Observation displays no-current/no-candidate after a scan or manual refresh finds no goblin evidence instead of leaving stale type/area text visible.
 * [ ] Live-validate Observation Mode no longer reports PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan.
 * [x] Live-validate Observation Mode no longer reports PF1 for Western Channel Level 1 when route context is Ancient Waterway and the channel title is a strong runner-up.
-* [ ] Live-retest manual `X` notification latency after the recent-observation skip and Minimap-first manual refresh changes.
-* [ ] Investigate the Sewers of Caldeum / Menagerist live miss where the manual count worked but notification type and Last Observation data were absent.
+* [x] Live-retest manual `X` notification latency after the recent-observation skip and Minimap-first manual refresh changes.
+* [x] Re-test Sewers of Caldeum / Menagerist notification type reuse after the Minimap-first manual refresh change.
+* [ ] Investigate the Blood Thief / Cave Of The Moon Clan Level 1 live miss where the manual count worked but notification type and Last Observation data were absent.
+* [x] Investigate Cathedral Level 3 accepting two manual count notifications in one game; latest package confirmed one accepted count followed by duplicate suppressions with `AreaAlreadyCounted`.
 * [ ] Live-validate Stinging Winds accepts manual goblin counts 1 and 2 in the same game and suppresses count 3 with `AreaLimitReached`.
 * [ ] Live-validate combat hotkey cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=CombatHotkey`.
 * [ ] Live-validate physical `2` cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`.
@@ -627,7 +635,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate a generated normal debug package remains size-bounded and reports failure screenshot included/excluded counts plus included/excluded/available failure screenshot sizes.
 * [ ] Manually validate physical `X` increments the counter once per press while GoblinFarmer is running.
 * [ ] Manually validate tracker active time advances only during combat automation and pauses while idle, in menus, waiting for game creation, waiting for Diablo launch, or paused.
-* [ ] Manually validate Reset Stats clears goblin count, tracker active time, GPH, and per-area count state, and restarts tracker timing from the reset moment if combat is active.
+* [ ] Manually validate Reset Stats clears goblin count, tracker active time, GPH, per-area count state, Goblin Evidence cooldowns, and Last Observation/manual observation state, and restarts tracker timing from the reset moment if combat is active.
 * [ ] Manually validate New Game clears per-area count state so the same resolved areas can count again in the next game.
 * [ ] Manually validate a generated debug package includes Goblin Tracker metadata from `session-info.txt`.
 

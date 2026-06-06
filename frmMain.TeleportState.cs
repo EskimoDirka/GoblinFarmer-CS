@@ -81,14 +81,27 @@ namespace GoblinFarmer
             string expectedNextFromConfirmed = PortNextTeleportForConfirmedLocation("", portLastConfirmedLocation);
             if (PortLocationMatchesForArrival(expectedNextFromConfirmed, queuedTarget))
             {
+                string nextFromFreshQueuedDestination = PortNextTeleportForConfirmedLocation(queuedTarget, freshRawLocation);
+                if (string.IsNullOrWhiteSpace(nextFromFreshQueuedDestination))
+                {
+                    AppLogger.Info(
+                        $"AlreadyAtQueuedDestinationAdvanceSkipped: source=Hotkey; " +
+                        $"freshRawLocation={PortDisplayLocation(freshRawLocation)}; " +
+                        $"queuedTarget={PortDisplayLocation(queuedTarget)}; " +
+                        $"lastConfirmed={PortDisplayLocation(portLastConfirmedLocation)}; " +
+                        $"expectedNextFromConfirmed={PortDisplayLocation(expectedNextFromConfirmed)}; " +
+                        $"reason=queued target is the normal next route step and has no next route target; preserving route order");
+                    return false;
+                }
+
                 AppLogger.Info(
-                    $"AlreadyAtQueuedDestinationAdvanceSkipped: source=Hotkey; " +
+                    $"AlreadyAtQueuedDestinationAdvanceAllowed: source=Hotkey; " +
                     $"freshRawLocation={PortDisplayLocation(freshRawLocation)}; " +
                     $"queuedTarget={PortDisplayLocation(queuedTarget)}; " +
                     $"lastConfirmed={PortDisplayLocation(portLastConfirmedLocation)}; " +
                     $"expectedNextFromConfirmed={PortDisplayLocation(expectedNextFromConfirmed)}; " +
-                    $"reason=queued target is the normal next route step; preserving route order");
-                return false;
+                    $"nextFromFreshQueuedDestination={PortDisplayLocation(nextFromFreshQueuedDestination)}; " +
+                    $"reason=fresh scan confirms the queued route destination and that destination can advance");
             }
 
             string buttonLocation = PortGetButtonLocationForDetectedLocation(freshRawLocation);

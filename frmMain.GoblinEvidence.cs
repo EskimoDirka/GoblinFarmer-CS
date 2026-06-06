@@ -770,6 +770,40 @@ namespace GoblinFarmer
             PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType);
         }
 
+        private void PortResetGoblinEvidenceObservationState(string reason)
+        {
+            int evidenceCooldownsCleared;
+            int missingTemplateCooldownsCleared;
+            int scanDiagnosticsCleared;
+            int detectorDiagnosticsCleared;
+            lock (portGoblinEvidenceLock)
+            {
+                evidenceCooldownsCleared = portLastGoblinEvidenceByType.Count;
+                missingTemplateCooldownsCleared = portLastGoblinEvidenceMissingTemplateLogByType.Count;
+                scanDiagnosticsCleared = portLastGoblinEvidenceScanDiagnosticByKey.Count;
+                detectorDiagnosticsCleared = portLastGoblinEvidenceDetectorDiagnosticByKey.Count;
+                portLastGoblinEvidenceByType.Clear();
+                portLastGoblinEvidenceMissingTemplateLogByType.Clear();
+                portLastGoblinEvidenceScanDiagnosticByKey.Clear();
+                portLastGoblinEvidenceDetectorDiagnosticByKey.Clear();
+                Interlocked.Exchange(ref portLastGoblinEvidenceDiagnosticCropTicks, 0);
+                Interlocked.Exchange(ref portLastGoblinEvidenceMissingTemplateScanSummaryTicks, 0);
+            }
+
+            bool hadManualObservation;
+            bool hadDisplayedObservation;
+            lock (portGoblinTrackerLock)
+            {
+                hadManualObservation = portLastGoblinObservationForManualCount != null;
+                hadDisplayedObservation = portDisplayedGoblinObservation != null || !string.IsNullOrWhiteSpace(portDisplayedGoblinObservationStatus);
+                portLastGoblinObservationForManualCount = null;
+                portDisplayedGoblinObservation = null;
+                portDisplayedGoblinObservationStatus = "No current observation";
+            }
+
+            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
+        }
+
         private string PortCaptureGoblinEvidenceScreenshot(GoblinEvidenceType type, DateTime timestamp)
         {
             try

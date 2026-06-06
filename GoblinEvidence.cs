@@ -123,7 +123,7 @@ namespace GoblinFarmer
 
         public static string NamingGuidance()
         {
-            return "<Goblin Type> Engaged Journal.png | <Goblin Type> Killed Journal.png | <Goblin Type> Engaged & Killed Journal.png | <Goblin Type> Minimap.png";
+            return "<Goblin Type> Engaged Journal.png | <Goblin Type> Killed Journal.png | <Goblin Type> Engaged & Killed Journal.png | <Goblin Type> Engaged.png | <Goblin Type> Killed.png | Engaged <Goblin Type> Journal.png | Killed <Goblin Type> Journal.png | <Goblin Type> Minimap.png";
         }
 
         private static bool TryParseTemplate(
@@ -159,7 +159,113 @@ namespace GoblinFarmer
 
             if (TryParseTemplateSuffix(
                 baseName,
+                " Engaged & Killed",
+                GoblinEvidenceTemplateKind.JournalEngagedAndKilled,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplatePrefix(
+                baseName,
+                "Engaged & Killed ",
+                " Journal",
+                GoblinEvidenceTemplateKind.JournalEngagedAndKilled,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplatePrefix(
+                baseName,
+                "Engaged & Killed ",
+                "",
+                GoblinEvidenceTemplateKind.JournalEngagedAndKilled,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplateSuffix(
+                baseName,
                 " Engaged Journal",
+                GoblinEvidenceTemplateKind.JournalEngaged,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplateSuffix(
+                baseName,
+                " Engaged",
+                GoblinEvidenceTemplateKind.JournalEngaged,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplatePrefix(
+                baseName,
+                "Engaged ",
+                " Journal",
+                GoblinEvidenceTemplateKind.JournalEngaged,
+                GoblinEvidenceType.JournalEncounter,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplatePrefix(
+                baseName,
+                "Engaged ",
+                "",
                 GoblinEvidenceTemplateKind.JournalEngaged,
                 GoblinEvidenceType.JournalEncounter,
                 "JournalCandidate",
@@ -193,6 +299,59 @@ namespace GoblinFarmer
 
             if (TryParseTemplateSuffix(
                 baseName,
+                " Killed",
+                GoblinEvidenceTemplateKind.JournalKilled,
+                GoblinEvidenceType.JournalKill,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplatePrefix(
+                baseName,
+                "Killed ",
+                " Journal",
+                GoblinEvidenceTemplateKind.JournalKilled,
+                GoblinEvidenceType.JournalKill,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplatePrefix(
+                baseName,
+                "Killed ",
+                "",
+                GoblinEvidenceTemplateKind.JournalKilled,
+                GoblinEvidenceType.JournalKill,
+                "JournalCandidate",
+                JournalThreshold,
+                out template,
+                out invalidReason))
+            {
+                return true;
+            }
+            else if (!string.IsNullOrWhiteSpace(invalidReason))
+            {
+                return false;
+            }
+
+            if (TryParseTemplateSuffix(
+                baseName,
                 " Minimap",
                 GoblinEvidenceTemplateKind.Minimap,
                 GoblinEvidenceType.MinimapIcon,
@@ -210,6 +369,57 @@ namespace GoblinFarmer
 
             invalidReason = "UnsupportedNamePattern";
             return false;
+        }
+
+        private static bool TryParseTemplatePrefix(
+            string baseName,
+            string prefix,
+            string optionalSuffix,
+            GoblinEvidenceTemplateKind kind,
+            GoblinEvidenceType evidenceType,
+            string source,
+            double threshold,
+            out GoblinEvidenceTemplateRequirement? template,
+            out string invalidReason)
+        {
+            template = null;
+            invalidReason = "";
+            if (!baseName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string goblinType = baseName[prefix.Length..].Trim();
+            if (!string.IsNullOrWhiteSpace(optionalSuffix))
+            {
+                if (!goblinType.EndsWith(optionalSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                goblinType = goblinType[..^optionalSuffix.Length].Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(goblinType))
+            {
+                invalidReason = "MissingGoblinType";
+                return false;
+            }
+
+            if (!GoblinTypeNormalizer.IsKnownGoblinType(goblinType))
+            {
+                invalidReason = $"UnknownGoblinType:{goblinType}";
+                return false;
+            }
+
+            template = new GoblinEvidenceTemplateRequirement(
+                evidenceType,
+                source,
+                $"{baseName}.png",
+                threshold,
+                GoblinTypeNormalizer.Normalize(goblinType),
+                kind);
+            return true;
         }
 
         private static bool TryParseTemplateSuffix(

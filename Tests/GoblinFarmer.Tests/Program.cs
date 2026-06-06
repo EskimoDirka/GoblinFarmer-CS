@@ -659,18 +659,22 @@ static void TestGoblinEvidenceTemplateDiscoveryAcceptsPerGoblinEvidenceFiles()
     {
         File.WriteAllText(Path.Combine(root, "Menagerist Goblin Engaged Journal.png"), "fake template for discovery test");
         File.WriteAllText(Path.Combine(root, "Blood Thief Engaged & Killed Journal.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Blood Thief Engaged.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Killed Treasure Goblin Journal.png"), "fake template for discovery test");
         File.WriteAllText(Path.Combine(root, "Gilded Baron Minimap.png"), "fake template for discovery test");
         File.WriteAllText(Path.Combine(root, "Oddius Collector Killed Journal.png"), "fake template for discovery test");
         File.WriteAllText(Path.Combine(root, "Unsupported Evidence.png"), "fake invalid template for discovery test");
 
         GoblinEvidenceTemplateCatalog catalog = GoblinEvidenceTemplateRequirements.DiscoverTemplates(root);
 
-        AssertEqual(4, catalog.Templates.Count, "valid per-goblin evidence templates should be discovered");
+        AssertEqual(6, catalog.Templates.Count, "valid per-goblin evidence templates should be discovered");
         AssertEqual(1, catalog.InvalidTemplates.Count, "unsupported template names should be reported invalid");
         AssertTrue(catalog.HasJournalTemplates, "journal templates should be detected");
         AssertTrue(catalog.HasMinimapTemplates, "minimap templates should be detected");
         AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Menagerist" && template.Kind == GoblinEvidenceTemplateKind.JournalEngaged), "Menagerist Goblin alias should normalize to Menagerist");
         AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled), "combined engaged/killed journal templates should be accepted");
+        AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalEngaged), "journal engaged templates without the Journal suffix should be accepted");
+        AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Treasure Goblin" && template.Kind == GoblinEvidenceTemplateKind.JournalKilled), "prefix-form killed journal templates should be accepted");
         AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Gilded Baron" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "minimap templates should be accepted");
         AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Odious Collector" && template.Kind == GoblinEvidenceTemplateKind.JournalKilled), "Oddius typo should normalize to Odious Collector");
     }
@@ -696,7 +700,8 @@ static void TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet()
     AssertTrue(catalog.HasJournalTemplates, "source Goblin Evidence folder should include journal templates");
     AssertTrue(catalog.HasMinimapTemplates, "source Goblin Evidence folder should include minimap templates");
     AssertEqual(10, catalog.Templates.Count(template => template.Kind == GoblinEvidenceTemplateKind.Minimap), "all 10 updated minimap icon templates should be discovered");
-    AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled), "source templates should accept combined Blood Thief journal evidence");
+    AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalEngaged), "source templates should accept Blood Thief engaged journal evidence");
+    AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalKilled), "source templates should accept Blood Thief killed journal evidence");
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Gilded Baron" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Gilded Baron minimap evidence");
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Menagerist" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Menagerist minimap evidence");
 }
@@ -1478,6 +1483,7 @@ static void TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas()
     string[] defaultOneCountAreas =
     [
         "Cathedral Level 1",
+        "Cathedral Level 3",
         "City Of Caldeum",
         "Ruined Cistern",
         "Ancient Waterway",

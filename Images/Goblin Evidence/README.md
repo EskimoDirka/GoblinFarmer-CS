@@ -7,12 +7,17 @@ Supported names:
 - `<Goblin Type> Engaged Journal.png`
 - `<Goblin Type> Killed Journal.png`
 - `<Goblin Type> Engaged & Killed Journal.png`
+- `<Goblin Type> Engaged.png`
+- `<Goblin Type> Killed.png`
+- `Engaged <Goblin Type> Journal.png`
+- `Killed <Goblin Type> Journal.png`
 - `<Goblin Type> Minimap.png`
 
 Examples:
 
 - `Menagerist Goblin Engaged Journal.png`
-- `Blood Thief Engaged & Killed Journal.png`
+- `Blood Thief Engaged.png`
+- `Killed Treasure Goblin Journal.png`
 - `Gilded Baron Minimap.png`
 
 Journal templates use the calibrated `64,736,645,417` reference region. Minimap templates should be tight crops of only the goblin minimap icon/dot; the scanner searches those small templates inside the calibrated `2108,66,421,423` minimap reference region. These regions are for Goblin Evidence Observation Mode only and do not change route or location-title detection.

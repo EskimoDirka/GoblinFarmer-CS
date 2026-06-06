@@ -26,6 +26,7 @@ namespace GoblinFarmer
             Interlocked.Increment(ref sessionGamesCreated);
             DebugManager.Session.RecordGameCreated();
             PortResetGoblinAreaDuplicateGuard("NewGameCreated");
+            PortResetGoblinEvidenceObservationState("NewGameCreated");
             PortUpdateSessionStats();
         }
 
@@ -81,6 +82,7 @@ namespace GoblinFarmer
         {
             DebugManager.Session.ResetGoblinTrackerStats();
             PortResetGoblinAreaDuplicateGuard("TrackerStatsReset");
+            PortResetGoblinEvidenceObservationState("TrackerStatsReset");
             AppLogger.Info("GoblinTracker: Session statistics reset");
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
