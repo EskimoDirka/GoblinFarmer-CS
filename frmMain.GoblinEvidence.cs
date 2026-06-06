@@ -328,12 +328,13 @@ namespace GoblinFarmer
                 referenceRegion,
                 bestMatch,
                 force: true);
+            string goblinType = PortApplyMinimapColorDisambiguation(bestTemplate, bestMatch);
             GoblinEvidenceCandidate candidate = new(
                 bestTemplate.Type,
                 bestMatch.Confidence,
                 bestTemplate.Source,
-                $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}",
-                bestTemplate.GoblinType);
+                $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}{PortMinimapColorNotes(bestTemplate, bestMatch)}",
+                goblinType);
             return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch);
         }
 
@@ -700,7 +701,8 @@ namespace GoblinFarmer
             Point matchPoint = new(maxLoc.X, maxLoc.Y);
             Point screenMatchPoint = new(screenRegion.Left + maxLoc.X, screenRegion.Top + maxLoc.Y);
             Size templateSize = new(templateMat.Width, templateMat.Height);
-            return new GoblinEvidenceTemplateMatch(maxVal, matchPoint, screenMatchPoint, templateSize);
+            GoblinMinimapColorClassification minimapColor = PortClassifyTreasureOdiousMinimapColor(screenshot, matchPoint, templateSize);
+            return new GoblinEvidenceTemplateMatch(maxVal, matchPoint, screenMatchPoint, templateSize, minimapColor);
         }
 
         private Rectangle PortGoblinEvidenceJournalRegion()
@@ -1148,6 +1150,160 @@ namespace GoblinFarmer
                 GoblinTypeNormalizer.Normalize(candidate.GoblinType),
                 $"Template={templateName}",
                 $"Kind={evidenceKind}");
+        }
+
+        private static string PortApplyMinimapColorDisambiguation(
+            GoblinEvidenceTemplateRequirement template,
+            GoblinEvidenceTemplateMatch match)
+        {
+            if (!PortNormalizeGoblinObservationSource(template.Source).Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
+                !PortGoblinTypeUsesTreasureOdiousMinimapColor(template.GoblinType) ||
+                string.IsNullOrWhiteSpace(match.MinimapColor.ClassifiedGoblinType))
+            {
+                return template.GoblinType;
+            }
+
+            if (!match.MinimapColor.ClassifiedGoblinType.Equals(template.GoblinType, StringComparison.OrdinalIgnoreCase))
+            {
+                AppLogger.Info(
+                    "GoblinEvidenceMinimapColorOverride: " +
+                    $"templateGoblinType={PortLogField(template.GoblinType)}; " +
+                    $"colorGoblinType={PortLogField(match.MinimapColor.ClassifiedGoblinType)}; " +
+                    $"templateName={PortLogField(template.FileName)}; " +
+                    $"yellowPixels={match.MinimapColor.YellowPixels}; " +
+                    $"greenPixels={match.MinimapColor.GreenPixels}; " +
+                    $"purplePixels={match.MinimapColor.PurplePixels}; " +
+                    $"coloredPixels={match.MinimapColor.ColoredPixels}; " +
+                    $"matchPoint={FormatPoint(match.MatchPoint)}; " +
+                    $"screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}");
+            }
+
+            return match.MinimapColor.ClassifiedGoblinType;
+        }
+
+        private static bool PortGoblinTypeUsesTreasureOdiousMinimapColor(string goblinType)
+        {
+            string normalized = GoblinTypeNormalizer.Normalize(goblinType);
+            return normalized.Equals("Treasure Goblin", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Equals("Odious Collector", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string PortMinimapColorNotes(
+            GoblinEvidenceTemplateRequirement template,
+            GoblinEvidenceTemplateMatch match)
+        {
+            if (!PortNormalizeGoblinObservationSource(template.Source).Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
+                !PortGoblinTypeUsesTreasureOdiousMinimapColor(template.GoblinType))
+            {
+                return "";
+            }
+
+            if (string.IsNullOrWhiteSpace(match.MinimapColor.ClassifiedGoblinType) &&
+                match.MinimapColor.ColoredPixels == 0)
+            {
+                return "";
+            }
+
+            return $"; MinimapColorType={match.MinimapColor.ClassifiedGoblinType}; MinimapYellowPixels={match.MinimapColor.YellowPixels}; MinimapGreenPixels={match.MinimapColor.GreenPixels}; MinimapPurplePixels={match.MinimapColor.PurplePixels}; MinimapColoredPixels={match.MinimapColor.ColoredPixels}";
+        }
+
+        private static GoblinMinimapColorClassification PortClassifyTreasureOdiousMinimapColor(
+            Bitmap screenshot,
+            Point matchPoint,
+            Size templateSize)
+        {
+            Rectangle matchRect = new(matchPoint, templateSize);
+            Rectangle screenRect = new(Point.Empty, screenshot.Size);
+            matchRect = Rectangle.Intersect(screenRect, matchRect);
+            if (matchRect.Width <= 0 || matchRect.Height <= 0)
+            {
+                return GoblinMinimapColorClassification.Empty;
+            }
+
+            int yellowPixels = 0;
+            int greenPixels = 0;
+            int purplePixels = 0;
+            int coloredPixels = 0;
+            for (int y = matchRect.Top; y < matchRect.Bottom; y++)
+            {
+                for (int x = matchRect.Left; x < matchRect.Right; x++)
+                {
+                    Color color = screenshot.GetPixel(x, y);
+                    PortRgbToHsv(color, out double hue, out double saturation, out double value);
+                    if (value < 0.20 || saturation < 0.25)
+                    {
+                        continue;
+                    }
+
+                    coloredPixels++;
+                    if (hue >= 35 && hue <= 75)
+                    {
+                        yellowPixels++;
+                    }
+                    else if (hue >= 80 && hue <= 155)
+                    {
+                        greenPixels++;
+                    }
+                    else if (hue >= 250 && hue <= 320)
+                    {
+                        purplePixels++;
+                    }
+                }
+            }
+
+            const int minimumDominantPixels = 45;
+            const double dominanceRatio = 2.0;
+            string classifiedGoblinType = "";
+            if (yellowPixels >= minimumDominantPixels && yellowPixels >= greenPixels * dominanceRatio)
+            {
+                classifiedGoblinType = "Treasure Goblin";
+            }
+            else if (greenPixels >= minimumDominantPixels && greenPixels >= yellowPixels * dominanceRatio)
+            {
+                classifiedGoblinType = "Odious Collector";
+            }
+
+            return new GoblinMinimapColorClassification(
+                classifiedGoblinType,
+                yellowPixels,
+                greenPixels,
+                purplePixels,
+                coloredPixels);
+        }
+
+        private static void PortRgbToHsv(Color color, out double hue, out double saturation, out double value)
+        {
+            double red = color.R / 255.0;
+            double green = color.G / 255.0;
+            double blue = color.B / 255.0;
+            double max = Math.Max(red, Math.Max(green, blue));
+            double min = Math.Min(red, Math.Min(green, blue));
+            double delta = max - min;
+
+            if (delta == 0)
+            {
+                hue = 0;
+            }
+            else if (max == red)
+            {
+                hue = 60 * (((green - blue) / delta) % 6);
+            }
+            else if (max == green)
+            {
+                hue = 60 * (((blue - red) / delta) + 2);
+            }
+            else
+            {
+                hue = 60 * (((red - green) / delta) + 4);
+            }
+
+            if (hue < 0)
+            {
+                hue += 360;
+            }
+
+            saturation = max == 0 ? 0 : delta / max;
+            value = max;
         }
 
         private static string PortGoblinEvidenceNoteValue(string notes, string key)

@@ -108,6 +108,8 @@
 - `GoblinEvidenceCandidateCheck source=Minimap` includes template name, goblin type, calibrated scan region, best confidence, threshold, match point, screen match point, and template size
 - `GoblinEvidenceCandidateCheck source=Journal` includes template coverage percentage and `journalDiagnosis`, including full-region-template guidance when applicable
 - Journal matches remain primary when Journal and Minimap evidence both match in the same scan; Minimap is logged as supporting evidence in that case
+- Treasure Goblin and Odious Collector minimap matches use the targeted color disambiguation pass; yellow-dominant patches report Treasure Goblin, green-dominant patches report Odious Collector, and overrides log `GoblinEvidenceMinimapColorOverride`
+- Treasure/Odious minimap candidate notes include `MinimapYellowPixels`, `MinimapGreenPixels`, `MinimapPurplePixels`, and `MinimapColoredPixels`
 - `JournalEngagedAccepted` logs when a fresh Engaged journal template anchors the current encounter
 - `JournalKilledIgnoredNoRecentEngaged` logs when a Killed-only journal template matches without a recent same-goblin/same-area Engaged line
 - `JournalKilledAcceptedAfterEngaged` logs when a Killed-only journal template is accepted after a recent same-goblin/same-area Engaged line
@@ -145,6 +147,7 @@
 - Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`
 - Evidence whose first-seen timestamp ages past the freshness window suppresses with `GoblinAutoCountSuppressed reason=StaleEvidence`
 - Accepted automatic counts show a no-activate notification with area, goblin type, and current total
+- Automatic Treasure/Odious counts use the color-disambiguated goblin type when the accepted source is Minimap
 - Reset Stats and New Game clear automatic-count evidence signature state
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`

@@ -39,7 +39,28 @@ namespace GoblinFarmer
         double Confidence,
         System.Drawing.Point MatchPoint,
         System.Drawing.Point ScreenMatchPoint,
-        System.Drawing.Size TemplateSize);
+        System.Drawing.Size TemplateSize,
+        GoblinMinimapColorClassification MinimapColor)
+    {
+        public GoblinEvidenceTemplateMatch(
+            double confidence,
+            System.Drawing.Point matchPoint,
+            System.Drawing.Point screenMatchPoint,
+            System.Drawing.Size templateSize)
+            : this(confidence, matchPoint, screenMatchPoint, templateSize, GoblinMinimapColorClassification.Empty)
+        {
+        }
+    }
+
+    internal readonly record struct GoblinMinimapColorClassification(
+        string ClassifiedGoblinType,
+        int YellowPixels,
+        int GreenPixels,
+        int PurplePixels,
+        int ColoredPixels)
+    {
+        public static GoblinMinimapColorClassification Empty { get; } = new("", 0, 0, 0, 0);
+    }
 
     internal static class GoblinEvidenceScanRegions
     {

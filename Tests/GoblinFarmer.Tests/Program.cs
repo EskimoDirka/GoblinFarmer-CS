@@ -40,6 +40,7 @@ Run("Witch Doctor combat uses mouse wheel and not held-left mode", TestWitchDoct
 Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGameClickPolicyBlocksInGameSignals);
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
+Run("Goblin minimap color disambiguates Treasure and Odious", TestGoblinMinimapColorDisambiguatesTreasureAndOdious);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
 Run("Debug package limits failure and debug screenshots by default", TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault);
 Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
@@ -721,6 +722,22 @@ static void TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet()
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Blood Thief" && template.Kind == GoblinEvidenceTemplateKind.JournalKilled), "source templates should accept Blood Thief killed journal evidence");
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Gilded Baron" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Gilded Baron minimap evidence");
     AssertTrue(catalog.Templates.Any(template => template.GoblinType == "Menagerist" && template.Kind == GoblinEvidenceTemplateKind.Minimap), "source templates should include Menagerist minimap evidence");
+}
+
+static void TestGoblinMinimapColorDisambiguatesTreasureAndOdious()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+
+    AssertTrue(evidenceModelSource.Contains("GoblinMinimapColorClassification", StringComparison.Ordinal), "minimap template matches should carry color classification data");
+    AssertTrue(evidenceSource.Contains("PortApplyMinimapColorDisambiguation(bestTemplate, bestMatch)", StringComparison.Ordinal), "minimap candidates should apply color disambiguation before creating the observation candidate");
+    AssertTrue(evidenceSource.Contains("GoblinEvidenceMinimapColorOverride", StringComparison.Ordinal), "Treasure/Odious minimap color overrides should be logged");
+    AssertTrue(evidenceSource.Contains("PortGoblinTypeUsesTreasureOdiousMinimapColor", StringComparison.Ordinal), "color override should be scoped to the Treasure/Odious pair");
+    AssertTrue(evidenceSource.Contains("classifiedGoblinType = \"Treasure Goblin\"", StringComparison.Ordinal), "yellow minimap matches should classify as Treasure Goblin");
+    AssertTrue(evidenceSource.Contains("classifiedGoblinType = \"Odious Collector\"", StringComparison.Ordinal), "green minimap matches should classify as Odious Collector");
+    AssertTrue(evidenceSource.Contains("MinimapYellowPixels", StringComparison.Ordinal), "candidate notes should include minimap yellow pixel diagnostics");
+    AssertTrue(evidenceSource.Contains("MinimapGreenPixels", StringComparison.Ordinal), "candidate notes should include minimap green pixel diagnostics");
 }
 
 static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()

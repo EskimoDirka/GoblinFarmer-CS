@@ -129,12 +129,16 @@
 * [x] Review `GoblinFarmer_Debug_20260606_090045.zip` for the VS Debug checkbox toggle, New Tristram block, Teleport Next no-route notification, fresh Gem Hoarder auto-count, no second Gem Hoarder count after leave/return, and the failed old-evidence auto-count arming expectation.
 * [x] Record automatic-count evidence signatures even while Auto Count is disabled so later enabling the gate can suppress already-visible evidence with `EvidenceSeenBeforeAutoCountEnabled`.
 * [x] Stabilize automatic-count evidence signatures so template/kind identity is preserved while confidence and match-point drift are ignored.
-* [ ] With Automatic Counting off, kill/observe a goblin, then turn Automatic Counting on while the old visible observation remains; confirm it suppresses with `EvidenceSeenBeforeAutoCountEnabled` and does not increment.
-* [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification.
+* [x] Review `GoblinFarmer_Debug_20260606_092132.zip` for the old-evidence toggle-on validation, fresh Leoric's Hunting Grounds auto-count, no second count after leaving/returning, and the Treasure Goblin/Odious Collector minimap mismatch.
+* [x] With Automatic Counting off, kill/observe a goblin, then turn Automatic Counting on while the old visible observation remains; confirm it suppresses with `EvidenceSeenBeforeAutoCountEnabled` and does not increment.
+* [x] Add targeted minimap color disambiguation for the known Treasure Goblin / Odious Collector mismatch pair.
+* [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
 * [x] Press Teleport Next when no queued/next route target exists and confirm the no-route notification appears.
 * [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
+* [ ] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now logs `GoblinEvidenceMinimapColorOverride` and displays/counts as Treasure Goblin.
+* [ ] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
