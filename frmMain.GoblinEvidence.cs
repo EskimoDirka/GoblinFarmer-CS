@@ -312,6 +312,8 @@ namespace GoblinFarmer
             GoblinEvidenceTemplateMatch BestMatch);
 
         private sealed record GoblinJournalEvidenceSeenState(
+            string GoblinType,
+            string AreaKey,
             DateTime FirstSeenUtc,
             DateTime LastSeenUtc);
 
@@ -403,23 +405,25 @@ namespace GoblinFarmer
             acceptedCandidate = null;
             DateTime nowUtc = DateTime.UtcNow;
             string goblinType = GoblinTypeNormalizer.Normalize(template.GoblinType);
-            string freshnessKey = $"{template.Kind}|{goblinType}";
-            string staleSignature = PortJournalEvidenceStaleSignature(template, goblinType, match, portLastConfirmedLocation);
+            string journalLineSignature = PortJournalEvidenceLineSignature(template, goblinType);
             DateTime firstSeenUtc;
+            string firstSeenAreaKey = "";
             GoblinJournalEngagedState? recentEngaged = null;
+            bool isEngagedSignal = template.Kind == GoblinEvidenceTemplateKind.JournalEngaged ||
+                template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled;
 
             lock (portGoblinEvidenceLock)
             {
-                if (!portJournalEvidenceSeenByKey.TryGetValue(freshnessKey, out GoblinJournalEvidenceSeenState? seenState) ||
-                    nowUtc - seenState.LastSeenUtc > GoblinJournalEvidenceFreshWindow)
+                if (!portJournalEvidenceSeenByKey.TryGetValue(journalLineSignature, out GoblinJournalEvidenceSeenState? seenState))
                 {
                     firstSeenUtc = nowUtc;
-                    portJournalEvidenceSeenByKey[freshnessKey] = new GoblinJournalEvidenceSeenState(firstSeenUtc, nowUtc);
+                    portJournalEvidenceSeenByKey[journalLineSignature] = new GoblinJournalEvidenceSeenState(goblinType, "", firstSeenUtc, nowUtc);
                 }
                 else
                 {
                     firstSeenUtc = seenState.FirstSeenUtc;
-                    portJournalEvidenceSeenByKey[freshnessKey] = seenState with { LastSeenUtc = nowUtc };
+                    firstSeenAreaKey = seenState.AreaKey;
+                    portJournalEvidenceSeenByKey[journalLineSignature] = seenState with { LastSeenUtc = nowUtc };
                 }
 
                 if (portRecentJournalEngagedByGoblinType.TryGetValue(goblinType, out GoblinJournalEngagedState? state))
@@ -429,12 +433,10 @@ namespace GoblinFarmer
             }
 
             TimeSpan firstSeenAge = nowUtc - firstSeenUtc;
-            bool isEngagedSignal = template.Kind == GoblinEvidenceTemplateKind.JournalEngaged ||
-                template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled;
             if (isEngagedSignal)
             {
                 bool staleSuppressionActive = !GoblinJournalFreshnessPolicy.IsFresh(firstSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow) &&
-                    PortTryTouchStaleSuppressedJournalEvidence(staleSignature, nowUtc);
+                    PortTryTouchStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
                 if (staleSuppressionActive)
                 {
                     PortLogJournalEvidenceFreshnessDiagnostic(
@@ -442,7 +444,7 @@ namespace GoblinFarmer
                         template,
                         match,
                         portLastConfirmedLocation,
-                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
+                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(firstSeenAreaKey)}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
                     return false;
                 }
             }
@@ -453,15 +455,26 @@ namespace GoblinFarmer
 
             if (isEngagedSignal)
             {
+                lock (portGoblinEvidenceLock)
+                {
+                    if (portJournalEvidenceSeenByKey.TryGetValue(journalLineSignature, out GoblinJournalEvidenceSeenState? seenState) &&
+                        string.IsNullOrWhiteSpace(seenState.AreaKey) &&
+                        !string.IsNullOrWhiteSpace(areaKey))
+                    {
+                        firstSeenAreaKey = areaKey;
+                        portJournalEvidenceSeenByKey[journalLineSignature] = seenState with { AreaKey = areaKey };
+                    }
+                }
+
                 if (!GoblinJournalFreshnessPolicy.IsFresh(firstSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
                 {
-                    PortRememberStaleSuppressedJournalEvidence(staleSignature, nowUtc);
+                    PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalEngagedIgnoredStale",
                         template,
                         match,
                         displayArea,
-                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
+                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(firstSeenAreaKey)}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
                     return false;
                 }
 
@@ -485,7 +498,7 @@ namespace GoblinFarmer
 
             if (template.Kind == GoblinEvidenceTemplateKind.JournalKilled)
             {
-                string killedSignature = PortJournalEvidenceStaleSignature(template, goblinType, match, areaKey);
+                string killedSignature = PortJournalEvidenceLineSignature(template, goblinType);
                 GoblinJournalKilledState killedState = PortRememberJournalKilledEvidence(killedSignature, goblinType, areaKey, nowUtc);
                 TimeSpan killedFirstSeenAge = nowUtc - killedState.FirstSeenUtc;
                 bool killedFreshInCurrentArea = GoblinJournalFreshnessPolicy.KilledIsFresh(
@@ -561,8 +574,7 @@ namespace GoblinFarmer
         {
             lock (portGoblinEvidenceLock)
             {
-                if (!portJournalKilledEvidenceSeenBySignature.TryGetValue(signature, out GoblinJournalKilledState? state) ||
-                    nowUtc - state.LastSeenUtc > GoblinJournalEvidenceFreshWindow)
+                if (!portJournalKilledEvidenceSeenBySignature.TryGetValue(signature, out GoblinJournalKilledState? state))
                 {
                     state = new GoblinJournalKilledState(goblinType, areaKey, nowUtc, nowUtc);
                 }
@@ -576,21 +588,14 @@ namespace GoblinFarmer
             }
         }
 
-        private string PortJournalEvidenceStaleSignature(
+        private string PortJournalEvidenceLineSignature(
             GoblinEvidenceTemplateRequirement template,
-            string goblinType,
-            GoblinEvidenceTemplateMatch match,
-            string currentArea)
+            string goblinType)
         {
             return string.Join("|",
                 template.Kind,
                 goblinType,
-                template.FileName,
-                PortDisplayLocation(currentArea),
-                match.MatchPoint.X,
-                match.MatchPoint.Y,
-                match.TemplateSize.Width,
-                match.TemplateSize.Height);
+                template.FileName);
         }
 
         private bool PortTryTouchStaleSuppressedJournalEvidence(string signature, DateTime nowUtc)

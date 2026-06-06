@@ -69,8 +69,11 @@
 * [x] Reduce default post-New-Tristram repair settle to 50ms after reviewing debug package timings.
 * [x] Accept latest repair timing as good enough after reviewing a debug package; preserve reliability over further speed changes.
 * [x] Reduce salvage confirmation wait/post-slot delay and add per-slot salvage timing logs after reviewing `GoblinFarmer_Debug_20260606_040604.zip`.
+* [x] Replace the salvage per-slot confirmation wait helper with a fast bounded confirmation probe after reviewing `GoblinFarmer_Debug_20260606_042740.zip`.
+* [x] Add Kadala right-click timing diagnostics and reduce the Up Arrow click cadence.
 * [ ] Investigate repeated New Tristram repair workflow cancellations where the blacksmith menu did not become visible after one or two sent clicks.
-* [ ] Validate reduced salvage confirmation timing in the next repair/salvage run; latest pre-fix package showed 7 slots salvaged and total repair/salvage workflow around 7158ms.
+* [ ] Validate fast salvage confirmation timing in the next repair/salvage run; latest pre-fix package showed 12 slots salvaged and total salvage time around 7266ms.
+* [ ] Validate Kadala feels faster and logs `Kadala timing` start/active/stop summaries without causing unsafe clicks.
 
 ### Testing
 
@@ -81,12 +84,15 @@
 * [x] Review `GoblinFarmer_Debug_20260606_040604.zip` for the fresh Killed journal/manual gate issue.
 * [x] Allow manual `X` refresh to accept fresh same-area Killed-only journal evidence without enabling auto-count.
 * [x] Track first-seen/resolved-area state for Killed journal lines and suppress stale Killed lines.
+* [x] Review `GoblinFarmer_Debug_20260606_042740.zip` for stale journal reuse, Reset Stats cleanup, blocked-area priority, and town workflow timing.
+* [x] Make Engaged/Killed journal freshness signatures area-insensitive and match-point-insensitive so old visible journal text cannot refresh itself after moving areas or shifting rows.
 * [ ] Live-validate Last Observation visibly updates/clears during continuous scans without pressing `X`.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
-* [ ] Live-validate immediate manual `X` after a Killed journal line counts the recognized goblin type and logs `JournalKilledAcceptedFreshManual`.
+* [x] Live-validate immediate manual `X` after a Killed journal line counts the recognized goblin type and logs `JournalKilledAcceptedFreshManual`.
 * [ ] Live-validate old visible Killed journal lines suppress with `JournalKilledIgnoredStale` after the freshness window.
+* [ ] Live-validate old visible Engaged journal lines suppress with `JournalEngagedIgnoredStale` after the freshness window and do not create a fresh same-area observation after moving.
 * [ ] Live-validate `Reset Stats` clears suppression/observation state and allows a count again only after fresh evidence exists.
 * [ ] Live-validate blocked manual-count areas still suppress with `BlockedArea` even if goblin evidence is visible.
 * [ ] Live-validate salvage is faster with `Salvage timing` logs and no missed confirmation prompts.

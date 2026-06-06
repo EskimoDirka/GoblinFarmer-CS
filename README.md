@@ -119,7 +119,7 @@ No current observation
 
 GPH uses tracker active combat time only and calculates as soon as active combat time is greater than zero. `Reset Stats` clears the count, tracker active time, GPH, the in-memory counted-area duplicate guard, Goblin Evidence cooldowns, and Last Observation/manual observation reuse state; if combat is currently running, tracker active time restarts from the reset moment. Starting a new game clears the counted-area guard plus Goblin Evidence observation/cooldown state so the same area can be counted again in the next game with fresh evidence context.
 
-Accepted manual `X` counts show a no-activate notification for 5 seconds with the counted area, goblin type when known, and current total. Manual `X` presses that do not have fresh evidence in a resolved allowed area show `No fresh goblin observation to count.` instead.
+Accepted manual `X` counts show a no-activate notification for 5 seconds with the counted area, goblin type when known, and current total. Manual `X` presses that do not have fresh evidence in a resolved allowed area show `No fresh goblin observation to count.` instead. Old visible journal entries are treated by their first-seen evidence signature so moving to a new area cannot refresh stale journal text into a new manual count.
 
 ## Combat Profile Skill Setup
 
@@ -192,7 +192,7 @@ Debug tooling includes:
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is not enabled.
 - Count-based GoblinEvidence retention under `Debug\GoblinEvidence`, defaulting to the newest 250 files, plus bounded ObservationDiagnostics crop samples in debug packages.
-- Detailed launch, Start Game, teleport, repair, per-slot salvage timing, bounty, and Exit Game logs.
+- Detailed launch, Start Game, teleport, repair, per-slot salvage timing, Kadala timing, bounty, and Exit Game logs.
 
 Generate a debug package from the project root:
 

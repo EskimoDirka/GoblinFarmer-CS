@@ -13,6 +13,12 @@ namespace GoblinFarmer
                 bool backtickWasDown = false;
                 bool escapeWasDown = false;
                 long nextKadalaAt = 0;
+                bool kadalaWasDown = false;
+                long kadalaStartedAt = 0;
+                long nextKadalaSummaryAt = 0;
+                int kadalaClickCount = 0;
+                const int kadalaClickIntervalMs = 60;
+                const int kadalaClickHoldMs = 15;
                 Stopwatch sw = Stopwatch.StartNew();
 
                 while (portHotkeysRunning)
@@ -90,12 +96,33 @@ namespace GoblinFarmer
                         ForceReleaseAllRuntimeInputs("Diablo lost focus");
                     }
 
-                    if (chkKadala.Checked && (GetAsyncKeyState(PortVkUp) & 0x8000) != 0 && diabloActive && now >= nextKadalaAt)
+                    bool kadalaDown = chkKadala.Checked && (GetAsyncKeyState(PortVkUp) & 0x8000) != 0 && diabloActive;
+                    if (kadalaDown && !kadalaWasDown)
+                    {
+                        kadalaWasDown = true;
+                        kadalaStartedAt = now;
+                        nextKadalaSummaryAt = now + 1000;
+                        kadalaClickCount = 0;
+                        AppLogger.Info($"Kadala timing: started intervalMs={kadalaClickIntervalMs}; clickHoldMs={kadalaClickHoldMs}; diabloActive={diabloActive}");
+                    }
+                    else if (!kadalaDown && kadalaWasDown)
+                    {
+                        kadalaWasDown = false;
+                        AppLogger.Info($"Kadala timing: stopped clicks={kadalaClickCount}; elapsedMs={Math.Max(0, now - kadalaStartedAt)}; diabloActive={diabloActive}; enabled={chkKadala.Checked}");
+                    }
+
+                    if (kadalaDown && now >= nextKadalaAt)
                     {
                         PortRuntimeMouseDown(MOUSEEVENTF_RIGHTDOWN);
-                        Thread.Sleep(25);
+                        Thread.Sleep(kadalaClickHoldMs);
                         PortRuntimeMouseUp(MOUSEEVENTF_RIGHTUP);
-                        nextKadalaAt = now + 100;
+                        kadalaClickCount++;
+                        nextKadalaAt = now + kadalaClickIntervalMs;
+                        if (now >= nextKadalaSummaryAt)
+                        {
+                            AppLogger.Info($"Kadala timing: active clicks={kadalaClickCount}; elapsedMs={Math.Max(0, now - kadalaStartedAt)}; intervalMs={kadalaClickIntervalMs}; clickHoldMs={kadalaClickHoldMs}");
+                            nextKadalaSummaryAt = now + 1000;
+                        }
                     }
 
                     Thread.Sleep(15);

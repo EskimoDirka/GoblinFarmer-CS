@@ -103,9 +103,11 @@
 - `JournalKilledAcceptedAfterEngaged` logs when a Killed-only journal template is accepted after a recent same-goblin/same-area Engaged line
 - Immediate manual `X` refresh can accept fresh same-area Killed-only journal evidence and logs `JournalKilledAcceptedFreshManual`
 - Stale visible Killed journal lines suppress with `JournalKilledIgnoredStale` after the freshness window and do not satisfy manual `X`
-- Killed journal freshness state tracks first-seen timestamp and resolved area, and Reset Stats/New Game clear it
+- Killed journal freshness state tracks first-seen timestamp and first resolved area, and Reset Stats/New Game clear it
 - `JournalEngagedIgnoredStale` logs when an old visible Engaged journal line is beyond the freshness window
-- Stale visible Engaged journal line signatures are suppressed until the line disappears or changes, and repeated `JournalEngagedIgnoredStale` logs are throttled
+- Stale visible Engaged/Killed journal line signatures are based on evidence kind, goblin type, and template file, not current area or match point
+- Re-detecting the same old visible Engaged/Killed journal line after moving areas or after a journal-row shift does not refresh first-seen time
+- Stale visible Engaged journal line signatures suppress with throttled `JournalEngagedIgnoredStale` and do not produce eligible observations
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - Observation candidates report the matched goblin type when a Journal or Minimap template passes confidence
@@ -164,8 +166,10 @@
 ## Town And Exit
 - Repair complete captures paired Diablo/App success screenshots
 - Salvage complete or skipped captures paired Diablo/App success screenshots
-- Salvage logs per-slot `Salvage timing` with confirmation wait, next-slot scan time, slot elapsed time, and total salvage elapsed time
-- Salvage logs `Salvage timing summary` with slots clicked, total elapsed time, confirmation timeout, and post-slot delay
+- Salvage logs per-slot `Salvage timing` with confirmation wait, confirmation scan count, next-slot scan time, slot elapsed time, and total salvage elapsed time
+- Salvage logs `Salvage timing summary` with slots clicked, total elapsed time, confirmation timeout, fast-probe attempts/delay, and post-slot delay
 - Salvage confirmation remains safe after the reduced confirmation wait; no confirmation prompts should be left open
+- Up Arrow Kadala logs `Kadala timing: started`, throttled `Kadala timing: active`, and `Kadala timing: stopped`
+- Up Arrow Kadala feels faster after the shorter right-click cadence and does not interfere with Diablo focus or automation safety
 - Leave Game main menu confirmation captures paired Diablo/App success screenshots
 - Exit Game complete captures paired Diablo/App success screenshots

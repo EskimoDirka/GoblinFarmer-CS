@@ -9,7 +9,9 @@ namespace GoblinFarmer
     {
         private const int PortRepairStationClickAttemptTimeoutMs = 1500;
         private const int PortRepairWorkflowTimeoutMs = 20000;
-        private const int PortSalvageConfirmationTimeoutMs = 300;
+        private const int PortSalvageConfirmationTimeoutMs = 160;
+        private const int PortSalvageConfirmationFastAttempts = 4;
+        private const int PortSalvageConfirmationFastDelayMs = 35;
         private const int PortSalvagePostSlotDelayMs = 50;
 
         private sealed record PortRepairReadinessResult(bool VendorPanelAlreadyVisible, bool VendorPanelBecameVisible, bool NewTristramConfirmed, long ReadinessElapsedMs, long PostArrivalWaitMs);
@@ -151,8 +153,7 @@ namespace GoblinFarmer
                 Stopwatch slotPerf = Stopwatch.StartNew();
                 PortSafeLeftClick(slot.Value);
                 salvagedCount++;
-                bool confirmationFound = PortWaitForImageInDiablo(Img("Salvage", "Salvage Confirmation Button.png"), token, PortSalvageConfirmationTimeoutMs, PortVendorUiConfidence);
-                long confirmationWaitMs = slotPerf.ElapsedMilliseconds;
+                bool confirmationFound = PortWaitForSalvageConfirmationFast(token, out long confirmationWaitMs, out int confirmationScans);
                 if (confirmationFound)
                 {
                     PortPressKey(PortVkReturn);
@@ -161,7 +162,7 @@ namespace GoblinFarmer
                 PortSleep(token, PortSalvagePostSlotDelayMs);
                 Stopwatch nextSlotPerf = Stopwatch.StartNew();
                 slot = PortFirstFilledInventorySlot();
-                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; nextSlotScanMs={nextSlotPerf.ElapsedMilliseconds}; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs={nextSlotPerf.ElapsedMilliseconds}; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
             }
 
             if (closeAfterSalvage)
@@ -171,9 +172,40 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep(salvagedCount == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {salvagedCount} slots clicked");
-            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}");
+            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
+        }
+
+        private bool PortWaitForSalvageConfirmationFast(CancellationToken token, out long elapsedMs, out int scans)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            scans = 0;
+            string confirmationImage = Img("Salvage", "Salvage Confirmation Button.png");
+
+            for (int attempt = 0; attempt < PortSalvageConfirmationFastAttempts && sw.ElapsedMilliseconds < PortSalvageConfirmationTimeoutMs; attempt++)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    elapsedMs = sw.ElapsedMilliseconds;
+                    return false;
+                }
+
+                scans++;
+                if (PortImageVisibleInDiablo(confirmationImage, PortVendorUiConfidence))
+                {
+                    elapsedMs = sw.ElapsedMilliseconds;
+                    return true;
+                }
+
+                if (attempt + 1 < PortSalvageConfirmationFastAttempts)
+                {
+                    PortSleep(token, PortSalvageConfirmationFastDelayMs);
+                }
+            }
+
+            elapsedMs = sw.ElapsedMilliseconds;
+            return false;
         }
 
         private bool PortSalvageInventory(CancellationToken token)

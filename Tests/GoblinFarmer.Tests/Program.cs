@@ -59,6 +59,7 @@ Run("Goblin fresh killed journal can satisfy manual evidence gate", TestGoblinFr
 Run("Goblin manual refresh logs fresh and stale killed journal decisions", TestGoblinManualRefreshLogsFreshAndStaleKilledJournalDecisions);
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
+Run("Kadala hotkey uses faster cadence and timing logs", TestKadalaHotkeyUsesFasterCadenceAndTimingLogs);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
 Run("Goblin area detection uses strong route-context runner-up", TestGoblinAreaDetectionUsesStrongRouteContextRunnerUp);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
@@ -886,6 +887,40 @@ static string FindRepositoryRootForTests()
     }
 
     throw new DirectoryNotFoundException("Could not locate GoblinFarmer source root from test output directory.");
+}
+
+static string ExtractMethodBody(string source, string methodName)
+{
+    int methodIndex = source.IndexOf(methodName, StringComparison.Ordinal);
+    if (methodIndex < 0)
+    {
+        throw new InvalidOperationException($"Could not find method {methodName}.");
+    }
+
+    int openBrace = source.IndexOf('{', methodIndex);
+    if (openBrace < 0)
+    {
+        throw new InvalidOperationException($"Could not find body for method {methodName}.");
+    }
+
+    int depth = 0;
+    for (int i = openBrace; i < source.Length; i++)
+    {
+        if (source[i] == '{')
+        {
+            depth++;
+        }
+        else if (source[i] == '}')
+        {
+            depth--;
+            if (depth == 0)
+            {
+                return source.Substring(openBrace, i - openBrace + 1);
+            }
+        }
+    }
+
+    throw new InvalidOperationException($"Could not extract body for method {methodName}.");
 }
 
 static void TestStartGameClickPolicyBlocksInGameSignals()
@@ -1776,6 +1811,14 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     AssertTrue(GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(matchingEngaged, "Cathedral Level 1", now, window), "Killed journal evidence should be accepted after a recent same-area Engaged line");
     AssertFalse(GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(wrongAreaEngaged, "Cathedral Level 1", now, window), "Killed journal evidence should ignore stale/wrong-area Engaged lines");
     AssertFalse(GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(null, "Cathedral Level 1", now, window), "Killed journal evidence should be ignored without a recent Engaged anchor");
+
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string signatureMethod = ExtractMethodBody(evidenceSource, "PortJournalEvidenceLineSignature");
+    AssertTrue(evidenceSource.Contains("PortJournalEvidenceLineSignature", StringComparison.Ordinal), "journal freshness should use a line signature, not current area as the freshness key");
+    AssertFalse(signatureMethod.Contains("PortDisplayLocation", StringComparison.Ordinal), "journal line freshness signatures must not include current area, or old visible lines can become fresh after moving");
+    AssertFalse(signatureMethod.Contains("MatchPoint", StringComparison.Ordinal), "journal line freshness signatures must not include match point, or old visible lines can become fresh after journal scroll shifts");
+    AssertFalse(evidenceSource.Contains("nowUtc - state.LastSeenUtc > GoblinJournalEvidenceFreshWindow", StringComparison.Ordinal), "Killed journal first-seen state should not reset just because the same visible line matched again later");
 }
 
 static void TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate()
@@ -1829,10 +1872,24 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     string repoRoot = FindRepositoryRootForTests();
     string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
 
-    AssertTrue(townSource.Contains("PortSalvageConfirmationTimeoutMs = 300", StringComparison.Ordinal), "salvage confirmation wait should be bounded below the previous 800ms delay");
+    AssertTrue(townSource.Contains("PortSalvageConfirmationTimeoutMs = 160", StringComparison.Ordinal), "salvage confirmation wait should be bounded below the previous 300ms helper wait");
+    AssertTrue(townSource.Contains("PortWaitForSalvageConfirmationFast", StringComparison.Ordinal), "salvage should use a fast confirmation probe instead of the repair polling wait helper");
+    AssertTrue(townSource.Contains("confirmationScans=", StringComparison.Ordinal), "salvage should log confirmation scan counts for timing diagnosis");
     AssertTrue(townSource.Contains("PortSalvagePostSlotDelayMs = 50", StringComparison.Ordinal), "salvage post-slot delay should be short but explicit");
     AssertTrue(townSource.Contains("Salvage timing: slotIndex=", StringComparison.Ordinal), "salvage should log per-slot timing");
     AssertTrue(townSource.Contains("Salvage timing summary:", StringComparison.Ordinal), "salvage should log a summary timing line");
+}
+
+static void TestKadalaHotkeyUsesFasterCadenceAndTimingLogs()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string hotkeysSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Hotkeys.cs"));
+
+    AssertTrue(hotkeysSource.Contains("const int kadalaClickIntervalMs = 60", StringComparison.Ordinal), "Kadala hotkey should click faster than the previous 100ms cadence");
+    AssertTrue(hotkeysSource.Contains("const int kadalaClickHoldMs = 15", StringComparison.Ordinal), "Kadala hotkey should use a short explicit right-click hold");
+    AssertTrue(hotkeysSource.Contains("Kadala timing: started", StringComparison.Ordinal), "Kadala hotkey should log timing at start");
+    AssertTrue(hotkeysSource.Contains("Kadala timing: stopped", StringComparison.Ordinal), "Kadala hotkey should log timing at stop");
+    AssertTrue(hotkeysSource.Contains("Kadala timing: active", StringComparison.Ordinal), "Kadala hotkey should log throttled active timing");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()
