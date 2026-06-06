@@ -377,7 +377,7 @@ namespace GoblinFarmer
                 {
                     portDisplayedGoblinObservation = observation;
                     portDisplayedGoblinObservationStatus = "";
-                    portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
+                    portDisplayedGoblinObservationStickyUntilUtc = DateTime.UtcNow + PortAutomaticGoblinObservationDisplayHold;
                 }
                 else
                 {
@@ -390,7 +390,7 @@ namespace GoblinFarmer
             AppLogger.Info($"GoblinTracker: GoblinObservationSummary source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState} areaLimit={guardResult.AreaLimit} currentAreaCount={guardResult.AreaCount}");
             if (displayUpdated)
             {
-                AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState}");
+                AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState} displayHoldSeconds={PortAutomaticGoblinObservationDisplayHold.TotalSeconds:0}");
             }
             else
             {
@@ -657,10 +657,10 @@ namespace GoblinFarmer
             {
                 previousObservation = portDisplayedGoblinObservation;
                 previousStatus = portDisplayedGoblinObservationStatus;
-                if (PortShouldPreserveDisplayedManualCountObservation(previousObservation, normalizedReason, nowUtc))
+                if (PortShouldPreserveDisplayedGoblinObservation(previousObservation, normalizedReason, nowUtc, out string preserveKind))
                 {
                     double remainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - nowUtc).TotalMilliseconds);
-                    AppLogger.Info($"GoblinTracker: LastObservationClearSkipped reason={PortLogField(normalizedReason)} preservedSource={PortLogField(previousObservation?.Source ?? "")} preservedGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} preservedReason={PortLogField(previousObservation?.Reason ?? "")} remainingMs={remainingMs:0}");
+                    AppLogger.Info($"GoblinTracker: LastObservationClearSkipped reason={PortLogField(normalizedReason)} preserveKind={PortLogField(preserveKind)} preservedSource={PortLogField(previousObservation?.Source ?? "")} preservedGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} preservedReason={PortLogField(previousObservation?.Reason ?? "")} remainingMs={remainingMs:0}");
                     return;
                 }
 
@@ -687,12 +687,47 @@ namespace GoblinFarmer
                 reason.Equals("NoCandidate", StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool PortShouldPreserveDisplayedGoblinObservation(
+            GoblinObservationRecord? observation,
+            string reason,
+            DateTime nowUtc,
+            out string preserveKind)
+        {
+            preserveKind = "";
+            if (PortShouldPreserveDisplayedManualCountObservation(observation, reason, nowUtc))
+            {
+                preserveKind = "ManualCountDisplayHold";
+                return true;
+            }
+
+            if (!PortAutomaticObservationDisplayHoldActive(observation, nowUtc))
+            {
+                return false;
+            }
+
+            if (reason.Equals("No current observation", StringComparison.OrdinalIgnoreCase) ||
+                reason.Equals("NoCandidate", StringComparison.OrdinalIgnoreCase))
+            {
+                preserveKind = "ObservationDisplayHold";
+                return true;
+            }
+
+            return false;
+        }
+
         private bool PortManualCountDisplayHoldActive(GoblinObservationRecord? observation, DateTime nowUtc)
         {
             return observation != null &&
                 nowUtc < portDisplayedGoblinObservationStickyUntilUtc &&
                 string.Equals(observation.Source, "ManualHotkey", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(observation.Reason, "Counted", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool PortAutomaticObservationDisplayHoldActive(GoblinObservationRecord? observation, DateTime nowUtc)
+        {
+            return observation != null &&
+                nowUtc < portDisplayedGoblinObservationStickyUntilUtc &&
+                !string.Equals(observation.Source, "ManualHotkey", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string PortGoblinObservationLabel(GoblinObservationRecord? observation, string status)

@@ -4,7 +4,7 @@ namespace GoblinFarmer
 {
     public partial class frmMain
     {
-        private const int GoblinEvidenceScanIntervalMs = 1500;
+        private const int GoblinEvidenceScanIntervalMs = 1000;
         private const int GoblinEvidenceObservationDiagnosticRetentionCount = 24;
         private static readonly TimeSpan GoblinEvidenceCooldown = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan GoblinJournalEvidenceFreshWindow = TimeSpan.FromSeconds(45);

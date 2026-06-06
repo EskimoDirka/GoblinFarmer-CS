@@ -97,6 +97,9 @@
 * [x] Review `GoblinFarmer_Debug_20260606_063031.zip` for Release UI validation and the Observation Mode disabled blocker.
 * [x] Enable Automation Observation Mode by default in normal Release through `GoblinTracker.EnableObservationMode=true` without enabling automatic counting.
 * [x] Add startup/config diagnostics for Observation Mode enablement and regression coverage so Release scanning does not require Debug Mode.
+* [x] Review `GoblinFarmer_Debug_20260606_064757.zip` for enabled Release Observation Mode, Journal observation evidence, and GoblinCount staying unchanged without manual `X`.
+* [x] Reduce the Observation Mode scan interval to improve Last Observation responsiveness while keeping diagnostic crops/package size bounded.
+* [x] Add a 10-second display hold for automatic Journal/Minimap Last Observation entries so one no-candidate scan does not clear fresh evidence immediately.
 * [x] Update AGENTS.md to require next test steps and commit/push follow-up unless otherwise specified.
 * [x] Add AGENTS workflow-maintenance guidance backed by `Docs/Worflow blocklist.md`.
 * [x] Prepare v1.4.0 release metadata, release notes, README text, release checklist, and Inno Setup script metadata.
@@ -106,6 +109,8 @@
 * [ ] Live-validate normal Release startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True`.
 * [ ] Live-validate normal Release Diablo-active time produces `ObservationScanAttempted` instead of repeated `ObservationScanSkipped reason=ObservationModeDisabled`.
 * [ ] Live-validate Observation Mode updates Last Observation from Journal or Minimap evidence without pressing `X`, while GoblinCount remains unchanged.
+* [ ] Live-validate Last Observation appears faster after Journal/Minimap evidence is visible and scanner startup reports `intervalMs=1000`.
+* [ ] Live-validate automatic Journal/Minimap Last Observation remains readable for about 10 seconds after a valid observation, with no-candidate clears logging `LastObservationClearSkipped preserveKind=ObservationDisplayHold`.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.

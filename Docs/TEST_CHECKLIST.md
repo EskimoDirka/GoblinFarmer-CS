@@ -87,6 +87,7 @@
 - App/session startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True` by default in normal Release through `GoblinTracker.EnableObservationMode=true`
 - Existing AppSettings without `GoblinTracker.EnableObservationMode` migrate to the enabled default
 - Observation scanner logs `ObservationScanAttempted` while Diablo is active/focused and no automation workflow is running
+- Observation scanner startup reports `intervalMs=1000` so Last Observation feedback is more responsive during live goblin encounters
 - Normal Release Diablo-active scans do not repeatedly skip with `ObservationScanSkipped reason=ObservationModeDisabled` unless `GoblinTracker.EnableObservationMode=false` is explicitly configured
 - Observation scanner logs `ObservationScanSkipped` with a reason when Diablo/scanner conditions are not eligible
 - Observation scanner logs combat state, automation state, Diablo running/active state, current area, and cooldown state in scanner attempt/skip diagnostics
@@ -125,7 +126,8 @@
 - Observation Mode uses manual `X` route-context disambiguation and does not report PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan
 - Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
-- The Goblin Tracker UI clears Last Observation to a no-current/no-candidate state after scans or manual refreshes that find no current goblin evidence
+- Fresh Journal/Minimap Last Observation entries remain readable for about 10 seconds and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
+- The Goblin Tracker UI clears Last Observation to a no-current/no-candidate state after scans or manual refreshes that find no current goblin evidence once any active display hold has expired
 - Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for no-candidate, stale, missing-template, reset, or no-current states
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`

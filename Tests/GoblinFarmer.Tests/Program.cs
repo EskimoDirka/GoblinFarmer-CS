@@ -1847,8 +1847,12 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
 
     AssertTrue(sessionStatsSource.Contains("PortStartGoblinObservationScanner(\"Startup\")", StringComparison.Ordinal), "observation scanner should start outside combat at session initialization");
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdated", StringComparison.Ordinal), "valid observations should log LastObservationUpdated when the UI state changes");
+    AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinObservationDisplayHold", StringComparison.Ordinal), "automatic observations should stay readable briefly after the first no-candidate scan");
+    AssertTrue(sessionStatsSource.Contains("ObservationDisplayHold", StringComparison.Ordinal), "no-candidate clears should report when they preserve a recent automatic observation");
+    AssertTrue(sessionStatsSource.Contains("displayHoldSeconds={PortAutomaticGoblinObservationDisplayHold.TotalSeconds:0}", StringComparison.Ordinal), "automatic observation update logs should include the display hold duration");
     AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should visibly clear Last Observation");
+    AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 1000", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback");
 }
 
 static void TestGoblinObservationModeEnabledByDefaultInRelease()
@@ -1885,7 +1889,8 @@ static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
     AssertTrue(publishMethod.Contains("LastObservationUiRefreshRequested", StringComparison.Ordinal), "manual count display should log an immediate UI refresh request");
     AssertFalse(publishMethod.Contains("RecordGoblinObservation", StringComparison.Ordinal), "manual count display updates should not increment observation-only counters");
     AssertTrue(clearMethod.Contains("LastObservationClearSkipped", StringComparison.Ordinal), "no-candidate scanner clears should be skipped during the manual-count display hold");
-    AssertTrue(clearMethod.Contains("PortShouldPreserveDisplayedManualCountObservation", StringComparison.Ordinal), "Last Observation clearing should preserve recent accepted manual counts briefly");
+    AssertTrue(clearMethod.Contains("PortShouldPreserveDisplayedGoblinObservation", StringComparison.Ordinal), "Last Observation clearing should preserve recent accepted manual counts briefly");
+    AssertTrue(sessionStatsSource.Contains("PortShouldPreserveDisplayedManualCountObservation", StringComparison.Ordinal), "shared Last Observation clearing should still preserve recent accepted manual counts briefly");
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdateSkippedDuringManualHold", StringComparison.Ordinal), "scanner observation updates should not overwrite accepted manual counts during the display hold");
     AssertTrue(sessionStatsSource.Contains("PortManualCountDisplayHoldActive", StringComparison.Ordinal), "manual count display hold priority should be shared by clear and update paths");
 }
