@@ -41,6 +41,8 @@ Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGa
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
 Run("Goblin minimap color disambiguates Treasure and Odious", TestGoblinMinimapColorDisambiguatesTreasureAndOdious);
+Run("Goblin minimap color disambiguates Gilded and Malevolent", TestGoblinMinimapColorDisambiguatesGildedAndMalevolent);
+Run("Goblin automatic minimap counts require strong confidence", TestGoblinAutomaticMinimapCountsRequireStrongConfidence);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
 Run("Debug package limits failure and debug screenshots by default", TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault);
 Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
@@ -734,10 +736,35 @@ static void TestGoblinMinimapColorDisambiguatesTreasureAndOdious()
     AssertTrue(evidenceSource.Contains("PortApplyMinimapColorDisambiguation(bestTemplate, bestMatch)", StringComparison.Ordinal), "minimap candidates should apply color disambiguation before creating the observation candidate");
     AssertTrue(evidenceSource.Contains("GoblinEvidenceMinimapColorOverride", StringComparison.Ordinal), "Treasure/Odious minimap color overrides should be logged");
     AssertTrue(evidenceSource.Contains("PortGoblinTypeUsesTreasureOdiousMinimapColor", StringComparison.Ordinal), "color override should be scoped to the Treasure/Odious pair");
-    AssertTrue(evidenceSource.Contains("classifiedGoblinType = \"Treasure Goblin\"", StringComparison.Ordinal), "yellow minimap matches should classify as Treasure Goblin");
-    AssertTrue(evidenceSource.Contains("classifiedGoblinType = \"Odious Collector\"", StringComparison.Ordinal), "green minimap matches should classify as Odious Collector");
+    AssertTrue(evidenceSource.Contains("return \"Treasure Goblin\"", StringComparison.Ordinal), "yellow minimap matches should classify as Treasure Goblin");
+    AssertTrue(evidenceSource.Contains("return \"Odious Collector\"", StringComparison.Ordinal), "green minimap matches should classify as Odious Collector");
     AssertTrue(evidenceSource.Contains("MinimapYellowPixels", StringComparison.Ordinal), "candidate notes should include minimap yellow pixel diagnostics");
     AssertTrue(evidenceSource.Contains("MinimapGreenPixels", StringComparison.Ordinal), "candidate notes should include minimap green pixel diagnostics");
+}
+
+static void TestGoblinMinimapColorDisambiguatesGildedAndMalevolent()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+
+    AssertTrue(evidenceModelSource.Contains("OrangePixels", StringComparison.Ordinal), "minimap color diagnostics should track orange pixels for Malevolent Tormentor");
+    AssertTrue(evidenceSource.Contains("PortGoblinTypeUsesGildedMalevolentMinimapColor", StringComparison.Ordinal), "color override should be scoped to the Gilded/Malevolent pair");
+    AssertTrue(evidenceSource.Contains("return \"Gilded Baron\"", StringComparison.Ordinal), "yellow-dominant Gilded/Malevolent patches should classify as Gilded Baron");
+    AssertTrue(evidenceSource.Contains("return \"Malevolent Tormentor\"", StringComparison.Ordinal), "orange-dominant Gilded/Malevolent patches should classify as Malevolent Tormentor");
+    AssertTrue(evidenceSource.Contains("MinimapOrangePixels", StringComparison.Ordinal), "candidate notes should include minimap orange pixel diagnostics");
+}
+
+static void TestGoblinAutomaticMinimapCountsRequireStrongConfidence()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+
+    AssertTrue(evidenceModelSource.Contains("EvidenceConfidence", StringComparison.Ordinal), "observation records should carry evidence confidence into auto-count decisions");
+    AssertTrue(sessionSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidence = 0.90", StringComparison.Ordinal), "automatic minimap counts should require a stronger confidence than generic observation matching");
+    AssertTrue(sessionSource.Contains("MinimapConfidencePendingJournal", StringComparison.Ordinal), "low-confidence minimap auto-count attempts should suppress and wait for stronger evidence");
+    AssertTrue(sessionSource.Contains("minimapAutoCountMinConfidence", StringComparison.Ordinal), "auto-count diagnostics should report the minimap confidence gate");
 }
 
 static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()
@@ -2125,6 +2152,8 @@ static void TestTeleportNextNoRouteStateNotifiesUser()
     AssertTrue(hotkeysSource.Contains("Teleport Next skipped", StringComparison.Ordinal), "no-route Teleport Next state should show a player-visible notification");
     AssertTrue(hotkeysSource.Contains("No queued route target for current location.", StringComparison.Ordinal), "no-route Teleport Next notification should explain the route state");
     AssertTrue(routingSource.Contains("Ancient Waterway allows hotkey teleportation to Stinging Winds", StringComparison.Ordinal), "plain Ancient Waterway should allow the queued Stinging Winds Teleport Next hop");
+    AssertTrue(routingSource.Contains("Eastern Channel Level 2 allows hotkey teleportation to Stinging Winds", StringComparison.Ordinal), "Eastern Channel Level 2 should continue to Stinging Winds");
+    AssertTrue(routingSource.Contains("Western Channel Level 2 should return to Ancient Waterway, not Stinging Winds", StringComparison.Ordinal), "Western Channel Level 2 should not skip back to Stinging Winds");
     AssertTrue(routingSource.Contains("Already inside Ancient Waterway; Ancient Waterway button is blocked", StringComparison.Ordinal), "the Ancient Waterway waypoint button should still block when already inside Ancient Waterway");
 }
 

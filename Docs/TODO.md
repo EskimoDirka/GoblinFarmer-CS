@@ -135,6 +135,9 @@
 * [x] Add targeted minimap color disambiguation for the known Treasure Goblin / Odious Collector mismatch pair.
 * [x] Review `GoblinFarmer_Debug_20260606_094955.zip` for Treasure/Odious validation, stale leave/return suppression, and delayed Gilded Baron journal observation.
 * [x] Allow continuous Observation/Auto Count to accept fresh same-area Killed-only journal evidence with `JournalKilledAcceptedFreshObservation` while preserving stale Killed suppression.
+* [x] Review `GoblinFarmer_Debug_20260606_181752.zip` for the Cathedral Level 2 Gilded Baron notification mismatch, automatic-count evidence source, duplicate/stale suppression, Last Observation persistence, and Ancient Waterway/channel route logs.
+* [x] Add a stronger automatic-count confidence gate for minimap-only observations so lower-confidence minimap evidence suppresses with `MinimapConfidencePendingJournal` instead of consuming an area count before Journal evidence appears.
+* [x] Extend minimap color diagnostics/overrides to the Gilded Baron / Malevolent Tormentor pair with `MinimapOrangePixels` diagnostics.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
@@ -142,6 +145,8 @@
 * [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
 * [x] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now displays/counts as Treasure Goblin.
 * [x] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
+* [ ] Live-validate a real Gilded Baron does not auto-count as Malevolent Tormentor from an early weak minimap match; confirm the accepted count, notification, and Last Observation use Gilded Baron.
+* [ ] Live-validate a real Malevolent Tormentor still auto-counts once with the correct type from strong minimap evidence or Journal evidence.
 * [ ] Live-validate a fresh Killed-only Gilded Baron journal match auto-counts promptly with `JournalKilledAcceptedFreshObservation` instead of waiting for a later Engaged line.
 * [x] Add encounter-level automatic-count protection so recently counted same-type Journal evidence in a different area suppresses with `EncounterAlreadyAutoCounted`.
 * [ ] Live-validate stale Treasure Goblin and other same-type journal lines stay ignored with `EncounterAlreadyAutoCounted` and do not auto-count after moving areas.

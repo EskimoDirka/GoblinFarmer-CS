@@ -706,7 +706,7 @@ namespace GoblinFarmer
             Point matchPoint = new(maxLoc.X, maxLoc.Y);
             Point screenMatchPoint = new(screenRegion.Left + maxLoc.X, screenRegion.Top + maxLoc.Y);
             Size templateSize = new(templateMat.Width, templateMat.Height);
-            GoblinMinimapColorClassification minimapColor = PortClassifyTreasureOdiousMinimapColor(screenshot, matchPoint, templateSize);
+            GoblinMinimapColorClassification minimapColor = PortClassifyGoblinMinimapColor(screenshot, matchPoint, templateSize);
             return new GoblinEvidenceTemplateMatch(maxVal, matchPoint, screenMatchPoint, templateSize, minimapColor);
         }
 
@@ -1125,7 +1125,7 @@ namespace GoblinFarmer
                 if (forceObservation)
                 {
                     AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=True; reason=EvidenceCooldownObservationOnly; type={candidate.Type}; source={candidate.Source}; goblinType={PortLogField(candidate.GoblinType)}; cooldownSeconds={GoblinEvidenceCooldown.TotalSeconds:0}");
-                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate));
+                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence);
                 }
 
                 return;
@@ -1142,7 +1142,7 @@ namespace GoblinFarmer
 
             DebugManager.Session.RecordGoblinEvidence(evidenceEvent);
             AppLogger.Info($"GoblinEvidence: Type={candidate.Type}; Confidence={candidate.Confidence:0.00}; Source={candidate.Source}; Screenshot={PortLogField(PortDisplayLocation(screenshotPath))}; Notes={PortLogField(candidate.Notes)}");
-            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate));
+            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence);
         }
 
         private static string PortGoblinEvidenceSignature(GoblinEvidenceCandidate candidate)
@@ -1162,20 +1162,26 @@ namespace GoblinFarmer
             GoblinEvidenceTemplateMatch match)
         {
             if (!PortNormalizeGoblinObservationSource(template.Source).Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
-                !PortGoblinTypeUsesTreasureOdiousMinimapColor(template.GoblinType) ||
-                string.IsNullOrWhiteSpace(match.MinimapColor.ClassifiedGoblinType))
+                !PortGoblinTypeUsesMinimapColorDisambiguation(template.GoblinType))
             {
                 return template.GoblinType;
             }
 
-            if (!match.MinimapColor.ClassifiedGoblinType.Equals(template.GoblinType, StringComparison.OrdinalIgnoreCase))
+            string classifiedGoblinType = PortClassifyMinimapColorGoblinType(template.GoblinType, match.MinimapColor);
+            if (string.IsNullOrWhiteSpace(classifiedGoblinType))
+            {
+                return template.GoblinType;
+            }
+
+            if (!classifiedGoblinType.Equals(template.GoblinType, StringComparison.OrdinalIgnoreCase))
             {
                 AppLogger.Info(
                     "GoblinEvidenceMinimapColorOverride: " +
                     $"templateGoblinType={PortLogField(template.GoblinType)}; " +
-                    $"colorGoblinType={PortLogField(match.MinimapColor.ClassifiedGoblinType)}; " +
+                    $"colorGoblinType={PortLogField(classifiedGoblinType)}; " +
                     $"templateName={PortLogField(template.FileName)}; " +
                     $"yellowPixels={match.MinimapColor.YellowPixels}; " +
+                    $"orangePixels={match.MinimapColor.OrangePixels}; " +
                     $"greenPixels={match.MinimapColor.GreenPixels}; " +
                     $"purplePixels={match.MinimapColor.PurplePixels}; " +
                     $"coloredPixels={match.MinimapColor.ColoredPixels}; " +
@@ -1183,7 +1189,13 @@ namespace GoblinFarmer
                     $"screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}");
             }
 
-            return match.MinimapColor.ClassifiedGoblinType;
+            return classifiedGoblinType;
+        }
+
+        private static bool PortGoblinTypeUsesMinimapColorDisambiguation(string goblinType)
+        {
+            return PortGoblinTypeUsesTreasureOdiousMinimapColor(goblinType) ||
+                PortGoblinTypeUsesGildedMalevolentMinimapColor(goblinType);
         }
 
         private static bool PortGoblinTypeUsesTreasureOdiousMinimapColor(string goblinType)
@@ -1193,26 +1205,85 @@ namespace GoblinFarmer
                 normalized.Equals("Odious Collector", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool PortGoblinTypeUsesGildedMalevolentMinimapColor(string goblinType)
+        {
+            string normalized = GoblinTypeNormalizer.Normalize(goblinType);
+            return normalized.Equals("Gilded Baron", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Equals("Malevolent Tormentor", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string PortClassifyMinimapColorGoblinType(
+            string templateGoblinType,
+            GoblinMinimapColorClassification color)
+        {
+            if (PortGoblinTypeUsesTreasureOdiousMinimapColor(templateGoblinType))
+            {
+                return PortClassifyTreasureOdiousMinimapColor(color);
+            }
+
+            if (PortGoblinTypeUsesGildedMalevolentMinimapColor(templateGoblinType))
+            {
+                return PortClassifyGildedMalevolentMinimapColor(color);
+            }
+
+            return "";
+        }
+
+        private static string PortClassifyTreasureOdiousMinimapColor(GoblinMinimapColorClassification color)
+        {
+            const int minimumDominantPixels = 45;
+            const double dominanceRatio = 2.0;
+            if (color.YellowPixels >= minimumDominantPixels && color.YellowPixels >= color.GreenPixels * dominanceRatio)
+            {
+                return "Treasure Goblin";
+            }
+
+            if (color.GreenPixels >= minimumDominantPixels && color.GreenPixels >= color.YellowPixels * dominanceRatio)
+            {
+                return "Odious Collector";
+            }
+
+            return "";
+        }
+
+        private static string PortClassifyGildedMalevolentMinimapColor(GoblinMinimapColorClassification color)
+        {
+            const int minimumDominantPixels = 45;
+            const double dominanceRatio = 2.0;
+            if (color.YellowPixels >= minimumDominantPixels && color.YellowPixels >= color.OrangePixels * dominanceRatio)
+            {
+                return "Gilded Baron";
+            }
+
+            if (color.OrangePixels >= minimumDominantPixels && color.OrangePixels >= color.YellowPixels * dominanceRatio)
+            {
+                return "Malevolent Tormentor";
+            }
+
+            return "";
+        }
+
         private static string PortMinimapColorNotes(
             GoblinEvidenceTemplateRequirement template,
             GoblinEvidenceTemplateMatch match)
         {
             if (!PortNormalizeGoblinObservationSource(template.Source).Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
-                !PortGoblinTypeUsesTreasureOdiousMinimapColor(template.GoblinType))
+                !PortGoblinTypeUsesMinimapColorDisambiguation(template.GoblinType))
             {
                 return "";
             }
 
-            if (string.IsNullOrWhiteSpace(match.MinimapColor.ClassifiedGoblinType) &&
+            string classifiedGoblinType = PortClassifyMinimapColorGoblinType(template.GoblinType, match.MinimapColor);
+            if (string.IsNullOrWhiteSpace(classifiedGoblinType) &&
                 match.MinimapColor.ColoredPixels == 0)
             {
                 return "";
             }
 
-            return $"; MinimapColorType={match.MinimapColor.ClassifiedGoblinType}; MinimapYellowPixels={match.MinimapColor.YellowPixels}; MinimapGreenPixels={match.MinimapColor.GreenPixels}; MinimapPurplePixels={match.MinimapColor.PurplePixels}; MinimapColoredPixels={match.MinimapColor.ColoredPixels}";
+            return $"; MinimapColorType={classifiedGoblinType}; MinimapYellowPixels={match.MinimapColor.YellowPixels}; MinimapOrangePixels={match.MinimapColor.OrangePixels}; MinimapGreenPixels={match.MinimapColor.GreenPixels}; MinimapPurplePixels={match.MinimapColor.PurplePixels}; MinimapColoredPixels={match.MinimapColor.ColoredPixels}";
         }
 
-        private static GoblinMinimapColorClassification PortClassifyTreasureOdiousMinimapColor(
+        private static GoblinMinimapColorClassification PortClassifyGoblinMinimapColor(
             Bitmap screenshot,
             Point matchPoint,
             Size templateSize)
@@ -1226,6 +1297,7 @@ namespace GoblinFarmer
             }
 
             int yellowPixels = 0;
+            int orangePixels = 0;
             int greenPixels = 0;
             int purplePixels = 0;
             int coloredPixels = 0;
@@ -1241,7 +1313,11 @@ namespace GoblinFarmer
                     }
 
                     coloredPixels++;
-                    if (hue >= 35 && hue <= 75)
+                    if (hue >= 10 && hue < 35)
+                    {
+                        orangePixels++;
+                    }
+                    else if (hue >= 35 && hue <= 75)
                     {
                         yellowPixels++;
                     }
@@ -1256,21 +1332,10 @@ namespace GoblinFarmer
                 }
             }
 
-            const int minimumDominantPixels = 45;
-            const double dominanceRatio = 2.0;
-            string classifiedGoblinType = "";
-            if (yellowPixels >= minimumDominantPixels && yellowPixels >= greenPixels * dominanceRatio)
-            {
-                classifiedGoblinType = "Treasure Goblin";
-            }
-            else if (greenPixels >= minimumDominantPixels && greenPixels >= yellowPixels * dominanceRatio)
-            {
-                classifiedGoblinType = "Odious Collector";
-            }
-
             return new GoblinMinimapColorClassification(
-                classifiedGoblinType,
+                "",
                 yellowPixels,
+                orangePixels,
                 greenPixels,
                 purplePixels,
                 coloredPixels);

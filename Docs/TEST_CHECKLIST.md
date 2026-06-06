@@ -110,7 +110,10 @@
 - `GoblinEvidenceCandidateCheck source=Journal` includes template coverage percentage and `journalDiagnosis`, including full-region-template guidance when applicable
 - Journal matches remain primary when Journal and Minimap evidence both match in the same scan; Minimap is logged as supporting evidence in that case
 - Treasure Goblin and Odious Collector minimap matches use the targeted color disambiguation pass; yellow-dominant patches report Treasure Goblin, green-dominant patches report Odious Collector, and overrides log `GoblinEvidenceMinimapColorOverride`
-- Treasure/Odious minimap candidate notes include `MinimapYellowPixels`, `MinimapGreenPixels`, `MinimapPurplePixels`, and `MinimapColoredPixels`
+- Gilded Baron and Malevolent Tormentor minimap matches include yellow-vs-orange diagnostics; clearly yellow-dominant patches report Gilded Baron, clearly orange-dominant patches report Malevolent Tormentor, and overrides log `GoblinEvidenceMinimapColorOverride`
+- Treasure/Odious/Gilded/Malevolent minimap candidate notes include `MinimapYellowPixels`, `MinimapOrangePixels`, `MinimapGreenPixels`, `MinimapPurplePixels`, and `MinimapColoredPixels`
+- With Automatic Counting enabled, a lower-confidence minimap-only observation below `0.900` does not increment GoblinCount and logs `GoblinAutoCountSuppressed reason=MinimapConfidencePendingJournal`
+- A real Gilded Baron must not auto-count as Malevolent Tormentor from an early weak minimap match; the accepted count notification and Last Observation should use the eventual accepted Journal or stronger Minimap goblin type
 - `JournalEngagedAccepted` logs when a fresh Engaged journal template anchors the current encounter
 - `JournalKilledAcceptedFreshObservation` logs when a fresh same-area Killed-only journal template is accepted by continuous Observation/Auto Count before an Engaged anchor appears
 - `JournalKilledIgnoredNoRecentEngaged` remains available as a conservative fallback for non-opt-in Killed-only journal acceptance paths

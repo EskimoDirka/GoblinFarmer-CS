@@ -55,11 +55,12 @@ namespace GoblinFarmer
     internal readonly record struct GoblinMinimapColorClassification(
         string ClassifiedGoblinType,
         int YellowPixels,
+        int OrangePixels,
         int GreenPixels,
         int PurplePixels,
         int ColoredPixels)
     {
-        public static GoblinMinimapColorClassification Empty { get; } = new("", 0, 0, 0, 0);
+        public static GoblinMinimapColorClassification Empty { get; } = new("", 0, 0, 0, 0, 0);
     }
 
     internal static class GoblinEvidenceScanRegions
@@ -503,7 +504,8 @@ namespace GoblinFarmer
         string Reason,
         string DuplicateState,
         int AreaLimit,
-        int CurrentAreaCount);
+        int CurrentAreaCount,
+        double EvidenceConfidence = 0);
 
     internal sealed record GoblinJournalEngagedState(
         string GoblinType,

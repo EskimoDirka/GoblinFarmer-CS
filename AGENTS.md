@@ -32,6 +32,7 @@
 - When a recent repeatable project workflow is added, changed, or used as the expected way to do work, add or update the concise workflow guidance in `AGENTS.md`.
 - Before adding or keeping workflow guidance in `AGENTS.md`, check `Docs/Worflow blocklist.md`.
 - Remove workflow guidance from `AGENTS.md` when it is listed in `Docs/Worflow blocklist.md`, and do not re-add blocked workflows unless the user explicitly removes them from that blocklist.
+- For latest-debug-package review prompts, treat the named/latest debug package and live-test notes as evidence before changing code. Inspect package manifests, session summaries, logs, route summaries, Goblin Tracker metadata, and runtime artifacts first; use GitHub only as repository reference unless the user explicitly says otherwise.
 
 ## Coding Rules
 
