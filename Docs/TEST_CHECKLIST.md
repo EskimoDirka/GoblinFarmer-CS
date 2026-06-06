@@ -111,7 +111,8 @@
 - Treasure Goblin and Odious Collector minimap matches use the targeted color disambiguation pass; yellow-dominant patches report Treasure Goblin, green-dominant patches report Odious Collector, and overrides log `GoblinEvidenceMinimapColorOverride`
 - Treasure/Odious minimap candidate notes include `MinimapYellowPixels`, `MinimapGreenPixels`, `MinimapPurplePixels`, and `MinimapColoredPixels`
 - `JournalEngagedAccepted` logs when a fresh Engaged journal template anchors the current encounter
-- `JournalKilledIgnoredNoRecentEngaged` logs when a Killed-only journal template matches without a recent same-goblin/same-area Engaged line
+- `JournalKilledAcceptedFreshObservation` logs when a fresh same-area Killed-only journal template is accepted by continuous Observation/Auto Count before an Engaged anchor appears
+- `JournalKilledIgnoredNoRecentEngaged` remains available as a conservative fallback for non-opt-in Killed-only journal acceptance paths
 - `JournalKilledAcceptedAfterEngaged` logs when a Killed-only journal template is accepted after a recent same-goblin/same-area Engaged line
 - Immediate manual `X` refresh can accept fresh same-area Killed-only journal evidence and logs `JournalKilledAcceptedFreshManual`
 - Stale visible Killed journal lines suppress with `JournalKilledIgnoredStale` after the freshness window and do not satisfy manual `X`
@@ -148,6 +149,7 @@
 - Evidence whose first-seen timestamp ages past the freshness window suppresses with `GoblinAutoCountSuppressed reason=StaleEvidence`
 - Accepted automatic counts show a no-activate notification with area, goblin type, and current total
 - Automatic Treasure/Odious counts use the color-disambiguated goblin type when the accepted source is Minimap
+- Automatic fresh Killed-only journal counts can increment from `JournalKilledAcceptedFreshObservation` when Auto Count is enabled, while stale visible Killed lines still suppress
 - Reset Stats and New Game clear automatic-count evidence signature state
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`

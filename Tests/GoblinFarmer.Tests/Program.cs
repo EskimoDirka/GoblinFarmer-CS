@@ -63,8 +63,8 @@ Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVs
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
-Run("Goblin fresh killed journal can satisfy manual evidence gate", TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate);
-Run("Goblin manual refresh logs fresh and stale killed journal decisions", TestGoblinManualRefreshLogsFreshAndStaleKilledJournalDecisions);
+Run("Goblin fresh killed journal can satisfy evidence gate", TestGoblinFreshKilledJournalCanSatisfyEvidenceGate);
+Run("Goblin refresh logs fresh and stale killed journal decisions", TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions);
 Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObservationState);
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
@@ -2014,7 +2014,7 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     AssertFalse(evidenceSource.Contains("nowUtc - state.LastSeenUtc > GoblinJournalEvidenceFreshWindow", StringComparison.Ordinal), "Killed journal first-seen state should not reset just because the same visible line matched again later");
 }
 
-static void TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate()
+static void TestGoblinFreshKilledJournalCanSatisfyEvidenceGate()
 {
     DateTime now = DateTime.UtcNow;
     TimeSpan window = TimeSpan.FromSeconds(45);
@@ -2024,10 +2024,10 @@ static void TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate()
 
     AssertTrue(
         GoblinJournalFreshnessPolicy.KilledIsFresh(freshKilled, "Cave Of The Moon Clan Level 1", now, window),
-        "fresh same-area Killed journal evidence should satisfy the manual evidence gate");
+        "fresh same-area Killed journal evidence should satisfy the evidence gate");
     AssertFalse(
         GoblinJournalFreshnessPolicy.KilledIsFresh(staleKilled, "Cave Of The Moon Clan Level 1", now, window),
-        "stale Killed journal evidence should not satisfy the manual evidence gate");
+        "stale Killed journal evidence should not satisfy the evidence gate");
     AssertFalse(
         GoblinJournalFreshnessPolicy.KilledIsFresh(wrongAreaKilled, "Cave Of The Moon Clan Level 1", now, window),
         "Killed journal evidence from another area should not satisfy the manual evidence gate");
@@ -2036,15 +2036,16 @@ static void TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate()
         "Killed journal evidence should require a resolved current area");
 }
 
-static void TestGoblinManualRefreshLogsFreshAndStaleKilledJournalDecisions()
+static void TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions()
 {
     string repoRoot = FindRepositoryRootForTests();
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
 
+    AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshObservation", StringComparison.Ordinal), "continuous observation scans should log fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshManual", StringComparison.Ordinal), "manual refresh should log fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("JournalKilledIgnoredStale", StringComparison.Ordinal), "stale Killed journal lines should log a stale suppression reason");
-    AssertTrue(evidenceSource.Contains("allowFreshKilledWithoutEngaged: true", StringComparison.Ordinal), "manual refresh should opt into fresh Killed journal acceptance");
-    AssertTrue(evidenceSource.Contains("allowFreshKilledWithoutEngaged: false", StringComparison.Ordinal), "continuous observation scans should stay stricter than manual refresh");
+    AssertTrue(evidenceSource.Contains("freshKilledWithoutEngagedReason: \"Observation\"", StringComparison.Ordinal), "continuous observation scans should opt into fresh Killed journal acceptance");
+    AssertTrue(evidenceSource.Contains("freshKilledWithoutEngagedReason: \"Manual\"", StringComparison.Ordinal), "manual refresh should opt into fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("clearedJournalKilled", StringComparison.Ordinal), "Reset Stats/New Game should clear Killed journal freshness state");
 }
 

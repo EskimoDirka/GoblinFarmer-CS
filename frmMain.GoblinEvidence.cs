@@ -246,7 +246,7 @@ namespace GoblinFarmer
                 PortLogGoblinEvidenceSourceScanResult(sourceGroup.Key, scanRegion, detection, templates.Count);
 
                 if (candidate != null &&
-                    PortTryAcceptGoblinEvidenceCandidate(sourceGroup.Key, detection, allowFreshKilledWithoutEngaged: false, out GoblinEvidenceCandidate? acceptedCandidate))
+                    PortTryAcceptGoblinEvidenceCandidate(sourceGroup.Key, detection, freshKilledWithoutEngagedReason: "Observation", out GoblinEvidenceCandidate? acceptedCandidate))
                 {
                     if (string.Equals(sourceGroup.Key, "JournalCandidate", StringComparison.OrdinalIgnoreCase))
                     {
@@ -397,7 +397,7 @@ namespace GoblinFarmer
                 GoblinEvidenceDetectionResult detection = PortDetectBestGoblinEvidenceTemplate(templates, scanRegion);
                 PortLogGoblinEvidenceSourceScanResult(source, scanRegion, detection, templates.Count);
                 if (detection.Candidate != null &&
-                    PortTryAcceptGoblinEvidenceCandidate(source, detection, allowFreshKilledWithoutEngaged: true, out GoblinEvidenceCandidate? acceptedCandidate))
+                    PortTryAcceptGoblinEvidenceCandidate(source, detection, freshKilledWithoutEngagedReason: "Manual", out GoblinEvidenceCandidate? acceptedCandidate))
                 {
                     return acceptedCandidate;
                 }
@@ -409,7 +409,7 @@ namespace GoblinFarmer
         private bool PortTryAcceptGoblinEvidenceCandidate(
             string source,
             GoblinEvidenceDetectionResult detection,
-            bool allowFreshKilledWithoutEngaged,
+            string freshKilledWithoutEngagedReason,
             out GoblinEvidenceCandidate? acceptedCandidate)
         {
             acceptedCandidate = detection.Candidate;
@@ -425,14 +425,14 @@ namespace GoblinFarmer
                 return true;
             }
 
-            return PortTryAcceptJournalEvidenceCandidate(template, acceptedCandidate, detection.BestMatch, allowFreshKilledWithoutEngaged, out acceptedCandidate);
+            return PortTryAcceptJournalEvidenceCandidate(template, acceptedCandidate, detection.BestMatch, freshKilledWithoutEngagedReason, out acceptedCandidate);
         }
 
         private bool PortTryAcceptJournalEvidenceCandidate(
             GoblinEvidenceTemplateRequirement template,
             GoblinEvidenceCandidate candidate,
             GoblinEvidenceTemplateMatch match,
-            bool allowFreshKilledWithoutEngaged,
+            string freshKilledWithoutEngagedReason,
             out GoblinEvidenceCandidate? acceptedCandidate)
         {
             acceptedCandidate = null;
@@ -555,17 +555,22 @@ namespace GoblinFarmer
                     areaKey,
                     nowUtc,
                     GoblinJournalEvidenceFreshWindow);
-                if (!recentEngagedMatches && allowFreshKilledWithoutEngaged)
+                if (!recentEngagedMatches && !string.IsNullOrWhiteSpace(freshKilledWithoutEngagedReason))
                 {
+                    bool acceptedForManualRefresh = string.Equals(freshKilledWithoutEngagedReason, "Manual", StringComparison.OrdinalIgnoreCase);
+                    string freshnessReason = acceptedForManualRefresh ? "Manual" : "Observation";
+                    string diagnosticEventName = acceptedForManualRefresh
+                        ? "JournalKilledAcceptedFreshManual"
+                        : "JournalKilledAcceptedFreshObservation";
                     PortLogJournalEvidenceFreshnessDiagnostic(
-                        "JournalKilledAcceptedFreshManual",
+                        diagnosticEventName,
                         template,
                         match,
                         displayArea,
                         $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                     acceptedCandidate = candidate with
                     {
-                        Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedFreshManual; JournalArea={displayArea}"
+                        Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedFresh{freshnessReason}; JournalArea={displayArea}"
                     };
                     return true;
                 }

@@ -132,13 +132,16 @@
 * [x] Review `GoblinFarmer_Debug_20260606_092132.zip` for the old-evidence toggle-on validation, fresh Leoric's Hunting Grounds auto-count, no second count after leaving/returning, and the Treasure Goblin/Odious Collector minimap mismatch.
 * [x] With Automatic Counting off, kill/observe a goblin, then turn Automatic Counting on while the old visible observation remains; confirm it suppresses with `EvidenceSeenBeforeAutoCountEnabled` and does not increment.
 * [x] Add targeted minimap color disambiguation for the known Treasure Goblin / Odious Collector mismatch pair.
+* [x] Review `GoblinFarmer_Debug_20260606_094955.zip` for Treasure/Odious validation, stale leave/return suppression, and delayed Gilded Baron journal observation.
+* [x] Allow continuous Observation/Auto Count to accept fresh same-area Killed-only journal evidence with `JournalKilledAcceptedFreshObservation` while preserving stale Killed suppression.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
 * [x] Press Teleport Next when no queued/next route target exists and confirm the no-route notification appears.
 * [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
-* [ ] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now logs `GoblinEvidenceMinimapColorOverride` and displays/counts as Treasure Goblin.
-* [ ] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
+* [x] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now displays/counts as Treasure Goblin.
+* [x] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
+* [ ] Live-validate a fresh Killed-only Gilded Baron journal match auto-counts promptly with `JournalKilledAcceptedFreshObservation` instead of waiting for a later Engaged line.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
@@ -665,7 +668,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Add journal candidate diagnostics for template coverage and full-region-template diagnosis before changing journal thresholds.
 * [x] Include best-template journal diagnostics in `GoblinEvidenceScanResult source=Journal` even when no candidate passes threshold.
 * [x] Keep Journal template matches primary when Journal and Minimap evidence both match in the same scan.
-* [x] Add journal freshness protection so Engaged journal templates anchor the current encounter and Killed-only journal templates require a recent same-goblin/same-area Engaged line.
+* [x] Add journal freshness protection so Engaged journal templates anchor the current encounter and Killed-only journal templates use first-seen same-area freshness protection before they can be accepted without an Engaged line.
 * [x] Add `JournalEngagedAccepted`, `JournalKilledIgnoredNoRecentEngaged`, `JournalKilledAcceptedAfterEngaged`, and `JournalEngagedIgnoredStale` diagnostics.
 * [x] Keep ObservationDiagnostics crops bounded by throttling capture and retaining only a recent runtime sample.
 * [x] Limit debug package inclusion for ObservationDiagnostics image crops and report missing-template state in `debug-package-manifest.txt`.
@@ -694,7 +697,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate calibrated per-goblin Journal/Minimap evidence templates produce `GoblinEvidenceCandidateCheck` results and, when confidence passes, typed observation candidates without changing GoblinCount.
 * [ ] Live-validate the newly cropped journal templates are discovered and can produce `JournalCandidate` observations while the journal scan region remains `64,736,645,417`.
 * [ ] Live-validate old/stale visible journal lines stop producing eligible observations after the journal freshness window.
-* [ ] Live-validate Killed-only journal matches log `JournalKilledIgnoredNoRecentEngaged` unless a recent same-goblin/same-area Engaged line exists.
+* [ ] Live-validate fresh same-area Killed-only journal matches log `JournalKilledAcceptedFreshObservation`, while stale Killed-only journal matches log `JournalKilledIgnoredStale` and do not count.
 * [ ] Live-validate `GoblinEvidenceScanResult source=Minimap scanRegion=2108,66,421,423` logs template name, best confidence, threshold, and match point for tight minimap icon templates.
 * [ ] Live-validate matching ObservationDiagnostics minimap crop framing in a live run.
 * [ ] If tight minimap icon matching is unreliable after one or two targeted tuning passes, document the failing template(s) and prepare a future color-matching fallback for the goblin minimap marker within the calibrated minimap region.
