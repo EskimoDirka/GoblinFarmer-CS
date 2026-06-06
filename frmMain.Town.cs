@@ -9,10 +9,12 @@ namespace GoblinFarmer
     {
         private const int PortRepairStationClickAttemptTimeoutMs = 1500;
         private const int PortRepairWorkflowTimeoutMs = 20000;
-        private const int PortSalvageConfirmationTimeoutMs = 160;
-        private const int PortSalvageConfirmationFastAttempts = 4;
-        private const int PortSalvageConfirmationFastDelayMs = 35;
-        private const int PortSalvagePostSlotDelayMs = 50;
+        private const int PortSalvageConfirmationTimeoutMs = 100;
+        private const int PortSalvageConfirmationFastAttempts = 3;
+        private const int PortSalvageConfirmationFastDelayMs = 30;
+        private const int PortSalvagePostSlotDelayMs = 35;
+        private const int PortSalvageSlotClickSettleMs = 35;
+        private const int PortSalvageSlotClickHoldMs = 20;
 
         private sealed record PortRepairReadinessResult(bool VendorPanelAlreadyVisible, bool VendorPanelBecameVisible, bool NewTristramConfirmed, long ReadinessElapsedMs, long PostArrivalWaitMs);
         private sealed record PortBlacksmithOpenResult(bool Opened, int Attempts, long ElapsedMs, long WorkflowElapsedMs);
@@ -151,7 +153,7 @@ namespace GoblinFarmer
                 }
 
                 Stopwatch slotPerf = Stopwatch.StartNew();
-                PortSafeLeftClick(slot.Value);
+                bool slotClickSent = PortSafeSalvageSlotClick(slot.Value);
                 salvagedCount++;
                 bool confirmationFound = PortWaitForSalvageConfirmationFast(token, out long confirmationWaitMs, out int confirmationScans);
                 if (confirmationFound)
@@ -162,7 +164,7 @@ namespace GoblinFarmer
                 PortSleep(token, PortSalvagePostSlotDelayMs);
                 Stopwatch nextSlotPerf = Stopwatch.StartNew();
                 slot = PortFirstFilledInventorySlot();
-                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs={nextSlotPerf.ElapsedMilliseconds}; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; slotClickSent={slotClickSent}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs={nextSlotPerf.ElapsedMilliseconds}; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
             }
 
             if (closeAfterSalvage)
@@ -172,8 +174,24 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep(salvagedCount == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {salvagedCount} slots clicked");
-            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}");
+            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
+            return true;
+        }
+
+        private bool PortSafeSalvageSlotClick(DrawingPoint point)
+        {
+            if (!PortClickPointIsSafe(point))
+            {
+                PortSetAppStatus("Unsafe Click Blocked");
+                return false;
+            }
+
+            SetCursorPos(point.X, point.Y);
+            Thread.Sleep(PortSalvageSlotClickSettleMs);
+            PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+            Thread.Sleep(PortSalvageSlotClickHoldMs);
+            PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
             return true;
         }
 

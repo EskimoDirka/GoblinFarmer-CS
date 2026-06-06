@@ -54,9 +54,11 @@ Run("Goblin observation counters are diagnostic only", TestGoblinObservationCoun
 Run("Goblin observation type reuse requires recent matching area", TestGoblinObservationTypeReuseRequiresRecentMatchingArea);
 Run("Goblin manual unknown count requires fresh observation by default", TestGoblinManualUnknownCountRequiresFreshObservationByDefault);
 Run("Goblin observation UI state logs update and clear", TestGoblinObservationUiStateLogsUpdateAndClear);
+Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
 Run("Goblin fresh killed journal can satisfy manual evidence gate", TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate);
 Run("Goblin manual refresh logs fresh and stale killed journal decisions", TestGoblinManualRefreshLogsFreshAndStaleKilledJournalDecisions);
+Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObservationState);
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
 Run("Kadala hotkey uses faster cadence and timing logs", TestKadalaHotkeyUsesFasterCadenceAndTimingLogs);
@@ -1795,6 +1797,22 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should visibly clear Last Observation");
 }
 
+static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string publishMethod = ExtractMethodBody(sessionStatsSource, "private void PortPublishManualGoblinCountObservation");
+    string clearMethod = ExtractMethodBody(sessionStatsSource, "private void PortMarkGoblinObservationNoCurrent");
+
+    AssertTrue(sessionStatsSource.Contains("PortPublishManualGoblinCountObservation(area, goblinType, source, guardResult)", StringComparison.Ordinal), "accepted manual counts should publish the Last Observation display immediately");
+    AssertTrue(publishMethod.Contains("ManualCountAccepted", StringComparison.Ordinal), "manual count display should identify the accepted-count state");
+    AssertTrue(publishMethod.Contains("\"Counted\"", StringComparison.Ordinal), "manual count display should show Counted as the Last Observation reason");
+    AssertTrue(publishMethod.Contains("PortManualGoblinCountDisplayHold", StringComparison.Ordinal), "manual count display should be held long enough to be visible");
+    AssertFalse(publishMethod.Contains("RecordGoblinObservation", StringComparison.Ordinal), "manual count display updates should not increment observation-only counters");
+    AssertTrue(clearMethod.Contains("LastObservationClearSkipped", StringComparison.Ordinal), "no-candidate scanner clears should be skipped during the manual-count display hold");
+    AssertTrue(clearMethod.Contains("PortShouldPreserveDisplayedManualCountObservation", StringComparison.Ordinal), "Last Observation clearing should preserve recent accepted manual counts briefly");
+}
+
 static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
 {
     DateTime now = DateTime.UtcNow;
@@ -1855,6 +1873,20 @@ static void TestGoblinManualRefreshLogsFreshAndStaleKilledJournalDecisions()
     AssertTrue(evidenceSource.Contains("clearedJournalKilled", StringComparison.Ordinal), "Reset Stats/New Game should clear Killed journal freshness state");
 }
 
+static void TestGoblinResetClearsStaleObservationState()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string resetMethod = ExtractMethodBody(evidenceSource, "private void PortResetGoblinEvidenceObservationState");
+
+    AssertTrue(resetMethod.Contains("portJournalEvidenceSeenByKey.Clear()", StringComparison.Ordinal), "Reset Stats/New Game should clear journal first-seen state");
+    AssertTrue(resetMethod.Contains("portStaleSuppressedJournalEvidenceByKey.Clear()", StringComparison.Ordinal), "Reset Stats/New Game should clear stale journal suppression state");
+    AssertTrue(resetMethod.Contains("portJournalKilledEvidenceSeenBySignature.Clear()", StringComparison.Ordinal), "Reset Stats/New Game should clear Killed journal signatures");
+    AssertTrue(resetMethod.Contains("portLastGoblinObservationForManualCount = null", StringComparison.Ordinal), "Reset Stats/New Game should clear manual observation reuse state");
+    AssertTrue(resetMethod.Contains("portDisplayedGoblinObservation = null", StringComparison.Ordinal), "Reset Stats/New Game should clear Last Observation display state");
+    AssertTrue(resetMethod.Contains("portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue", StringComparison.Ordinal), "Reset Stats/New Game should clear manual-count display hold state");
+}
+
 static void TestGoblinManualNoFreshGatePreservesBlockedAreaPriority()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -1872,10 +1904,14 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     string repoRoot = FindRepositoryRootForTests();
     string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
 
-    AssertTrue(townSource.Contains("PortSalvageConfirmationTimeoutMs = 160", StringComparison.Ordinal), "salvage confirmation wait should be bounded below the previous 300ms helper wait");
+    AssertTrue(townSource.Contains("PortSalvageConfirmationTimeoutMs = 100", StringComparison.Ordinal), "salvage confirmation wait should be bounded below the previous 160ms fast probe");
+    AssertTrue(townSource.Contains("PortSalvageConfirmationFastAttempts = 3", StringComparison.Ordinal), "salvage should use fewer fast confirmation scans in the common no-dialog case");
+    AssertTrue(townSource.Contains("PortSalvageConfirmationFastDelayMs = 30", StringComparison.Ordinal), "salvage confirmation scan spacing should stay short but explicit");
     AssertTrue(townSource.Contains("PortWaitForSalvageConfirmationFast", StringComparison.Ordinal), "salvage should use a fast confirmation probe instead of the repair polling wait helper");
     AssertTrue(townSource.Contains("confirmationScans=", StringComparison.Ordinal), "salvage should log confirmation scan counts for timing diagnosis");
-    AssertTrue(townSource.Contains("PortSalvagePostSlotDelayMs = 50", StringComparison.Ordinal), "salvage post-slot delay should be short but explicit");
+    AssertTrue(townSource.Contains("PortSalvagePostSlotDelayMs = 35", StringComparison.Ordinal), "salvage post-slot delay should be short but explicit");
+    AssertTrue(townSource.Contains("PortSafeSalvageSlotClick", StringComparison.Ordinal), "salvage slot clicks should use the faster slot-only safe click helper");
+    AssertTrue(townSource.Contains("slotClickSent=", StringComparison.Ordinal), "salvage should log whether the slot click was sent");
     AssertTrue(townSource.Contains("Salvage timing: slotIndex=", StringComparison.Ordinal), "salvage should log per-slot timing");
     AssertTrue(townSource.Contains("Salvage timing summary:", StringComparison.Ordinal), "salvage should log a summary timing line");
 }

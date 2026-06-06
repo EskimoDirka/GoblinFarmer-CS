@@ -75,6 +75,8 @@
 - Accepted manual `X` notifications reuse a recent same-area Observation Mode goblin type within the safe short window
 - Accepted manual `X` runs a current observation refresh before showing the notification, without automatic counting or area-slot consumption
 - Accepted manual `X` skips the evidence refresh when a recent same-area Last Observation already has a reusable goblin type
+- Accepted manual `X` counts immediately update Last Observation to the counted goblin type, area, source `ManualHotkey`, and reason `Counted`
+- No-candidate scanner clears do not erase an accepted manual count Last Observation during the 5-second count notification window
 - Manual `X` notification refresh checks Minimap evidence before Journal evidence to keep count notifications responsive; normal Observation Mode scans remain Journal-primary
 - Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
@@ -166,8 +168,8 @@
 ## Town And Exit
 - Repair complete captures paired Diablo/App success screenshots
 - Salvage complete or skipped captures paired Diablo/App success screenshots
-- Salvage logs per-slot `Salvage timing` with confirmation wait, confirmation scan count, next-slot scan time, slot elapsed time, and total salvage elapsed time
-- Salvage logs `Salvage timing summary` with slots clicked, total elapsed time, confirmation timeout, fast-probe attempts/delay, and post-slot delay
+- Salvage logs per-slot `Salvage timing` with slot click sent state, confirmation wait, confirmation scan count, next-slot scan time, slot elapsed time, and total salvage elapsed time
+- Salvage logs `Salvage timing summary` with slots clicked, total elapsed time, confirmation timeout, fast-probe attempts/delay, post-slot delay, and salvage slot-click timing
 - Salvage confirmation remains safe after the reduced confirmation wait; no confirmation prompts should be left open
 - Up Arrow Kadala logs `Kadala timing: started`, throttled `Kadala timing: active`, and `Kadala timing: stopped`
 - Up Arrow Kadala feels faster after the shorter right-click cadence and does not interfere with Diablo focus or automation safety

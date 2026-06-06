@@ -1147,6 +1147,7 @@ namespace GoblinFarmer
                 portLastGoblinObservationForManualCount = null;
                 portDisplayedGoblinObservation = null;
                 portDisplayedGoblinObservationStatus = "No current observation";
+                portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
             }
 
             AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedJournalKilled={journalKilledCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
