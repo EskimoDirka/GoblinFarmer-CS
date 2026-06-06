@@ -407,6 +407,11 @@ namespace GoblinFarmer
 
                 if (rawKey == PortLocationKey("Ancient Waterway"))
                 {
+                    if (targetKey == PortLocationKey("Stinging Winds"))
+                    {
+                        return (false, "Ancient Waterway allows hotkey teleportation to Stinging Winds");
+                    }
+
                     return (true, "Ancient Waterway blocks hotkey teleport routing.");
                 }
 

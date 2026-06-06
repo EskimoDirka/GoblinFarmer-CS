@@ -26,6 +26,7 @@
 - Caverns of Frost Level 1 blocks Teleport Next
 - Caverns of Frost Level 2 allows Rakkis Crossing
 - If the player walks to the queued Rakkis Crossing destination before pressing Teleport Next, the hotkey updates route/button state and starts Pandemonium Fortress Level 1 in the same press
+- Plain Ancient Waterway allows Teleport Next to Stinging Winds when Stinging Winds is queued, while clicking the Ancient Waterway button from inside Ancient Waterway still blocks
 - Each successful teleport confirmation captures paired Diablo/App success screenshots
 - Route blocks/failures capture paired Diablo/App failure screenshots
 
@@ -130,9 +131,10 @@
 - Observation Mode uses manual `X` route-context disambiguation and does not report PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan
 - Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
-- Fresh Journal/Minimap Last Observation entries remain readable for about 10 seconds and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
-- The Goblin Tracker UI clears Last Observation to a no-current/no-candidate state after scans or manual refreshes that find no current goblin evidence once any active display hold has expired
-- Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for no-candidate, stale, missing-template, reset, or no-current states
+- Fresh Journal/Minimap Last Observation entries remain readable during the short display hold and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
+- After the short hold expires, no-candidate scanner scans preserve the last real goblin observation with `LastObservationClearSkipped preserveKind=LastObservationPersistent` instead of clearing the UI
+- Last Observation updates only when a new real goblin observation/count is accepted, or clears during Reset Stats/New Game/missing-template setup cleanup; stale cross-area journal repeats should not replace the displayed goblin
+- Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for reset/new-game or true cleanup states
 - `GoblinTracker.EnableObservationMode` controls scanner/diagnostic behavior only; `GoblinTracker.EnableAutomaticCounting` is the separate automatic-count gate and defaults to `false`
 - Startup logs report `EnableObservationMode`, `EnableAutomaticCounting`, effective `automaticCountingEnabled`, and `manualHotkeyOnlyCountPath`
 - With `EnableAutomaticCounting=false`, Observation Mode may update Last Observation but must not increment GoblinCount, GPH, found records, or counted-area slots
@@ -146,11 +148,13 @@
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are stable across confidence/match-point drift for the same visible Journal/Minimap template
 - Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`
+- Reusing a recently auto-counted goblin type through Journal evidence in a different area suppresses with `GoblinAutoCountSuppressed reason=EncounterAlreadyAutoCounted`
+- Suppressed cross-area Journal repeats report `GoblinObservationCandidate ... wouldCount=False reason=EncounterAlreadyAutoCounted` and log `LastObservationUpdateSkippedPreserved` when an older visible line tries to overwrite the displayed Last Observation
 - Evidence whose first-seen timestamp ages past the freshness window suppresses with `GoblinAutoCountSuppressed reason=StaleEvidence`
 - Accepted automatic counts show a no-activate notification with area, goblin type, and current total
 - Automatic Treasure/Odious counts use the color-disambiguated goblin type when the accepted source is Minimap
 - Automatic fresh Killed-only journal counts can increment from `JournalKilledAcceptedFreshObservation` when Auto Count is enabled, while stale visible Killed lines still suppress
-- Reset Stats and New Game clear automatic-count evidence signature state
+- Reset Stats and New Game clear automatic-count evidence signature and encounter state
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
 - Teleport Next accepted with no queued/next route target logs `Teleport Next hotkey ignored: no queued/next teleport` and shows a no-route notification instead of appearing broken

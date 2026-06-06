@@ -319,11 +319,13 @@ namespace GoblinFarmer
             goblinType = GoblinTypeNormalizer.Normalize(goblinType);
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
+            DateTime nowUtc = DateTime.UtcNow;
             string reason = "Eligible";
             string duplicateState = "Available";
             bool wouldCount = true;
             GoblinAreaDuplicateGuardResult guardResult = new(true, 0, 0);
             bool displayUpdated;
+            string displaySkipKind = "";
             double manualHoldRemainingMs = 0;
             GoblinObservationRecord? preservedObservation = null;
             GoblinObservationRecord observation;
@@ -357,10 +359,19 @@ namespace GoblinFarmer
                         reason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
                         duplicateState = reason;
                     }
+                    else if (PortGoblinAutomaticCountingEnabled() &&
+                        string.Equals(observationSource, "Journal", StringComparison.OrdinalIgnoreCase) &&
+                        portGoblinAutoCountEncounterByGoblinType.TryGetValue(PortGoblinAutoCountEncounterKey(goblinType), out PortGoblinAutoCountEncounterState? encounterState) &&
+                        PortShouldSuppressJournalEncounterAlreadyAutoCounted(observationSource, goblinType, area.AreaKey, encounterState, nowUtc))
+                    {
+                        wouldCount = false;
+                        reason = "EncounterAlreadyAutoCounted";
+                        duplicateState = reason;
+                    }
                 }
 
                 observation = new(
-                    DateTime.UtcNow,
+                    nowUtc,
                     observationSource,
                     goblinType,
                     area.AreaKey,
@@ -376,17 +387,26 @@ namespace GoblinFarmer
                     portLastGoblinObservationForManualCount = observation;
                 }
 
-                displayUpdated = !PortManualCountDisplayHoldActive(portDisplayedGoblinObservation, DateTime.UtcNow);
-                if (displayUpdated)
+                if (PortManualCountDisplayHoldActive(portDisplayedGoblinObservation, nowUtc))
                 {
-                    portDisplayedGoblinObservation = observation;
-                    portDisplayedGoblinObservationStatus = "";
-                    portDisplayedGoblinObservationStickyUntilUtc = DateTime.UtcNow + PortAutomaticGoblinObservationDisplayHold;
+                    displayUpdated = false;
+                    displaySkipKind = "ManualCountDisplayHold";
+                    preservedObservation = portDisplayedGoblinObservation;
+                    manualHoldRemainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - nowUtc).TotalMilliseconds);
+                }
+                else if (PortShouldPreserveDisplayedObservationAgainstIncoming(observation, portDisplayedGoblinObservation))
+                {
+                    displayUpdated = false;
+                    displaySkipKind = "LastObservationPersistent";
+                    preservedObservation = portDisplayedGoblinObservation;
+                    manualHoldRemainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - nowUtc).TotalMilliseconds);
                 }
                 else
                 {
-                    preservedObservation = portDisplayedGoblinObservation;
-                    manualHoldRemainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - DateTime.UtcNow).TotalMilliseconds);
+                    displayUpdated = true;
+                    portDisplayedGoblinObservation = observation;
+                    portDisplayedGoblinObservationStatus = "";
+                    portDisplayedGoblinObservationStickyUntilUtc = nowUtc + PortAutomaticGoblinObservationDisplayHold;
                 }
             }
 
@@ -398,7 +418,10 @@ namespace GoblinFarmer
             }
             else
             {
-                AppLogger.Info($"GoblinTracker: LastObservationUpdateSkippedDuringManualHold incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
+                string eventName = displaySkipKind.Equals("ManualCountDisplayHold", StringComparison.OrdinalIgnoreCase)
+                    ? "LastObservationUpdateSkippedDuringManualHold"
+                    : "LastObservationUpdateSkippedPreserved";
+                AppLogger.Info($"GoblinTracker: {eventName} incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preserveKind={PortLogField(displaySkipKind)} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
             }
             PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature);
             PortWriteSessionMetadata(logSuccess: false);
@@ -418,11 +441,15 @@ namespace GoblinFarmer
             bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled();
             double evidenceAgeSeconds = Math.Max(0, (nowUtc - observation.TimestampUtc).TotalSeconds);
             string autoEvidenceKey = PortGoblinAutoCountEvidenceKey(evidenceSignature, observation);
+            string autoEncounterKey = PortGoblinAutoCountEncounterKey(observation);
             GoblinAreaDuplicateGuardResult guardResult = new(observation.WouldCount, observation.CurrentAreaCount, observation.AreaLimit);
             string suppressionReason = "";
             int total = 0;
             PortGoblinAutoCountEvidenceState? evidenceState = null;
+            PortGoblinAutoCountEncounterState? encounterState = null;
             double evidenceFirstSeenAgeSeconds = 0;
+            double encounterAgeSeconds = -1;
+            string encounterAreaKey = "";
             double autoArmedAgeSeconds = portGoblinAutomaticCountingArmedAtUtc == DateTime.MinValue
                 ? -1
                 : Math.Max(0, (nowUtc - portGoblinAutomaticCountingArmedAtUtc).TotalSeconds);
@@ -460,6 +487,20 @@ namespace GoblinFarmer
                     evidenceFirstSeenAgeSeconds = Math.Max(0, (nowUtc - evidenceState.FirstSeenUtc).TotalSeconds);
                 }
 
+                if (!string.IsNullOrWhiteSpace(autoEncounterKey) &&
+                    portGoblinAutoCountEncounterByGoblinType.TryGetValue(autoEncounterKey, out encounterState))
+                {
+                    encounterState = encounterState with
+                    {
+                        LastSeenUtc = nowUtc,
+                        GoblinType = observation.GoblinType,
+                        Source = observation.Source,
+                    };
+                    portGoblinAutoCountEncounterByGoblinType[autoEncounterKey] = encounterState;
+                    encounterAgeSeconds = Math.Max(0, (nowUtc - encounterState.CountedUtc).TotalSeconds);
+                    encounterAreaKey = encounterState.AreaKey;
+                }
+
                 if (!autoCountingEnabled)
                 {
                     suppressionReason = "AutomaticCountingDisabled";
@@ -474,6 +515,11 @@ namespace GoblinFarmer
                     evidenceState!.Counted)
                 {
                     suppressionReason = "EvidenceAlreadyAutoCounted";
+                }
+                else if (string.IsNullOrWhiteSpace(suppressionReason) &&
+                    PortShouldSuppressJournalEncounterAlreadyAutoCounted(observation, area, encounterState, nowUtc))
+                {
+                    suppressionReason = "EncounterAlreadyAutoCounted";
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
                     !GoblinJournalFreshnessPolicy.IsFresh(evidenceState!.FirstSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
@@ -518,6 +564,16 @@ namespace GoblinFarmer
                         GoblinType = observation.GoblinType,
                         Source = observation.Source,
                     };
+                    if (!string.IsNullOrWhiteSpace(autoEncounterKey))
+                    {
+                        portGoblinAutoCountEncounterByGoblinType[autoEncounterKey] = new PortGoblinAutoCountEncounterState(
+                            nowUtc,
+                            nowUtc,
+                            area.AreaKey,
+                            observation.GoblinType,
+                            observation.Source,
+                            autoEvidenceKey);
+                    }
                 }
             }
 
@@ -526,16 +582,50 @@ namespace GoblinFarmer
                 string eventName = autoCountingEnabled
                     ? "GoblinAutoCountSuppressed"
                     : "GoblinAutoCountSkippedDisabled";
-                AppLogger.Info($"GoblinTracker: {eventName} source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
+                AppLogger.Info($"GoblinTracker: {eventName} source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterAreaKey={PortLogField(PortDisplayLocation(encounterAreaKey))} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
                 return false;
             }
 
-            AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
+            AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} encounterAgeSeconds={encounterAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
             AppLogger.Info($"GoblinTracker: GoblinCountAccepted areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} blockListStatus=Allowed countResult=Accepted rawLocation='{PortLogField(PortDisplayLocation(area.RawLocation))}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(observation.GoblinType)}' source='{PortLogField(source)}' evidenceSource='{PortLogField(observation.Source)}' total={total}");
             PortShowSplash($"Goblin auto-counted\r\n{displayLocation}\r\nType: {observation.GoblinType}\r\nTotal: {total}", 5000);
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;
+        }
+
+        private bool PortShouldSuppressJournalEncounterAlreadyAutoCounted(
+            GoblinObservationRecord observation,
+            GoblinAreaResolution area,
+            PortGoblinAutoCountEncounterState? encounterState,
+            DateTime nowUtc)
+        {
+            return PortShouldSuppressJournalEncounterAlreadyAutoCounted(
+                observation.Source,
+                observation.GoblinType,
+                area.AreaKey,
+                encounterState,
+                nowUtc);
+        }
+
+        private bool PortShouldSuppressJournalEncounterAlreadyAutoCounted(
+            string source,
+            string goblinType,
+            string areaKey,
+            PortGoblinAutoCountEncounterState? encounterState,
+            DateTime nowUtc)
+        {
+            if (encounterState == null ||
+                string.IsNullOrWhiteSpace(areaKey) ||
+                !string.Equals(PortNormalizeGoblinObservationSource(source), "Journal", StringComparison.OrdinalIgnoreCase) ||
+                !GoblinTypeNormalizer.Normalize(encounterState.GoblinType).Equals(GoblinTypeNormalizer.Normalize(goblinType), StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(encounterState.AreaKey) ||
+                encounterState.AreaKey.Equals(areaKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return nowUtc - encounterState.CountedUtc <= PortAutomaticGoblinJournalEncounterSuppressWindow;
         }
 
         private string PortGoblinAutoCountEvidenceKey(string evidenceSignature, GoblinObservationRecord observation)
@@ -558,6 +648,19 @@ namespace GoblinFarmer
                 normalizedSignature);
         }
 
+        private string PortGoblinAutoCountEncounterKey(GoblinObservationRecord observation)
+        {
+            return PortGoblinAutoCountEncounterKey(observation.GoblinType);
+        }
+
+        private string PortGoblinAutoCountEncounterKey(string goblinType)
+        {
+            string normalizedGoblinType = GoblinTypeNormalizer.Normalize(goblinType);
+            return string.IsNullOrWhiteSpace(normalizedGoblinType) || normalizedGoblinType.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+                ? ""
+                : normalizedGoblinType;
+        }
+
         private static string PortShortEvidenceSignature(string evidenceSignature)
         {
             if (string.IsNullOrWhiteSpace(evidenceSignature))
@@ -573,13 +676,16 @@ namespace GoblinFarmer
         private void PortResetGoblinAutoCountEvidenceState(string reason)
         {
             int cleared;
+            int encountersCleared;
             lock (portGoblinTrackerLock)
             {
                 cleared = portGoblinAutoCountEvidenceBySignature.Count;
+                encountersCleared = portGoblinAutoCountEncounterByGoblinType.Count;
                 portGoblinAutoCountEvidenceBySignature.Clear();
+                portGoblinAutoCountEncounterByGoblinType.Clear();
             }
 
-            AppLogger.Info($"GoblinTracker: Auto-count evidence state reset reason='{PortLogField(reason)}' clearedEvidenceSignatures={cleared}");
+            AppLogger.Info($"GoblinTracker: Auto-count evidence state reset reason='{PortLogField(reason)}' clearedEvidenceSignatures={cleared} clearedEncounterSignatures={encountersCleared}");
         }
 
         private void PortSetGoblinAutomaticCountingArmedState(string reason)
@@ -887,6 +993,14 @@ namespace GoblinFarmer
                 reason.Equals("NoCandidate", StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool PortShouldPreserveDisplayedObservationAgainstIncoming(
+            GoblinObservationRecord incomingObservation,
+            GoblinObservationRecord? displayedObservation)
+        {
+            return displayedObservation != null &&
+                incomingObservation.Reason.Equals("EncounterAlreadyAutoCounted", StringComparison.OrdinalIgnoreCase);
+        }
+
         private bool PortShouldPreserveDisplayedGoblinObservation(
             GoblinObservationRecord? observation,
             string reason,
@@ -900,15 +1014,14 @@ namespace GoblinFarmer
                 return true;
             }
 
-            if (!PortAutomaticObservationDisplayHoldActive(observation, nowUtc))
+            if (observation != null &&
+                (reason.Equals("No current observation", StringComparison.OrdinalIgnoreCase) ||
+                reason.Equals("NoCandidate", StringComparison.OrdinalIgnoreCase) ||
+                reason.Equals("MissingTemplate", StringComparison.OrdinalIgnoreCase)))
             {
-                return false;
-            }
-
-            if (reason.Equals("No current observation", StringComparison.OrdinalIgnoreCase) ||
-                reason.Equals("NoCandidate", StringComparison.OrdinalIgnoreCase))
-            {
-                preserveKind = "ObservationDisplayHold";
+                preserveKind = PortAutomaticObservationDisplayHoldActive(observation, nowUtc)
+                    ? "ObservationDisplayHold"
+                    : "LastObservationPersistent";
                 return true;
             }
 

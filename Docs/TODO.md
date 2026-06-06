@@ -11,6 +11,7 @@
 * [x] Fix Waterway button clearing next-target button color by requiring exact Ancient Waterway arrival confirmation before advancing state.
 * [x] Keep Eastern Channel Level 2 as the only channel level that allows direct hotkey routing to Stinging Winds.
 * [x] Block Ancient Waterway hotkey routing away from Ancient Waterway with explicit reason.
+* [x] Allow plain Ancient Waterway Teleport Next hotkey routing to Stinging Winds while preserving the Ancient Waterway self-click block.
 * [x] Fix Western Channel Level 2 corrective target to Ancient Waterway instead of direct Stinging Winds.
 * [x] Force a fresh raw current-location scan on every teleport hotkey press before choosing allowed/blocked routing.
 * [x] Use raw hotkey scan location as the primary blocking/route-decision location so aliases do not override channel sublocations.
@@ -142,7 +143,9 @@
 * [x] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now displays/counts as Treasure Goblin.
 * [x] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
 * [ ] Live-validate a fresh Killed-only Gilded Baron journal match auto-counts promptly with `JournalKilledAcceptedFreshObservation` instead of waiting for a later Engaged line.
-* [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
+* [x] Add encounter-level automatic-count protection so recently counted same-type Journal evidence in a different area suppresses with `EncounterAlreadyAutoCounted`.
+* [ ] Live-validate stale Treasure Goblin and other same-type journal lines stay ignored with `EncounterAlreadyAutoCounted` and do not auto-count after moving areas.
+* [ ] Live-validate Last Observation remains visible after no-candidate scans and is replaced only by a new goblin observation/count or reset/new-game cleanup.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
 * [x] Live-validate immediate manual `X` after a Killed journal line counts the recognized goblin type and logs `JournalKilledAcceptedFreshManual`.

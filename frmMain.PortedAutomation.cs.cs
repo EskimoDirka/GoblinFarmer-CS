@@ -55,11 +55,13 @@ namespace GoblinFarmer
         private static readonly TimeSpan PortManualGoblinObservationTypeReuseWindow = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan PortManualGoblinCountDisplayHold = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan PortAutomaticGoblinObservationDisplayHold = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan PortAutomaticGoblinJournalEncounterSuppressWindow = TimeSpan.FromMinutes(10);
         private GoblinObservationRecord? portLastGoblinObservationForManualCount;
         private GoblinObservationRecord? portDisplayedGoblinObservation;
         private string portDisplayedGoblinObservationStatus = "";
         private DateTime portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
         private readonly Dictionary<string, PortGoblinAutoCountEvidenceState> portGoblinAutoCountEvidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, PortGoblinAutoCountEncounterState> portGoblinAutoCountEncounterByGoblinType = new(StringComparer.OrdinalIgnoreCase);
         private DateTime portGoblinAutomaticCountingArmedAtUtc = DateTime.MinValue;
         private bool portGoblinTrackerDebugPreferenceControlsInitialized;
         private CheckBox? chkGoblinObservationMode;
@@ -175,6 +177,13 @@ namespace GoblinFarmer
             string AreaKey,
             string GoblinType,
             string Source);
+        private sealed record PortGoblinAutoCountEncounterState(
+            DateTime CountedUtc,
+            DateTime LastSeenUtc,
+            string AreaKey,
+            string GoblinType,
+            string Source,
+            string EvidenceKey);
         private sealed class PortNoActivateSplashForm : Form
         {
             private const int WS_EX_NOACTIVATE = 0x08000000;

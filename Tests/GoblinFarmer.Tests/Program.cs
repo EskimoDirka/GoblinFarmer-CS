@@ -1871,9 +1871,10 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdated", StringComparison.Ordinal), "valid observations should log LastObservationUpdated when the UI state changes");
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinObservationDisplayHold", StringComparison.Ordinal), "automatic observations should stay readable briefly after the first no-candidate scan");
     AssertTrue(sessionStatsSource.Contains("ObservationDisplayHold", StringComparison.Ordinal), "no-candidate clears should report when they preserve a recent automatic observation");
+    AssertTrue(sessionStatsSource.Contains("LastObservationPersistent", StringComparison.Ordinal), "no-candidate scans should preserve the latest real observation after the short hold expires");
     AssertTrue(sessionStatsSource.Contains("displayHoldSeconds={PortAutomaticGoblinObservationDisplayHold.TotalSeconds:0}", StringComparison.Ordinal), "automatic observation update logs should include the display hold duration");
     AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
-    AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should visibly clear Last Observation");
+    AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should route through the Last Observation state helper");
     AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 1000", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback");
 }
 
@@ -1950,6 +1951,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
     string autoCountMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordAutomaticGoblinCount");
 
     AssertTrue(automationSource.Contains("portGoblinAutoCountEvidenceBySignature", StringComparison.Ordinal), "automatic counting should remember evidence signatures");
@@ -1961,11 +1963,18 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountMethod.IndexOf("portGoblinAutoCountEvidenceBySignature[autoEvidenceKey] = evidenceState", StringComparison.Ordinal) < autoCountMethod.IndexOf("AutomaticCountingDisabled", StringComparison.Ordinal), "auto-count evidence should be remembered before the disabled gate returns");
     AssertTrue(autoCountMethod.Contains("EvidenceSeenBeforeAutoCountEnabled", StringComparison.Ordinal), "automatic counting should suppress evidence seen before the auto-count gate was armed");
     AssertTrue(autoCountMethod.Contains("EvidenceAlreadyAutoCounted", StringComparison.Ordinal), "automatic counting should suppress the same evidence signature after it counts once");
+    AssertTrue(autoCountMethod.Contains("EncounterAlreadyAutoCounted", StringComparison.Ordinal), "automatic counting should suppress recently counted journal evidence when it appears again in another area");
+    AssertTrue(autoCountMethod.Contains("PortShouldSuppressJournalEncounterAlreadyAutoCounted", StringComparison.Ordinal), "automatic counting should use encounter-level protection in addition to exact evidence signatures");
+    AssertTrue(observeMethod.Contains("EncounterAlreadyAutoCounted", StringComparison.Ordinal), "observation summaries should report cross-area journal repeats as not countable before auto-count attempts run");
+    AssertTrue(observeMethod.Contains("PortShouldPreserveDisplayedObservationAgainstIncoming", StringComparison.Ordinal), "suppressed old journal repeats should not replace the Last Observation display");
+    AssertTrue(automationSource.Contains("portGoblinAutoCountEncounterByGoblinType", StringComparison.Ordinal), "automatic counting should remember recently counted goblin types across source/template variants");
+    AssertTrue(automationSource.Contains("PortAutomaticGoblinJournalEncounterSuppressWindow", StringComparison.Ordinal), "cross-area journal suppression should use an explicit bounded window");
     AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");
     AssertTrue(autoCountMethod.Contains("PortShowSplash($\"Goblin auto-counted", StringComparison.Ordinal), "automatic counting should show a visible notification when it increments");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinAutoCountEvidenceState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear auto-count evidence signatures");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinAutoCountEvidenceState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear auto-count evidence signatures");
     AssertTrue(evidenceSource.Contains("clearedAutoCountEvidence", StringComparison.Ordinal), "evidence-state reset logs should report auto-count signature clearing");
+    AssertTrue(evidenceSource.Contains("clearedAutoCountEncounters", StringComparison.Ordinal), "evidence-state reset logs should report auto-count encounter clearing");
 }
 
 static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
@@ -1984,6 +1993,8 @@ static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
     AssertTrue(clearMethod.Contains("LastObservationClearSkipped", StringComparison.Ordinal), "no-candidate scanner clears should be skipped during the manual-count display hold");
     AssertTrue(clearMethod.Contains("PortShouldPreserveDisplayedGoblinObservation", StringComparison.Ordinal), "Last Observation clearing should preserve recent accepted manual counts briefly");
     AssertTrue(sessionStatsSource.Contains("PortShouldPreserveDisplayedManualCountObservation", StringComparison.Ordinal), "shared Last Observation clearing should still preserve recent accepted manual counts briefly");
+    AssertTrue(sessionStatsSource.Contains("LastObservationPersistent", StringComparison.Ordinal), "shared Last Observation clearing should keep the last real goblin visible until another goblin or reset updates it");
+    AssertTrue(sessionStatsSource.Contains("LastObservationUpdateSkippedPreserved", StringComparison.Ordinal), "suppressed stale cross-area observations should not overwrite the displayed Last Observation");
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdateSkippedDuringManualHold", StringComparison.Ordinal), "scanner observation updates should not overwrite accepted manual counts during the display hold");
     AssertTrue(sessionStatsSource.Contains("PortManualCountDisplayHoldActive", StringComparison.Ordinal), "manual count display hold priority should be shared by clear and update paths");
 }
@@ -2108,10 +2119,13 @@ static void TestTeleportNextNoRouteStateNotifiesUser()
 {
     string repoRoot = FindRepositoryRootForTests();
     string hotkeysSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Hotkeys.cs"));
+    string routingSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.TeleportRouting.cs"));
 
     AssertTrue(hotkeysSource.Contains("Teleport Next hotkey ignored: no queued/next teleport", StringComparison.Ordinal), "no-route Teleport Next state should still log the ignored hotkey");
     AssertTrue(hotkeysSource.Contains("Teleport Next skipped", StringComparison.Ordinal), "no-route Teleport Next state should show a player-visible notification");
     AssertTrue(hotkeysSource.Contains("No queued route target for current location.", StringComparison.Ordinal), "no-route Teleport Next notification should explain the route state");
+    AssertTrue(routingSource.Contains("Ancient Waterway allows hotkey teleportation to Stinging Winds", StringComparison.Ordinal), "plain Ancient Waterway should allow the queued Stinging Winds Teleport Next hop");
+    AssertTrue(routingSource.Contains("Already inside Ancient Waterway; Ancient Waterway button is blocked", StringComparison.Ordinal), "the Ancient Waterway waypoint button should still block when already inside Ancient Waterway");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()
