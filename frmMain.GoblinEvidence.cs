@@ -150,6 +150,12 @@ namespace GoblinFarmer
             return AppSettings.GoblinTracker.EnableObservationMode;
         }
 
+        private static bool PortGoblinAutomaticCountingEnabled()
+        {
+            return AppSettings.GoblinTracker.EnableObservationMode &&
+                AppSettings.GoblinTracker.EnableAutomaticCounting;
+        }
+
         private void PortLogGoblinObservationModeConfiguration(string context)
         {
             if (Interlocked.Exchange(ref portGoblinObservationModeConfigurationLogged, 1) != 0)
@@ -161,13 +167,16 @@ namespace GoblinFarmer
                 "ObservationModeConfiguration: " +
                 $"context={PortLogField(context)}; " +
                 $"enabled={PortGoblinObservationScannerEnabled()}; " +
-                $"setting=GoblinTracker.EnableObservationMode; " +
-                $"settingValue={AppSettings.GoblinTracker.EnableObservationMode}; " +
-                $"defaultValue=True; " +
+                $"enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode}; " +
+                $"enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}; " +
+                $"observationSetting=GoblinTracker.EnableObservationMode; " +
+                $"automaticCountingSetting=GoblinTracker.EnableAutomaticCounting; " +
+                $"observationDefaultValue=True; " +
+                $"automaticCountingDefaultValue=False; " +
                 $"debugMode={AppSettings.Debug.DebugMode}; " +
                 $"diagnosticLoggingEnabled={DebugManager.DiagnosticLoggingEnabled}; " +
-                $"automaticCountingEnabled=False; " +
-                $"manualHotkeyOnlyCountPath=True; " +
+                $"automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; " +
+                $"manualHotkeyOnlyCountPath={!PortGoblinAutomaticCountingEnabled()}; " +
                 $"configPath={PortLogField(AppSettings.ConfigPath)}");
         }
 
@@ -823,7 +832,7 @@ namespace GoblinFarmer
                 portLastGoblinEvidenceScanDiagnosticByKey[key] = now;
             }
 
-            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; observationModeEnabled={PortGoblinObservationScannerEnabled()}; observationModeSetting=GoblinTracker.EnableObservationMode; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
+            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; observationModeEnabled={PortGoblinObservationScannerEnabled()}; automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; observationModeSetting=GoblinTracker.EnableObservationMode; automaticCountingSetting=GoblinTracker.EnableAutomaticCounting; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
         }
 
         private void PortLogJournalEvidenceFreshnessDiagnostic(

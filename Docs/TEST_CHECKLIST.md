@@ -129,10 +129,13 @@
 - Fresh Journal/Minimap Last Observation entries remain readable for about 10 seconds and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
 - The Goblin Tracker UI clears Last Observation to a no-current/no-candidate state after scans or manual refreshes that find no current goblin evidence once any active display hold has expired
 - Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for no-candidate, stale, missing-template, reset, or no-current states
-- Before automatic goblin counting is enabled, the automatic-count gate must be disabled by default and visible in config/log diagnostics
-- Automatic goblin counting, when explicitly enabled in a future pass, must count only from fresh eligible observations and must log accepted/suppressed decisions separately from observation-only diagnostics
-- Future automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
-- Future automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
+- `GoblinTracker.EnableObservationMode` controls scanner/diagnostic behavior only; `GoblinTracker.EnableAutomaticCounting` is the separate automatic-count gate and defaults to `false`
+- Startup logs report `EnableObservationMode`, `EnableAutomaticCounting`, effective `automaticCountingEnabled`, and `manualHotkeyOnlyCountPath`
+- With `EnableAutomaticCounting=false`, Observation Mode may update Last Observation but must not increment GoblinCount, GPH, found records, or counted-area slots
+- Automatic goblin counting requires both `EnableObservationMode=true` and `EnableAutomaticCounting=true`
+- When explicitly enabled, automatic goblin counting must count only from fresh eligible observations and must log accepted/suppressed decisions separately from observation-only diagnostics
+- Enabled automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
+- Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
 

@@ -57,6 +57,7 @@ Run("Goblin observation type reuse requires recent matching area", TestGoblinObs
 Run("Goblin manual unknown count requires fresh observation by default", TestGoblinManualUnknownCountRequiresFreshObservationByDefault);
 Run("Goblin observation UI state logs update and clear", TestGoblinObservationUiStateLogsUpdateAndClear);
 Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
+Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
 Run("Goblin fresh killed journal can satisfy manual evidence gate", TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate);
@@ -1866,13 +1867,40 @@ static void TestGoblinObservationModeEnabledByDefaultInRelease()
     AssertTrue(appSettingsSource.Contains("public bool EnableObservationMode { get; set; } = true", StringComparison.Ordinal), "Observation Mode should default on for v1.4 Release diagnostics");
     AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableObservationMode={GoblinTracker.EnableObservationMode}", StringComparison.Ordinal), "AppSettings startup log should expose the Observation Mode setting");
     AssertTrue(appSettingsSource.Contains("TryGetProperty(\"EnableObservationMode\"", StringComparison.Ordinal), "existing installed configs should be migrated when the Observation Mode setting is absent");
-    AssertTrue(configSource.Contains("\"EnableObservationMode\": true", StringComparison.Ordinal), "tracked default config should make Observation Mode visible and enabled");
+    AssertTrue(configSource.Contains("\"EnableObservationMode\"", StringComparison.Ordinal), "tracked config should make Observation Mode visible");
     AssertTrue(scannerEnabledMethod.Contains("AppSettings.GoblinTracker.EnableObservationMode", StringComparison.Ordinal), "scanner enablement should be controlled by the GoblinTracker Observation Mode setting");
     AssertFalse(scannerEnabledMethod.Contains("DebugManager.DiagnosticLoggingEnabled", StringComparison.Ordinal), "normal Release observation scanning must not require verbose diagnostic logging");
     AssertFalse(scannerEnabledMethod.Contains("AppSettings.Debug.DebugMode", StringComparison.Ordinal), "normal Release observation scanning must not require Debug Mode");
     AssertTrue(evidenceSource.Contains("ObservationModeConfiguration", StringComparison.Ordinal), "startup should log why Observation Mode is enabled or disabled");
-    AssertTrue(evidenceSource.Contains("automaticCountingEnabled=False", StringComparison.Ordinal), "Observation Mode diagnostics should remain separate from automatic counting");
+    AssertTrue(evidenceSource.Contains("enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode}", StringComparison.Ordinal), "Observation Mode diagnostics should report the scanner setting separately");
+    AssertTrue(evidenceSource.Contains("enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}", StringComparison.Ordinal), "Observation Mode diagnostics should report the automatic-count setting separately");
+    AssertTrue(evidenceSource.Contains("automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}", StringComparison.Ordinal), "Observation Mode diagnostics should report the effective automatic-count gate");
     AssertTrue(evidenceSource.Contains("observationModeEnabled={PortGoblinObservationScannerEnabled()}", StringComparison.Ordinal), "scan skipped diagnostics should expose the current Observation Mode setting");
+}
+
+static void TestGoblinAutomaticCountingGateDefaultsDisabled()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+    string automaticEnabledMethod = ExtractMethodBody(evidenceSource, "private static bool PortGoblinAutomaticCountingEnabled");
+    string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
+    string autoCountMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordAutomaticGoblinCount");
+
+    AssertTrue(appSettingsSource.Contains("public bool EnableAutomaticCounting { get; set; } = false", StringComparison.Ordinal), "automatic goblin counting should default off");
+    AssertTrue(configSource.Contains("\"EnableAutomaticCounting\": false", StringComparison.Ordinal), "tracked default config should expose automatic counting as disabled");
+    AssertTrue(appSettingsSource.Contains("TryGetProperty(\"EnableAutomaticCounting\"", StringComparison.Ordinal), "installed configs missing the automatic-count setting should migrate to the disabled default");
+    AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}", StringComparison.Ordinal), "startup AppSettings logs should expose the automatic-count setting");
+    AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableObservationMode", StringComparison.Ordinal), "automatic counting should require Observation Mode");
+    AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting", StringComparison.Ordinal), "automatic counting should require the explicit automatic-count setting");
+    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper");
+    AssertTrue(autoCountMethod.Contains("if (!PortGoblinAutomaticCountingEnabled())", StringComparison.Ordinal), "automatic count helper should do nothing when the gate is disabled");
+    AssertTrue(autoCountMethod.Contains("GoblinAutoCountAccepted", StringComparison.Ordinal), "enabled automatic counts should log accepted decisions");
+    AssertTrue(autoCountMethod.Contains("GoblinAutoCountSuppressed", StringComparison.Ordinal), "enabled automatic counts should log suppressed decisions");
+    AssertTrue(autoCountMethod.Contains("portGoblinAreaDuplicateGuard.TryAccept", StringComparison.Ordinal), "enabled automatic counts should consume the existing duplicate guard");
+    AssertTrue(autoCountMethod.Contains("GoblinManualCountBlockList.IsBlocked", StringComparison.Ordinal), "enabled automatic counts should preserve the block list");
 }
 
 static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()

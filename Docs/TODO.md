@@ -102,6 +102,8 @@
 * [x] Add a 10-second display hold for automatic Journal/Minimap Last Observation entries so one no-candidate scan does not clear fresh evidence immediately.
 * [x] Review `GoblinFarmer_Debug_20260606_070639.zip` for the 1000ms scanner interval, automatic Last Observation hold, manual `X` type reuse, and observation-only count safety.
 * [x] Confirm Observation Mode produced Journal and Minimap observations in normal Release while GoblinCount changed only after manual `X`.
+* [x] Review `GoblinFarmer_Debug_20260606_074102.zip` for config naming confusion and confirmation that Observation Mode remained manual-count-only.
+* [x] Add explicit `GoblinTracker.EnableAutomaticCounting=false` config gate separate from `GoblinTracker.EnableObservationMode`.
 * [x] Update AGENTS.md to require next test steps and commit/push follow-up unless otherwise specified.
 * [x] Add AGENTS workflow-maintenance guidance backed by `Docs/Worflow blocklist.md`.
 * [x] Prepare v1.4.0 release metadata, release notes, README text, release checklist, and Inno Setup script metadata.
@@ -113,9 +115,12 @@
 * [x] Live-validate Observation Mode updates Last Observation from Journal or Minimap evidence without pressing `X`, while GoblinCount remains unchanged.
 * [x] Live-validate Last Observation appears faster after Journal/Minimap evidence is visible and scanner startup reports `intervalMs=1000`.
 * [x] Live-validate automatic Journal/Minimap Last Observation remains readable for about 10 seconds after a valid observation, with no-candidate clears logging `LastObservationClearSkipped preserveKind=ObservationDisplayHold`.
-* [ ] Design and implement a controlled automatic Goblin Tracker count gate that is disabled by default and cannot count unless explicitly enabled.
-* [ ] Ensure the future automatic count gate consumes the same accepted observation path, area resolver, block list, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area limits already proven by manual `X` and Observation Mode.
-* [ ] Add future automatic-count diagnostics before enabling it live: `GoblinAutoCountAccepted`, `GoblinAutoCountSuppressed`, source, goblin type, area key, area count, area limit, reason, and evidence age.
+* [x] Design and implement a controlled automatic Goblin Tracker count gate that is disabled by default and cannot count unless explicitly enabled.
+* [x] Ensure the automatic count gate consumes the same accepted observation path, area resolver, block list, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area limits already proven by manual `X` and Observation Mode.
+* [x] Add automatic-count diagnostics before enabling it live: `GoblinAutoCountAccepted`, `GoblinAutoCountSuppressed`, source, goblin type, area key, area count, area limit, reason, and evidence age.
+* [ ] Live-validate `GoblinTracker.EnableAutomaticCounting=false` keeps Observation Mode diagnostic-only and never increments GoblinCount.
+* [ ] Live-validate `GoblinTracker.EnableObservationMode=true` plus `GoblinTracker.EnableAutomaticCounting=true` auto-counts exactly one fresh eligible default-area goblin observation.
+* [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.

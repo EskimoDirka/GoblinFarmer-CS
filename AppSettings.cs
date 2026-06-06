@@ -455,7 +455,8 @@ namespace GoblinFarmer
                 return document.RootElement.TryGetProperty("GoblinTracker", out JsonElement goblinTrackerElement) &&
                     goblinTrackerElement.ValueKind == JsonValueKind.Object &&
                     goblinTrackerElement.TryGetProperty("AllowUnknownManualCount", out _) &&
-                    goblinTrackerElement.TryGetProperty("EnableObservationMode", out _);
+                    goblinTrackerElement.TryGetProperty("EnableObservationMode", out _) &&
+                    goblinTrackerElement.TryGetProperty("EnableAutomaticCounting", out _);
             }
             catch (Exception ex)
             {
@@ -1174,6 +1175,7 @@ namespace GoblinFarmer
                 $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}; " +
                 $"GoblinTracker.AllowUnknownManualCount={GoblinTracker.AllowUnknownManualCount}; " +
                 $"GoblinTracker.EnableObservationMode={GoblinTracker.EnableObservationMode}; " +
+                $"GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}; " +
                 $"User.CombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatClass={User.CombatProfile}; " +
@@ -1297,6 +1299,7 @@ namespace GoblinFarmer
         {
             public bool AllowUnknownManualCount { get; set; } = false;
             public bool EnableObservationMode { get; set; } = true;
+            public bool EnableAutomaticCounting { get; set; } = false;
 
             public void Normalize()
             {
