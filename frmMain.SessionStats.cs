@@ -113,6 +113,8 @@ namespace GoblinFarmer
             }
 
             goblinType = PortResolveGoblinTypeForManualCount(source, goblinType, area.AreaKey);
+            bool hasFreshManualObservationForUnknown = area.Resolved &&
+                PortHasFreshManualCountObservation(area.AreaKey);
             string rawLocation = PortDisplayLocation(area.RawLocation);
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
@@ -180,20 +182,63 @@ namespace GoblinFarmer
                     PortShowSplash("Goblin count skipped: blocked area", 2500);
                     return false;
                 }
-                else if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey, out guardResult))
+                else if (area.Resolved)
                 {
-                    suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
-                    GoblinFoundRecord suppressedRecord = new(
-                        area.AreaKey,
-                        area.DisplayLocation,
-                        goblinType,
+                    guardResult = portGoblinAreaDuplicateGuard.Peek(area.AreaKey);
+                    if (!guardResult.Accepted)
+                    {
+                        suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                        GoblinFoundRecord suppressedRecord = new(
+                            area.AreaKey,
+                            area.DisplayLocation,
+                            goblinType,
+                            source,
+                            DateTime.UtcNow,
+                            false,
+                            suppressionReason);
+                        DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                        AppLogger.Info($"GoblinTracker: GoblinCountSuppressed areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={suppressionReason} blockListStatus=Allowed countResult=Suppressed rawLocation='{PortLogField(rawLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}'");
+                        return false;
+                    }
+
+                    bool suppressUnknownManualCount = GoblinManualCountPolicy.RequiresFreshObservationForUnknownManualCount(
                         source,
-                        DateTime.UtcNow,
-                        false,
-                        suppressionReason);
-                    DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
-                    AppLogger.Info($"GoblinTracker: GoblinCountSuppressed areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={suppressionReason} blockListStatus=Allowed countResult=Suppressed rawLocation='{PortLogField(rawLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}'");
-                    return false;
+                        goblinType,
+                        area.Resolved,
+                        AppSettings.GoblinTracker.AllowUnknownManualCount,
+                        hasFreshManualObservationForUnknown);
+                    if (suppressUnknownManualCount)
+                    {
+                        suppressionReason = "NoFreshObservation";
+                        GoblinFoundRecord suppressedRecord = new(
+                            area.AreaKey,
+                            area.DisplayLocation,
+                            goblinType,
+                            source,
+                            DateTime.UtcNow,
+                            false,
+                            suppressionReason);
+                        DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                        AppLogger.Info($"GoblinTracker: GoblinCountSuppressed areaKey={areaKey} reason={suppressionReason} source={PortLogField(source)} blockListStatus=Allowed countResult=Suppressed areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} rawLocation='{PortLogField(rawLocation)}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' allowUnknownManualCount={AppSettings.GoblinTracker.AllowUnknownManualCount}");
+                        PortShowSplash("No fresh goblin observation to count.", 3000);
+                        return false;
+                    }
+
+                    if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey, out guardResult))
+                    {
+                        suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                        GoblinFoundRecord suppressedRecord = new(
+                            area.AreaKey,
+                            area.DisplayLocation,
+                            goblinType,
+                            source,
+                            DateTime.UtcNow,
+                            false,
+                            suppressionReason);
+                        DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                        AppLogger.Info($"GoblinTracker: GoblinCountSuppressed areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={suppressionReason} blockListStatus=Allowed countResult=Suppressed rawLocation='{PortLogField(rawLocation)}' type='{PortLogField(goblinType)}' source='{PortLogField(source)}'");
+                        return false;
+                    }
                 }
 
                 GoblinFoundRecord countedRecord = new(
@@ -294,6 +339,7 @@ namespace GoblinFarmer
 
             AppLogger.Info($"GoblinTracker: GoblinObservationCandidate source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} wouldCount={wouldCount} reason={reason}");
             AppLogger.Info($"GoblinTracker: GoblinObservationSummary source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState} areaLimit={guardResult.AreaLimit} currentAreaCount={guardResult.AreaCount}");
+            AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState}");
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return wouldCount;
@@ -461,6 +507,42 @@ namespace GoblinFarmer
             return !string.Equals(resolvedType, "Unknown", StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool PortHasFreshManualCountObservation(string areaKey)
+        {
+            DateTime nowUtc = DateTime.UtcNow;
+            GoblinObservationRecord? manualObservation;
+            GoblinObservationRecord? displayedObservation;
+            lock (portGoblinTrackerLock)
+            {
+                manualObservation = portLastGoblinObservationForManualCount;
+                displayedObservation = portDisplayedGoblinObservation;
+            }
+
+            return PortObservationIsFreshEligibleForManualCount(manualObservation, areaKey, nowUtc) ||
+                PortObservationIsFreshEligibleForManualCount(displayedObservation, areaKey, nowUtc);
+        }
+
+        private static bool PortObservationIsFreshEligibleForManualCount(
+            GoblinObservationRecord? observation,
+            string areaKey,
+            DateTime nowUtc)
+        {
+            if (observation == null ||
+                !observation.WouldCount ||
+                !string.Equals(observation.Reason, "Eligible", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(areaKey) ||
+                string.IsNullOrWhiteSpace(observation.AreaKey) ||
+                nowUtc - observation.TimestampUtc > PortManualGoblinObservationTypeReuseWindow)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                GoblinAreaResolver.NormalizedKey(areaKey),
+                GoblinAreaResolver.NormalizedKey(observation.AreaKey),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
         private string PortGoblinTrackerAreaRouteContext()
         {
             if (!string.IsNullOrWhiteSpace(portLastConfirmedLocation))
@@ -511,12 +593,17 @@ namespace GoblinFarmer
 
         private void PortMarkGoblinObservationNoCurrent(string reason)
         {
+            GoblinObservationRecord? previousObservation;
+            string previousStatus;
             lock (portGoblinTrackerLock)
             {
+                previousObservation = portDisplayedGoblinObservation;
+                previousStatus = portDisplayedGoblinObservationStatus;
                 portDisplayedGoblinObservation = null;
                 portDisplayedGoblinObservationStatus = string.IsNullOrWhiteSpace(reason) ? "NoCandidate" : reason.Trim();
             }
 
+            AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(string.IsNullOrWhiteSpace(reason) ? "NoCandidate" : reason.Trim())} previousGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} previousAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} previousSource={PortLogField(previousObservation?.Source ?? "")} previousStatus={PortLogField(previousStatus)}");
             PortUpdateGoblinTrackerStats();
         }
 

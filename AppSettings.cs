@@ -56,6 +56,7 @@ namespace GoblinFarmer
         public static TeleportSettings Teleport => settings.Teleport;
         public static BountySettings Bounty => settings.Bounty;
         public static ImageRecognitionSettings ImageRecognition => settings.ImageRecognition;
+        public static GoblinTrackerSettings GoblinTracker => settings.GoblinTracker;
         public static UserSettings User => settings.User;
         public static int RetentionDays => 1;
 
@@ -102,6 +103,7 @@ namespace GoblinFarmer
                     bool hasSavedDebugScreenshotsPreference = HasSavedDebugScreenshotsPreference(json);
                     bool hasSavedSuccessScreenshotsPreference = HasSavedSuccessScreenshotsPreference(json);
                     bool hasSavedUserPreferences = HasSavedUserPreferences(json);
+                    bool hasSavedGoblinTrackerPreferences = HasSavedGoblinTrackerPreferences(json);
                     SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(json, JsonOptions);
                     settings = loaded ?? SettingsModel.Default();
                     settings.Normalize();
@@ -125,6 +127,12 @@ namespace GoblinFarmer
                     {
                         shouldSaveLoadedSettings = true;
                         AppLogger.Info("AppSettings missing one or more User preferences; using defaults for missing values.");
+                    }
+
+                    if (!hasSavedGoblinTrackerPreferences)
+                    {
+                        shouldSaveLoadedSettings = true;
+                        AppLogger.Info("AppSettings missing GoblinTracker preferences; using default AllowUnknownManualCount=false.");
                     }
 
                     ApplyReleaseDebugPersistenceDefaults();
@@ -430,6 +438,27 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 AppLogger.Error("Failed to inspect AppSettings User preferences.", ex);
+                return false;
+            }
+        }
+
+        private static bool HasSavedGoblinTrackerPreferences(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
+
+                return document.RootElement.TryGetProperty("GoblinTracker", out JsonElement goblinTrackerElement) &&
+                    goblinTrackerElement.ValueKind == JsonValueKind.Object &&
+                    goblinTrackerElement.TryGetProperty("AllowUnknownManualCount", out _);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to inspect AppSettings GoblinTracker preferences.", ex);
                 return false;
             }
         }
@@ -1142,6 +1171,7 @@ namespace GoblinFarmer
                 $"Bounty.EscapeCooldownMs={Bounty.EscapeCooldownMs}; " +
                 $"ImageRecognition.StartGameButtonConfidence={ImageRecognition.StartGameButtonConfidence:0.000}; " +
                 $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}; " +
+                $"GoblinTracker.AllowUnknownManualCount={GoblinTracker.AllowUnknownManualCount}; " +
                 $"User.CombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatClass={User.CombatProfile}; " +
@@ -1197,6 +1227,7 @@ namespace GoblinFarmer
             public TeleportSettings Teleport { get; set; } = new();
             public BountySettings Bounty { get; set; } = new();
             public ImageRecognitionSettings ImageRecognition { get; set; } = new();
+            public GoblinTrackerSettings GoblinTracker { get; set; } = new();
             public UserSettings User { get; set; } = new();
 
             public static SettingsModel Default()
@@ -1211,6 +1242,7 @@ namespace GoblinFarmer
                     Teleport = new TeleportSettings(),
                     Bounty = new BountySettings(),
                     ImageRecognition = new ImageRecognitionSettings(),
+                    GoblinTracker = new GoblinTrackerSettings(),
                     User = new UserSettings(),
                 };
                 model.Normalize();
@@ -1229,6 +1261,7 @@ namespace GoblinFarmer
                     Teleport = Teleport,
                     Bounty = Bounty,
                     ImageRecognition = ImageRecognition,
+                    GoblinTracker = GoblinTracker,
                     User = User,
                 };
             }
@@ -1243,6 +1276,7 @@ namespace GoblinFarmer
                 Teleport ??= new TeleportSettings();
                 Bounty ??= new BountySettings();
                 ImageRecognition ??= new ImageRecognitionSettings();
+                GoblinTracker ??= new GoblinTrackerSettings();
                 User ??= new UserSettings();
                 Runtime.Normalize();
                 Launch.Normalize();
@@ -1252,7 +1286,17 @@ namespace GoblinFarmer
                 Teleport.Normalize();
                 Bounty.Normalize();
                 ImageRecognition.Normalize();
+                GoblinTracker.Normalize();
                 User.Normalize();
+            }
+        }
+
+        internal sealed class GoblinTrackerSettings
+        {
+            public bool AllowUnknownManualCount { get; set; } = false;
+
+            public void Normalize()
+            {
             }
         }
 

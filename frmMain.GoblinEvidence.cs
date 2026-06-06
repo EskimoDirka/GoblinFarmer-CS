@@ -25,6 +25,7 @@ namespace GoblinFarmer
         private readonly Dictionary<string, DateTime> portLastGoblinEvidenceDetectorDiagnosticByKey = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, GoblinJournalEvidenceSeenState> portJournalEvidenceSeenByKey = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, GoblinJournalEngagedState> portRecentJournalEngagedByGoblinType = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, GoblinJournalStaleSuppressedState> portStaleSuppressedJournalEvidenceByKey = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource? portGoblinEvidenceObservationCts;
         private Task? portGoblinEvidenceScannerTask;
         private int portGoblinEvidenceCalibrationCaptureActive;
@@ -309,11 +310,6 @@ namespace GoblinFarmer
             string BestImagePath,
             GoblinEvidenceTemplateMatch BestMatch);
 
-        private sealed record GoblinJournalEngagedState(
-            string GoblinType,
-            string AreaKey,
-            DateTime SeenUtc);
-
         private sealed record GoblinJournalEvidenceSeenState(
             DateTime FirstSeenUtc,
             DateTime LastSeenUtc);
@@ -402,12 +398,10 @@ namespace GoblinFarmer
             out GoblinEvidenceCandidate? acceptedCandidate)
         {
             acceptedCandidate = null;
-            PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea("Journal");
-            string areaKey = areaResult.Area.Resolved ? areaResult.Area.AreaKey : "";
-            string displayArea = areaResult.Area.Resolved ? areaResult.Area.DisplayLocation : "Unknown";
             DateTime nowUtc = DateTime.UtcNow;
             string goblinType = GoblinTypeNormalizer.Normalize(template.GoblinType);
             string freshnessKey = $"{template.Kind}|{goblinType}";
+            string staleSignature = PortJournalEvidenceStaleSignature(template, goblinType, match, portLastConfirmedLocation);
             DateTime firstSeenUtc;
             GoblinJournalEngagedState? recentEngaged = null;
 
@@ -436,14 +430,35 @@ namespace GoblinFarmer
                 template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled;
             if (isEngagedSignal)
             {
-                if (firstSeenAge > GoblinJournalEvidenceFreshWindow)
+                bool staleSuppressionActive = !GoblinJournalFreshnessPolicy.IsFresh(firstSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow) &&
+                    PortTryTouchStaleSuppressedJournalEvidence(staleSignature, nowUtc);
+                if (staleSuppressionActive)
                 {
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalEngagedIgnoredStale",
                         template,
                         match,
+                        portLastConfirmedLocation,
+                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
+                    return false;
+                }
+            }
+
+            PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea("Journal");
+            string areaKey = areaResult.Area.Resolved ? areaResult.Area.AreaKey : "";
+            string displayArea = areaResult.Area.Resolved ? areaResult.Area.DisplayLocation : "Unknown";
+
+            if (isEngagedSignal)
+            {
+                if (!GoblinJournalFreshnessPolicy.IsFresh(firstSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                {
+                    PortRememberStaleSuppressedJournalEvidence(staleSignature, nowUtc);
+                    PortLogJournalEvidenceFreshnessDiagnostic(
+                        "JournalEngagedIgnoredStale",
+                        template,
+                        match,
                         displayArea,
-                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
                     return false;
                 }
 
@@ -467,9 +482,11 @@ namespace GoblinFarmer
 
             if (template.Kind == GoblinEvidenceTemplateKind.JournalKilled)
             {
-                bool recentEngagedMatches = recentEngaged != null &&
-                    string.Equals(recentEngaged.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase) &&
-                    nowUtc - recentEngaged.SeenUtc <= GoblinJournalEvidenceFreshWindow;
+                bool recentEngagedMatches = GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(
+                    recentEngaged,
+                    areaKey,
+                    nowUtc,
+                    GoblinJournalEvidenceFreshWindow);
                 if (!recentEngagedMatches)
                 {
                     double recentAgeSeconds = recentEngaged == null ? -1 : Math.Max(0, (nowUtc - recentEngaged.SeenUtc).TotalSeconds);
@@ -497,6 +514,57 @@ namespace GoblinFarmer
 
             acceptedCandidate = candidate;
             return true;
+        }
+
+        private string PortJournalEvidenceStaleSignature(
+            GoblinEvidenceTemplateRequirement template,
+            string goblinType,
+            GoblinEvidenceTemplateMatch match,
+            string currentArea)
+        {
+            return string.Join("|",
+                template.Kind,
+                goblinType,
+                template.FileName,
+                PortDisplayLocation(currentArea),
+                match.MatchPoint.X,
+                match.MatchPoint.Y,
+                match.TemplateSize.Width,
+                match.TemplateSize.Height);
+        }
+
+        private bool PortTryTouchStaleSuppressedJournalEvidence(string signature, DateTime nowUtc)
+        {
+            lock (portGoblinEvidenceLock)
+            {
+                if (!portStaleSuppressedJournalEvidenceByKey.TryGetValue(signature, out GoblinJournalStaleSuppressedState? state))
+                {
+                    return false;
+                }
+
+                if (!GoblinJournalFreshnessPolicy.StaleSuppressionActive(state.LastSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                {
+                    portStaleSuppressedJournalEvidenceByKey.Remove(signature);
+                    return false;
+                }
+
+                portStaleSuppressedJournalEvidenceByKey[signature] = state with { LastSeenUtc = nowUtc };
+                return true;
+            }
+        }
+
+        private void PortRememberStaleSuppressedJournalEvidence(string signature, DateTime nowUtc)
+        {
+            lock (portGoblinEvidenceLock)
+            {
+                if (portStaleSuppressedJournalEvidenceByKey.TryGetValue(signature, out GoblinJournalStaleSuppressedState? state))
+                {
+                    portStaleSuppressedJournalEvidenceByKey[signature] = state with { LastSeenUtc = nowUtc };
+                    return;
+                }
+
+                portStaleSuppressedJournalEvidenceByKey[signature] = new GoblinJournalStaleSuppressedState(nowUtc, nowUtc);
+            }
         }
 
         private GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatchInDiabloRegion(string imagePath, Rectangle referenceRegion)
@@ -981,6 +1049,7 @@ namespace GoblinFarmer
             int detectorDiagnosticsCleared;
             int journalFirstSeenCleared;
             int journalEngagedCleared;
+            int staleJournalSuppressedCleared;
             lock (portGoblinEvidenceLock)
             {
                 evidenceCooldownsCleared = portLastGoblinEvidenceByType.Count;
@@ -989,12 +1058,14 @@ namespace GoblinFarmer
                 detectorDiagnosticsCleared = portLastGoblinEvidenceDetectorDiagnosticByKey.Count;
                 journalFirstSeenCleared = portJournalEvidenceSeenByKey.Count;
                 journalEngagedCleared = portRecentJournalEngagedByGoblinType.Count;
+                staleJournalSuppressedCleared = portStaleSuppressedJournalEvidenceByKey.Count;
                 portLastGoblinEvidenceByType.Clear();
                 portLastGoblinEvidenceMissingTemplateLogByType.Clear();
                 portLastGoblinEvidenceScanDiagnosticByKey.Clear();
                 portLastGoblinEvidenceDetectorDiagnosticByKey.Clear();
                 portJournalEvidenceSeenByKey.Clear();
                 portRecentJournalEngagedByGoblinType.Clear();
+                portStaleSuppressedJournalEvidenceByKey.Clear();
                 Interlocked.Exchange(ref portLastGoblinEvidenceDiagnosticCropTicks, 0);
                 Interlocked.Exchange(ref portLastGoblinEvidenceMissingTemplateScanSummaryTicks, 0);
             }
@@ -1010,7 +1081,8 @@ namespace GoblinFarmer
                 portDisplayedGoblinObservationStatus = "No current observation";
             }
 
-            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
+            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
+            AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(reason)} previousDisplayed={hadDisplayedObservation}");
         }
 
         private string PortCaptureGoblinEvidenceScreenshot(GoblinEvidenceType type, DateTime timestamp)
@@ -1160,5 +1232,7 @@ namespace GoblinFarmer
         {
             return $"X={region.X} Y={region.Y} W={region.Width} H={region.Height}";
         }
+
+        private sealed record GoblinJournalStaleSuppressedState(DateTime FirstSuppressedUtc, DateTime LastSeenUtc);
     }
 }

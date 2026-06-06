@@ -52,6 +52,10 @@ Run("Goblin area duplicate guard peek does not consume count slots", TestGoblinA
 Run("Goblin manual count block list blocks explicit no-count areas", TestGoblinManualCountBlockListBlocksExplicitNoCountAreas);
 Run("Goblin observation counters are diagnostic only", TestGoblinObservationCountersAreDiagnosticOnly);
 Run("Goblin observation type reuse requires recent matching area", TestGoblinObservationTypeReuseRequiresRecentMatchingArea);
+Run("Goblin manual unknown count requires fresh observation by default", TestGoblinManualUnknownCountRequiresFreshObservationByDefault);
+Run("Goblin observation UI state logs update and clear", TestGoblinObservationUiStateLogsUpdateAndClear);
+Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
+Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
 Run("Goblin area detection uses strong route-context runner-up", TestGoblinAreaDetectionUsesStrongRouteContextRunnerUp);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
@@ -1691,6 +1695,96 @@ static void TestGoblinObservationTypeReuseRequiresRecentMatchingArea()
         "Rainbow Goblin",
         GoblinObservationTypeReuse.ResolveForManualCount("Rainbow Goblin", "Southern Highlands", matchingObservation, now, window),
         "known manual goblin type should win over observation reuse");
+}
+
+static void TestGoblinManualUnknownCountRequiresFreshObservationByDefault()
+{
+    AssertTrue(
+        GoblinManualCountPolicy.RequiresFreshObservationForUnknownManualCount(
+            "ManualHotkey",
+            "Unknown",
+            areaResolved: true,
+            allowUnknownManualCount: false,
+            hasFreshObservation: false),
+        "manual Unknown in a resolved area should suppress when no fresh observation exists");
+
+    AssertFalse(
+        GoblinManualCountPolicy.RequiresFreshObservationForUnknownManualCount(
+            "ManualHotkey",
+            "Unknown",
+            areaResolved: true,
+            allowUnknownManualCount: false,
+            hasFreshObservation: true),
+        "manual Unknown should be allowed when a fresh observation/candidate exists");
+
+    AssertFalse(
+        GoblinManualCountPolicy.RequiresFreshObservationForUnknownManualCount(
+            "ManualHotkey",
+            "Unknown",
+            areaResolved: true,
+            allowUnknownManualCount: true,
+            hasFreshObservation: false),
+        "explicit opt-in should preserve legacy Unknown manual counting");
+
+    AssertFalse(
+        GoblinManualCountPolicy.RequiresFreshObservationForUnknownManualCount(
+            "ManualHotkey",
+            "Treasure Goblin",
+            areaResolved: true,
+            allowUnknownManualCount: false,
+            hasFreshObservation: false),
+        "known goblin types should not be blocked by the Unknown manual-count gate");
+
+    AssertFalse(
+        GoblinManualCountPolicy.RequiresFreshObservationForUnknownManualCount(
+            "ManualHotkey",
+            "Unknown",
+            areaResolved: false,
+            allowUnknownManualCount: false,
+            hasFreshObservation: false),
+        "unresolved legacy fallback remains outside the resolved-area no-fresh gate");
+}
+
+static void TestGoblinObservationUiStateLogsUpdateAndClear()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+
+    AssertTrue(sessionStatsSource.Contains("PortStartGoblinObservationScanner(\"Startup\")", StringComparison.Ordinal), "observation scanner should start outside combat at session initialization");
+    AssertTrue(sessionStatsSource.Contains("LastObservationUpdated", StringComparison.Ordinal), "valid observations should log LastObservationUpdated when the UI state changes");
+    AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
+    AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should visibly clear Last Observation");
+}
+
+static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
+{
+    DateTime now = DateTime.UtcNow;
+    TimeSpan window = TimeSpan.FromSeconds(45);
+    DateTime firstSeen = now - TimeSpan.FromSeconds(46);
+    DateTime recentSeen = now - TimeSpan.FromSeconds(10);
+
+    AssertFalse(GoblinJournalFreshnessPolicy.IsFresh(firstSeen, now, window), "journal Engaged lines older than the freshness window should be stale");
+    AssertTrue(GoblinJournalFreshnessPolicy.StaleSuppressionActive(recentSeen, now, window), "recently stale-suppressed signatures should stay suppressed while still visible");
+    AssertFalse(GoblinJournalFreshnessPolicy.StaleSuppressionActive(now - TimeSpan.FromSeconds(90), now, window), "stale suppression should expire after the line disappears long enough");
+
+    GoblinJournalEngagedState matchingEngaged = new("Treasure Goblin", "Cathedral Level 1", recentSeen);
+    GoblinJournalEngagedState wrongAreaEngaged = new("Treasure Goblin", "Highlands Cave", recentSeen);
+    AssertTrue(GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(matchingEngaged, "Cathedral Level 1", now, window), "Killed journal evidence should be accepted after a recent same-area Engaged line");
+    AssertFalse(GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(wrongAreaEngaged, "Cathedral Level 1", now, window), "Killed journal evidence should ignore stale/wrong-area Engaged lines");
+    AssertFalse(GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(null, "Cathedral Level 1", now, window), "Killed journal evidence should be ignored without a recent Engaged anchor");
+}
+
+static void TestGoblinManualNoFreshGatePreservesBlockedAreaPriority()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    int blockedIndex = sessionStatsSource.IndexOf("suppressionReason = \"BlockedArea\"", StringComparison.Ordinal);
+    int noFreshIndex = sessionStatsSource.IndexOf("suppressionReason = \"NoFreshObservation\"", StringComparison.Ordinal);
+
+    AssertTrue(blockedIndex >= 0, "manual block-list suppression should still exist");
+    AssertTrue(noFreshIndex >= 0, "manual no-fresh suppression should exist");
+    AssertTrue(blockedIndex < noFreshIndex, "blocked areas should suppress before the no-fresh Unknown gate, even if evidence exists");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()

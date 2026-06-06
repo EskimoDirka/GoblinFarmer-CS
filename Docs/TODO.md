@@ -73,6 +73,16 @@
 
 ### Testing
 
+* [x] Review `GoblinFarmer_Debug_20260606_034050.zip` for Observation Mode pre-auto-count readiness issues.
+* [x] Add explicit Last Observation UI update/clear diagnostics for continuous scanner state.
+* [x] Suppress stale visible journal Engaged-line signatures after the freshness window until they disappear or change.
+* [x] Require fresh same-area observation evidence before resolved-area manual `X` can accept an `Unknown` goblin type by default.
+* [ ] Live-validate Last Observation visibly updates/clears during continuous scans without pressing `X`.
+* [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
+* [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
+* [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
+* [ ] Live-validate `Reset Stats` clears suppression/observation state and allows a count again only after fresh evidence exists.
+* [ ] Live-validate blocked manual-count areas still suppress with `BlockedArea` even if goblin evidence is visible.
 * [ ] Validate `ExtendedRightMenuNoClickRegion`: hover over the lower-right menu, confirm combat continues, cursor does not move, clicks are blocked with `blockReason=ExtendedRightMenuNoClickRegion`, and clicks resume after moving away.
 * [ ] Validate combat no-click suppression mode: logs show `combatInputMode=PhysicalCursorNoClickSuppression`, `clickSendMethod=suppressed`, and Demon Hunter key rotation continues while mouse clicks are suppressed.
 * [ ] Validate Demon Hunter right-hold mode: start right-hold in a safe area, hover over no-click UI, confirm no new right click is sent, UI is not clicked, Shift+Left maintenance skips unsafe injected mouse clicks without stopping combat, and logs show `combatInputMode=PhysicalCursorHeldFromSafeRegion`.

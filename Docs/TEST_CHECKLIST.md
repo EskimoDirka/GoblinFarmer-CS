@@ -65,7 +65,12 @@
 - Cathedral Level 3 remains a default one-count area; a second manual `X` in the same game should suppress as a duplicate unless the log shows a different resolved area key or unknown fallback
 - Reset Stats clears goblin count, tracker active time, GPH, per-area count state, Goblin Evidence cooldowns, and Last Observation/manual observation state
 - New Game clears per-area count state and Goblin Evidence observation/cooldown state while preserving the current session tracker statistics
-- Unknown-area manual fallback still counts through the existing fallback behavior and does not create a counted area key
+- Unknown-area manual fallback still counts through the existing fallback behavior when no area can be resolved and does not create a counted area key
+- Manual `X` in a resolved allowed area with no fresh same-area observation or manual refresh candidate suppresses with `GoblinCountSuppressed reason=NoFreshObservation source=ManualHotkey`
+- Manual `X` no-fresh suppression shows `No fresh goblin observation to count.` and does not increment GoblinCount or consume an area-count slot
+- Manual `X` with fresh same-area observation/candidate still counts, reuses the goblin type when known, and follows the duplicate guard
+- `GoblinTracker.AllowUnknownManualCount` defaults to `false`; setting it to `true` is the explicit opt-in for legacy resolved-area `Unknown` manual counts
+- Blocked manual-count areas still suppress with `BlockedArea` before the no-fresh Unknown gate, even when evidence exists
 - Accepted manual `X` counts show a no-activate notification for 5 seconds with goblin counted, area/location, goblin type or `Unknown`, and current total
 - Accepted manual `X` notifications reuse a recent same-area Observation Mode goblin type within the safe short window
 - Accepted manual `X` runs a current observation refresh before showing the notification, without automatic counting or area-slot consumption
@@ -97,6 +102,7 @@
 - `JournalKilledIgnoredNoRecentEngaged` logs when a Killed-only journal template matches without a recent same-goblin/same-area Engaged line
 - `JournalKilledAcceptedAfterEngaged` logs when a Killed-only journal template is accepted after a recent same-goblin/same-area Engaged line
 - `JournalEngagedIgnoredStale` logs when an old visible Engaged journal line is beyond the freshness window
+- Stale visible Engaged journal line signatures are suppressed until the line disappears or changes, and repeated `JournalEngagedIgnoredStale` logs are throttled
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - Observation candidates report the matched goblin type when a Journal or Minimap template passes confidence
@@ -107,6 +113,7 @@
 - Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
 - The Goblin Tracker UI clears Last Observation to a no-current/no-candidate state after scans or manual refreshes that find no current goblin evidence
+- Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for no-candidate, stale, missing-template, reset, or no-current states
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
 
