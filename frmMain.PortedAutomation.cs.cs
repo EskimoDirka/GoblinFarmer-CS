@@ -61,7 +61,7 @@ namespace GoblinFarmer
         private DateTime portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
         private readonly Dictionary<string, PortGoblinAutoCountEvidenceState> portGoblinAutoCountEvidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
         private DateTime portGoblinAutomaticCountingArmedAtUtc = DateTime.MinValue;
-        private GroupBox? grpGoblinTrackerDebugSettings;
+        private bool portGoblinTrackerDebugPreferenceControlsInitialized;
         private CheckBox? chkGoblinObservationMode;
         private CheckBox? chkGoblinAutomaticCounting;
 
@@ -421,50 +421,41 @@ namespace GoblinFarmer
 
         private void PortInitializeGoblinTrackerDebugPreferenceControls()
         {
-            if (!AppSettings.IsVsDebugProfile || grpGoblinTrackerDebugSettings != null)
+            if (!AppSettings.IsVsDebugProfile || portGoblinTrackerDebugPreferenceControlsInitialized || portSettingsGroup == null)
             {
                 return;
             }
 
-            grpGoblinTrackerDebugSettings = new GroupBox
-            {
-                Location = new Point(349, 466),
-                Name = "grpGoblinTrackerDebugSettings",
-                Size = new Size(270, 76),
-                TabIndex = 30,
-                TabStop = false,
-                Text = "Goblin Tracker Debug",
-            };
+            portGoblinTrackerDebugPreferenceControlsInitialized = true;
 
             chkGoblinObservationMode = new CheckBox
             {
-                AutoSize = true,
-                Location = new Point(12, 22),
+                AutoSize = false,
+                Location = new Point(14, 108),
                 Name = "chkGoblinObservationMode",
-                Size = new Size(156, 19),
+                Size = new Size(158, 20),
                 TabIndex = 0,
-                Text = "Enable Observation Mode",
+                Text = "Observation Mode",
                 UseVisualStyleBackColor = true,
                 Checked = AppSettings.GoblinTracker.EnableObservationMode,
             };
 
             chkGoblinAutomaticCounting = new CheckBox
             {
-                AutoSize = true,
-                Location = new Point(12, 47),
+                AutoSize = false,
+                Location = new Point(190, 108),
                 Name = "chkGoblinAutomaticCounting",
-                Size = new Size(168, 19),
+                Size = new Size(154, 20),
                 TabIndex = 1,
-                Text = "Enable Automatic Counting",
+                Text = "Auto Goblin Count",
                 UseVisualStyleBackColor = true,
                 Checked = AppSettings.GoblinTracker.EnableAutomaticCounting,
             };
 
             chkGoblinObservationMode.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ObservationModeCheckbox");
             chkGoblinAutomaticCounting.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("AutomaticCountingCheckbox");
-            grpGoblinTrackerDebugSettings.Controls.Add(chkGoblinObservationMode);
-            grpGoblinTrackerDebugSettings.Controls.Add(chkGoblinAutomaticCounting);
-            Controls.Add(grpGoblinTrackerDebugSettings);
+            portSettingsGroup.Controls.Add(chkGoblinObservationMode);
+            portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting);
             AppLogger.Info(
                 "Goblin Tracker VS Debug preference controls initialized: " +
                 $"enableObservationMode={chkGoblinObservationMode.Checked}; " +

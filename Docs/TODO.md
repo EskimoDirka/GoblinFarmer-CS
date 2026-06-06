@@ -125,12 +125,15 @@
 * [x] Add automatic-count diagnostics before enabling it live: `GoblinAutoCountAccepted`, `GoblinAutoCountSuppressed`, source, goblin type, area key, area count, area limit, reason, and evidence age.
 * [ ] Live-validate `GoblinTracker.EnableAutomaticCounting=false` keeps Observation Mode diagnostic-only and never increments GoblinCount.
 * [ ] Live-validate `GoblinTracker.EnableObservationMode=true` plus `GoblinTracker.EnableAutomaticCounting=true` auto-counts exactly one fresh eligible default-area goblin observation.
-* [ ] In VS Debug, toggle the new Observation Mode and Automatic Counting checkboxes and confirm `Config\AppSettings.json` updates plus logs show the effective gate and armed timestamp.
+* [x] In VS Debug, toggle the new Observation Mode and Automatic Counting checkboxes and confirm `Config\AppSettings.json` updates plus logs show the effective gate and armed timestamp.
+* [x] Review `GoblinFarmer_Debug_20260606_090045.zip` for the VS Debug checkbox toggle, New Tristram block, Teleport Next no-route notification, fresh Gem Hoarder auto-count, no second Gem Hoarder count after leave/return, and the failed old-evidence auto-count arming expectation.
+* [x] Record automatic-count evidence signatures even while Auto Count is disabled so later enabling the gate can suppress already-visible evidence with `EvidenceSeenBeforeAutoCountEnabled`.
+* [x] Stabilize automatic-count evidence signatures so template/kind identity is preserved while confidence and match-point drift are ignored.
 * [ ] With Automatic Counting off, kill/observe a goblin, then turn Automatic Counting on while the old visible observation remains; confirm it suppresses with `EvidenceSeenBeforeAutoCountEnabled` and does not increment.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification.
-* [ ] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence suppresses with `EvidenceAlreadyAutoCounted` instead of counting again.
-* [ ] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
-* [ ] Press Teleport Next when no queued/next route target exists and confirm the no-route notification appears.
+* [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
+* [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
+* [x] Press Teleport Next when no queued/next route target exists and confirm the no-route notification appears.
 * [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.

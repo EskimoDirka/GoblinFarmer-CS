@@ -94,6 +94,10 @@ namespace GoblinFarmer
                 portSettingsGroup.Controls.Add(portDebugModeCheckBox);
                 PortMoveKeepDebugScreenshotsToSettingsGroup();
             }
+            else
+            {
+                PortInitializeGoblinTrackerDebugPreferenceControls();
+            }
 
             Controls.Add(portSettingsGroup);
             PortApplyDebugModeUi();

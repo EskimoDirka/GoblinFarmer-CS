@@ -1140,11 +1140,41 @@ namespace GoblinFarmer
 
         private static string PortGoblinEvidenceSignature(GoblinEvidenceCandidate candidate)
         {
+            string templateName = PortGoblinEvidenceNoteValue(candidate.Notes, "Template");
+            string evidenceKind = PortGoblinEvidenceNoteValue(candidate.Notes, "Kind");
             return string.Join("|",
                 candidate.Type,
                 PortNormalizeGoblinObservationSource(candidate.Source),
                 GoblinTypeNormalizer.Normalize(candidate.GoblinType),
-                string.IsNullOrWhiteSpace(candidate.Notes) ? "" : candidate.Notes.Trim());
+                $"Template={templateName}",
+                $"Kind={evidenceKind}");
+        }
+
+        private static string PortGoblinEvidenceNoteValue(string notes, string key)
+        {
+            if (string.IsNullOrWhiteSpace(notes) || string.IsNullOrWhiteSpace(key))
+            {
+                return "";
+            }
+
+            foreach (string part in notes.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                int separatorIndex = part.IndexOf('=');
+                if (separatorIndex <= 0)
+                {
+                    continue;
+                }
+
+                string partKey = part[..separatorIndex].Trim();
+                if (!partKey.Equals(key, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                return part[(separatorIndex + 1)..].Trim();
+            }
+
+            return "";
         }
 
         private void PortResetGoblinEvidenceObservationState(string reason)

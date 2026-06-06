@@ -133,6 +133,7 @@
 - `GoblinTracker.EnableObservationMode` controls scanner/diagnostic behavior only; `GoblinTracker.EnableAutomaticCounting` is the separate automatic-count gate and defaults to `false`
 - Startup logs report `EnableObservationMode`, `EnableAutomaticCounting`, effective `automaticCountingEnabled`, and `manualHotkeyOnlyCountPath`
 - With `EnableAutomaticCounting=false`, Observation Mode may update Last Observation but must not increment GoblinCount, GPH, found records, or counted-area slots
+- With `EnableAutomaticCounting=false`, Observation Mode still records automatic-count evidence first-seen signatures so old visible evidence cannot become newly eligible when Auto Count is toggled on
 - Automatic goblin counting requires both `EnableObservationMode=true` and `EnableAutomaticCounting=true`
 - In VS Debug, the Goblin Tracker Debug checkboxes for Observation Mode and Automatic Counting persist to `Config\AppSettings.json`
 - Toggling Automatic Counting on logs a new automatic-count armed timestamp
@@ -140,6 +141,7 @@
 - Enabled automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
 - Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
+- Automatic-count evidence signatures are stable across confidence/match-point drift for the same visible Journal/Minimap template
 - Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`
 - Evidence whose first-seen timestamp ages past the freshness window suppresses with `GoblinAutoCountSuppressed reason=StaleEvidence`
 - Accepted automatic counts show a no-activate notification with area, goblin type, and current total

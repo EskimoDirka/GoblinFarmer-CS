@@ -411,15 +411,11 @@ namespace GoblinFarmer
             GoblinAreaResolution area,
             string evidenceSignature)
         {
-            if (!PortGoblinAutomaticCountingEnabled())
-            {
-                return false;
-            }
-
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
             string source = "AutomaticObservation";
             DateTime nowUtc = DateTime.UtcNow;
+            bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled();
             double evidenceAgeSeconds = Math.Max(0, (nowUtc - observation.TimestampUtc).TotalSeconds);
             string autoEvidenceKey = PortGoblinAutoCountEvidenceKey(evidenceSignature, observation);
             GoblinAreaDuplicateGuardResult guardResult = new(observation.WouldCount, observation.CurrentAreaCount, observation.AreaLimit);
@@ -464,7 +460,11 @@ namespace GoblinFarmer
                     evidenceFirstSeenAgeSeconds = Math.Max(0, (nowUtc - evidenceState.FirstSeenUtc).TotalSeconds);
                 }
 
-                if (string.IsNullOrWhiteSpace(suppressionReason) &&
+                if (!autoCountingEnabled)
+                {
+                    suppressionReason = "AutomaticCountingDisabled";
+                }
+                else if (string.IsNullOrWhiteSpace(suppressionReason) &&
                     (portGoblinAutomaticCountingArmedAtUtc == DateTime.MinValue ||
                     evidenceState!.FirstSeenUtc < portGoblinAutomaticCountingArmedAtUtc))
                 {
@@ -523,7 +523,10 @@ namespace GoblinFarmer
 
             if (!string.IsNullOrWhiteSpace(suppressionReason))
             {
-                AppLogger.Info($"GoblinTracker: GoblinAutoCountSuppressed source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
+                string eventName = autoCountingEnabled
+                    ? "GoblinAutoCountSuppressed"
+                    : "GoblinAutoCountSkippedDisabled";
+                AppLogger.Info($"GoblinTracker: {eventName} source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
                 return false;
             }
 
