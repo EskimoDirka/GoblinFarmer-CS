@@ -1808,9 +1808,12 @@ static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
     AssertTrue(publishMethod.Contains("ManualCountAccepted", StringComparison.Ordinal), "manual count display should identify the accepted-count state");
     AssertTrue(publishMethod.Contains("\"Counted\"", StringComparison.Ordinal), "manual count display should show Counted as the Last Observation reason");
     AssertTrue(publishMethod.Contains("PortManualGoblinCountDisplayHold", StringComparison.Ordinal), "manual count display should be held long enough to be visible");
+    AssertTrue(publishMethod.Contains("LastObservationUiRefreshRequested", StringComparison.Ordinal), "manual count display should log an immediate UI refresh request");
     AssertFalse(publishMethod.Contains("RecordGoblinObservation", StringComparison.Ordinal), "manual count display updates should not increment observation-only counters");
     AssertTrue(clearMethod.Contains("LastObservationClearSkipped", StringComparison.Ordinal), "no-candidate scanner clears should be skipped during the manual-count display hold");
     AssertTrue(clearMethod.Contains("PortShouldPreserveDisplayedManualCountObservation", StringComparison.Ordinal), "Last Observation clearing should preserve recent accepted manual counts briefly");
+    AssertTrue(sessionStatsSource.Contains("LastObservationUpdateSkippedDuringManualHold", StringComparison.Ordinal), "scanner observation updates should not overwrite accepted manual counts during the display hold");
+    AssertTrue(sessionStatsSource.Contains("PortManualCountDisplayHoldActive", StringComparison.Ordinal), "manual count display hold priority should be shared by clear and update paths");
 }
 
 static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()

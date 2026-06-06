@@ -25,10 +25,10 @@ This is a personal automation project, not an official Blizzard product. Use it 
 
 ## Installation
 
-For the v1.3 installer, use:
+For the v1.4 installer, use:
 
 ```text
-GoblinFarmerSetup-1.3.0.exe
+GoblinFarmerSetup-1.4.0.exe
 ```
 
 The installer places GoblinFarmer under:
@@ -98,7 +98,7 @@ The counter does not require combat to be active. In resolved allowed areas, man
 
 Automation Observation Mode watches Journal and Minimap goblin candidates and records what the automation would have counted. It discovers per-goblin templates from `Images\Goblin Evidence` using names such as `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, optional cropped journal names like `<Goblin Type> Engaged.png`, prefix names like `Killed <Goblin Type> Journal.png`, and tight `<Goblin Type> Minimap.png` icon crops, then reports the matched goblin type when possible. The observation scanner runs while Diablo is active/focused and debug observation diagnostics are enabled, even outside combat, but automatic counting is not enabled yet. Journal evidence is primary when both Journal and Minimap match in the same normal scan, and Engaged journal lines are the preferred current-encounter anchor. Manual `X` refreshes can also use fresh same-area Killed journal evidence when Engaged templates miss, while stale visible Engaged or Killed lines are suppressed until they disappear/change or fall outside the freshness window. Observation Mode uses the same safer area resolution, blocked-area, duplicate, and two-count exception rules as manual `X`, but observations do not change GoblinCount, GPH, active time, or counted-area slots. Accepted manual `X` notifications reuse a recent same-area observed goblin type when available, otherwise run a Minimap-first current observation refresh before suppressing if no fresh evidence exists. Debug logs include Last Observation update/clear state, scanner start/stop, scan attempts/skips, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness diagnostics, and throttled diagnostic crop paths.
 
-Accepted manual `X` counts also update the Last Observation display with the counted goblin type, area, source `ManualHotkey`, and reason `Counted`. That display is held briefly during the 5-second count notification so a normal no-candidate scanner pass does not erase it before it can be read.
+Accepted manual `X` counts also update the Last Observation display with the counted goblin type, area, source `ManualHotkey`, and reason `Counted`. That display is held during the 5-second count notification so scanner no-candidate clears and later Journal/Minimap observation updates do not erase or overwrite it before it can be read.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
@@ -204,38 +204,37 @@ powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 
 Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample so packages remain compact while still showing the latest scanner evidence.
 
-## Release v1.3
+## Release v1.4
 
-GoblinFarmer v1.3 is considered a stable release focused on reliability, launch flow improvements, teleport routing accuracy, and overall usability.
+GoblinFarmer v1.4 is focused on Goblin Tracker readiness, Observation Mode diagnostics, Witch Doctor input reliability, startup validation, and package-size hardening while keeping automatic goblin counting disabled.
 
 Highlights:
 
-- Improved Battle.net launch reliability.
-- Improved Diablo launch detection.
-- Fixed Start Game workflow stability.
-- Added Start Game recovery handling.
-- Improved Make New Game workflow protection.
-- Improved teleport routing and location handling.
-- Preserved matched current-location names for hotkey blocked-location notifications while keeping route buttons grouped.
-- Added dynamic application version display.
-- Installer version now synchronized with application version.
+- Added Goblin Tracker Automation Observation Mode for Journal and Minimap evidence without enabling automatic counting.
+- Hardened manual `X` counting with fresh-evidence gating, stale journal protection, blocked-area suppression, and per-area duplicate limits.
+- Added two-count exceptions for Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds.
+- Improved Last Observation diagnostics and accepted-count display behavior.
+- Added Witch Doctor mouse-wheel plus cursor-change left-click combat input.
+- Improved startup path validation and Diablo III auto-discovery.
+- Reduced default debug package size from Goblin Evidence and screenshot artifacts.
 
 Quality improvements:
 
-- Updated release workflow.
-- Improved logging and diagnostics.
-- Installer packaging improvements.
-- Version metadata cleanup.
+- Added bounded Goblin Evidence diagnostics and clearer scanner/candidate logs.
+- Preserved manual `X` as the only real Goblin Tracker count path.
+- Improved Reset Stats/New Game cleanup for Goblin Tracker observation and duplicate state.
+- Improved salvage timing diagnostics and per-slot speed.
+- Synchronized release version metadata and installer EXE metadata for v1.4.
 
 Version details:
 
-- App title: `GoblinFarmer v1.3.0`
-- EXE `FileVersion`: `1.3.0.0`
-- EXE `ProductVersion`: `1.3.0`
-- Installer version: `1.3.0`
-- Expected installer artifact: `GoblinFarmerSetup-1.3.0.exe`
+- App title: `GoblinFarmer v1.4.0`
+- EXE `FileVersion`: `1.4.0.0`
+- EXE `ProductVersion`: `1.4.0`
+- Installer version: `1.4.0`
+- Expected installer artifact: `GoblinFarmerSetup-1.4.0.exe`
 
-See [Docs/Release_v1.3.md](Docs/Release_v1.3.md) for ready-to-copy GitHub release notes.
+See [Docs/Release_v1.4.md](Docs/Release_v1.4.md) for ready-to-copy GitHub release notes.
 
 ## Build From Source
 
@@ -277,10 +276,10 @@ Example workflow:
 Release versioning starts in `GoblinFarmer.csproj`. Before publishing a new release, update:
 
 ```xml
-<Version>1.3.0</Version>
-<AssemblyVersion>1.3.0.0</AssemblyVersion>
-<FileVersion>1.3.0.0</FileVersion>
-<InformationalVersion>1.3.0</InformationalVersion>
+<Version>1.4.0</Version>
+<AssemblyVersion>1.4.0.0</AssemblyVersion>
+<FileVersion>1.4.0.0</FileVersion>
+<InformationalVersion>1.4.0</InformationalVersion>
 ```
 
 Then publish the self-contained Windows build. You can publish from Visual Studio using the `GoblinFarmerRelease` publish profile, or run the publish script from the project root:
@@ -304,14 +303,15 @@ Manual release flow:
 1. Update version metadata in `GoblinFarmer.csproj`.
 2. Update `Docs\Project_Status.md`, `README.md`, and release notes/checklists for the changes being shipped.
 3. Run `Scripts\publish-release.ps1`, or publish from Visual Studio and upload assets manually.
-4. Confirm the installer name and version, such as `GoblinFarmerSetup-1.3.0.exe`.
-5. For major app milestones only, create a GitHub Release manually, then confirm the release uses the notes from `Docs/Release_v1.3.md` and includes the installer asset.
+4. Confirm the installer name and version, such as `GoblinFarmerSetup-1.4.0.exe`.
+5. For major app milestones, create a GitHub Release, then confirm the release uses the notes from the matching `Docs/Release_v*.md` file and includes the installer asset when available.
 
 See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a final build.
 
 ## Project Docs
 
 - [CHANGELOG.md](CHANGELOG.md): user-facing release history.
+- [Docs/Release_v1.4.md](Docs/Release_v1.4.md): ready-to-copy GitHub release notes.
 - [Docs/Release_v1.3.md](Docs/Release_v1.3.md): ready-to-copy GitHub release notes.
 - [Docs/CombatProfiles.md](Docs/CombatProfiles.md): supported combat profiles and required skill setup.
 - [Docs/Project_Status.md](Docs/Project_Status.md): detailed development status and implementation history.

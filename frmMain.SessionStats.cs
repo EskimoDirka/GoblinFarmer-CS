@@ -302,6 +302,7 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(observation.GoblinType)} areaKey={PortLogField(PortDisplayLocation(observation.AreaKey))} displayLocation={PortLogField(PortDisplayLocation(observation.DisplayLocation))} wouldCount=True reason=Counted duplicateState=ManualCountAccepted displayHoldSeconds={PortManualGoblinCountDisplayHold.TotalSeconds:0}");
+            AppLogger.Info($"GoblinTracker: LastObservationUiRefreshRequested source={PortLogField(observationSource)} goblinType={PortLogField(observation.GoblinType)} areaKey={PortLogField(PortDisplayLocation(observation.AreaKey))} reason=Counted invokeRequired={InvokeRequired}");
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
         }
@@ -318,6 +319,10 @@ namespace GoblinFarmer
             string duplicateState = "Available";
             bool wouldCount = true;
             GoblinAreaDuplicateGuardResult guardResult = new(true, 0, 0);
+            bool displayUpdated;
+            double manualHoldRemainingMs = 0;
+            GoblinObservationRecord? preservedObservation = null;
+            GoblinObservationRecord observation;
 
             lock (portGoblinTrackerLock)
             {
@@ -350,7 +355,7 @@ namespace GoblinFarmer
                     }
                 }
 
-                GoblinObservationRecord observation = new(
+                observation = new(
                     DateTime.UtcNow,
                     observationSource,
                     goblinType,
@@ -367,14 +372,30 @@ namespace GoblinFarmer
                     portLastGoblinObservationForManualCount = observation;
                 }
 
-                portDisplayedGoblinObservation = observation;
-                portDisplayedGoblinObservationStatus = "";
-                portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
+                displayUpdated = !PortManualCountDisplayHoldActive(portDisplayedGoblinObservation, DateTime.UtcNow);
+                if (displayUpdated)
+                {
+                    portDisplayedGoblinObservation = observation;
+                    portDisplayedGoblinObservationStatus = "";
+                    portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
+                }
+                else
+                {
+                    preservedObservation = portDisplayedGoblinObservation;
+                    manualHoldRemainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - DateTime.UtcNow).TotalMilliseconds);
+                }
             }
 
             AppLogger.Info($"GoblinTracker: GoblinObservationCandidate source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} wouldCount={wouldCount} reason={reason}");
             AppLogger.Info($"GoblinTracker: GoblinObservationSummary source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState} areaLimit={guardResult.AreaLimit} currentAreaCount={guardResult.AreaCount}");
-            AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState}");
+            if (displayUpdated)
+            {
+                AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState}");
+            }
+            else
+            {
+                AppLogger.Info($"GoblinTracker: LastObservationUpdateSkippedDuringManualHold incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
+            }
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return wouldCount;
@@ -657,16 +678,21 @@ namespace GoblinFarmer
             string reason,
             DateTime nowUtc)
         {
-            if (observation == null ||
-                nowUtc >= portDisplayedGoblinObservationStickyUntilUtc ||
-                !string.Equals(observation.Source, "ManualHotkey", StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(observation.Reason, "Counted", StringComparison.OrdinalIgnoreCase))
+            if (!PortManualCountDisplayHoldActive(observation, nowUtc))
             {
                 return false;
             }
 
             return reason.Equals("No current observation", StringComparison.OrdinalIgnoreCase) ||
                 reason.Equals("NoCandidate", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool PortManualCountDisplayHoldActive(GoblinObservationRecord? observation, DateTime nowUtc)
+        {
+            return observation != null &&
+                nowUtc < portDisplayedGoblinObservationStickyUntilUtc &&
+                string.Equals(observation.Source, "ManualHotkey", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(observation.Reason, "Counted", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string PortGoblinObservationLabel(GoblinObservationRecord? observation, string status)

@@ -18,6 +18,19 @@
    - what was tested
    - what still needs testing
    - next recommended task
+3. Keep README.md synchronized with high-level stable/current behavior when Project_Status changes affect user-facing behavior.
+
+## Required Response And GitHub Follow-Up
+
+- After every user prompt unless otherwise specified, provide the next steps to test.
+- After every user prompt unless otherwise specified, commit and push resulting repository changes to GitHub. If no files changed, state that no commit was created.
+- If the user submits a release prompt, update GitHub accordingly with a version tag and release notes after the release build artifacts are created and validated.
+
+## Workflow Notes
+
+- When a recent repeatable project workflow is added, changed, or used as the expected way to do work, add or update the concise workflow guidance in `AGENTS.md`.
+- Before adding or keeping workflow guidance in `AGENTS.md`, check `Docs/Worflow blocklist.md`.
+- Remove workflow guidance from `AGENTS.md` when it is listed in `Docs/Worflow blocklist.md`, and do not re-add blocked workflows unless the user explicitly removes them from that blocklist.
 
 ## Coding Rules
 

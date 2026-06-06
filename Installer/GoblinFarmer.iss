@@ -14,7 +14,7 @@
 #if !FileExists(SourceDebugPackageLauncher)
 #error "Published Scripts\\Create Debug Package.bat was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
 #endif
-#define MyAppFileVersion GetFileVersion(SourceExe)
+#define MyAppFileVersion GetVersionNumbersString(SourceExe)
 #if MyAppFileVersion == ""
 #error "Unable to read GoblinFarmer.exe file version from the published executable."
 #endif
@@ -39,11 +39,16 @@ OutputDir=..\artifacts\installer
 OutputBaseFilename=GoblinFarmerSetup-{#MyAppVersion}
 SetupIconFile=..\GoblinFarmerIcon.ico
 UninstallDisplayIcon={app}\GoblinFarmer.exe
+VersionInfoVersion={#MyAppFileVersion}
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoProductName={#MyAppName}
+VersionInfoCompany=Eskimo Dirka
+VersionInfoDescription={#MyAppName} Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
-ArchitecturesAllowed=x64
+ArchitecturesAllowed=x64compatible
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked

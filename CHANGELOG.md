@@ -2,6 +2,28 @@
 
 Release notes are maintained manually. Before running `Scripts\GitHub Sync.bat` or creating a GitHub Release, update the next release section with the user-facing changes worth publishing.
 
+## v1.4
+
+GoblinFarmer v1.4 is focused on Goblin Tracker readiness, Observation Mode diagnostics, Witch Doctor input reliability, startup validation, and package-size hardening while keeping automatic goblin counting disabled.
+
+### Highlights
+
+- Added Goblin Tracker Automation Observation Mode for Journal and Minimap evidence without enabling automatic counting.
+- Hardened manual `X` counting with fresh-evidence gating, stale journal protection, blocked-area suppression, and per-area duplicate limits.
+- Added two-count exceptions for Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds.
+- Improved Last Observation diagnostics and accepted-count display behavior.
+- Added Witch Doctor mouse-wheel plus cursor-change left-click combat input.
+- Improved startup path validation and Diablo III auto-discovery.
+- Reduced default debug package size from Goblin Evidence and screenshot artifacts.
+
+### Quality Improvements
+
+- Added bounded Goblin Evidence diagnostics and clearer scanner/candidate logs.
+- Preserved manual `X` as the only real Goblin Tracker count path.
+- Improved Reset Stats/New Game cleanup for Goblin Tracker observation and duplicate state.
+- Improved salvage timing diagnostics and per-slot speed.
+- Synchronized release version metadata and installer EXE metadata for v1.4.
+
 ## v1.3
 
 GoblinFarmer v1.3 is considered a stable release focused on reliability, launch flow improvements, teleport routing accuracy, and overall usability.

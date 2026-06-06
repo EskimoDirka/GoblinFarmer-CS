@@ -89,7 +89,13 @@
 * [x] Make Engaged/Killed journal freshness signatures area-insensitive and match-point-insensitive so old visible journal text cannot refresh itself after moving areas or shifting rows.
 * [x] Review `GoblinFarmer_Debug_20260606_044942.zip` for proven stale-journal suppression and accepted manual-count Last Observation display sync.
 * [x] Publish accepted manual `X` counts into Last Observation display state and briefly preserve that display from no-candidate scanner clears.
-* [ ] Live-validate Last Observation visibly updates to `ManualHotkey` / `Counted` immediately after accepted manual `X` counts and remains visible during the 5-second count notification.
+* [x] Review `GoblinFarmer_Debug_20260606_050819.zip` for accepted manual-count display hold behavior, stale/block/reset regressions, package size, and salvage timing.
+* [x] Preserve `ManualHotkey` / `Counted` Last Observation from Journal/Minimap scanner overwrites during the 5-second manual-count display hold.
+* [x] Update AGENTS.md to require next test steps and commit/push follow-up unless otherwise specified.
+* [x] Add AGENTS workflow-maintenance guidance backed by `Docs/Worflow blocklist.md`.
+* [x] Prepare v1.4.0 release metadata, release notes, README text, release checklist, and Inno Setup script metadata.
+* [x] Create the v1.4.0 self-contained release EXE and Inno Setup installer with matching version metadata.
+* [ ] Live-validate Last Observation visibly updates to `ManualHotkey` / `Counted` immediately after accepted manual `X` counts and remains visible for the full 5-second count notification, with scanner overwrites logging `LastObservationUpdateSkippedDuringManualHold`.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
@@ -98,7 +104,8 @@
 * [ ] Live-validate old visible Engaged journal lines suppress with `JournalEngagedIgnoredStale` after the freshness window and do not create a fresh same-area observation after moving.
 * [ ] Live-validate `Reset Stats` clears suppression/observation state and allows a count again only after fresh evidence exists.
 * [ ] Live-validate blocked manual-count areas still suppress with `BlockedArea` even if goblin evidence is visible.
-* [ ] Live-validate salvage is faster with `Salvage timing` logs and no missed confirmation prompts.
+* [x] Live-validate salvage is faster with `Salvage timing` logs and no missed confirmation prompts.
+* [ ] Live-validate Kadala timing/feel once blood shards are available.
 * [ ] Validate `ExtendedRightMenuNoClickRegion`: hover over the lower-right menu, confirm combat continues, cursor does not move, clicks are blocked with `blockReason=ExtendedRightMenuNoClickRegion`, and clicks resume after moving away.
 * [ ] Validate combat no-click suppression mode: logs show `combatInputMode=PhysicalCursorNoClickSuppression`, `clickSendMethod=suppressed`, and Demon Hunter key rotation continues while mouse clicks are suppressed.
 * [ ] Validate Demon Hunter right-hold mode: start right-hold in a safe area, hover over no-click UI, confirm no new right click is sent, UI is not clicked, Shift+Left maintenance skips unsafe injected mouse clicks without stopping combat, and logs show `combatInputMode=PhysicalCursorHeldFromSafeRegion`.

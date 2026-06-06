@@ -77,6 +77,7 @@
 - Accepted manual `X` skips the evidence refresh when a recent same-area Last Observation already has a reusable goblin type
 - Accepted manual `X` counts immediately update Last Observation to the counted goblin type, area, source `ManualHotkey`, and reason `Counted`
 - No-candidate scanner clears do not erase an accepted manual count Last Observation during the 5-second count notification window
+- Journal/Minimap scanner updates during the manual-count display hold log `LastObservationUpdateSkippedDuringManualHold` and do not overwrite `ManualHotkey` / `Counted`
 - Manual `X` notification refresh checks Minimap evidence before Journal evidence to keep count notifications responsive; normal Observation Mode scans remain Journal-primary
 - Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
