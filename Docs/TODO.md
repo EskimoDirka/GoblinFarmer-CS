@@ -100,17 +100,22 @@
 * [x] Review `GoblinFarmer_Debug_20260606_064757.zip` for enabled Release Observation Mode, Journal observation evidence, and GoblinCount staying unchanged without manual `X`.
 * [x] Reduce the Observation Mode scan interval to improve Last Observation responsiveness while keeping diagnostic crops/package size bounded.
 * [x] Add a 10-second display hold for automatic Journal/Minimap Last Observation entries so one no-candidate scan does not clear fresh evidence immediately.
+* [x] Review `GoblinFarmer_Debug_20260606_070639.zip` for the 1000ms scanner interval, automatic Last Observation hold, manual `X` type reuse, and observation-only count safety.
+* [x] Confirm Observation Mode produced Journal and Minimap observations in normal Release while GoblinCount changed only after manual `X`.
 * [x] Update AGENTS.md to require next test steps and commit/push follow-up unless otherwise specified.
 * [x] Add AGENTS workflow-maintenance guidance backed by `Docs/Worflow blocklist.md`.
 * [x] Prepare v1.4.0 release metadata, release notes, README text, release checklist, and Inno Setup script metadata.
 * [x] Create the v1.4.0 self-contained release EXE and Inno Setup installer with matching version metadata.
 * [ ] Live-validate Last Observation visibly updates to `ManualHotkey` / `Counted` immediately after accepted manual `X` counts and remains visible for the full 5-second count notification, with scanner overwrites logging `LastObservationUpdateSkippedDuringManualHold`.
 * [ ] Live-validate the Release Goblin Tracker group shows all tracker/evidence/Last Observation fields without merged lines before and after toggling Debug Mode.
-* [ ] Live-validate normal Release startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True`.
-* [ ] Live-validate normal Release Diablo-active time produces `ObservationScanAttempted` instead of repeated `ObservationScanSkipped reason=ObservationModeDisabled`.
-* [ ] Live-validate Observation Mode updates Last Observation from Journal or Minimap evidence without pressing `X`, while GoblinCount remains unchanged.
-* [ ] Live-validate Last Observation appears faster after Journal/Minimap evidence is visible and scanner startup reports `intervalMs=1000`.
-* [ ] Live-validate automatic Journal/Minimap Last Observation remains readable for about 10 seconds after a valid observation, with no-candidate clears logging `LastObservationClearSkipped preserveKind=ObservationDisplayHold`.
+* [x] Live-validate normal Release startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True`.
+* [x] Live-validate normal Release Diablo-active time produces `ObservationScanAttempted` instead of repeated `ObservationScanSkipped reason=ObservationModeDisabled`.
+* [x] Live-validate Observation Mode updates Last Observation from Journal or Minimap evidence without pressing `X`, while GoblinCount remains unchanged.
+* [x] Live-validate Last Observation appears faster after Journal/Minimap evidence is visible and scanner startup reports `intervalMs=1000`.
+* [x] Live-validate automatic Journal/Minimap Last Observation remains readable for about 10 seconds after a valid observation, with no-candidate clears logging `LastObservationClearSkipped preserveKind=ObservationDisplayHold`.
+* [ ] Design and implement a controlled automatic Goblin Tracker count gate that is disabled by default and cannot count unless explicitly enabled.
+* [ ] Ensure the future automatic count gate consumes the same accepted observation path, area resolver, block list, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area limits already proven by manual `X` and Observation Mode.
+* [ ] Add future automatic-count diagnostics before enabling it live: `GoblinAutoCountAccepted`, `GoblinAutoCountSuppressed`, source, goblin type, area key, area count, area limit, reason, and evidence age.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
