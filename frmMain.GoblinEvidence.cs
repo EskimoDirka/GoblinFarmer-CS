@@ -34,6 +34,7 @@ namespace GoblinFarmer
         private int portGoblinEvidenceMissingTemplateNotificationShown;
         private int portGoblinEvidenceTemplateReadyLogged;
         private int portGoblinEvidenceTemplateWarningLogged;
+        private int portGoblinObservationModeConfigurationLogged;
         private long portLastGoblinEvidenceDiagnosticCropTicks;
         private long portLastGoblinEvidenceMissingTemplateScanSummaryTicks;
 
@@ -55,6 +56,7 @@ namespace GoblinFarmer
             portGoblinEvidenceObservationCts = new CancellationTokenSource();
             CancellationToken scannerToken = portGoblinEvidenceObservationCts.Token;
             PortValidateGoblinEvidenceTemplateSetup("ObservationScannerStart", notifyIfMissing: true);
+            PortLogGoblinObservationModeConfiguration("ObservationScannerStart");
             AppLogger.Info($"ObservationScannerStartRequested: source={PortLogField(source)}; intervalMs={GoblinEvidenceScanIntervalMs}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; enabled={PortGoblinObservationScannerEnabled()}");
             portGoblinEvidenceScannerTask = Task.Run(() =>
             {
@@ -145,7 +147,28 @@ namespace GoblinFarmer
 
         private static bool PortGoblinObservationScannerEnabled()
         {
-            return DebugManager.DiagnosticLoggingEnabled || AppSettings.Debug.DebugMode;
+            return AppSettings.GoblinTracker.EnableObservationMode;
+        }
+
+        private void PortLogGoblinObservationModeConfiguration(string context)
+        {
+            if (Interlocked.Exchange(ref portGoblinObservationModeConfigurationLogged, 1) != 0)
+            {
+                return;
+            }
+
+            AppLogger.Info(
+                "ObservationModeConfiguration: " +
+                $"context={PortLogField(context)}; " +
+                $"enabled={PortGoblinObservationScannerEnabled()}; " +
+                $"setting=GoblinTracker.EnableObservationMode; " +
+                $"settingValue={AppSettings.GoblinTracker.EnableObservationMode}; " +
+                $"defaultValue=True; " +
+                $"debugMode={AppSettings.Debug.DebugMode}; " +
+                $"diagnosticLoggingEnabled={DebugManager.DiagnosticLoggingEnabled}; " +
+                $"automaticCountingEnabled=False; " +
+                $"manualHotkeyOnlyCountPath=True; " +
+                $"configPath={PortLogField(AppSettings.ConfigPath)}");
         }
 
         private void PortScanGoblinEvidence()
@@ -800,7 +823,7 @@ namespace GoblinFarmer
                 portLastGoblinEvidenceScanDiagnosticByKey[key] = now;
             }
 
-            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
+            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; observationModeEnabled={PortGoblinObservationScannerEnabled()}; observationModeSetting=GoblinTracker.EnableObservationMode; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
         }
 
         private void PortLogJournalEvidenceFreshnessDiagnostic(

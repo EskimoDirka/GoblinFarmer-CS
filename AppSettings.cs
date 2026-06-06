@@ -132,7 +132,7 @@ namespace GoblinFarmer
                     if (!hasSavedGoblinTrackerPreferences)
                     {
                         shouldSaveLoadedSettings = true;
-                        AppLogger.Info("AppSettings missing GoblinTracker preferences; using default AllowUnknownManualCount=false.");
+                        AppLogger.Info("AppSettings missing one or more GoblinTracker preferences; using defaults for missing values.");
                     }
 
                     ApplyReleaseDebugPersistenceDefaults();
@@ -454,7 +454,8 @@ namespace GoblinFarmer
 
                 return document.RootElement.TryGetProperty("GoblinTracker", out JsonElement goblinTrackerElement) &&
                     goblinTrackerElement.ValueKind == JsonValueKind.Object &&
-                    goblinTrackerElement.TryGetProperty("AllowUnknownManualCount", out _);
+                    goblinTrackerElement.TryGetProperty("AllowUnknownManualCount", out _) &&
+                    goblinTrackerElement.TryGetProperty("EnableObservationMode", out _);
             }
             catch (Exception ex)
             {
@@ -1172,6 +1173,7 @@ namespace GoblinFarmer
                 $"ImageRecognition.StartGameButtonConfidence={ImageRecognition.StartGameButtonConfidence:0.000}; " +
                 $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}; " +
                 $"GoblinTracker.AllowUnknownManualCount={GoblinTracker.AllowUnknownManualCount}; " +
+                $"GoblinTracker.EnableObservationMode={GoblinTracker.EnableObservationMode}; " +
                 $"User.CombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatClass={User.CombatProfile}; " +
@@ -1294,6 +1296,7 @@ namespace GoblinFarmer
         internal sealed class GoblinTrackerSettings
         {
             public bool AllowUnknownManualCount { get; set; } = false;
+            public bool EnableObservationMode { get; set; } = true;
 
             public void Normalize()
             {

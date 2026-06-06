@@ -56,6 +56,7 @@ Run("Goblin observation counters are diagnostic only", TestGoblinObservationCoun
 Run("Goblin observation type reuse requires recent matching area", TestGoblinObservationTypeReuseRequiresRecentMatchingArea);
 Run("Goblin manual unknown count requires fresh observation by default", TestGoblinManualUnknownCountRequiresFreshObservationByDefault);
 Run("Goblin observation UI state logs update and clear", TestGoblinObservationUiStateLogsUpdateAndClear);
+Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
 Run("Goblin fresh killed journal can satisfy manual evidence gate", TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate);
@@ -780,14 +781,26 @@ static void TestBattleNetSuccessfulLaunchDiagnosticsAvoidFailureScreenshots()
 {
     string repoRoot = FindRepositoryRootForTests();
     string formSource = File.ReadAllText(Path.Combine(repoRoot, "Form1.cs"));
+    string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
     string recordMethod = ExtractMethodBody(formSource, "private void PortRecordDiabloLaunchAfterBattleNet");
     string stillOpenMethod = ExtractMethodBody(formSource, "private void PortLogBattleNetStillOpenAfterDiabloLaunch");
+    int failureTypesStart = packageScript.IndexOf("$failureTypes = @(", StringComparison.Ordinal);
+    int failureTypesEnd = packageScript.IndexOf("foreach ($failureType in $failureTypes)", StringComparison.Ordinal);
+    AssertTrue(failureTypesStart >= 0 && failureTypesEnd > failureTypesStart, "debug package failure type list should be present");
+    string failureTypesSource = packageScript[failureTypesStart..failureTypesEnd];
 
     AssertTrue(recordMethod.Contains("PortRecordBattleNetPlayClickAccepted(\"Diablo process detected after app Play click\"", StringComparison.Ordinal), "Diablo appearing after an app Play click should be reconciled as app-click acceptance before launch outcome logging");
     AssertTrue(recordMethod.Contains("CaptureDebugScreenshot(\"BattleNetLaunch\", \"BattleNetManualPlaySuspected\")", StringComparison.Ordinal), "manual-play suspicion after Diablo launches should be diagnostic-only");
     AssertFalse(recordMethod.Contains("PortCaptureFailureScreenshot(\"BattleNetManualPlaySuspected\"", StringComparison.Ordinal), "manual-play suspicion during a successful launch should not create failure screenshot pairs");
-    AssertTrue(stillOpenMethod.Contains("CaptureDebugScreenshot(\"BattleNetLaunch\", \"BattleNetStillOpenAfterDiabloLaunch\")", StringComparison.Ordinal), "Battle.net still-open evidence after Diablo launch should be debug evidence while close handling continues");
+    AssertTrue(stillOpenMethod.Contains("bool successfulAppClickLaunch = battleNetPlayClickAcceptedByBattleNet && diabloLaunchedAfterAppPlayClick", StringComparison.Ordinal), "Battle.net still-open handling should distinguish successful app-click launches");
+    AssertTrue(stillOpenMethod.Contains("? \"None\"", StringComparison.Ordinal), "successful app-click launches should not capture still-open screenshots");
+    AssertTrue(stillOpenMethod.Contains(": CaptureDebugScreenshot(\"BattleNetLaunch\", \"BattleNetStillOpenAfterDiabloLaunch\")", StringComparison.Ordinal), "non-app-click/manual launch diagnostics may still capture still-open debug evidence");
+    AssertTrue(stillOpenMethod.Contains("screenshotCaptured={screenshotCaptured}", StringComparison.Ordinal), "still-open logs should state whether screenshot evidence was captured");
     AssertFalse(stillOpenMethod.Contains("PortCaptureFailureScreenshot(\"BattleNetStillOpenAfterDiabloLaunch\"", StringComparison.Ordinal), "Battle.net still-open-after-launch should not be packaged as a failure when close handling can succeed");
+    AssertFalse(failureTypesSource.Contains("BattleNetPlayClickAccepted", StringComparison.Ordinal), "successful Battle.net Play acceptance should not be classified as a failure screenshot");
+    AssertFalse(failureTypesSource.Contains("BattleNetManualPlaySuspected", StringComparison.Ordinal), "manual-play diagnostics should not be classified as failure screenshots by package defaults");
+    AssertFalse(failureTypesSource.Contains("BattleNetStillOpenAfterDiabloLaunch", StringComparison.Ordinal), "still-open diagnostics should not be classified as failure screenshots by package defaults");
+    AssertTrue(failureTypesSource.Contains("BattleNetPlayButtonNotClickedByApp", StringComparison.Ordinal), "real Battle.net app-click failures should remain classified as failure screenshots");
 }
 
 static void TestExplicitAppSettingsPathOverrideWins()
@@ -1166,6 +1179,10 @@ static void TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault()
             Touch(Path.Combine(screenshots, $"2026-06-05_140{index:000}_000_Failure_Teleport_TeleportInterrupted_App.png"), timestamp);
         }
 
+        Touch(Path.Combine(screenshots, "20260605_140600_000_BattleNetManualPlaySuspected.png"), sessionStart.AddSeconds(6));
+        Touch(Path.Combine(screenshots, "20260605_140601_000_BattleNetStillOpenAfterDiabloLaunch.png"), sessionStart.AddSeconds(7));
+        Touch(Path.Combine(screenshots, "20260605_140602_000_BattleNetPlayClickAccepted.png"), sessionStart.AddSeconds(8));
+
         for (int index = 0; index < 7; index++)
         {
             DateTime timestamp = sessionStart.AddSeconds(index + 1);
@@ -1200,9 +1217,15 @@ static void TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault()
         int includedDebugScreenshots = archive.Entries.Count(entry =>
             entry.FullName.Replace('\\', '/').StartsWith("debug-screenshots/", StringComparison.OrdinalIgnoreCase) &&
             entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+        bool falseBattleNetFailureIncluded = archive.Entries.Any(entry =>
+            entry.FullName.Replace('\\', '/').Contains("Screenshots/Failure", StringComparison.OrdinalIgnoreCase) &&
+            (entry.FullName.Contains("BattleNetManualPlaySuspected", StringComparison.OrdinalIgnoreCase) ||
+                entry.FullName.Contains("BattleNetStillOpenAfterDiabloLaunch", StringComparison.OrdinalIgnoreCase) ||
+                entry.FullName.Contains("BattleNetPlayClickAccepted", StringComparison.OrdinalIgnoreCase)));
 
         AssertEqual(6, includedFailureScreenshots, "default debug package should include only the latest three failure screenshot groups");
         AssertEqual(4, includedDebugScreenshots, "default debug package should include only the capped current-session debug screenshot sample");
+        AssertFalse(falseBattleNetFailureIncluded, "successful/diagnostic Battle.net launch screenshots should not be packaged as failure screenshots");
 
         ZipArchiveEntry manifest = archive.GetEntry("debug-package-manifest.txt") ?? throw new InvalidOperationException("manifest missing from debug package");
         using StreamReader reader = new(manifest.Open());
@@ -1826,6 +1849,26 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdated", StringComparison.Ordinal), "valid observations should log LastObservationUpdated when the UI state changes");
     AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should visibly clear Last Observation");
+}
+
+static void TestGoblinObservationModeEnabledByDefaultInRelease()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+    string scannerEnabledMethod = ExtractMethodBody(evidenceSource, "private static bool PortGoblinObservationScannerEnabled");
+
+    AssertTrue(appSettingsSource.Contains("public bool EnableObservationMode { get; set; } = true", StringComparison.Ordinal), "Observation Mode should default on for v1.4 Release diagnostics");
+    AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableObservationMode={GoblinTracker.EnableObservationMode}", StringComparison.Ordinal), "AppSettings startup log should expose the Observation Mode setting");
+    AssertTrue(appSettingsSource.Contains("TryGetProperty(\"EnableObservationMode\"", StringComparison.Ordinal), "existing installed configs should be migrated when the Observation Mode setting is absent");
+    AssertTrue(configSource.Contains("\"EnableObservationMode\": true", StringComparison.Ordinal), "tracked default config should make Observation Mode visible and enabled");
+    AssertTrue(scannerEnabledMethod.Contains("AppSettings.GoblinTracker.EnableObservationMode", StringComparison.Ordinal), "scanner enablement should be controlled by the GoblinTracker Observation Mode setting");
+    AssertFalse(scannerEnabledMethod.Contains("DebugManager.DiagnosticLoggingEnabled", StringComparison.Ordinal), "normal Release observation scanning must not require verbose diagnostic logging");
+    AssertFalse(scannerEnabledMethod.Contains("AppSettings.Debug.DebugMode", StringComparison.Ordinal), "normal Release observation scanning must not require Debug Mode");
+    AssertTrue(evidenceSource.Contains("ObservationModeConfiguration", StringComparison.Ordinal), "startup should log why Observation Mode is enabled or disabled");
+    AssertTrue(evidenceSource.Contains("automaticCountingEnabled=False", StringComparison.Ordinal), "Observation Mode diagnostics should remain separate from automatic counting");
+    AssertTrue(evidenceSource.Contains("observationModeEnabled={PortGoblinObservationScannerEnabled()}", StringComparison.Ordinal), "scan skipped diagnostics should expose the current Observation Mode setting");
 }
 
 static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()

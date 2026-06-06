@@ -4,7 +4,7 @@
 - Battle.net launches/focuses
 - Diablo III tab selected
 - Play clicked
-- If Diablo starts after GoblinFarmer sends Play and Battle.net closes successfully, `BattleNetManualPlaySuspected` and `BattleNetStillOpenAfterDiabloLaunch` evidence is diagnostic-only and not packaged as failure screenshot pairs
+- If Diablo starts after GoblinFarmer sends Play, `BattleNetManualPlaySuspected` is false; if Battle.net is briefly still visible and then closes successfully, `BattleNetStillOpenAfterDiabloLaunch` logs `screenshotCaptured=False` / `screenshotPath=None` and is not packaged as a failure screenshot
 - Paired success screenshots captured for Battle.net Play click accepted
 - Diablo launches
 - Paired success screenshots captured for Diablo process detected
@@ -84,8 +84,10 @@
 - Manual `X` notification refresh checks Minimap evidence before Journal evidence to keep count notifications responsive; normal Observation Mode scans remain Journal-primary
 - Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
-- App/session startup logs `ObservationScannerStarted` when Observation/debug diagnostics are enabled
+- App/session startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True` by default in normal Release through `GoblinTracker.EnableObservationMode=true`
+- Existing AppSettings without `GoblinTracker.EnableObservationMode` migrate to the enabled default
 - Observation scanner logs `ObservationScanAttempted` while Diablo is active/focused and no automation workflow is running
+- Normal Release Diablo-active scans do not repeatedly skip with `ObservationScanSkipped reason=ObservationModeDisabled` unless `GoblinTracker.EnableObservationMode=false` is explicitly configured
 - Observation scanner logs `ObservationScanSkipped` with a reason when Diablo/scanner conditions are not eligible
 - Observation scanner logs combat state, automation state, Diablo running/active state, current area, and cooldown state in scanner attempt/skip diagnostics
 - Evidence loop logs Journal/Minimap crop paths from `Debug\GoblinEvidence\ObservationDiagnostics`

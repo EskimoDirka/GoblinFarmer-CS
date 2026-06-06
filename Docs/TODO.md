@@ -93,13 +93,19 @@
 * [x] Preserve `ManualHotkey` / `Counted` Last Observation from Journal/Minimap scanner overwrites during the 5-second manual-count display hold.
 * [x] Review `GoblinFarmer_Debug_20260606_054218.zip` for v1.4.0 installed-run evidence, Goblin Tracker layout overlap, Battle.net launch diagnostic noise, Kadala timing, salvage success, and reliability counters.
 * [x] Expand the Release Goblin Tracker group and form height so evidence fields and the Last Observation block do not overlap.
-* [x] Reconcile Diablo detection after an app Battle.net Play click before launch outcome logging and downgrade successful-launch `BattleNetManualPlaySuspected` / `BattleNetStillOpenAfterDiabloLaunch` screenshots to debug evidence.
+* [x] Reconcile Diablo detection after an app Battle.net Play click before launch outcome logging, prevent successful-launch `BattleNetManualPlaySuspected` / `BattleNetStillOpenAfterDiabloLaunch` from being packaged as failure screenshots, and suppress successful app-click still-open screenshot capture with `screenshotCaptured=False`.
+* [x] Review `GoblinFarmer_Debug_20260606_063031.zip` for Release UI validation and the Observation Mode disabled blocker.
+* [x] Enable Automation Observation Mode by default in normal Release through `GoblinTracker.EnableObservationMode=true` without enabling automatic counting.
+* [x] Add startup/config diagnostics for Observation Mode enablement and regression coverage so Release scanning does not require Debug Mode.
 * [x] Update AGENTS.md to require next test steps and commit/push follow-up unless otherwise specified.
 * [x] Add AGENTS workflow-maintenance guidance backed by `Docs/Worflow blocklist.md`.
 * [x] Prepare v1.4.0 release metadata, release notes, README text, release checklist, and Inno Setup script metadata.
 * [x] Create the v1.4.0 self-contained release EXE and Inno Setup installer with matching version metadata.
 * [ ] Live-validate Last Observation visibly updates to `ManualHotkey` / `Counted` immediately after accepted manual `X` counts and remains visible for the full 5-second count notification, with scanner overwrites logging `LastObservationUpdateSkippedDuringManualHold`.
 * [ ] Live-validate the Release Goblin Tracker group shows all tracker/evidence/Last Observation fields without merged lines before and after toggling Debug Mode.
+* [ ] Live-validate normal Release startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True`.
+* [ ] Live-validate normal Release Diablo-active time produces `ObservationScanAttempted` instead of repeated `ObservationScanSkipped reason=ObservationModeDisabled`.
+* [ ] Live-validate Observation Mode updates Last Observation from Journal or Minimap evidence without pressing `X`, while GoblinCount remains unchanged.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
@@ -141,7 +147,7 @@
 * [ ] Validate `BattleNetPlayClickAccepted` appears only after Battle.net UI transition, Battle.net window/process transition, or Diablo process start confirms the app Play click was accepted.
 * [ ] Validate `BattleNetManualPlaySuspected` appears if Diablo launches without `battleNetPlayClickAcceptedByBattleNet=True`, including when the app sent a click but acceptance was not verified.
 * [ ] Validate `BattleNetStillOpenAfterDiabloLaunch` appears only if the visible Battle.net window remains open after Diablo launches.
-* [ ] Validate successful app-click launches do not package `BattleNetManualPlaySuspected` or `BattleNetStillOpenAfterDiabloLaunch` as failure screenshot pairs when Diablo starts and Battle.net closes successfully.
+* [ ] Validate successful app-click launches do not capture or package `BattleNetManualPlaySuspected` or `BattleNetStillOpenAfterDiabloLaunch` as failure evidence when Diablo starts and Battle.net closes successfully; still-open logs should show `screenshotCaptured=False` and `screenshotPath=None`.
 * [x] Treat background/tray Battle.net processes after Diablo launch as informational, not as close or launch failures.
 * [ ] Validate `BattleNetPostLaunchCloseSummary` marks Diablo launch successful only after an accepted app Play click while reporting Battle.net close requested/succeeded/failed/timed out separately.
 * [ ] Validate debug package workflow output reports app play click sent, app play click accepted, manual play suspected, Diablo launched, and Battle.net still open after launch as separate fields.
@@ -380,8 +386,8 @@ DebugPackages/
 * [x] Log route failure summaries for teleport blocks, cancels, failed confirmations, allowed route-debug decisions, and Start Game verification failures.
 * [x] Capture paired Diablo/App screenshots for major workflow failures.
 * [x] Capture paired Diablo/App screenshots for `BattleNetPlayButtonNotClickedByApp`.
-* [x] Capture paired Diablo/App screenshots for `BattleNetManualPlaySuspected`.
-* [x] Capture paired Diablo/App screenshots for `BattleNetStillOpenAfterDiabloLaunch`.
+* [x] Add Battle.net diagnostics for `BattleNetManualPlaySuspected` without classifying it as a default failure screenshot.
+* [x] Add Battle.net still-open-after-launch diagnostics while suppressing screenshot capture for successful app-click launches.
 * [ ] Record image name, confidence, scan region, threshold, and best match information.
 
 ### Success Screenshot Capture
@@ -601,6 +607,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Start the GoblinEvidence scanner from combat so Observation Mode can run during normal farming.
 * [x] Add scanner/evidence-loop diagnostics for scanner start/stop, scan attempts/skips, Journal/Minimap crop paths, candidate found/not-found, and skipped reasons.
 * [x] Move Observation Mode scanning off the combat token so it runs continuously while Diablo is active/focused and observation/debug diagnostics are enabled.
+* [x] Make Observation Mode default-on for Release diagnostics through `GoblinTracker.EnableObservationMode=true`, with automatic counting still disabled.
 * [x] Add `ObservationScannerStarted`, `ObservationScannerStopped`, `ObservationScanSkipped`, and `ObservationScanAttempted` diagnostics with combat, automation, Diablo, current-area, and cooldown state.
 * [x] Add a no-activate 5-second manual `X` count notification with goblin counted, area/location, goblin type, and current total.
 * [x] Reuse a recent same-area Observation Mode goblin type in accepted manual `X` notifications while preserving `Unknown` for stale or different-area observations.
