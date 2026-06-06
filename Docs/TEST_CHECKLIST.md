@@ -101,6 +101,9 @@
 - `JournalEngagedAccepted` logs when a fresh Engaged journal template anchors the current encounter
 - `JournalKilledIgnoredNoRecentEngaged` logs when a Killed-only journal template matches without a recent same-goblin/same-area Engaged line
 - `JournalKilledAcceptedAfterEngaged` logs when a Killed-only journal template is accepted after a recent same-goblin/same-area Engaged line
+- Immediate manual `X` refresh can accept fresh same-area Killed-only journal evidence and logs `JournalKilledAcceptedFreshManual`
+- Stale visible Killed journal lines suppress with `JournalKilledIgnoredStale` after the freshness window and do not satisfy manual `X`
+- Killed journal freshness state tracks first-seen timestamp and resolved area, and Reset Stats/New Game clear it
 - `JournalEngagedIgnoredStale` logs when an old visible Engaged journal line is beyond the freshness window
 - Stale visible Engaged journal line signatures are suppressed until the line disappears or changes, and repeated `JournalEngagedIgnoredStale` logs are throttled
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
@@ -161,5 +164,8 @@
 ## Town And Exit
 - Repair complete captures paired Diablo/App success screenshots
 - Salvage complete or skipped captures paired Diablo/App success screenshots
+- Salvage logs per-slot `Salvage timing` with confirmation wait, next-slot scan time, slot elapsed time, and total salvage elapsed time
+- Salvage logs `Salvage timing summary` with slots clicked, total elapsed time, confirmation timeout, and post-slot delay
+- Salvage confirmation remains safe after the reduced confirmation wait; no confirmation prompts should be left open
 - Leave Game main menu confirmation captures paired Diablo/App success screenshots
 - Exit Game complete captures paired Diablo/App success screenshots

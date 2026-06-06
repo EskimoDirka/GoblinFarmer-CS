@@ -68,8 +68,9 @@
 * [x] Add config-controlled repair settle and polling interval settings.
 * [x] Reduce default post-New-Tristram repair settle to 50ms after reviewing debug package timings.
 * [x] Accept latest repair timing as good enough after reviewing a debug package; preserve reliability over further speed changes.
+* [x] Reduce salvage confirmation wait/post-slot delay and add per-slot salvage timing logs after reviewing `GoblinFarmer_Debug_20260606_040604.zip`.
 * [ ] Investigate repeated New Tristram repair workflow cancellations where the blacksmith menu did not become visible after one or two sent clicks.
-* [ ] Investigate slow salvage confirmation behavior; latest package showed salvage eventually completed 37 slots but took about 38 seconds after the repair button click.
+* [ ] Validate reduced salvage confirmation timing in the next repair/salvage run; latest pre-fix package showed 7 slots salvaged and total repair/salvage workflow around 7158ms.
 
 ### Testing
 
@@ -77,12 +78,18 @@
 * [x] Add explicit Last Observation UI update/clear diagnostics for continuous scanner state.
 * [x] Suppress stale visible journal Engaged-line signatures after the freshness window until they disappear or change.
 * [x] Require fresh same-area observation evidence before resolved-area manual `X` can accept an `Unknown` goblin type by default.
+* [x] Review `GoblinFarmer_Debug_20260606_040604.zip` for the fresh Killed journal/manual gate issue.
+* [x] Allow manual `X` refresh to accept fresh same-area Killed-only journal evidence without enabling auto-count.
+* [x] Track first-seen/resolved-area state for Killed journal lines and suppress stale Killed lines.
 * [ ] Live-validate Last Observation visibly updates/clears during continuous scans without pressing `X`.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
+* [ ] Live-validate immediate manual `X` after a Killed journal line counts the recognized goblin type and logs `JournalKilledAcceptedFreshManual`.
+* [ ] Live-validate old visible Killed journal lines suppress with `JournalKilledIgnoredStale` after the freshness window.
 * [ ] Live-validate `Reset Stats` clears suppression/observation state and allows a count again only after fresh evidence exists.
 * [ ] Live-validate blocked manual-count areas still suppress with `BlockedArea` even if goblin evidence is visible.
+* [ ] Live-validate salvage is faster with `Salvage timing` logs and no missed confirmation prompts.
 * [ ] Validate `ExtendedRightMenuNoClickRegion`: hover over the lower-right menu, confirm combat continues, cursor does not move, clicks are blocked with `blockReason=ExtendedRightMenuNoClickRegion`, and clicks resume after moving away.
 * [ ] Validate combat no-click suppression mode: logs show `combatInputMode=PhysicalCursorNoClickSuppression`, `clickSendMethod=suppressed`, and Demon Hunter key rotation continues while mouse clicks are suppressed.
 * [ ] Validate Demon Hunter right-hold mode: start right-hold in a safe area, hover over no-click UI, confirm no new right click is sent, UI is not clicked, Shift+Left maintenance skips unsafe injected mouse clicks without stopping combat, and logs show `combatInputMode=PhysicalCursorHeldFromSafeRegion`.

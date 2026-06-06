@@ -55,7 +55,10 @@ Run("Goblin observation type reuse requires recent matching area", TestGoblinObs
 Run("Goblin manual unknown count requires fresh observation by default", TestGoblinManualUnknownCountRequiresFreshObservationByDefault);
 Run("Goblin observation UI state logs update and clear", TestGoblinObservationUiStateLogsUpdateAndClear);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
+Run("Goblin fresh killed journal can satisfy manual evidence gate", TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate);
+Run("Goblin manual refresh logs fresh and stale killed journal decisions", TestGoblinManualRefreshLogsFreshAndStaleKilledJournalDecisions);
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
+Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
 Run("Goblin area detection uses strong route-context runner-up", TestGoblinAreaDetectionUsesStrongRouteContextRunnerUp);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
@@ -1775,6 +1778,40 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     AssertFalse(GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(null, "Cathedral Level 1", now, window), "Killed journal evidence should be ignored without a recent Engaged anchor");
 }
 
+static void TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate()
+{
+    DateTime now = DateTime.UtcNow;
+    TimeSpan window = TimeSpan.FromSeconds(45);
+    GoblinJournalKilledState freshKilled = new("Rainbow Goblin", "Cave Of The Moon Clan Level 1", now.AddSeconds(-3), now);
+    GoblinJournalKilledState staleKilled = freshKilled with { FirstSeenUtc = now.AddSeconds(-60), LastSeenUtc = now };
+    GoblinJournalKilledState wrongAreaKilled = freshKilled with { AreaKey = "WhimsyDale" };
+
+    AssertTrue(
+        GoblinJournalFreshnessPolicy.KilledIsFresh(freshKilled, "Cave Of The Moon Clan Level 1", now, window),
+        "fresh same-area Killed journal evidence should satisfy the manual evidence gate");
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.KilledIsFresh(staleKilled, "Cave Of The Moon Clan Level 1", now, window),
+        "stale Killed journal evidence should not satisfy the manual evidence gate");
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.KilledIsFresh(wrongAreaKilled, "Cave Of The Moon Clan Level 1", now, window),
+        "Killed journal evidence from another area should not satisfy the manual evidence gate");
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.KilledIsFresh(freshKilled, "", now, window),
+        "Killed journal evidence should require a resolved current area");
+}
+
+static void TestGoblinManualRefreshLogsFreshAndStaleKilledJournalDecisions()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+
+    AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshManual", StringComparison.Ordinal), "manual refresh should log fresh Killed journal acceptance");
+    AssertTrue(evidenceSource.Contains("JournalKilledIgnoredStale", StringComparison.Ordinal), "stale Killed journal lines should log a stale suppression reason");
+    AssertTrue(evidenceSource.Contains("allowFreshKilledWithoutEngaged: true", StringComparison.Ordinal), "manual refresh should opt into fresh Killed journal acceptance");
+    AssertTrue(evidenceSource.Contains("allowFreshKilledWithoutEngaged: false", StringComparison.Ordinal), "continuous observation scans should stay stricter than manual refresh");
+    AssertTrue(evidenceSource.Contains("clearedJournalKilled", StringComparison.Ordinal), "Reset Stats/New Game should clear Killed journal freshness state");
+}
+
 static void TestGoblinManualNoFreshGatePreservesBlockedAreaPriority()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -1785,6 +1822,17 @@ static void TestGoblinManualNoFreshGatePreservesBlockedAreaPriority()
     AssertTrue(blockedIndex >= 0, "manual block-list suppression should still exist");
     AssertTrue(noFreshIndex >= 0, "manual no-fresh suppression should exist");
     AssertTrue(blockedIndex < noFreshIndex, "blocked areas should suppress before the no-fresh Unknown gate, even if evidence exists");
+}
+
+static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+
+    AssertTrue(townSource.Contains("PortSalvageConfirmationTimeoutMs = 300", StringComparison.Ordinal), "salvage confirmation wait should be bounded below the previous 800ms delay");
+    AssertTrue(townSource.Contains("PortSalvagePostSlotDelayMs = 50", StringComparison.Ordinal), "salvage post-slot delay should be short but explicit");
+    AssertTrue(townSource.Contains("Salvage timing: slotIndex=", StringComparison.Ordinal), "salvage should log per-slot timing");
+    AssertTrue(townSource.Contains("Salvage timing summary:", StringComparison.Ordinal), "salvage should log a summary timing line");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()

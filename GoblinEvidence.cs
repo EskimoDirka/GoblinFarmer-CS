@@ -489,6 +489,12 @@ namespace GoblinFarmer
         string AreaKey,
         DateTime SeenUtc);
 
+    internal sealed record GoblinJournalKilledState(
+        string GoblinType,
+        string AreaKey,
+        DateTime FirstSeenUtc,
+        DateTime LastSeenUtc);
+
     internal readonly record struct GoblinAreaResolution(
         string RawLocation,
         string AreaKey,
@@ -1208,6 +1214,15 @@ namespace GoblinFarmer
             return recentEngaged != null &&
                 string.Equals(recentEngaged.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase) &&
                 nowUtc - recentEngaged.SeenUtc <= freshnessWindow;
+        }
+
+        public static bool KilledIsFresh(GoblinJournalKilledState? killedState, string areaKey, DateTime nowUtc, TimeSpan freshnessWindow)
+        {
+            return killedState != null &&
+                !string.IsNullOrWhiteSpace(areaKey) &&
+                !string.IsNullOrWhiteSpace(killedState.AreaKey) &&
+                string.Equals(killedState.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase) &&
+                IsFresh(killedState.FirstSeenUtc, nowUtc, freshnessWindow);
         }
     }
 }

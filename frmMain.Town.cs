@@ -9,6 +9,8 @@ namespace GoblinFarmer
     {
         private const int PortRepairStationClickAttemptTimeoutMs = 1500;
         private const int PortRepairWorkflowTimeoutMs = 20000;
+        private const int PortSalvageConfirmationTimeoutMs = 300;
+        private const int PortSalvagePostSlotDelayMs = 50;
 
         private sealed record PortRepairReadinessResult(bool VendorPanelAlreadyVisible, bool VendorPanelBecameVisible, bool NewTristramConfirmed, long ReadinessElapsedMs, long PostArrivalWaitMs);
         private sealed record PortBlacksmithOpenResult(bool Opened, int Attempts, long ElapsedMs, long WorkflowElapsedMs);
@@ -130,6 +132,7 @@ namespace GoblinFarmer
             PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Button", new DrawingPoint(215, 382))));
             PortSleep(token, 150);
 
+            Stopwatch salvagePerf = Stopwatch.StartNew();
             int salvagedCount = 0;
             DrawingPoint? slot = firstSlot;
             for (int i = 0; i < 60; i++)
@@ -145,15 +148,20 @@ namespace GoblinFarmer
                     break;
                 }
 
+                Stopwatch slotPerf = Stopwatch.StartNew();
                 PortSafeLeftClick(slot.Value);
                 salvagedCount++;
-                if (PortWaitForImageInDiablo(Img("Salvage", "Salvage Confirmation Button.png"), token, 800, PortVendorUiConfidence))
+                bool confirmationFound = PortWaitForImageInDiablo(Img("Salvage", "Salvage Confirmation Button.png"), token, PortSalvageConfirmationTimeoutMs, PortVendorUiConfidence);
+                long confirmationWaitMs = slotPerf.ElapsedMilliseconds;
+                if (confirmationFound)
                 {
                     PortPressKey(PortVkReturn);
                 }
 
-                PortSleep(token, 100);
+                PortSleep(token, PortSalvagePostSlotDelayMs);
+                Stopwatch nextSlotPerf = Stopwatch.StartNew();
                 slot = PortFirstFilledInventorySlot();
+                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; nextSlotScanMs={nextSlotPerf.ElapsedMilliseconds}; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
             }
 
             if (closeAfterSalvage)
@@ -163,6 +171,7 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep(salvagedCount == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {salvagedCount} slots clicked");
+            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
         }
