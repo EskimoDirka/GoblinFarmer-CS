@@ -9,6 +9,7 @@
    - active issues
    - confirmed working behavior
    - next recommended task
+3. Verify .gitignore is up to date and properly excludes build artifacts, user-specific files, and other non-source files
 
 ## Required After Any Code Changes
 

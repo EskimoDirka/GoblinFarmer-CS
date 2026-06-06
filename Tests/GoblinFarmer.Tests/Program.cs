@@ -31,6 +31,8 @@ Run("GoblinEvidence template discovery accepts per-goblin evidence files", TestG
 Run("GoblinEvidence template discovery finds source image set", TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet);
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
+Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
+Run("Battle.net successful launch diagnostics avoid failure screenshots", TestBattleNetSuccessfulLaunchDiagnosticsAvoidFailureScreenshots);
 Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverrideWins);
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
 Run("Demon Hunter no-click suppression diagnostic is not named as failure or stall", TestDemonHunterNoClickSuppressionDiagnosticName);
@@ -757,6 +759,35 @@ static void TestReleaseProfileRequiresSetupWhenMissingPaths()
     AssertFalse(snapshot.FirstRunSetupSuppressed, "installed launch should not suppress first-run setup");
     AssertTrue(snapshot.DynamicDebugControlsVisible, "installed launch can show dynamic debug controls");
     AssertTrue(AppSettings.ShouldRequireFirstRunSetup(snapshot.Profile, requiredRuntimeConfigurationIsValid: false), "installed launch with missing paths should require setup");
+}
+
+static void TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string designerSource = File.ReadAllText(Path.Combine(repoRoot, "Form1.Designer.cs"));
+    string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
+
+    AssertTrue(designerSource.Contains("grpGoblinTracker.Size = new Size(311, 304)", StringComparison.Ordinal), "base Release layout should give Goblin Tracker enough height for all labels");
+    AssertTrue(designerSource.Contains("lblGoblinActiveTime.Location = new Point(12, 72)", StringComparison.Ordinal), "Active Time should be below GPH without overlapping evidence labels");
+    AssertTrue(designerSource.Contains("lblGoblinEvidenceLast.Location = new Point(12, 108)", StringComparison.Ordinal), "Last Evidence should be separated below core tracker stats");
+    AssertTrue(designerSource.Contains("lblGoblinObservation.Location = new Point(12, 212)", StringComparison.Ordinal), "Last Observation should start below evidence fields");
+    AssertTrue(designerSource.Contains("lblGoblinObservation.Size = new Size(287, 84)", StringComparison.Ordinal), "Last Observation should have enough height for five lines");
+    AssertTrue(designerSource.Contains("ClientSize = new Size(918, 836)", StringComparison.Ordinal), "base Release form should be tall enough for the expanded Goblin Tracker group");
+    AssertTrue(releaseSource.Contains("ClientSize = new Size(918, 836)", StringComparison.Ordinal), "Release Debug Mode off reset should not shrink back to the overlapping layout");
+}
+
+static void TestBattleNetSuccessfulLaunchDiagnosticsAvoidFailureScreenshots()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string formSource = File.ReadAllText(Path.Combine(repoRoot, "Form1.cs"));
+    string recordMethod = ExtractMethodBody(formSource, "private void PortRecordDiabloLaunchAfterBattleNet");
+    string stillOpenMethod = ExtractMethodBody(formSource, "private void PortLogBattleNetStillOpenAfterDiabloLaunch");
+
+    AssertTrue(recordMethod.Contains("PortRecordBattleNetPlayClickAccepted(\"Diablo process detected after app Play click\"", StringComparison.Ordinal), "Diablo appearing after an app Play click should be reconciled as app-click acceptance before launch outcome logging");
+    AssertTrue(recordMethod.Contains("CaptureDebugScreenshot(\"BattleNetLaunch\", \"BattleNetManualPlaySuspected\")", StringComparison.Ordinal), "manual-play suspicion after Diablo launches should be diagnostic-only");
+    AssertFalse(recordMethod.Contains("PortCaptureFailureScreenshot(\"BattleNetManualPlaySuspected\"", StringComparison.Ordinal), "manual-play suspicion during a successful launch should not create failure screenshot pairs");
+    AssertTrue(stillOpenMethod.Contains("CaptureDebugScreenshot(\"BattleNetLaunch\", \"BattleNetStillOpenAfterDiabloLaunch\")", StringComparison.Ordinal), "Battle.net still-open evidence after Diablo launch should be debug evidence while close handling continues");
+    AssertFalse(stillOpenMethod.Contains("PortCaptureFailureScreenshot(\"BattleNetStillOpenAfterDiabloLaunch\"", StringComparison.Ordinal), "Battle.net still-open-after-launch should not be packaged as a failure when close handling can succeed");
 }
 
 static void TestExplicitAppSettingsPathOverrideWins()

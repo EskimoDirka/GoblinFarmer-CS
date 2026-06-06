@@ -502,8 +502,8 @@ namespace GoblinFarmer
             Control? diagnostics = Controls.Find("tabDiagnostics", searchAllChildren: false).FirstOrDefault();
             if (!debugControlsForcedVisible && !debugMode)
             {
-                MinimumSize = new Size(934, 779);
-                ClientSize = new Size(918, 740);
+                MinimumSize = new Size(934, 875);
+                ClientSize = new Size(918, 836);
                 if (diagnostics != null)
                 {
                     Controls.Remove(diagnostics);

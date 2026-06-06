@@ -91,11 +91,15 @@
 * [x] Publish accepted manual `X` counts into Last Observation display state and briefly preserve that display from no-candidate scanner clears.
 * [x] Review `GoblinFarmer_Debug_20260606_050819.zip` for accepted manual-count display hold behavior, stale/block/reset regressions, package size, and salvage timing.
 * [x] Preserve `ManualHotkey` / `Counted` Last Observation from Journal/Minimap scanner overwrites during the 5-second manual-count display hold.
+* [x] Review `GoblinFarmer_Debug_20260606_054218.zip` for v1.4.0 installed-run evidence, Goblin Tracker layout overlap, Battle.net launch diagnostic noise, Kadala timing, salvage success, and reliability counters.
+* [x] Expand the Release Goblin Tracker group and form height so evidence fields and the Last Observation block do not overlap.
+* [x] Reconcile Diablo detection after an app Battle.net Play click before launch outcome logging and downgrade successful-launch `BattleNetManualPlaySuspected` / `BattleNetStillOpenAfterDiabloLaunch` screenshots to debug evidence.
 * [x] Update AGENTS.md to require next test steps and commit/push follow-up unless otherwise specified.
 * [x] Add AGENTS workflow-maintenance guidance backed by `Docs/Worflow blocklist.md`.
 * [x] Prepare v1.4.0 release metadata, release notes, README text, release checklist, and Inno Setup script metadata.
 * [x] Create the v1.4.0 self-contained release EXE and Inno Setup installer with matching version metadata.
 * [ ] Live-validate Last Observation visibly updates to `ManualHotkey` / `Counted` immediately after accepted manual `X` counts and remains visible for the full 5-second count notification, with scanner overwrites logging `LastObservationUpdateSkippedDuringManualHold`.
+* [ ] Live-validate the Release Goblin Tracker group shows all tracker/evidence/Last Observation fields without merged lines before and after toggling Debug Mode.
 * [ ] Live-validate stale Treasure Goblin journal lines stay ignored and do not keep producing eligible observations after moving areas.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.
@@ -137,6 +141,7 @@
 * [ ] Validate `BattleNetPlayClickAccepted` appears only after Battle.net UI transition, Battle.net window/process transition, or Diablo process start confirms the app Play click was accepted.
 * [ ] Validate `BattleNetManualPlaySuspected` appears if Diablo launches without `battleNetPlayClickAcceptedByBattleNet=True`, including when the app sent a click but acceptance was not verified.
 * [ ] Validate `BattleNetStillOpenAfterDiabloLaunch` appears only if the visible Battle.net window remains open after Diablo launches.
+* [ ] Validate successful app-click launches do not package `BattleNetManualPlaySuspected` or `BattleNetStillOpenAfterDiabloLaunch` as failure screenshot pairs when Diablo starts and Battle.net closes successfully.
 * [x] Treat background/tray Battle.net processes after Diablo launch as informational, not as close or launch failures.
 * [ ] Validate `BattleNetPostLaunchCloseSummary` marks Diablo launch successful only after an accepted app Play click while reporting Battle.net close requested/succeeded/failed/timed out separately.
 * [ ] Validate debug package workflow output reports app play click sent, app play click accepted, manual play suspected, Diablo launched, and Battle.net still open after launch as separate fields.

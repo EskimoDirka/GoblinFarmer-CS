@@ -18,7 +18,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Monk, Demon Hunter, and Witch Doctor combat support.
 - Location-aware Goblin Tracker with `X` hotkey counting, per-area duplicate protection, active-combat-time GPH, live UI stats, accepted-count notifications, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and debug package generation.
-- Visual Studio Debug layout that keeps the expanded Goblin Tracker evidence and Last Observation fields visible while normal release launches stay compact.
+- Release and Visual Studio Debug layouts that keep the expanded Goblin Tracker evidence and Last Observation fields readable while release diagnostic tabs stay hidden until Debug Mode is enabled.
 - Runtime configuration for Diablo III, Battle.net, image templates, launch timings, diagnostic behavior, and VS Debug project-root config persistence.
 - Self-contained Windows release publishing plus optional Inno Setup installer packaging.
 - Dynamic app title and synchronized installer/application versioning.
@@ -183,7 +183,7 @@ Debug Mode is off by default for normal release use. When enabled from Settings,
 
 Debug packages keep evidence useful but bounded by default: success screenshots are excluded unless explicitly requested, failure screenshot groups and current-session `debug-screenshots` are capped to recent samples, and Goblin Evidence crops/event screenshots use their own retention and package limits. The package manifest reports included and excluded screenshot counts and sizes.
 
-Visual Studio Debug uses a taller diagnostic window so the Goblin Tracker evidence and Last Observation fields remain readable. Release-user launches stay compact and show diagnostics only after Debug Mode is enabled.
+Release and Visual Studio Debug use a taller Goblin Tracker group so the evidence and Last Observation fields remain readable. Release-user launches keep diagnostic tabs hidden until Debug Mode is enabled.
 
 Debug tooling includes:
 

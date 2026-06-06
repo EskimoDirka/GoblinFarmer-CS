@@ -4,6 +4,7 @@
 - Battle.net launches/focuses
 - Diablo III tab selected
 - Play clicked
+- If Diablo starts after GoblinFarmer sends Play and Battle.net closes successfully, `BattleNetManualPlaySuspected` and `BattleNetStillOpenAfterDiabloLaunch` evidence is diagnostic-only and not packaged as failure screenshot pairs
 - Paired success screenshots captured for Battle.net Play click accepted
 - Diablo launches
 - Paired success screenshots captured for Diablo process detected
@@ -35,6 +36,8 @@
 - Failure screenshots include both Diablo and GoblinFarmer app evidence
 
 ## Goblin Tracker
+- Release and VS Debug Goblin Tracker group layouts show Goblins, GPH, Active Time, Last Evidence, Evidence Type, Evidence Confidence, Evidence Time, and the full Last Observation block without merged lines or bottom clipping
+- Toggling Release Debug Mode on/off does not shrink the Goblin Tracker group back to the overlapping layout
 - Default resolved areas allow one goblin count per area per game
 - Manual `X` logs `AreaDetectionAmbiguous` when PF and known channel/cavern, Moon Clan, or Cathedral title-template matches are extremely close
 - Manual `X` uses route context to select Western Channel Level 1/2 or Eastern Channel Level 1/2 from Ancient Waterway context instead of consuming PF slots
