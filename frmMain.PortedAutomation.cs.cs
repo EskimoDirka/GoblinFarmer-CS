@@ -431,6 +431,7 @@ namespace GoblinFarmer
             PortHideSplash();
             portSplashTimer?.Dispose();
             portSplashForm?.Dispose();
+            PortStopGoblinObservationScanner("app closing");
             PortStopAllAutomation("app closing");
             PortStopCombat("app closing");
             ForceReleaseAllRuntimeInputs("app closing");

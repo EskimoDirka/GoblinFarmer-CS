@@ -16,6 +16,7 @@ namespace GoblinFarmer
             sessionStartTime = DateTime.Now;
             PortResetGoblinAreaDuplicateGuard("SessionStart");
             PortValidateGoblinEvidenceTemplateSetup("Startup", notifyIfMissing: false);
+            PortStartGoblinObservationScanner("Startup");
             PortWriteSessionMetadata();
             PortUpdateSessionStats();
             PortUpdateGoblinTrackerStats();

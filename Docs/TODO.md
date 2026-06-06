@@ -562,6 +562,8 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Include Automation Observation Mode counters and last-observation details in the UI diagnostics, session summaries, runtime `session-info.txt`, and debug package manifests.
 * [x] Start the GoblinEvidence scanner from combat so Observation Mode can run during normal farming.
 * [x] Add scanner/evidence-loop diagnostics for scanner start/stop, scan attempts/skips, Journal/Minimap crop paths, candidate found/not-found, and skipped reasons.
+* [x] Move Observation Mode scanning off the combat token so it runs continuously while Diablo is active/focused and observation/debug diagnostics are enabled.
+* [x] Add `ObservationScannerStarted`, `ObservationScannerStopped`, `ObservationScanSkipped`, and `ObservationScanAttempted` diagnostics with combat, automation, Diablo, current-area, and cooldown state.
 * [x] Add a no-activate 5-second manual `X` count notification with goblin counted, area/location, goblin type, and current total.
 * [x] Reuse a recent same-area Observation Mode goblin type in accepted manual `X` notifications while preserving `Unknown` for stale or different-area observations.
 * [x] Run a current observation refresh before accepted manual `X` notifications so same-area evidence that appears at count time can supply the goblin type without enabling automatic counting.
@@ -585,6 +587,8 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Add journal candidate diagnostics for template coverage and full-region-template diagnosis before changing journal thresholds.
 * [x] Include best-template journal diagnostics in `GoblinEvidenceScanResult source=Journal` even when no candidate passes threshold.
 * [x] Keep Journal template matches primary when Journal and Minimap evidence both match in the same scan.
+* [x] Add journal freshness protection so Engaged journal templates anchor the current encounter and Killed-only journal templates require a recent same-goblin/same-area Engaged line.
+* [x] Add `JournalEngagedAccepted`, `JournalKilledIgnoredNoRecentEngaged`, `JournalKilledAcceptedAfterEngaged`, and `JournalEngagedIgnoredStale` diagnostics.
 * [x] Keep ObservationDiagnostics crops bounded by throttling capture and retaining only a recent runtime sample.
 * [x] Limit debug package inclusion for ObservationDiagnostics image crops and report missing-template state in `debug-package-manifest.txt`.
 * [x] Limit direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots by count and size, and report included/excluded/oversized counts in `debug-package-manifest.txt`.
@@ -605,12 +609,14 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Live-validate Cathedral Level 1 manual `X` counts once, suppresses the second press, and does not consume PF1 slots.
 * [ ] Live-validate Cathedral Level 2 manual `X` counts once, suppresses the second press, and does not consume PF2 slots.
 * [ ] Live-validate real PF1/PF2 counts remain available after Cave/Cathedral close-match checks.
-* [ ] Live-validate `JournalCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
+* [x] Live-validate `JournalCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
 * [ ] Live-validate `MinimapCandidate` observations log `GoblinObservationCandidate` and `GoblinObservationSummary` while leaving GoblinCount, GPH, tracker active time, found records, and counted-area slots unchanged.
-* [ ] Live-validate the latest log contains `GoblinEvidenceScannerStartRequested`, `GoblinEvidenceScannerStarted`, `GoblinEvidenceScanAttempted`, crop-path diagnostics, and `GoblinEvidenceScannerStopped` during normal combat.
+* [ ] Live-validate the latest log contains `ObservationScannerStarted`, `ObservationScanAttempted`, `ObservationScanSkipped reason=...`, crop-path diagnostics, and `ObservationScannerStopped` during normal Diablo-active/non-combat time.
 * [ ] Live-validate missing or invalid Journal/Minimap evidence template setup logs one clear `GoblinEvidenceTemplateSetupMissing` or `GoblinEvidenceTemplateSetupWarning` line plus throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries instead of repeated per-scan `GoblinEvidenceCandidateCheck` spam.
 * [ ] Live-validate calibrated per-goblin Journal/Minimap evidence templates produce `GoblinEvidenceCandidateCheck` results and, when confidence passes, typed observation candidates without changing GoblinCount.
 * [ ] Live-validate the newly cropped journal templates are discovered and can produce `JournalCandidate` observations while the journal scan region remains `64,736,645,417`.
+* [ ] Live-validate old/stale visible journal lines stop producing eligible observations after the journal freshness window.
+* [ ] Live-validate Killed-only journal matches log `JournalKilledIgnoredNoRecentEngaged` unless a recent same-goblin/same-area Engaged line exists.
 * [ ] Live-validate `GoblinEvidenceScanResult source=Minimap scanRegion=2108,66,421,423` logs template name, best confidence, threshold, and match point for tight minimap icon templates.
 * [ ] Live-validate matching ObservationDiagnostics minimap crop framing in a live run.
 * [ ] If tight minimap icon matching is unreliable after one or two targeted tuning passes, document the failing template(s) and prepare a future color-matching fallback for the goblin minimap marker within the calibrated minimap region.
@@ -621,7 +627,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [x] Live-validate Observation Mode no longer reports PF1 for Western Channel Level 1 when route context is Ancient Waterway and the channel title is a strong runner-up.
 * [x] Live-retest manual `X` notification latency after the recent-observation skip and Minimap-first manual refresh changes.
 * [x] Re-test Sewers of Caldeum / Menagerist notification type reuse after the Minimap-first manual refresh change.
-* [ ] Investigate the Blood Thief / Cave Of The Moon Clan Level 1 live miss where the manual count worked but notification type and Last Observation data were absent.
+* [ ] Investigate the Blood Thief / Cave Of The Moon Clan Level 1 live miss where the manual count worked but notification type and Last Observation data were absent; latest package confirms Cave Of The Moon Clan Level 1 can count from Journal, but Blood Thief-specific recognition still needs a same-type retest.
 * [x] Investigate Cathedral Level 3 accepting two manual count notifications in one game; latest package confirmed one accepted count followed by duplicate suppressions with `AreaAlreadyCounted`.
 * [ ] Live-validate Stinging Winds accepts manual goblin counts 1 and 2 in the same game and suppresses count 3 with `AreaLimitReached`.
 * [ ] Live-validate combat hotkey cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=CombatHotkey`.

@@ -73,10 +73,10 @@
 - Manual `X` notification refresh checks Minimap evidence before Journal evidence to keep count notifications responsive; normal Observation Mode scans remain Journal-primary
 - Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
 - Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
-- Combat start logs `GoblinEvidenceScannerStartRequested` and `GoblinEvidenceScannerStarted`
-- Combat stop logs `GoblinEvidenceScannerStopped`
-- Evidence loop logs `GoblinEvidenceScanAttempted` during eligible combat scans
-- Evidence loop logs `GoblinEvidenceScanSkipped` with a reason when combat/scanner conditions are not eligible
+- App/session startup logs `ObservationScannerStarted` when Observation/debug diagnostics are enabled
+- Observation scanner logs `ObservationScanAttempted` while Diablo is active/focused and no automation workflow is running
+- Observation scanner logs `ObservationScanSkipped` with a reason when Diablo/scanner conditions are not eligible
+- Observation scanner logs combat state, automation state, Diablo running/active state, current area, and cooldown state in scanner attempt/skip diagnostics
 - Evidence loop logs Journal/Minimap crop paths from `Debug\GoblinEvidence\ObservationDiagnostics`
 - If Goblin Evidence templates are missing, startup/scanner diagnostics log one clear `GoblinEvidenceTemplateSetupMissing` line and throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries
 - Missing Goblin Evidence templates do not spam `GoblinEvidenceCandidateCheck reason=MissingTemplate` on every scan
@@ -93,6 +93,10 @@
 - `GoblinEvidenceCandidateCheck source=Minimap` includes template name, goblin type, calibrated scan region, best confidence, threshold, match point, screen match point, and template size
 - `GoblinEvidenceCandidateCheck source=Journal` includes template coverage percentage and `journalDiagnosis`, including full-region-template guidance when applicable
 - Journal matches remain primary when Journal and Minimap evidence both match in the same scan; Minimap is logged as supporting evidence in that case
+- `JournalEngagedAccepted` logs when a fresh Engaged journal template anchors the current encounter
+- `JournalKilledIgnoredNoRecentEngaged` logs when a Killed-only journal template matches without a recent same-goblin/same-area Engaged line
+- `JournalKilledAcceptedAfterEngaged` logs when a Killed-only journal template is accepted after a recent same-goblin/same-area Engaged line
+- `JournalEngagedIgnoredStale` logs when an old visible Engaged journal line is beyond the freshness window
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - Observation candidates report the matched goblin type when a Journal or Minimap template passes confidence

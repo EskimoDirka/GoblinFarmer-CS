@@ -4,9 +4,10 @@ namespace GoblinFarmer
 {
     public partial class frmMain
     {
-        private const int GoblinEvidenceScanIntervalMs = 750;
+        private const int GoblinEvidenceScanIntervalMs = 1500;
         private const int GoblinEvidenceObservationDiagnosticRetentionCount = 24;
         private static readonly TimeSpan GoblinEvidenceCooldown = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan GoblinJournalEvidenceFreshWindow = TimeSpan.FromSeconds(45);
         private static readonly TimeSpan GoblinEvidenceMissingTemplateLogCooldown = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan GoblinEvidenceDiagnosticLogCooldown = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan GoblinEvidenceDiagnosticCropCooldown = TimeSpan.FromSeconds(60);
@@ -22,6 +23,9 @@ namespace GoblinFarmer
         private readonly Dictionary<GoblinEvidenceType, DateTime> portLastGoblinEvidenceMissingTemplateLogByType = new();
         private readonly Dictionary<string, DateTime> portLastGoblinEvidenceScanDiagnosticByKey = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DateTime> portLastGoblinEvidenceDetectorDiagnosticByKey = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, GoblinJournalEvidenceSeenState> portJournalEvidenceSeenByKey = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, GoblinJournalEngagedState> portRecentJournalEngagedByGoblinType = new(StringComparer.OrdinalIgnoreCase);
+        private CancellationTokenSource? portGoblinEvidenceObservationCts;
         private Task? portGoblinEvidenceScannerTask;
         private int portGoblinEvidenceCalibrationCaptureActive;
         private int portGoblinEvidenceMissingTemplateSetupLogged;
@@ -33,32 +37,53 @@ namespace GoblinFarmer
 
         private void PortStartGoblinEvidenceScanner(CancellationToken token)
         {
+            PortStartGoblinObservationScanner("CombatStart");
+        }
+
+        private void PortStartGoblinObservationScanner(string source)
+        {
             if (portGoblinEvidenceScannerTask != null && !portGoblinEvidenceScannerTask.IsCompleted)
             {
-                AppLogger.Info($"GoblinEvidenceScannerStartSkipped: reason=AlreadyRunning; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; cancelled={token.IsCancellationRequested}");
+                AppLogger.Info($"ObservationScannerStartSkipped: reason=AlreadyRunning; source={PortLogField(source)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}");
                 return;
             }
 
-            PortValidateGoblinEvidenceTemplateSetup("ScannerStart", notifyIfMissing: true);
-            AppLogger.Info($"GoblinEvidenceScannerStartRequested: intervalMs={GoblinEvidenceScanIntervalMs}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; cancelled={token.IsCancellationRequested}");
+            portGoblinEvidenceObservationCts?.Cancel();
+            portGoblinEvidenceObservationCts?.Dispose();
+            portGoblinEvidenceObservationCts = new CancellationTokenSource();
+            CancellationToken scannerToken = portGoblinEvidenceObservationCts.Token;
+            PortValidateGoblinEvidenceTemplateSetup("ObservationScannerStart", notifyIfMissing: true);
+            AppLogger.Info($"ObservationScannerStartRequested: source={PortLogField(source)}; intervalMs={GoblinEvidenceScanIntervalMs}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; enabled={PortGoblinObservationScannerEnabled()}");
             portGoblinEvidenceScannerTask = Task.Run(() =>
             {
                 try
                 {
-                    PortGoblinEvidenceScannerLoop(token);
+                    PortGoblinEvidenceScannerLoop(scannerToken);
                 }
                 catch (Exception ex)
                 {
-                    AppLogger.Error("Goblin evidence scanner failed.", ex);
+                    AppLogger.Error("Goblin observation scanner failed.", ex);
                 }
             }, CancellationToken.None);
         }
 
+        private void PortStopGoblinObservationScanner(string reason)
+        {
+            CancellationTokenSource? cts = portGoblinEvidenceObservationCts;
+            if (cts == null)
+            {
+                return;
+            }
+
+            AppLogger.Info($"ObservationScannerStopRequested: reason={PortLogField(reason)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}");
+            cts.Cancel();
+        }
+
         private void PortGoblinEvidenceScannerLoop(CancellationToken token)
         {
-            AppLogger.Info($"GoblinEvidenceScannerStarted: intervalMs={GoblinEvidenceScanIntervalMs}; cooldownSeconds={GoblinEvidenceCooldown.TotalSeconds:0}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}");
+            AppLogger.Info($"ObservationScannerStarted: intervalMs={GoblinEvidenceScanIntervalMs}; evidenceCooldownSeconds={GoblinEvidenceCooldown.TotalSeconds:0}; journalFreshWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; enabled={PortGoblinObservationScannerEnabled()}");
 
-            while (!token.IsCancellationRequested && portCombatRunning)
+            while (!token.IsCancellationRequested)
             {
                 string skipReason = PortGoblinEvidenceScanSkipReason(token);
                 if (string.IsNullOrWhiteSpace(skipReason))
@@ -67,13 +92,13 @@ namespace GoblinFarmer
                 }
                 else
                 {
-                    PortLogGoblinEvidenceScanDiagnostic("GoblinEvidenceScanSkipped", skipReason);
+                    PortLogGoblinEvidenceScanDiagnostic("ObservationScanSkipped", skipReason);
                 }
 
                 PortSleep(token, GoblinEvidenceScanIntervalMs);
             }
 
-            AppLogger.Info($"GoblinEvidenceScannerStopped: combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; cancelled={token.IsCancellationRequested}; stopReason={(token.IsCancellationRequested ? "CancellationRequested" : portCombatRunning ? "LoopExited" : "CombatStopped")}");
+            AppLogger.Info($"ObservationScannerStopped: combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cancelled={token.IsCancellationRequested}; stopReason={(token.IsCancellationRequested ? "CancellationRequested" : "LoopExited")}");
         }
 
         private bool PortShouldScanGoblinEvidence(CancellationToken token)
@@ -88,9 +113,9 @@ namespace GoblinFarmer
                 return "CancellationRequested";
             }
 
-            if (!portCombatRunning)
+            if (!PortGoblinObservationScannerEnabled())
             {
-                return "CombatInactive";
+                return "ObservationModeDisabled";
             }
 
             if (portCombatStopping)
@@ -116,6 +141,11 @@ namespace GoblinFarmer
             return "";
         }
 
+        private static bool PortGoblinObservationScannerEnabled()
+        {
+            return DebugManager.DiagnosticLoggingEnabled || AppSettings.Debug.DebugMode;
+        }
+
         private void PortScanGoblinEvidence()
         {
             DateTime scanTime = DateTime.Now;
@@ -128,7 +158,7 @@ namespace GoblinFarmer
             }
 
             PortLogGoblinEvidenceScanDiagnostic(
-                "GoblinEvidenceScanAttempted",
+                "ObservationScanAttempted",
                 $"Eligible; journalCropPath={PortLogField(PortDisplayLocation(journalCropPath))}; minimapCropPath={PortLogField(PortDisplayLocation(minimapCropPath))}");
 
             GoblinEvidenceTemplateCatalog templateCatalog = PortGoblinEvidenceTemplateCatalog();
@@ -146,7 +176,7 @@ namespace GoblinFarmer
             foreach (GoblinEvidenceCandidate candidate in PortDetectGoblinEvidenceCandidates(templateCatalog))
             {
                 candidateCount++;
-                PortRecordGoblinEvidence(candidate);
+                PortRecordGoblinEvidence(candidate, forceObservation: true);
             }
 
             if (candidateCount == 0)
@@ -181,15 +211,16 @@ namespace GoblinFarmer
                 GoblinEvidenceCandidate? candidate = detection.Candidate;
                 PortLogGoblinEvidenceSourceScanResult(sourceGroup.Key, scanRegion, detection, templates.Count);
 
-                if (candidate != null)
+                if (candidate != null &&
+                    PortTryAcceptGoblinEvidenceCandidate(sourceGroup.Key, detection, out GoblinEvidenceCandidate? acceptedCandidate))
                 {
                     if (string.Equals(sourceGroup.Key, "JournalCandidate", StringComparison.OrdinalIgnoreCase))
                     {
-                        primaryJournalCandidate = candidate;
+                        primaryJournalCandidate = acceptedCandidate;
                     }
                     else
                     {
-                        supportingCandidates.Add(candidate);
+                        supportingCandidates.Add(acceptedCandidate!);
                     }
                 }
             }
@@ -278,6 +309,15 @@ namespace GoblinFarmer
             string BestImagePath,
             GoblinEvidenceTemplateMatch BestMatch);
 
+        private sealed record GoblinJournalEngagedState(
+            string GoblinType,
+            string AreaKey,
+            DateTime SeenUtc);
+
+        private sealed record GoblinJournalEvidenceSeenState(
+            DateTime FirstSeenUtc,
+            DateTime LastSeenUtc);
+
         private void PortTryRefreshGoblinObservationForManualHotkey()
         {
             try
@@ -324,13 +364,139 @@ namespace GoblinFarmer
                 Rectangle scanRegion = PortGoblinEvidenceRegionForSource(source);
                 GoblinEvidenceDetectionResult detection = PortDetectBestGoblinEvidenceTemplate(templates, scanRegion);
                 PortLogGoblinEvidenceSourceScanResult(source, scanRegion, detection, templates.Count);
-                if (detection.Candidate != null)
+                if (detection.Candidate != null &&
+                    PortTryAcceptGoblinEvidenceCandidate(source, detection, out GoblinEvidenceCandidate? acceptedCandidate))
                 {
-                    return detection.Candidate;
+                    return acceptedCandidate;
                 }
             }
 
             return null;
+        }
+
+        private bool PortTryAcceptGoblinEvidenceCandidate(
+            string source,
+            GoblinEvidenceDetectionResult detection,
+            out GoblinEvidenceCandidate? acceptedCandidate)
+        {
+            acceptedCandidate = detection.Candidate;
+            if (acceptedCandidate == null)
+            {
+                return false;
+            }
+
+            GoblinEvidenceTemplateRequirement? template = detection.BestTemplate;
+            if (template == null ||
+                !string.Equals(source, "JournalCandidate", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return PortTryAcceptJournalEvidenceCandidate(template, acceptedCandidate, detection.BestMatch, out acceptedCandidate);
+        }
+
+        private bool PortTryAcceptJournalEvidenceCandidate(
+            GoblinEvidenceTemplateRequirement template,
+            GoblinEvidenceCandidate candidate,
+            GoblinEvidenceTemplateMatch match,
+            out GoblinEvidenceCandidate? acceptedCandidate)
+        {
+            acceptedCandidate = null;
+            PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea("Journal");
+            string areaKey = areaResult.Area.Resolved ? areaResult.Area.AreaKey : "";
+            string displayArea = areaResult.Area.Resolved ? areaResult.Area.DisplayLocation : "Unknown";
+            DateTime nowUtc = DateTime.UtcNow;
+            string goblinType = GoblinTypeNormalizer.Normalize(template.GoblinType);
+            string freshnessKey = $"{template.Kind}|{goblinType}";
+            DateTime firstSeenUtc;
+            GoblinJournalEngagedState? recentEngaged = null;
+
+            lock (portGoblinEvidenceLock)
+            {
+                if (!portJournalEvidenceSeenByKey.TryGetValue(freshnessKey, out GoblinJournalEvidenceSeenState? seenState) ||
+                    nowUtc - seenState.LastSeenUtc > GoblinJournalEvidenceFreshWindow)
+                {
+                    firstSeenUtc = nowUtc;
+                    portJournalEvidenceSeenByKey[freshnessKey] = new GoblinJournalEvidenceSeenState(firstSeenUtc, nowUtc);
+                }
+                else
+                {
+                    firstSeenUtc = seenState.FirstSeenUtc;
+                    portJournalEvidenceSeenByKey[freshnessKey] = seenState with { LastSeenUtc = nowUtc };
+                }
+
+                if (portRecentJournalEngagedByGoblinType.TryGetValue(goblinType, out GoblinJournalEngagedState? state))
+                {
+                    recentEngaged = state;
+                }
+            }
+
+            TimeSpan firstSeenAge = nowUtc - firstSeenUtc;
+            bool isEngagedSignal = template.Kind == GoblinEvidenceTemplateKind.JournalEngaged ||
+                template.Kind == GoblinEvidenceTemplateKind.JournalEngagedAndKilled;
+            if (isEngagedSignal)
+            {
+                if (firstSeenAge > GoblinJournalEvidenceFreshWindow)
+                {
+                    PortLogJournalEvidenceFreshnessDiagnostic(
+                        "JournalEngagedIgnoredStale",
+                        template,
+                        match,
+                        displayArea,
+                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                    return false;
+                }
+
+                lock (portGoblinEvidenceLock)
+                {
+                    portRecentJournalEngagedByGoblinType[goblinType] = new GoblinJournalEngagedState(goblinType, areaKey, nowUtc);
+                }
+
+                PortLogJournalEvidenceFreshnessDiagnostic(
+                    "JournalEngagedAccepted",
+                    template,
+                    match,
+                    displayArea,
+                    $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                acceptedCandidate = candidate with
+                {
+                    Notes = $"{candidate.Notes}; JournalFreshness=EngagedAccepted; JournalArea={displayArea}"
+                };
+                return true;
+            }
+
+            if (template.Kind == GoblinEvidenceTemplateKind.JournalKilled)
+            {
+                bool recentEngagedMatches = recentEngaged != null &&
+                    string.Equals(recentEngaged.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase) &&
+                    nowUtc - recentEngaged.SeenUtc <= GoblinJournalEvidenceFreshWindow;
+                if (!recentEngagedMatches)
+                {
+                    double recentAgeSeconds = recentEngaged == null ? -1 : Math.Max(0, (nowUtc - recentEngaged.SeenUtc).TotalSeconds);
+                    PortLogJournalEvidenceFreshnessDiagnostic(
+                        "JournalKilledIgnoredNoRecentEngaged",
+                        template,
+                        match,
+                        displayArea,
+                        $"recentEngagedArea={PortLogField(recentEngaged?.AreaKey ?? "")}; recentEngagedAgeSeconds={recentAgeSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                    return false;
+                }
+
+                PortLogJournalEvidenceFreshnessDiagnostic(
+                    "JournalKilledAcceptedAfterEngaged",
+                    template,
+                    match,
+                    displayArea,
+                    $"recentEngagedArea={PortLogField(recentEngaged!.AreaKey)}; recentEngagedAgeSeconds={Math.Max(0, (nowUtc - recentEngaged.SeenUtc).TotalSeconds):0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                acceptedCandidate = candidate with
+                {
+                    Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedAfterEngaged; JournalArea={displayArea}"
+                };
+                return true;
+            }
+
+            acceptedCandidate = candidate;
+            return true;
         }
 
         private GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatchInDiabloRegion(string imagePath, Rectangle referenceRegion)
@@ -462,7 +628,7 @@ namespace GoblinFarmer
             }
 
             Interlocked.Exchange(ref portLastGoblinEvidenceMissingTemplateScanSummaryTicks, nowTicks);
-            AppLogger.Info($"GoblinEvidenceScanResult: candidateFound=False; reason=MissingTemplate; templateCount={templateCatalog.Templates.Count}; invalidTemplateCount={templateCatalog.InvalidTemplates.Count}; invalidTemplates={PortLogField(PortGoblinEvidenceInvalidTemplateSummary(templateCatalog))}; diagnosticCropsContinue=True; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            AppLogger.Info($"GoblinEvidenceScanResult: candidateFound=False; reason=MissingTemplate; templateCount={templateCatalog.Templates.Count}; invalidTemplateCount={templateCatalog.InvalidTemplates.Count}; invalidTemplates={PortLogField(PortGoblinEvidenceInvalidTemplateSummary(templateCatalog))}; diagnosticCropsContinue=True; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
         }
 
         private void PortLogGoblinEvidenceMissingTemplate(
@@ -501,7 +667,44 @@ namespace GoblinFarmer
                 portLastGoblinEvidenceScanDiagnosticByKey[key] = now;
             }
 
-            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}");
+            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
+        }
+
+        private void PortLogJournalEvidenceFreshnessDiagnostic(
+            string eventName,
+            GoblinEvidenceTemplateRequirement template,
+            GoblinEvidenceTemplateMatch match,
+            string currentArea,
+            string details)
+        {
+            DateTime now = DateTime.Now;
+            string key = $"{eventName}|{template.Kind}|{template.GoblinType}";
+            lock (portGoblinEvidenceLock)
+            {
+                if (portLastGoblinEvidenceDetectorDiagnosticByKey.TryGetValue(key, out DateTime lastLogged) &&
+                    now - lastLogged < GoblinEvidenceDiagnosticLogCooldown)
+                {
+                    return;
+                }
+
+                portLastGoblinEvidenceDetectorDiagnosticByKey[key] = now;
+            }
+
+            AppLogger.Info($"{eventName}: source=Journal; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; templateName={PortLogField(template.FileName)}; currentArea={PortLogField(PortDisplayLocation(currentArea))}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; {details}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
+        }
+
+        private string PortGoblinEvidenceCooldownStateForLog()
+        {
+            lock (portGoblinEvidenceLock)
+            {
+                string evidenceTypes = portLastGoblinEvidenceByType.Count == 0
+                    ? "none"
+                    : string.Join("|", portLastGoblinEvidenceByType.Select(pair => $"{pair.Key}:{Math.Max(0, (DateTime.Now - pair.Value).TotalSeconds):0.0}s"));
+                string engaged = portRecentJournalEngagedByGoblinType.Count == 0
+                    ? "none"
+                    : string.Join("|", portRecentJournalEngagedByGoblinType.Select(pair => $"{pair.Key}@{PortDisplayLocation(pair.Value.AreaKey)}:{Math.Max(0, (DateTime.UtcNow - pair.Value.SeenUtc).TotalSeconds):0.0}s"));
+                return $"evidence={evidenceTypes}; engaged={engaged}";
+            }
         }
 
         private void PortLogGoblinEvidenceDetectorDiagnostic(
@@ -776,16 +979,22 @@ namespace GoblinFarmer
             int missingTemplateCooldownsCleared;
             int scanDiagnosticsCleared;
             int detectorDiagnosticsCleared;
+            int journalFirstSeenCleared;
+            int journalEngagedCleared;
             lock (portGoblinEvidenceLock)
             {
                 evidenceCooldownsCleared = portLastGoblinEvidenceByType.Count;
                 missingTemplateCooldownsCleared = portLastGoblinEvidenceMissingTemplateLogByType.Count;
                 scanDiagnosticsCleared = portLastGoblinEvidenceScanDiagnosticByKey.Count;
                 detectorDiagnosticsCleared = portLastGoblinEvidenceDetectorDiagnosticByKey.Count;
+                journalFirstSeenCleared = portJournalEvidenceSeenByKey.Count;
+                journalEngagedCleared = portRecentJournalEngagedByGoblinType.Count;
                 portLastGoblinEvidenceByType.Clear();
                 portLastGoblinEvidenceMissingTemplateLogByType.Clear();
                 portLastGoblinEvidenceScanDiagnosticByKey.Clear();
                 portLastGoblinEvidenceDetectorDiagnosticByKey.Clear();
+                portJournalEvidenceSeenByKey.Clear();
+                portRecentJournalEngagedByGoblinType.Clear();
                 Interlocked.Exchange(ref portLastGoblinEvidenceDiagnosticCropTicks, 0);
                 Interlocked.Exchange(ref portLastGoblinEvidenceMissingTemplateScanSummaryTicks, 0);
             }
@@ -801,7 +1010,7 @@ namespace GoblinFarmer
                 portDisplayedGoblinObservationStatus = "No current observation";
             }
 
-            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
+            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
         }
 
         private string PortCaptureGoblinEvidenceScreenshot(GoblinEvidenceType type, DateTime timestamp)
