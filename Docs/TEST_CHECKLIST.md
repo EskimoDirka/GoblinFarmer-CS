@@ -48,6 +48,7 @@
 - Manual `X` in WhimsyDale suppresses with `GoblinCountSuppressed areaKey=WhimsyDale reason=BlockedArea source=ManualHotkey`
 - Repeated manual `X` in WhimsyDale remains blocked
 - City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk suppress with `GoblinCountSuppressed`, `reason=BlockedArea`, and `source=ManualHotkey`
+- New Tristram suppresses with `GoblinCountSuppressed`, `reason=BlockedArea`, and a visible blocked-area notification
 - Manual-count blocked areas do not increment the counter and do not consume an area-count slot
 - Cave Of The Moon Clan Level 1 counts once and suppresses the second press as the same area
 - Cathedral Level 1 counts once and suppresses the second press as the same area
@@ -133,11 +134,19 @@
 - Startup logs report `EnableObservationMode`, `EnableAutomaticCounting`, effective `automaticCountingEnabled`, and `manualHotkeyOnlyCountPath`
 - With `EnableAutomaticCounting=false`, Observation Mode may update Last Observation but must not increment GoblinCount, GPH, found records, or counted-area slots
 - Automatic goblin counting requires both `EnableObservationMode=true` and `EnableAutomaticCounting=true`
+- In VS Debug, the Goblin Tracker Debug checkboxes for Observation Mode and Automatic Counting persist to `Config\AppSettings.json`
+- Toggling Automatic Counting on logs a new automatic-count armed timestamp
 - When explicitly enabled, automatic goblin counting must count only from fresh eligible observations and must log accepted/suppressed decisions separately from observation-only diagnostics
 - Enabled automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
 - Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
+- Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
+- Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`
+- Evidence whose first-seen timestamp ages past the freshness window suppresses with `GoblinAutoCountSuppressed reason=StaleEvidence`
+- Accepted automatic counts show a no-activate notification with area, goblin type, and current total
+- Reset Stats and New Game clear automatic-count evidence signature state
 - Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
+- Teleport Next accepted with no queued/next route target logs `Teleport Next hotkey ignored: no queued/next teleport` and shows a no-route notification instead of appearing broken
 
 ## Debug Package Evidence
 - Debug package includes latest log

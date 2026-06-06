@@ -534,6 +534,7 @@ namespace GoblinFarmer
 
                 AppLogger.Info("Teleport Next hotkey ignored: no queued/next teleport");
                 AddWorkflowStep("Teleport Next ignored: no queued teleport");
+                PortShowSplash("Teleport Next skipped\r\nNo queued route target for current location.", 2500);
                 return;
             }
 

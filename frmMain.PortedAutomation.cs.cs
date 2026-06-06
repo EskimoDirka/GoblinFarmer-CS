@@ -59,6 +59,11 @@ namespace GoblinFarmer
         private GoblinObservationRecord? portDisplayedGoblinObservation;
         private string portDisplayedGoblinObservationStatus = "";
         private DateTime portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
+        private readonly Dictionary<string, PortGoblinAutoCountEvidenceState> portGoblinAutoCountEvidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
+        private DateTime portGoblinAutomaticCountingArmedAtUtc = DateTime.MinValue;
+        private GroupBox? grpGoblinTrackerDebugSettings;
+        private CheckBox? chkGoblinObservationMode;
+        private CheckBox? chkGoblinAutomaticCounting;
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
@@ -163,6 +168,13 @@ namespace GoblinFarmer
 
         private sealed record PortMapPoint(string Name, string Act, int X, int Y);
         private sealed record PortLocationDetectionResult(string Detected, string BestName, double BestConfidence, string SecondName, double SecondConfidence, int TemplateCount, long ElapsedMilliseconds);
+        private sealed record PortGoblinAutoCountEvidenceState(
+            DateTime FirstSeenUtc,
+            DateTime LastSeenUtc,
+            bool Counted,
+            string AreaKey,
+            string GoblinType,
+            string Source);
         private sealed class PortNoActivateSplashForm : Form
         {
             private const int WS_EX_NOACTIVATE = 0x08000000;
@@ -277,6 +289,7 @@ namespace GoblinFarmer
             PortWireCombatProfilePreference();
             PortApplyHotkeyPreferences();
             PortWireHotkeyPreferences();
+            PortInitializeGoblinTrackerDebugPreferenceControls();
             chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
             chkKeepDebugScreenshots.CheckedChanged += (_, _) =>
             {
@@ -404,6 +417,90 @@ namespace GoblinFarmer
                 $"exitGame={AppSettings.User.ExitGameHotkeyEnabled}; " +
                 $"kadala={AppSettings.User.KadalaHotkeyEnabled}; " +
                 $"loot={AppSettings.User.LootHotkeyEnabled}");
+        }
+
+        private void PortInitializeGoblinTrackerDebugPreferenceControls()
+        {
+            if (!AppSettings.IsVsDebugProfile || grpGoblinTrackerDebugSettings != null)
+            {
+                return;
+            }
+
+            grpGoblinTrackerDebugSettings = new GroupBox
+            {
+                Location = new Point(349, 466),
+                Name = "grpGoblinTrackerDebugSettings",
+                Size = new Size(270, 76),
+                TabIndex = 30,
+                TabStop = false,
+                Text = "Goblin Tracker Debug",
+            };
+
+            chkGoblinObservationMode = new CheckBox
+            {
+                AutoSize = true,
+                Location = new Point(12, 22),
+                Name = "chkGoblinObservationMode",
+                Size = new Size(156, 19),
+                TabIndex = 0,
+                Text = "Enable Observation Mode",
+                UseVisualStyleBackColor = true,
+                Checked = AppSettings.GoblinTracker.EnableObservationMode,
+            };
+
+            chkGoblinAutomaticCounting = new CheckBox
+            {
+                AutoSize = true,
+                Location = new Point(12, 47),
+                Name = "chkGoblinAutomaticCounting",
+                Size = new Size(168, 19),
+                TabIndex = 1,
+                Text = "Enable Automatic Counting",
+                UseVisualStyleBackColor = true,
+                Checked = AppSettings.GoblinTracker.EnableAutomaticCounting,
+            };
+
+            chkGoblinObservationMode.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ObservationModeCheckbox");
+            chkGoblinAutomaticCounting.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("AutomaticCountingCheckbox");
+            grpGoblinTrackerDebugSettings.Controls.Add(chkGoblinObservationMode);
+            grpGoblinTrackerDebugSettings.Controls.Add(chkGoblinAutomaticCounting);
+            Controls.Add(grpGoblinTrackerDebugSettings);
+            AppLogger.Info(
+                "Goblin Tracker VS Debug preference controls initialized: " +
+                $"enableObservationMode={chkGoblinObservationMode.Checked}; " +
+                $"enableAutomaticCounting={chkGoblinAutomaticCounting.Checked}; " +
+                $"configPath={PortLogField(AppSettings.ConfigPath)}");
+        }
+
+        private void PortSaveGoblinTrackerDebugPreferenceControls(string source)
+        {
+            if (chkGoblinObservationMode == null || chkGoblinAutomaticCounting == null)
+            {
+                return;
+            }
+
+            bool previousEffectiveAutomaticCounting = PortGoblinAutomaticCountingEnabled();
+            AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked;
+            AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked;
+            AppSettings.Save();
+            bool currentEffectiveAutomaticCounting = PortGoblinAutomaticCountingEnabled();
+            if (previousEffectiveAutomaticCounting != currentEffectiveAutomaticCounting)
+            {
+                PortSetGoblinAutomaticCountingArmedState(source);
+            }
+
+            if (AppSettings.GoblinTracker.EnableObservationMode)
+            {
+                PortStartGoblinObservationScanner(source);
+            }
+
+            AppLogger.Info(
+                "Goblin Tracker VS Debug preferences saved: " +
+                $"source={PortLogField(source)}; " +
+                $"enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode}; " +
+                $"enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}; " +
+                $"automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; " +
+                $"manualHotkeyOnlyCountPath={!PortGoblinAutomaticCountingEnabled()}");
         }
 
         private void PortLogDebugStartupState()

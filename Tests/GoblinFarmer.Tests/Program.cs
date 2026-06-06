@@ -58,6 +58,8 @@ Run("Goblin manual unknown count requires fresh observation by default", TestGob
 Run("Goblin observation UI state logs update and clear", TestGoblinObservationUiStateLogsUpdateAndClear);
 Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
+Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
+Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
 Run("Goblin fresh killed journal can satisfy manual evidence gate", TestGoblinFreshKilledJournalCanSatisfyManualEvidenceGate);
@@ -66,6 +68,7 @@ Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObs
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
 Run("Kadala hotkey uses faster cadence and timing logs", TestKadalaHotkeyUsesFasterCadenceAndTimingLogs);
+Run("Teleport Next no-route state notifies user", TestTeleportNextNoRouteStateNotifiesUser);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
 Run("Goblin area detection uses strong route-context runner-up", TestGoblinAreaDetectionUsesStrongRouteContextRunnerUp);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
@@ -1670,6 +1673,7 @@ static void TestGoblinManualCountBlockListBlocksExplicitNoCountAreas()
         "Flooded Causeway",
         "Ancient Waterway",
         "The Bridge Of Korsikk",
+        "New Tristram",
     ];
 
     foreach (string areaName in blockedAreas)
@@ -1890,17 +1894,49 @@ static void TestGoblinAutomaticCountingGateDefaultsDisabled()
     string autoCountMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordAutomaticGoblinCount");
 
     AssertTrue(appSettingsSource.Contains("public bool EnableAutomaticCounting { get; set; } = false", StringComparison.Ordinal), "automatic goblin counting should default off");
-    AssertTrue(configSource.Contains("\"EnableAutomaticCounting\": false", StringComparison.Ordinal), "tracked default config should expose automatic counting as disabled");
+    AssertTrue(configSource.Contains("\"EnableAutomaticCounting\"", StringComparison.Ordinal), "config should expose the automatic counting setting even when a local VS Debug run toggles it");
     AssertTrue(appSettingsSource.Contains("TryGetProperty(\"EnableAutomaticCounting\"", StringComparison.Ordinal), "installed configs missing the automatic-count setting should migrate to the disabled default");
     AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}", StringComparison.Ordinal), "startup AppSettings logs should expose the automatic-count setting");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableObservationMode", StringComparison.Ordinal), "automatic counting should require Observation Mode");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting", StringComparison.Ordinal), "automatic counting should require the explicit automatic-count setting");
-    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper");
+    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper with evidence identity");
     AssertTrue(autoCountMethod.Contains("if (!PortGoblinAutomaticCountingEnabled())", StringComparison.Ordinal), "automatic count helper should do nothing when the gate is disabled");
     AssertTrue(autoCountMethod.Contains("GoblinAutoCountAccepted", StringComparison.Ordinal), "enabled automatic counts should log accepted decisions");
     AssertTrue(autoCountMethod.Contains("GoblinAutoCountSuppressed", StringComparison.Ordinal), "enabled automatic counts should log suppressed decisions");
     AssertTrue(autoCountMethod.Contains("portGoblinAreaDuplicateGuard.TryAccept", StringComparison.Ordinal), "enabled automatic counts should consume the existing duplicate guard");
     AssertTrue(autoCountMethod.Contains("GoblinManualCountBlockList.IsBlocked", StringComparison.Ordinal), "enabled automatic counts should preserve the block list");
+}
+
+static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+
+    AssertTrue(automationSource.Contains("chkGoblinObservationMode", StringComparison.Ordinal), "VS Debug form should expose an Observation Mode checkbox");
+    AssertTrue(automationSource.Contains("chkGoblinAutomaticCounting", StringComparison.Ordinal), "VS Debug form should expose an Automatic Counting checkbox");
+    AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked", StringComparison.Ordinal), "Observation Mode checkbox changes should persist to AppSettings");
+    AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked", StringComparison.Ordinal), "Automatic Counting checkbox changes should persist to AppSettings");
+    AssertTrue(automationSource.Contains("PortSetGoblinAutomaticCountingArmedState(source)", StringComparison.Ordinal), "toggling automatic counting should re-arm the freshness gate");
+    AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
+}
+
+static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string autoCountMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordAutomaticGoblinCount");
+
+    AssertTrue(automationSource.Contains("portGoblinAutoCountEvidenceBySignature", StringComparison.Ordinal), "automatic counting should remember evidence signatures");
+    AssertTrue(evidenceSource.Contains("PortGoblinEvidenceSignature(candidate)", StringComparison.Ordinal), "journal/minimap candidates should carry a stable evidence signature");
+    AssertTrue(autoCountMethod.Contains("EvidenceSeenBeforeAutoCountEnabled", StringComparison.Ordinal), "automatic counting should suppress evidence seen before the auto-count gate was armed");
+    AssertTrue(autoCountMethod.Contains("EvidenceAlreadyAutoCounted", StringComparison.Ordinal), "automatic counting should suppress the same evidence signature after it counts once");
+    AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");
+    AssertTrue(autoCountMethod.Contains("PortShowSplash($\"Goblin auto-counted", StringComparison.Ordinal), "automatic counting should show a visible notification when it increments");
+    AssertTrue(sessionStatsSource.Contains("PortResetGoblinAutoCountEvidenceState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear auto-count evidence signatures");
+    AssertTrue(sessionStatsSource.Contains("PortResetGoblinAutoCountEvidenceState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear auto-count evidence signatures");
+    AssertTrue(evidenceSource.Contains("clearedAutoCountEvidence", StringComparison.Ordinal), "evidence-state reset logs should report auto-count signature clearing");
 }
 
 static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
@@ -2036,6 +2072,16 @@ static void TestKadalaHotkeyUsesFasterCadenceAndTimingLogs()
     AssertTrue(hotkeysSource.Contains("Kadala timing: started", StringComparison.Ordinal), "Kadala hotkey should log timing at start");
     AssertTrue(hotkeysSource.Contains("Kadala timing: stopped", StringComparison.Ordinal), "Kadala hotkey should log timing at stop");
     AssertTrue(hotkeysSource.Contains("Kadala timing: active", StringComparison.Ordinal), "Kadala hotkey should log throttled active timing");
+}
+
+static void TestTeleportNextNoRouteStateNotifiesUser()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string hotkeysSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Hotkeys.cs"));
+
+    AssertTrue(hotkeysSource.Contains("Teleport Next hotkey ignored: no queued/next teleport", StringComparison.Ordinal), "no-route Teleport Next state should still log the ignored hotkey");
+    AssertTrue(hotkeysSource.Contains("Teleport Next skipped", StringComparison.Ordinal), "no-route Teleport Next state should show a player-visible notification");
+    AssertTrue(hotkeysSource.Contains("No queued route target for current location.", StringComparison.Ordinal), "no-route Teleport Next notification should explain the route state");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()

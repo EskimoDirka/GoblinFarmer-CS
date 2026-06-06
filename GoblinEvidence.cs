@@ -912,6 +912,7 @@ namespace GoblinFarmer
             GoblinAreaResolver.NormalizedKey("City of Caldeum"),
             GoblinAreaResolver.NormalizedKey("Flooded Causeway"),
             GoblinAreaResolver.NormalizedKey("Gates of Caldeum"),
+            GoblinAreaResolver.NormalizedKey("New Tristram"),
             GoblinAreaResolver.NormalizedKey("The Bridge Of Korsikk"),
             GoblinAreaResolver.NormalizedKey("WhimsyDale"),
         };
