@@ -6,7 +6,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 
 ## Screenshot
 
-![GoblinFarmer main window](Docs/Goblin%20Farmer%20v1.3.0.png)
+![GoblinFarmer main window](Docs/Goblin%20Farmer%20v1.4.0.png)
 
 ## Features
 
