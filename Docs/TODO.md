@@ -144,8 +144,10 @@
 * [x] Remove the Caverns of Frost Level 1/2 linked-level journal freshness exception because the latest package showed it could reuse Level 1 journal text in Level 2.
 * [x] Clear persisted Last Observation with `AreaChanged` when no-candidate scans happen after the current confirmed area differs from the displayed observation area.
 * [x] Add route-button click receipt/queue/execution diagnostics for future PF2 button no-op investigation.
+* [x] Add no-activate feedback for manual route button clicks and already-at-target button short-circuits so very fast PF2 button completions do not look unresponsive.
 * [x] Live-validate plain Ancient Waterway blocks Teleport Next to Stinging Winds while Eastern Channel Level 2 still allows Stinging Winds and Western Channel Level 2 still returns to Ancient Waterway.
-* [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text.
+* [x] Review `GoblinFarmer_Debug_20260606_205029.zip` and confirm stale Caverns of Frost Level 1 Menagerist journal evidence did not auto-count after moving to Level 2.
+* [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.

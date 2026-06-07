@@ -2183,6 +2183,9 @@ static void TestTeleportNextNoRouteStateNotifiesUser()
     AssertTrue(buttonSource.Contains("ButtonClickReceived", StringComparison.Ordinal), "route button clicks should log receipt before any workflow gate can make them look silent");
     AssertTrue(buttonSource.Contains("ButtonClickQueued", StringComparison.Ordinal), "route button clicks should log when they are queued into the workflow runner");
     AssertTrue(buttonSource.Contains("ButtonClickExecuting", StringComparison.Ordinal), "route button clicks should log when the workflow body starts executing");
+    AssertTrue(buttonSource.Contains("Teleport queued", StringComparison.Ordinal), "route button clicks should show immediate no-focus feedback after the click is accepted");
+    AssertTrue(buttonSource.Contains("ButtonClickFeedbackShown", StringComparison.Ordinal), "route button click feedback should be logged for package diagnosis");
+    AssertTrue(File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs")).Contains("ButtonClickAlreadyAtTargetFeedbackShown", StringComparison.Ordinal), "button clicks that short-circuit as already at target should show/log visible feedback");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()

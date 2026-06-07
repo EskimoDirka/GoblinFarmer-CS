@@ -890,6 +890,12 @@ namespace GoblinFarmer
                 AppLogger.Info($"Already at target location: {displayName}");
                 portLastConfirmedLocation = currentLocation;
                 PortSetAppStatus("Already At Target");
+                if (source.Equals("Button", StringComparison.OrdinalIgnoreCase))
+                {
+                    PortShowSplash($"Already here\r\n{displayName}", 1800);
+                    AppLogger.Info($"ButtonClickAlreadyAtTargetFeedbackShown: requested={displayName}; source={source}; currentLocation={PortDisplayLocation(currentLocation)}");
+                }
+
                 AddWorkflowStep($"Already at {displayName}; teleport complete");
                 return true;
             }

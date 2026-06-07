@@ -153,6 +153,7 @@
 - Enabled automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
 - Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
 - Route button clicks log `ButtonClickReceived`, `ButtonClickQueued`, and `ButtonClickExecuting` so a briefly unresponsive manual route button can be diagnosed from the next package
+- Accepted route button clicks show a short no-activate `Teleport queued` notification, and button clicks that immediately short-circuit because the app is already at the target show/log `Already here`
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are stable across confidence/match-point drift for the same visible Journal/Minimap template
 - Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`

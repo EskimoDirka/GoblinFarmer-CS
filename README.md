@@ -86,6 +86,8 @@ Images/Teleport Function
 
 After combat stops, Teleport Next is available as soon as combat is marked stopped. Cleanup still releases tracked mouse and Shift inputs before the queued teleport flow runs, Witch Doctor cleanup uses only a short best-effort Hex/chicken exit, and only user `1` presses trigger Teleport Next.
 
+Manual route button clicks show brief no-activate feedback when a teleport is queued or when the app detects it is already at the requested target, so fast route-button completions do not steal Diablo focus or appear silent.
+
 ## Goblin Tracker
 
 The Goblin Tracker is a counter foundation with resolved-area duplicate protection. Press `X` while GoblinFarmer is running to add one goblin for the current detected area; a second count in the same resolved area is suppressed for normal areas. Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds are explicit exceptions and allow up to two counts per game before further counts are suppressed.

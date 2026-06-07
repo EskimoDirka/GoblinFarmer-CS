@@ -32,6 +32,8 @@ namespace GoblinFarmer
             }
 
             AppLogger.Info($"ButtonClickQueued: requested={PortDisplayLocation(location)}; source=Button; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; waitingForConfirmation={portTeleportWaitingForConfirmation}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}");
+            PortShowSplash($"Teleport queued\r\n{PortDisplayLocation(location)}", 1500);
+            AppLogger.Info($"ButtonClickFeedbackShown: requested={PortDisplayLocation(location)}; source=Button; message=Teleport queued");
             _ = PortRunAutomationAsync(token => PortRunTeleportButtonClick(location, token));
         }
 
