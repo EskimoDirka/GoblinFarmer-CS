@@ -69,6 +69,9 @@ namespace GoblinFarmer
         private CheckBox? chkGoblinManualTestCountOverride;
         private CheckBox? chkGoblinDecisionTrace;
         private Button? btnReplayGoblinEvidenceFolder;
+        private TextBox? txtGoblinScenarioArea;
+        private TextBox? txtGoblinScenarioGoblin;
+        private TextBox? txtGoblinScenarioExpected;
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
@@ -439,7 +442,7 @@ namespace GoblinFarmer
             }
 
             portGoblinTrackerDebugPreferenceControlsInitialized = true;
-            portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 198);
+            portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 254);
 
             chkGoblinObservationMode = new CheckBox
             {
@@ -489,12 +492,39 @@ namespace GoblinFarmer
                 Checked = AppSettings.GoblinTracker.EnableDecisionTrace,
             };
 
+            txtGoblinScenarioArea = new TextBox
+            {
+                Location = new Point(14, 194),
+                Name = "txtGoblinScenarioArea",
+                PlaceholderText = "Scenario area",
+                Size = new Size(156, 23),
+                TabIndex = 4,
+            };
+
+            txtGoblinScenarioGoblin = new TextBox
+            {
+                Location = new Point(184, 194),
+                Name = "txtGoblinScenarioGoblin",
+                PlaceholderText = "Expected goblin",
+                Size = new Size(156, 23),
+                TabIndex = 5,
+            };
+
+            txtGoblinScenarioExpected = new TextBox
+            {
+                Location = new Point(354, 194),
+                Name = "txtGoblinScenarioExpected",
+                PlaceholderText = "Expected count/block",
+                Size = new Size(182, 23),
+                TabIndex = 6,
+            };
+
             btnReplayGoblinEvidenceFolder = new Button
             {
                 Location = new Point(424, 160),
                 Name = "btnReplayGoblinEvidenceFolder",
                 Size = new Size(112, 28),
-                TabIndex = 4,
+                TabIndex = 7,
                 Text = "Create Debug Package",
                 UseVisualStyleBackColor = true,
             };
@@ -508,6 +538,9 @@ namespace GoblinFarmer
             portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting);
             portSettingsGroup.Controls.Add(chkGoblinManualTestCountOverride);
             portSettingsGroup.Controls.Add(chkGoblinDecisionTrace);
+            portSettingsGroup.Controls.Add(txtGoblinScenarioArea);
+            portSettingsGroup.Controls.Add(txtGoblinScenarioGoblin);
+            portSettingsGroup.Controls.Add(txtGoblinScenarioExpected);
             portSettingsGroup.Controls.Add(btnReplayGoblinEvidenceFolder);
             AppLogger.Info(
                 "Goblin Tracker VS Debug preference controls initialized: " +

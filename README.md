@@ -187,6 +187,8 @@ Debug Mode is off by default for normal release use. When enabled from Settings,
 
 Debug packages keep evidence useful but bounded by default: success screenshots are excluded unless explicitly requested, failure screenshot groups and current-session `debug-screenshots` are capped to recent samples, and Goblin Evidence crops/event screenshots use their own retention and package limits. Successful Battle.net app-click launches do not create false failure screenshots for manual-play suspicion or brief post-launch Battle.net visibility. The package manifest reports included and excluded screenshot counts and sizes.
 
+Goblin Tracker debug packages now include a root `goblin-tracker-review.html` index and `goblin-tracker-summary.txt` so package review can start from one place. In VS Debug, the `Create Debug Package` button can capture scenario tags for area, expected goblin, and expected count/block outcome, then runs Goblin replay and packages the replay log, HTML report, grouped summary, changed-decision summary, and per-observation decision bundles. A terminal helper is also available at `Scripts\replay-goblin-evidence.ps1` to summarize the latest package artifacts from `DebugPackages`.
+
 Release and Visual Studio Debug use a taller Goblin Tracker group so the evidence and Last Observation fields remain readable. Release-user launches keep diagnostic tabs hidden until Debug Mode is enabled.
 
 Debug tooling includes:
@@ -195,6 +197,7 @@ Debug tooling includes:
 - Optional debug screenshot retention.
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
+- Root Goblin Tracker package review index, grouped decision summary, changed-decision report, scenario metadata, and replay decision bundles.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is a separate opt-in gate and defaults off.
 - Count-based GoblinEvidence retention under `Debug\GoblinEvidence`, defaulting to the newest 250 files, plus bounded ObservationDiagnostics crop samples in debug packages.
@@ -207,6 +210,12 @@ powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
 
 Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample so packages remain compact while still showing the latest scanner evidence.
+
+To review the latest Goblin Tracker package artifacts from a terminal:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Scripts\replay-goblin-evidence.ps1
+```
 
 ## Release v1.4
 

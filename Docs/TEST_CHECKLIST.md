@@ -163,6 +163,8 @@
 - Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
 - In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
 - In VS Debug, `Create Debug Package` remains the same 112x28 size/alignment as the Settings `Change...` and `Verify Paths` buttons
+- In VS Debug, scenario fields for area, expected goblin, and expected count/block outcome can be filled before clicking `Create Debug Package`
+- Clicking VS Debug `Create Debug Package` writes `Debug\GoblinTrackerScenario.txt` and includes that metadata in the resulting package
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
@@ -199,6 +201,12 @@
 - Debug package manifest reports package size, session start, session duration, total screenshots, success screenshot availability, failure screenshots, folder totals, and stale screenshot exclusions
 - Debug package manifest reports Goblin observation counters and last-observation metadata from `session-info.txt`
 - Debug package manifest reports Goblin Evidence missing-template state from the latest log
+- Debug package root includes `goblin-tracker-review.html` and `goblin-tracker-summary.txt`
+- `goblin-tracker-review.html` links to the manifest, route summary, latest logs, replay HTML, changed-decision summaries, scenario metadata, and replay decision bundles when present
+- Goblin replay package artifacts include `GoblinReplay_*_summary.txt`, `GoblinReplay_*_changed.txt`, and `GoblinReplay_*_bundles\...\decision.txt`
+- `GoblinReplay_*_summary.txt` groups replay decisions by area, goblin type, decision, and reason
+- `GoblinReplay_*_changed.txt` reports changed decisions compared with the previous replay or says none changed
+- `Scripts\replay-goblin-evidence.ps1` self-discovers the latest `DebugPackages\GoblinFarmer_Debug_*.zip` and writes `Logs\GoblinReplayCli_*.txt`
 - Debug package includes only a small recent sample from `Debug\GoblinEvidence\ObservationDiagnostics` and reports included/excluded observation crop counts
 - GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
 - Direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots are bounded by count and size; manifest reports included, excluded, and oversized event screenshot counts

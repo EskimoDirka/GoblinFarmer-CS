@@ -1174,6 +1174,7 @@ namespace GoblinFarmer
         {
             string packageRuntimeRoot = PortResolveDebugPackageRuntimeRoot();
             string packageDirectory = Path.Combine(packageRuntimeRoot, "DebugPackages");
+            string scenarioPath = PortWriteGoblinTrackerReviewScenarioMetadata();
             AppLogger.Info(
                 "ReviewDebugPackageRequested: " +
                 "source=Button; " +
@@ -1181,7 +1182,8 @@ namespace GoblinFarmer
                 $"vsDebugProjectRootConfigUsed={AppSettings.VsDebugProjectRootConfigUsed}; " +
                 $"configPath={PortLogField(AppSettings.ConfigPath)}; " +
                 $"packageRuntimeRoot={PortLogField(packageRuntimeRoot)}; " +
-                $"packageDirectory={PortLogField(packageDirectory)}");
+                $"packageDirectory={PortLogField(packageDirectory)}; " +
+                $"scenarioPath={PortLogField(scenarioPath)}");
             PortShowSplash("Creating debug package...", 2500);
 
             _ = Task.Run(PortCreateDebugPackageForReview)
@@ -1215,6 +1217,42 @@ namespace GoblinFarmer
         private GoblinReplayDebugPackageResult PortCreateDebugPackageAfterGoblinReplay(GoblinReplaySummary summary)
         {
             return PortCreateDebugPackage("Replay", summary.LogPath, summary.HtmlReportPath);
+        }
+
+        private string PortWriteGoblinTrackerReviewScenarioMetadata()
+        {
+            if (!AppSettings.IsVsDebugProfile)
+            {
+                return "";
+            }
+
+            string area = txtGoblinScenarioArea?.Text.Trim() ?? "";
+            string goblin = txtGoblinScenarioGoblin?.Text.Trim() ?? "";
+            string expected = txtGoblinScenarioExpected?.Text.Trim() ?? "";
+            string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Debug");
+            string path = Path.Combine(directory, "GoblinTrackerScenario.txt");
+            Directory.CreateDirectory(directory);
+            List<string> lines =
+            [
+                "Goblin Tracker Review Scenario",
+                $"CreatedLocal={DateTime.Now:O}",
+                $"CreatedUtc={DateTime.UtcNow:O}",
+                $"ScenarioArea={area}",
+                $"ExpectedGoblin={goblin}",
+                $"ExpectedOutcome={expected}",
+                $"VsDebugProfile={AppSettings.IsVsDebugProfile}",
+                $"ConfigPath={AppSettings.ConfigPath}",
+                $"RuntimeRoot={AppDomain.CurrentDomain.BaseDirectory}",
+                $"PackageRuntimeRoot={PortResolveDebugPackageRuntimeRoot()}",
+            ];
+            File.WriteAllLines(path, lines);
+            AppLogger.Info(
+                "GoblinTrackerReviewScenarioSaved: " +
+                $"path={PortLogField(path)}; " +
+                $"area={PortLogField(area)}; " +
+                $"expectedGoblin={PortLogField(goblin)}; " +
+                $"expectedOutcome={PortLogField(expected)}");
+            return path;
         }
 
         private GoblinReplaySummary? PortRunGoblinReplayForReview()
@@ -1423,8 +1461,12 @@ namespace GoblinFarmer
             string logPath = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}.log");
             string htmlPath = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}.html");
             string assetDirectory = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}_files");
+            string summaryPath = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}_summary.txt");
+            string changedPath = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}_changed.txt");
+            string bundleDirectory = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}_bundles");
             string extractionRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplay_{timestamp}_{Guid.NewGuid():N}");
             Directory.CreateDirectory(assetDirectory);
+            Directory.CreateDirectory(bundleDirectory);
             Directory.CreateDirectory(extractionRoot);
 
             GoblinEvidenceTemplateCatalog templateCatalog = GoblinEvidenceTemplateRequirements.DiscoverTemplates(PortGoblinEvidenceTemplateDirectory());
@@ -1595,10 +1637,11 @@ namespace GoblinFarmer
             }
 
             GoblinReplaySummary summary = new(files.Count, evidenceFiles, accepted, rejected, unknown, logPath, htmlPath, comparisonChanged, comparisonNew, comparisonSame);
-            lines.Add($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; comparisonChanged={summary.ComparisonChanged}; comparisonNew={summary.ComparisonNew}; comparisonSame={summary.ComparisonSame}; logPath={summary.LogPath}; htmlReportPath={summary.HtmlReportPath}");
+            lines.Add($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; comparisonChanged={summary.ComparisonChanged}; comparisonNew={summary.ComparisonNew}; comparisonSame={summary.ComparisonSame}; logPath={summary.LogPath}; htmlReportPath={summary.HtmlReportPath}; summaryPath={summaryPath}; changedSummaryPath={changedPath}; bundleDirectory={bundleDirectory}");
             File.WriteAllLines(logPath, lines);
             PortWriteGoblinReplayHtmlReport(htmlPath, summary, reportRows, folder, started);
-            AppLogger.Info($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; comparisonChanged={summary.ComparisonChanged}; comparisonNew={summary.ComparisonNew}; comparisonSame={summary.ComparisonSame}; logPath={PortLogField(summary.LogPath)}; htmlReportPath={PortLogField(summary.HtmlReportPath)}");
+            PortWriteGoblinReplayDecisionArtifacts(summaryPath, changedPath, bundleDirectory, summary, reportRows, htmlPath, folder, started);
+            AppLogger.Info($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; comparisonChanged={summary.ComparisonChanged}; comparisonNew={summary.ComparisonNew}; comparisonSame={summary.ComparisonSame}; logPath={PortLogField(summary.LogPath)}; htmlReportPath={PortLogField(summary.HtmlReportPath)}; summaryPath={PortLogField(summaryPath)}; changedSummaryPath={PortLogField(changedPath)}; bundleDirectory={PortLogField(bundleDirectory)}");
             return summary;
         }
 
@@ -1944,6 +1987,127 @@ namespace GoblinFarmer
 
             lines.Add("</tbody></table></body></html>");
             File.WriteAllLines(htmlPath, lines);
+        }
+
+        private static void PortWriteGoblinReplayDecisionArtifacts(
+            string summaryPath,
+            string changedPath,
+            string bundleDirectory,
+            GoblinReplaySummary summary,
+            IReadOnlyList<GoblinReplayReportRow> rows,
+            string htmlPath,
+            string inputPath,
+            DateTime started)
+        {
+            List<string> summaryLines =
+            [
+                "Goblin Replay Decision Summary",
+                $"Input={inputPath}",
+                $"Started={started:O}",
+                $"LogPath={summary.LogPath}",
+                $"HtmlReportPath={htmlPath}",
+                $"TotalFiles={summary.TotalFiles}",
+                $"EvidenceFiles={summary.EvidenceFiles}",
+                $"Accepted={summary.Accepted}",
+                $"Rejected={summary.Rejected}",
+                $"Unknown={summary.Unknown}",
+                $"ComparisonChanged={summary.ComparisonChanged}",
+                $"ComparisonNew={summary.ComparisonNew}",
+                $"ComparisonSame={summary.ComparisonSame}",
+                "",
+                "Grouped decisions:",
+            ];
+
+            foreach (var group in rows
+                .GroupBy(row => new { row.AreaKey, row.GoblinType, row.Decision, row.Reason })
+                .OrderByDescending(group => group.Count())
+                .ThenBy(group => group.Key.AreaKey, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(group => group.Key.GoblinType, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(group => group.Key.Decision, StringComparer.OrdinalIgnoreCase))
+            {
+                summaryLines.Add($"count={group.Count()}; area={group.Key.AreaKey}; goblinType={group.Key.GoblinType}; decision={group.Key.Decision}; reason={group.Key.Reason}");
+            }
+
+            File.WriteAllLines(summaryPath, summaryLines);
+
+            List<GoblinReplayReportRow> changedRows = rows
+                .Where(row => row.Comparison.Equals("Changed", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            List<string> changedLines =
+            [
+                "Goblin Replay Changed Decisions",
+                $"ChangedCount={changedRows.Count}",
+                $"PreviousComparisonChanged={summary.ComparisonChanged}",
+                "",
+            ];
+            if (changedRows.Count == 0)
+            {
+                changedLines.Add("No changed replay decisions compared with the previous replay log.");
+            }
+            else
+            {
+                foreach (GoblinReplayReportRow row in changedRows)
+                {
+                    changedLines.Add($"file={row.DisplayPath}; area={row.AreaKey}; goblinType={row.GoblinType}; decision={row.Decision}; reason={row.Reason}; previousDecision={row.PreviousDecision}; previousReason={row.PreviousReason}; bestTemplate={row.BestTemplate}; confidence={row.BestConfidence:0.000}");
+                }
+            }
+
+            File.WriteAllLines(changedPath, changedLines);
+
+            string htmlDirectory = Path.GetDirectoryName(htmlPath) ?? "";
+            int bundleIndex = 0;
+            foreach (GoblinReplayReportRow row in rows.Where(row =>
+                !row.Decision.Equals("Count", StringComparison.OrdinalIgnoreCase) ||
+                row.Comparison.Equals("Changed", StringComparison.OrdinalIgnoreCase)))
+            {
+                bundleIndex++;
+                string bundleName = $"{bundleIndex:000}_{PortSanitizeReplayBundleName(row.Decision)}_{PortSanitizeReplayBundleName(row.GoblinType)}_{PortSanitizeReplayBundleName(row.AreaKey)}";
+                string rowBundleDirectory = Path.Combine(bundleDirectory, bundleName);
+                Directory.CreateDirectory(rowBundleDirectory);
+                List<string> decisionLines =
+                [
+                    "Goblin Replay Decision Bundle",
+                    $"DisplayPath={row.DisplayPath}",
+                    $"AssetPath={row.AssetPath}",
+                    $"GoblinType={row.GoblinType}",
+                    $"Source={row.Source}",
+                    $"BestTemplate={row.BestTemplate}",
+                    $"BestConfidence={row.BestConfidence:0.000}",
+                    $"AreaKey={row.AreaKey}",
+                    $"AreaInferenceSource={row.AreaInferenceSource}",
+                    $"AreaInferenceReason={row.AreaInferenceReason}",
+                    $"Decision={row.Decision}",
+                    $"Reason={row.Reason}",
+                    $"Comparison={row.Comparison}",
+                    $"PreviousDecision={row.PreviousDecision}",
+                    $"PreviousReason={row.PreviousReason}",
+                    "",
+                    "Candidate ranking:",
+                ];
+                int rank = 0;
+                foreach (GoblinEvidenceCandidateRank candidate in row.CandidateRanking.Take(10))
+                {
+                    rank++;
+                    decisionLines.Add($"{rank}. template={candidate.TemplateName}; goblinType={candidate.GoblinType}; source={candidate.Source}; kind={candidate.Kind}; confidence={candidate.Confidence:0.000}; threshold={candidate.Threshold:0.000}; matchPoint={candidate.MatchPoint}");
+                }
+
+                File.WriteAllLines(Path.Combine(rowBundleDirectory, "decision.txt"), decisionLines);
+                if (!string.IsNullOrWhiteSpace(row.AssetPath))
+                {
+                    string assetSourcePath = Path.Combine(htmlDirectory, row.AssetPath);
+                    if (File.Exists(assetSourcePath))
+                    {
+                        File.Copy(assetSourcePath, Path.Combine(rowBundleDirectory, Path.GetFileName(assetSourcePath)), overwrite: true);
+                    }
+                }
+            }
+        }
+
+        private static string PortSanitizeReplayBundleName(string value)
+        {
+            value = string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
+            string sanitized = System.Text.RegularExpressions.Regex.Replace(value, @"[^A-Za-z0-9_.-]+", "_").Trim('_');
+            return string.IsNullOrWhiteSpace(sanitized) ? "Unknown" : sanitized;
         }
 
         private sealed record GoblinReplayInputFile(

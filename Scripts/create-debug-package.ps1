@@ -1476,6 +1476,154 @@ function New-RouteFailureSummary {
     $linesOut | Out-File -FilePath $OutputPath -Encoding utf8
 }
 
+function Get-PackageRelativePath {
+    param(
+        [string]$Root,
+        [string]$Path
+    )
+
+    $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    $pathFull = [System.IO.Path]::GetFullPath($Path)
+    if ($pathFull.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $pathFull.Substring($rootFull.Length).Replace('\', '/')
+    }
+
+    return $pathFull.Replace('\', '/')
+}
+
+function Add-ReviewIndexLink {
+    param(
+        [System.Collections.Generic.List[string]]$Lines,
+        [string]$Href,
+        [string]$Text
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Href)) {
+        return
+    }
+
+    $safeHref = [System.Net.WebUtility]::HtmlEncode($Href.Replace('\', '/'))
+    $safeText = [System.Net.WebUtility]::HtmlEncode($Text)
+    $Lines.Add("<li><a href=""$safeHref"">$safeText</a></li>")
+}
+
+function New-GoblinTrackerPackageSummary {
+    param(
+        [string]$StagingRoot,
+        [string]$OutputPath
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("Goblin Tracker Package Summary")
+    $lines.Add("Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
+    $lines.Add("")
+
+    $scenarioPath = Join-Path $StagingRoot "Debug\GoblinTrackerScenario.txt"
+    if (Test-Path -LiteralPath $scenarioPath -PathType Leaf) {
+        $lines.Add("Scenario:")
+        foreach ($line in Get-Content -LiteralPath $scenarioPath) {
+            $lines.Add("  $line")
+        }
+        $lines.Add("")
+    }
+    else {
+        $lines.Add("Scenario: none captured")
+        $lines.Add("")
+    }
+
+    $replaySummaryFiles = @(Get-ChildItem -LiteralPath $StagingRoot -Recurse -Filter "GoblinReplay_*_summary.txt" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    $replayChangedFiles = @(Get-ChildItem -LiteralPath $StagingRoot -Recurse -Filter "GoblinReplay_*_changed.txt" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    $decisionBundles = @(Get-ChildItem -LiteralPath $StagingRoot -Recurse -Filter "decision.txt" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName.Replace('/', '\').IndexOf('\GoblinReplay_', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 })
+    $lines.Add("Replay artifacts:")
+    $lines.Add("  Replay summaries: $($replaySummaryFiles.Count)")
+    $lines.Add("  Changed-decision summaries: $($replayChangedFiles.Count)")
+    $lines.Add("  Replay decision bundles: $($decisionBundles.Count)")
+    $lines.Add("")
+
+    if ($replaySummaryFiles.Count -gt 0) {
+        $lines.Add("Latest replay grouped decisions:")
+        $latestSummary = $replaySummaryFiles[0]
+        foreach ($line in Get-Content -LiteralPath $latestSummary.FullName | Select-Object -First 120) {
+            $lines.Add("  $line")
+        }
+        $lines.Add("")
+    }
+
+    if ($replayChangedFiles.Count -gt 0) {
+        $lines.Add("Latest changed decisions:")
+        $latestChanged = $replayChangedFiles[0]
+        foreach ($line in Get-Content -LiteralPath $latestChanged.FullName | Select-Object -First 120) {
+            $lines.Add("  $line")
+        }
+        $lines.Add("")
+    }
+
+    $latestLog = Get-ChildItem -LiteralPath (Join-Path $StagingRoot "Logs") -Filter "*.log" -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($null -ne $latestLog) {
+        $traceLines = @(Select-String -LiteralPath $latestLog.FullName -Pattern "GoblinAutoCountAccepted|GoblinAutoCountSuppressed|GoblinCountAccepted|GoblinCountSuppressed|LastObservationUpdated|LastObservationCleared" -ErrorAction SilentlyContinue)
+        $lines.Add("Latest live log Goblin Tracker markers: $($traceLines.Count)")
+        foreach ($match in $traceLines | Select-Object -Last 80) {
+            $lines.Add("  $($match.Line)")
+        }
+    }
+
+    $lines | Out-File -FilePath $OutputPath -Encoding utf8
+}
+
+function New-GoblinTrackerReviewIndex {
+    param(
+        [string]$StagingRoot,
+        [string]$OutputPath
+    )
+
+    $links = New-Object System.Collections.Generic.List[string]
+    foreach ($relative in @(
+        "goblin-tracker-summary.txt",
+        "debug-package-manifest.txt",
+        "route-failure-summary.txt",
+        "debug-screenshot-manifest.txt",
+        "session-info.txt",
+        "Debug\GoblinTrackerScenario.txt"
+    )) {
+        $path = Join-Path $StagingRoot $relative
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            Add-ReviewIndexLink $links ($relative.Replace('\', '/')) $relative
+        }
+    }
+
+    foreach ($file in Get-ChildItem -LiteralPath $StagingRoot -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -like "GoblinReplay_*.html" -or
+            $_.Name -like "GoblinReplay_*_summary.txt" -or
+            $_.Name -like "GoblinReplay_*_changed.txt" -or
+            $_.FullName.Replace('/', '\').IndexOf('\GoblinReplay_', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Name -eq "decision.txt" -or
+            $_.FullName.Replace('/', '\').IndexOf('\Logs\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and ($_.Extension -eq ".log" -or $_.Extension -eq ".txt") -or
+            $_.FullName.Replace('/', '\').IndexOf('\Screenshots\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -or
+            $_.FullName.Replace('/', '\').IndexOf('\Debug\GoblinEvidence\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$'
+        } |
+        Sort-Object FullName |
+        Select-Object -First 250) {
+        Add-ReviewIndexLink $links (Get-PackageRelativePath $StagingRoot $file.FullName) (Get-PackageRelativePath $StagingRoot $file.FullName)
+    }
+
+    $html = @(
+        "<!doctype html>",
+        "<html><head><meta charset=""utf-8""><title>Goblin Tracker Review</title>",
+        "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#202124}li{margin:4px 0}code{background:#f6f8fa;padding:2px 4px}</style>",
+        "</head><body>",
+        "<h1>Goblin Tracker Review</h1>",
+        "<p>Open <code>goblin-tracker-summary.txt</code> first, then the latest replay HTML and changed-decision summary.</p>",
+        "<ul>",
+        $links,
+        "</ul>",
+        "</body></html>"
+    )
+    $html | Out-File -FilePath $OutputPath -Encoding utf8
+}
+
 if ($MaxScreenshots -lt 1) {
     Write-Warning "MaxScreenshots must be at least 1. Using 1."
     $MaxScreenshots = 1
@@ -1566,6 +1714,23 @@ try {
     Write-Step "Collecting runtime metadata"
     $runtimeSessionInfoIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "session-info.txt" "session-info.txt"
     $runtimeAppSettingsIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "Config\AppSettings.json" "Config\AppSettings.json"
+    $goblinTrackerScenarioIncluded = $false
+    $goblinTrackerScenarioSource = "none"
+    foreach ($root in $packageRuntimeRoots) {
+        $candidate = Join-Path $root "Debug\GoblinTrackerScenario.txt"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            $scenarioDebugDestination = Join-Path $stagingRoot "Debug\GoblinTrackerScenario.txt"
+            $scenarioRootDestination = Join-Path $stagingRoot "goblin-tracker-scenario.txt"
+            New-Item -ItemType Directory -Path (Split-Path -Parent $scenarioDebugDestination) -Force | Out-Null
+            Copy-Item -LiteralPath $candidate -Destination $scenarioDebugDestination -Force
+            Copy-Item -LiteralPath $candidate -Destination $scenarioRootDestination -Force
+            $goblinTrackerScenarioIncluded = $true
+            $goblinTrackerScenarioSource = $candidate
+            break
+        }
+    }
+    Write-Host "Goblin Tracker scenario metadata included: $goblinTrackerScenarioIncluded"
+    Write-Host "Goblin Tracker scenario metadata source: $goblinTrackerScenarioSource"
 
     $logFoldersList = New-Object System.Collections.Generic.List[string]
     foreach ($root in $packageRuntimeRoots) {
@@ -1597,11 +1762,25 @@ try {
 
     $replayLogs = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*.log") 10)
     $replayReports = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*.html") 10)
-    if ($replayLogs.Count -gt 0) {
+    $replaySummaries = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*_summary.txt") 10)
+    $replayChangedSummaries = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*_changed.txt") 10)
+    $replayBundleDirectoryCandidates = foreach ($folder in $logFolders) {
+        if (Test-Path -LiteralPath $folder -PathType Container) {
+            Get-ChildItem -LiteralPath $folder -Directory -Filter "GoblinReplay_*_bundles" -ErrorAction SilentlyContinue
+        }
+    }
+    $replayBundleDirectories = @($replayBundleDirectoryCandidates | Sort-Object LastWriteTime -Descending | Select-Object -First 10)
+    if (($replayLogs.Count + $replayReports.Count + $replaySummaries.Count + $replayChangedSummaries.Count + $replayBundleDirectories.Count) -gt 0) {
         $replayLogDestinationDirectory = Join-Path $stagingRoot "Logs\GoblinReplay"
         New-Item -ItemType Directory -Path $replayLogDestinationDirectory -Force | Out-Null
         foreach ($replayLog in $replayLogs) {
             Copy-Item -LiteralPath $replayLog.FullName -Destination (Join-Path $replayLogDestinationDirectory $replayLog.Name) -Force
+        }
+        foreach ($replaySummary in $replaySummaries) {
+            Copy-Item -LiteralPath $replaySummary.FullName -Destination (Join-Path $replayLogDestinationDirectory $replaySummary.Name) -Force
+        }
+        foreach ($replayChangedSummary in $replayChangedSummaries) {
+            Copy-Item -LiteralPath $replayChangedSummary.FullName -Destination (Join-Path $replayLogDestinationDirectory $replayChangedSummary.Name) -Force
         }
         foreach ($replayReport in $replayReports) {
             Copy-Item -LiteralPath $replayReport.FullName -Destination (Join-Path $replayLogDestinationDirectory $replayReport.Name) -Force
@@ -1610,12 +1789,21 @@ try {
                 Copy-Item -LiteralPath $assetFolder -Destination (Join-Path $replayLogDestinationDirectory (Split-Path -Leaf $assetFolder)) -Recurse -Force
             }
         }
+        foreach ($replayBundleDirectory in $replayBundleDirectories) {
+            Copy-Item -LiteralPath $replayBundleDirectory.FullName -Destination (Join-Path $replayLogDestinationDirectory $replayBundleDirectory.Name) -Recurse -Force
+        }
         Write-Host "Included Goblin replay logs: $($replayLogs.Count)"
         Write-Host "Included Goblin replay HTML reports: $($replayReports.Count)"
+        Write-Host "Included Goblin replay summaries: $($replaySummaries.Count)"
+        Write-Host "Included Goblin replay changed summaries: $($replayChangedSummaries.Count)"
+        Write-Host "Included Goblin replay decision bundle folders: $($replayBundleDirectories.Count)"
     }
     else {
         Write-Host "Included Goblin replay logs: 0"
         Write-Host "Included Goblin replay HTML reports: 0"
+        Write-Host "Included Goblin replay summaries: 0"
+        Write-Host "Included Goblin replay changed summaries: 0"
+        Write-Host "Included Goblin replay decision bundle folders: 0"
     }
 
     $debugSkipInfo = Get-DebugScreenshotSkipInfo $latestLog
@@ -1913,6 +2101,12 @@ try {
     New-RouteFailureSummary $latestLog $routeFailureSummaryPath
     Write-Host "Included route failure summary: route-failure-summary.txt"
 
+    Write-Step "Generating Goblin Tracker review artifacts"
+    $goblinTrackerSummaryPath = Join-Path $stagingRoot "goblin-tracker-summary.txt"
+    $goblinTrackerReviewIndexPath = Join-Path $stagingRoot "goblin-tracker-review.html"
+    New-GoblinTrackerPackageSummary $stagingRoot $goblinTrackerSummaryPath
+    Write-Host "Included Goblin Tracker summary: goblin-tracker-summary.txt"
+
     Write-Step "Capturing git state"
     $gitStatusCaptured = Save-GitOutput $repoRoot (Join-Path $stagingRoot "git-status.txt") @("status", "--short") $gitSkipReason
     $gitLogCaptured = Save-GitOutput $repoRoot (Join-Path $stagingRoot "git-log.txt") @("log", "--oneline", "--decorate", "-n", "25") $gitSkipReason
@@ -2015,6 +2209,11 @@ try {
             "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
             "Goblin replay logs included: $($replayLogs.Count)",
             "Goblin replay HTML reports included: $($replayReports.Count)",
+            "Goblin replay summaries included: $($replaySummaries.Count)",
+            "Goblin replay changed summaries included: $($replayChangedSummaries.Count)",
+            "Goblin replay decision bundle folders included: $($replayBundleDirectories.Count)",
+            "Goblin Tracker scenario metadata included: $goblinTrackerScenarioIncluded",
+            "Goblin Tracker scenario metadata source: $goblinTrackerScenarioSource",
             "Selected screenshot folder: $selectedScreenshotFolder",
             "Selected debug screenshot folder: $selectedDebugScreenshotFolder",
             "Runtime session-info included: $runtimeSessionInfoIncluded",
@@ -2030,10 +2229,16 @@ try {
             "- git-status.txt",
             "- git-log.txt",
             "- route-failure-summary.txt",
+            "- goblin-tracker-summary.txt",
+            "- goblin-tracker-review.html",
+            "- goblin-tracker-scenario.txt included: $goblinTrackerScenarioIncluded",
             "- debug-screenshot-manifest.txt",
             "- Latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
             "- Goblin replay logs included: $($replayLogs.Count)",
             "- Goblin replay HTML reports included: $($replayReports.Count)",
+            "- Goblin replay summaries included: $($replaySummaries.Count)",
+            "- Goblin replay changed summaries included: $($replayChangedSummaries.Count)",
+            "- Goblin replay decision bundle folders included: $($replayBundleDirectories.Count)",
             "- Total screenshots included: $totalScreenshotCount",
             "- Failure screenshots included: $($failureScreenshots.Count)",
             "- Failure screenshots excluded: $excludedFailureScreenshots",
@@ -2104,6 +2309,7 @@ try {
     for ($i = 0; $i -lt 10; $i++) {
         $packageSizeDisplay = if ($packageSizeBytes -gt 0) { Format-ByteSize $packageSizeBytes } else { "calculated during package creation" }
         & $buildManifestLines $packageSizeBytes $packageSizeDisplay | Out-File -FilePath $manifestPath -Encoding utf8
+        New-GoblinTrackerReviewIndex $stagingRoot $goblinTrackerReviewIndexPath
         Compress-Archive -Path (Join-Path $stagingRoot "*") -DestinationPath $zipPath -Force
         $newPackageSizeBytes = (Get-Item -LiteralPath $zipPath).Length
         if ($newPackageSizeBytes -eq $packageSizeBytes) {
@@ -2114,6 +2320,7 @@ try {
     }
 
     $packageSizeDisplay = Format-ByteSize $packageSizeBytes
+    Write-Host "Included Goblin Tracker review index: goblin-tracker-review.html"
 }
 finally {
     if (Test-Path -LiteralPath $stagingRoot) {

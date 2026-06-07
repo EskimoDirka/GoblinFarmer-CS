@@ -2007,7 +2007,7 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
     AssertTrue(automationSource.Contains("Size = new Size(112, 28)", StringComparison.Ordinal), "Create Debug Package button should match the Change and Verify Paths button width");
     AssertTrue(automationSource.Contains("Location = new Point(424, 160)", StringComparison.Ordinal), "Create Debug Package button should align with the Settings action buttons");
-    AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 198)", StringComparison.Ordinal), "VS Debug Settings group should expand for the added Goblin Tracker test control");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 254)", StringComparison.Ordinal), "VS Debug Settings group should expand for the added Goblin Tracker test controls");
 }
 
 static void TestVsDebugDiagnosticsIncludeNextTestStepsTab()
@@ -2153,6 +2153,7 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
+    string replayCliScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "replay-goblin-evidence.ps1"));
     string createPackageButtonMethod = ExtractMethodBody(evidenceSource, "private void PortCreateReviewDebugPackageFromButton");
     string createPackageForReviewMethod = ExtractMethodBody(evidenceSource, "private GoblinReplayDebugPackageResult PortCreateDebugPackageForReview");
     string runReplayForReviewMethod = ExtractMethodBody(evidenceSource, "private GoblinReplaySummary? PortRunGoblinReplayForReview");
@@ -2163,11 +2164,15 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(evidenceSource.Contains("PortReplayGoblinEvidenceFolder", StringComparison.Ordinal), "replay folder runner should exist");
     AssertTrue(automationSource.Contains("Text = \"Create Debug Package\"", StringComparison.Ordinal), "VS Debug button should clearly create a debug package");
     AssertTrue(automationSource.Contains("PortCreateReviewDebugPackageFromButton()", StringComparison.Ordinal), "VS Debug button should create a package without prompting for replay input");
+    AssertTrue(automationSource.Contains("txtGoblinScenarioArea", StringComparison.Ordinal), "VS Debug should expose a scenario area tag for Goblin Tracker package review");
+    AssertTrue(automationSource.Contains("txtGoblinScenarioGoblin", StringComparison.Ordinal), "VS Debug should expose an expected goblin tag for Goblin Tracker package review");
+    AssertTrue(automationSource.Contains("txtGoblinScenarioExpected", StringComparison.Ordinal), "VS Debug should expose an expected count/block tag for Goblin Tracker package review");
     AssertFalse(releaseSource.Contains("PortCreateReviewDebugPackageFromButton", StringComparison.Ordinal), "Release form should not wire the one-click package button unless explicitly requested");
     AssertFalse(releaseSource.Contains("Create Package", StringComparison.Ordinal), "Release form package UI should remain unchanged unless explicitly requested");
     AssertFalse(createPackageButtonMethod.Contains("OpenFileDialog", StringComparison.Ordinal), "create package button should not ask for a debug package ZIP");
     AssertFalse(createPackageButtonMethod.Contains("FolderBrowserDialog", StringComparison.Ordinal), "create package button should not ask for a folder");
     AssertTrue(createPackageButtonMethod.Contains("PortCreateDebugPackageForReview", StringComparison.Ordinal), "create package button should package the active runtime immediately");
+    AssertTrue(createPackageButtonMethod.Contains("PortWriteGoblinTrackerReviewScenarioMetadata", StringComparison.Ordinal), "create package button should persist scenario tags before packaging");
     AssertTrue(createPackageForReviewMethod.Contains("PortRunGoblinReplayForReview()", StringComparison.Ordinal), "review package creation should run Goblin replay before packaging");
     AssertTrue(createPackageForReviewMethod.Contains("replaySummary?.LogPath", StringComparison.Ordinal), "review package creation should pass the fresh replay log into package diagnostics");
     AssertTrue(runReplayForReviewMethod.Contains("PortReplayGoblinEvidenceFolder(replayInputPath)", StringComparison.Ordinal), "review package button should invoke the replay engine");
@@ -2185,6 +2190,11 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(evidenceSource.Contains("dryRun=True", StringComparison.Ordinal), "replay should be logged as a dry run");
     AssertTrue(evidenceSource.Contains("GoblinReplay_", StringComparison.Ordinal), "replay should write deterministic GoblinReplay logs");
     AssertTrue(evidenceSource.Contains("PortWriteGoblinReplayHtmlReport", StringComparison.Ordinal), "replay should write an HTML report");
+    AssertTrue(evidenceSource.Contains("PortWriteGoblinReplayDecisionArtifacts", StringComparison.Ordinal), "replay should write package-friendly summaries and decision bundles");
+    AssertTrue(evidenceSource.Contains("GoblinReplay_{timestamp}_summary.txt", StringComparison.Ordinal), "replay should write a grouped decision summary file");
+    AssertTrue(evidenceSource.Contains("GoblinReplay_{timestamp}_changed.txt", StringComparison.Ordinal), "replay should write a changed-decision summary file");
+    AssertTrue(evidenceSource.Contains("GoblinReplay_{timestamp}_bundles", StringComparison.Ordinal), "replay should write per-observation bundle folders");
+    AssertTrue(evidenceSource.Contains("ChangedCount=", StringComparison.Ordinal), "replay changed summaries should identify changed decisions");
     AssertTrue(evidenceSource.Contains("GoblinReplayCandidateRanking", StringComparison.Ordinal), "replay should log ranked candidate matches");
     AssertTrue(evidenceSource.Contains("GoblinReplayAreaInference", StringComparison.Ordinal), "replay should log area inference decisions");
     AssertTrue(evidenceSource.Contains("replayComparison", StringComparison.Ordinal), "replay should compare decisions to the previous replay log");
@@ -2198,8 +2208,19 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(sessionStatsSource.Contains("GoblinDecisionBundleSaved", StringComparison.Ordinal), "live decision bundles should log their saved folder");
     AssertTrue(packageScript.Contains("GoblinReplay_*.log", StringComparison.Ordinal), "debug packages should include replay logs");
     AssertTrue(packageScript.Contains("GoblinReplay_*.html", StringComparison.Ordinal), "debug packages should include replay HTML reports");
+    AssertTrue(packageScript.Contains("GoblinReplay_*_summary.txt", StringComparison.Ordinal), "debug packages should include replay summary files");
+    AssertTrue(packageScript.Contains("GoblinReplay_*_changed.txt", StringComparison.Ordinal), "debug packages should include changed-decision summary files");
+    AssertTrue(packageScript.Contains("GoblinReplay_*_bundles", StringComparison.Ordinal), "debug packages should include replay decision bundle folders");
+    AssertTrue(packageScript.Contains("GoblinTrackerScenario.txt", StringComparison.Ordinal), "debug packages should include VS Debug scenario metadata when available");
+    AssertTrue(packageScript.Contains("goblin-tracker-summary.txt", StringComparison.Ordinal), "debug packages should include a root Goblin Tracker review summary");
+    AssertTrue(packageScript.Contains("goblin-tracker-review.html", StringComparison.Ordinal), "debug packages should include a root review index");
     AssertTrue(packageScript.Contains("$($replayReport.BaseName)_files", StringComparison.Ordinal), "debug packages should include replay report thumbnail assets");
     AssertTrue(packageScript.Contains("Logs\\GoblinReplay", StringComparison.Ordinal), "replay logs should have a stable package destination");
+    AssertTrue(replayCliScript.Contains("Goblin replay CLI summary", StringComparison.Ordinal), "terminal replay runner should write a concise CLI summary");
+    AssertTrue(replayCliScript.Contains("GoblinFarmer_Debug_*.zip", StringComparison.Ordinal), "terminal replay runner should self-discover the latest debug package");
+    AssertTrue(replayCliScript.Contains("ChangedDecisionSummaries", StringComparison.Ordinal), "terminal replay runner should surface changed-decision summaries");
+    AssertTrue(replayCliScript.Contains("DecisionBundles", StringComparison.Ordinal), "terminal replay runner should surface per-observation bundles");
+    AssertTrue(File.Exists(Path.Combine(repoRoot, "Scripts", "replay-goblin-evidence.ps1")), "terminal Goblin replay runner should be tracked in Scripts");
 }
 
 static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
