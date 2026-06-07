@@ -435,6 +435,14 @@ DebugPackages/
 Sessions/
 debug-screenshots/
 ChatGPT Uploads/
+GitHub Upload/
+GoblinFarmer.exe
+GoblinFarmerSetup-*.exe
+GoblinFarmer-*-portable.zip
+Installer/Output/
+
+# Local machine settings
+Config/AppSettings.local.json
 
 # Keep the sanitized release publish profile, but continue ignoring per-user
 # publish profile data and ad hoc local profiles.

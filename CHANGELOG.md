@@ -1,15 +1,17 @@
 # Changelog
 
-Release notes are maintained manually. Before running `Scripts\GitHub Sync.bat` or creating a GitHub Release, update the next release section with the user-facing changes worth publishing.
+Release notes are maintained manually. Before running `Scripts\publish-release.ps1` or creating a GitHub Release, update the next release section with the user-facing changes worth publishing.
 
 ## v1.4
 
-GoblinFarmer v1.4 is focused on Goblin Tracker readiness, Observation Mode diagnostics, Witch Doctor input reliability, startup validation, and package-size hardening while keeping automatic goblin counting disabled.
+GoblinFarmer v1.4 is focused on Goblin Tracker automatic-count readiness, Observation Mode diagnostics, Witch Doctor input reliability, startup validation, and package-size hardening.
 
 ### Highlights
 
-- Added Goblin Tracker Automation Observation Mode for Journal and Minimap evidence without enabling automatic counting.
-- Hardened manual `X` counting with fresh-evidence gating, stale journal protection, blocked-area suppression, and per-area duplicate limits.
+- Added Goblin Tracker Automation Observation Mode for Journal and Minimap evidence.
+- Added gated automatic Goblin Tracker counting behind Observation Mode and Auto Goblin Count.
+- Retired the physical `X` Goblin Tracker count hotkey and added a VS Debug `Capture` button for image-recognition troubleshooting snapshots.
+- Hardened automatic counting with fresh-evidence gating, stale journal protection, blocked-area suppression, and per-area duplicate limits.
 - Added two-count exceptions for Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds.
 - Improved Last Observation diagnostics and accepted-count display behavior.
 - Added Witch Doctor mouse-wheel plus cursor-change left-click combat input.
@@ -19,7 +21,7 @@ GoblinFarmer v1.4 is focused on Goblin Tracker readiness, Observation Mode diagn
 ### Quality Improvements
 
 - Added bounded Goblin Evidence diagnostics and clearer scanner/candidate logs.
-- Preserved manual `X` as the only real Goblin Tracker count path.
+- Preserved automatic Goblin Tracker debug artifacts while making the manual `Capture` button supplemental only.
 - Improved Reset Stats/New Game cleanup for Goblin Tracker observation and duplicate state.
 - Improved salvage timing diagnostics and per-slot speed.
 - Synchronized release version metadata and installer EXE metadata for v1.4.

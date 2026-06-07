@@ -24,6 +24,8 @@ This file keeps backlog and historical context that no longer belongs in the sho
 - Goblin Replay and derived evidence reprocessing were removed from the active workflow.
 - `Scripts\Create Debug Package.bat` became the single ZIP package export path for VS Debug and Release.
 - Form close was kept quiet and does not generate packages or loose review files.
+- Tracked root/GitHub-upload EXE copies and retired local GitHub Sync / Exe Updater helper files were removed from the active workflow. Release artifacts now belong under generated `artifacts\` output and GitHub Releases, not source control.
+- Tracked `Config\AppSettings.json` was returned to sanitized defaults; private VS Debug paths/toggles can live in ignored `Config\AppSettings.local.json`.
 - Debug package analysis helpers were added at the ZIP root:
   - `debug-package-analysis.txt`
   - `goblin-tracker-timeline.md`

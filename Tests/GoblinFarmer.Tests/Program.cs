@@ -13,6 +13,7 @@ Run("Initial safe-wait timeout stops only when Python would stop", TestInitialSa
 Run("Default AppSettings path/debug profile are launch-surface neutral", TestAppSettingsLaunchParityDefaults);
 Run("VS Debug/dev profile suppresses first-run setup and forces internal debug defaults", TestVsDebugDevProfileDefaults);
 Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectRootConfigPreferred);
+Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -227,6 +228,70 @@ static void TestVsDebugProjectRootConfigPreferred()
         AssertTrue(loaded != null, "project-root AppSettings should deserialize");
         loaded!.Normalize();
         AssertEqual(diabloPath, loaded.Runtime.DiabloExecutablePath, "VS Debug should load Diablo path from project-root AppSettings");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestVsDebugProjectLocalConfigPreferred()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.ConfigTests", Guid.NewGuid().ToString("N"));
+    string projectConfigDirectory = Path.Combine(root, "Config");
+    string binDirectory = Path.Combine(root, "bin", "Debug", "net10.0-windows");
+    string localDiabloPath = Path.Combine(root, "Local Diablo", "Diablo III64.exe");
+    string trackedDiabloPath = Path.Combine(root, "Tracked Diablo", "Diablo III64.exe");
+    Directory.CreateDirectory(projectConfigDirectory);
+    Directory.CreateDirectory(Path.GetDirectoryName(localDiabloPath)!);
+    Directory.CreateDirectory(Path.GetDirectoryName(trackedDiabloPath)!);
+    File.WriteAllText(localDiabloPath, "fake local exe for config test");
+    File.WriteAllText(trackedDiabloPath, "fake tracked exe for config test");
+
+    try
+    {
+        string projectFilePath = Path.Combine(root, "GoblinFarmer.csproj");
+        string trackedConfigPath = Path.Combine(projectConfigDirectory, "AppSettings.json");
+        string localConfigPath = Path.Combine(projectConfigDirectory, "AppSettings.local.json");
+        File.WriteAllText(projectFilePath, "<Project />");
+        File.WriteAllText(trackedConfigPath, """
+            {
+              "Runtime": {
+                "DiabloExecutablePath": "%TRACKED_DIABLO_PATH%",
+                "BattleNetExecutablePath": "",
+                "ImagesRoot": "Images"
+              }
+            }
+            """
+            .Replace("%TRACKED_DIABLO_PATH%", EscapeJsonPath(trackedDiabloPath)));
+        File.WriteAllText(localConfigPath, """
+            {
+              "Runtime": {
+                "DiabloExecutablePath": "%LOCAL_DIABLO_PATH%",
+                "BattleNetExecutablePath": "",
+                "ImagesRoot": "Images"
+              }
+            }
+            """
+            .Replace("%LOCAL_DIABLO_PATH%", EscapeJsonPath(localDiabloPath)));
+
+        AppSettings.LaunchProfileSnapshot snapshot = AppSettings.ResolveLaunchProfileForTests(
+            explicitProfile: null,
+            debuggerAttached: true,
+            debugBuild: true,
+            explicitConfigPath: null,
+            baseDirectory: binDirectory);
+
+        AssertEqual(Path.GetFullPath(localConfigPath), snapshot.ConfigPath, "VS Debug should prefer ignored AppSettings.local.json over tracked AppSettings.json when present");
+        AssertTrue(snapshot.VsDebugProjectRootConfigUsed, "snapshot should still report project-root config resolution for the local override");
+
+        AppSettings.SettingsModel? loaded = JsonSerializer.Deserialize<AppSettings.SettingsModel>(File.ReadAllText(snapshot.ConfigPath));
+        AssertTrue(loaded != null, "local AppSettings should deserialize");
+        loaded!.Normalize();
+        AssertEqual(localDiabloPath, loaded.Runtime.DiabloExecutablePath, "VS Debug should load Diablo path from local AppSettings override");
     }
     finally
     {
@@ -2341,7 +2406,7 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
 
     AssertTrue(appSettingsSource.Contains("public bool EnableDecisionTrace { get; set; } = false", StringComparison.Ordinal), "Release decision trace should default off unless Debug Mode enables it");
     AssertTrue(appSettingsSource.Contains("settings.GoblinTracker.EnableDecisionTrace = true", StringComparison.Ordinal), "VS Debug/dev defaults should enable decision trace");
-    AssertTrue(configSource.Contains("\"EnableDecisionTrace\": true", StringComparison.Ordinal), "project VS Debug config should explicitly expose decision trace");
+    AssertTrue(configSource.Contains("\"EnableDecisionTrace\": false", StringComparison.Ordinal), "tracked project config should keep decision trace sanitized/off; VS Debug can enable it through debug defaults or AppSettings.local.json");
     AssertFalse(automationSource.Contains("Text = \"Review Files\"", StringComparison.Ordinal), "VS Debug troubleshooting should no longer expose a manual Review Files button");
     AssertFalse(automationSource.Contains(retiredReviewCloseMethod, StringComparison.Ordinal), "VS Debug close should not create loose review files or derived evidence artifacts");
     AssertFalse(evidenceSource.Contains("private void " + retiredReviewCloseMethod, StringComparison.Ordinal), "close-specific derived-evidence review generation should be removed");

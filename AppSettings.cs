@@ -221,10 +221,19 @@ namespace GoblinFarmer
             while (directory != null)
             {
                 string projectFilePath = Path.Combine(directory.FullName, "GoblinFarmer.csproj");
+                string projectLocalConfigPath = Path.Combine(directory.FullName, "Config", "AppSettings.local.json");
                 string projectConfigPath = Path.Combine(directory.FullName, "Config", "AppSettings.json");
-                if (File.Exists(projectFilePath) && File.Exists(projectConfigPath))
+                if (File.Exists(projectFilePath))
                 {
-                    return projectConfigPath;
+                    if (File.Exists(projectLocalConfigPath))
+                    {
+                        return projectLocalConfigPath;
+                    }
+
+                    if (File.Exists(projectConfigPath))
+                    {
+                        return projectConfigPath;
+                    }
                 }
 
                 directory = directory.Parent;

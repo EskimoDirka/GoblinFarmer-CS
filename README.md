@@ -55,7 +55,7 @@ Diablo III discovery checks common install locations on fixed local drives, incl
 
 Automation stays disabled until the required paths and template folders validate successfully. Paths can also be reviewed and changed later from the Settings area in the app.
 
-The selected combat profile and Hotkeys checkbox states are saved in `Config\AppSettings.json` under `User` and restored when GoblinFarmer starts. Visual Studio Debug runs use the project-level `Config\AppSettings.json` directly so form or rebuild changes do not reset developer paths; release and installed runs use the app-local copy beside the executable.
+The selected combat profile and Hotkeys checkbox states are saved under `User` and restored when GoblinFarmer starts. Visual Studio Debug runs prefer an ignored project-level `Config\AppSettings.local.json` when present, then fall back to the sanitized tracked `Config\AppSettings.json`; release and installed runs use the app-local copy beside the executable.
 
 When config defaults are added later, GoblinFarmer preserves existing Diablo III, Battle.net, and custom Images paths instead of replacing them with blank/default values.
 
@@ -320,8 +320,9 @@ See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a f
 - [Docs/Release_v1.4.md](Docs/Release_v1.4.md): ready-to-copy GitHub release notes.
 - [Docs/Release_v1.3.md](Docs/Release_v1.3.md): ready-to-copy GitHub release notes.
 - [Docs/CombatProfiles.md](Docs/CombatProfiles.md): supported combat profiles and required skill setup.
-- [Docs/Project_Status.md](Docs/Project_Status.md): detailed development status and implementation history.
+- [Docs/Project_Status.md](Docs/Project_Status.md): brief current release status, stable behavior, and next development plans.
 - [Docs/TODO.md](Docs/TODO.md): development and validation backlog.
+- [Docs/History.md](Docs/History.md): historical package reviews, retired workflows, and backlog context.
 - [Docs/Release_Checklist.md](Docs/Release_Checklist.md): release validation checklist.
 
 ## License

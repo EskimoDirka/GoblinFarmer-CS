@@ -13,14 +13,10 @@ This file is the current source of truth for the active release, stable behavior
 - Automatic debug artifacts: accepted Goblin Tracker count workflows still automatically write decision bundles and encounter captures needed for debugging.
 - `Next Tests` tab: removed. Current validation steps are tracked in `Docs/TODO.md`.
 
-## Latest Package Review
+## Latest Review Finding
 
-Reviewed `DebugPackages\GoblinFarmer_Debug_20260607_140848.zip` plus live notes.
-
-- Package confirms stale Battlefields journal-history replay after Enter/journal history and confirms teleport-button cancellation worked.
-- Package does not show the reported Cave Of The Moon Clan Level 1 Blood Thief encounter. It shows Blood Thief counted in Eastern Channel Level 1, suppressed in Eastern Channel Level 2, then falsely accepted in Battlefields from journal-history-like evidence.
-- Battlefields encounter capture showed non-goblin journal history lines, including Noxious Guardian and Herald of Pestilence text. The fix validates the goblin-name portion of Journal templates, ignores upper/history rows, and briefly suppresses Journal candidates after physical Enter/journal-history input.
-- Specific goblin-type hunts are now niche classifier follow-up unless the type itself is the suspected issue. Location, stale-evidence, route, and area-limit behavior are the main auto-count readiness path.
+- Latest reviewed package `GoblinFarmer_Debug_20260607_140848.zip` showed stale Battlefields journal-history replay after Enter/journal history.
+- Current fix validates the goblin-name portion of Journal templates, ignores upper/history rows, and briefly suppresses Journal candidates after physical Enter/journal-history input.
 
 ## Stable Systems
 
@@ -29,6 +25,8 @@ Reviewed `DebugPackages\GoblinFarmer_Debug_20260607_140848.zip` plus live notes.
 - Debug package workflow remains `Scripts\Create Debug Package.bat`, which creates a ZIP for VS Debug and Release review.
 - Form close remains quiet and does not generate packages or loose review files.
 - VS Debug and release/debug-mode artifact retention is 7 days; Goblin Evidence folders also use count/package limits.
+- Tracked `Config\AppSettings.json` is sanitized for release/defaults. Private VS Debug paths and toggles should live in ignored `Config\AppSettings.local.json` when needed.
+- Generated EXEs, installer output, portable ZIPs, debug packages, logs, screenshots, source-upload output, and retired `GitHub Upload` copies are not source files.
 
 ## Goblin Tracker Current Behavior
 

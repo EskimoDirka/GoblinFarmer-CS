@@ -24,17 +24,20 @@ This file contains only open work and remaining test/verifications. Historical c
 
 ## VS Debug Capture Workflow
 
-- [ ] Verify physical `X` no longer counts goblins.
-- [ ] Verify VS Debug Settings shows `Capture` and no longer shows `Test Count Override`.
 - [ ] Click `Capture` only when diagnosing image recognition; confirm it writes files under `Debug\GoblinEvidence\ManualCaptures`.
 - [ ] Confirm automatic count workflows still create decision bundles and encounter captures without using the Capture button.
+- [ ] If private VS Debug paths/toggles are needed, create/use ignored `Config\AppSettings.local.json` and keep tracked `Config\AppSettings.json` sanitized.
 
 ## Debug Package Workflow
 
 - [ ] Generate a ZIP with `Scripts\Create Debug Package.bat` after a run with any suspicious Goblin Tracker behavior.
-- [ ] Confirm packages no longer include `GoblinTrackerNextTests.txt` or `goblin-tracker-next-tests.txt`.
 - [ ] Confirm packages still include logs, manifests, session info, decision bundles, encounter captures, observation diagnostics, and Goblin Evidence samples.
 - [ ] Confirm VS Debug and release/debug-mode retention keeps artifacts for 7 days and does not keep stale troubleshooting files indefinitely.
+
+## Repo Hygiene
+
+- [ ] Keep generated EXEs, installer output, portable ZIPs, debug packages, logs, screenshots, source-upload output, and retired upload folders out of Git.
+- [ ] Before each release, confirm `.gitignore` still protects user-specific paths and generated artifacts.
 
 ## Route And Workflow Monitoring
 
