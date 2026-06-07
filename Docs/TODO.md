@@ -151,6 +151,7 @@
 * [x] Scope automatic-count evidence signatures by resolved area so fresh evidence in separate route subregions can count independently without weakening same-area duplicate suppression.
 * [x] Add coarse journal row `LineBucket` identity to journal freshness/evidence signatures so later legitimate same-template journal rows can become fresh while the same old visible row remains stale across area moves.
 * [x] Clear displayed Last Observation on confirmed route/current-area changes from teleport confirmation, already-at-target, already-at-queued-destination, and route-end hotkey state updates.
+* [x] Record 2026-06-07 live auto-count notes: blocked areas, duplicate suppression, and stale-evidence count prevention looked good; Cave Level 2, special two-count areas, and classification edge cases still need encounters.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
@@ -158,6 +159,8 @@
 * [ ] Live-validate Battlefields fresh Treasure Goblin evidence auto-counts once even if an older Treasure Goblin journal template was seen earlier in the run.
 * [ ] Live-validate teleporting from Cathedral/Royal Crypts/Battlefields-style transitions clears previous-area Last Observation instead of showing stale goblin text.
 * [ ] Live-validate repeated Malevolent Tormentor journal evidence after moving between Battlefields and Rakkis Crossing does not overwrite the accepted Battlefields Last Observation or create stale display spam.
+* [ ] Review the next debug package for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
+* [ ] Consider adding a setting or quieter mode for route-button/Teleport queued notifications during Goblin Tracker validation.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.

@@ -142,6 +142,7 @@
 - Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
 - Fresh Journal/Minimap Last Observation entries remain readable during the short display hold and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
+- Last Observation remains visible long enough to validate the goblin type, area, source, and reason after an auto-count or accepted observation; if it disappears too quickly, generate a debug package for display-state review
 - After the short hold expires, no-candidate scanner scans preserve the last real goblin observation with `LastObservationClearSkipped preserveKind=LastObservationPersistent` instead of clearing the UI
 - Last Observation updates only when a new real goblin observation/count is accepted, or clears during Reset Stats/New Game/missing-template setup cleanup; stale cross-area journal repeats should not replace the displayed goblin
 - Last Observation clears with `LastObservationCleared reason=AreaChanged` when no-candidate scans occur after the current confirmed area changes away from the displayed observation area
@@ -159,6 +160,7 @@
 - Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
 - Route button clicks log `ButtonClickReceived`, `ButtonClickQueued`, and `ButtonClickExecuting` so a briefly unresponsive manual route button can be diagnosed from the next package
 - Accepted route button clicks show a short no-activate `Teleport queued` notification, and button clicks that immediately short-circuit because the app is already at the target show/log `Already here`
+- During Goblin Tracker validation, Teleport queued notifications should not obscure or distract from count/Last Observation validation; consider a quieter notification mode if they remain intrusive
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
 - Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template
