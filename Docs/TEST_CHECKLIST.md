@@ -6,6 +6,7 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 
 - `dotnet build GoblinFarmer.csproj` succeeds.
 - `dotnet run --project Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false` succeeds.
+- Explicit Goblin Replay capture-folder command reports clear load/decision output when run with quoted capture folder paths.
 - `git diff --check` has no whitespace errors.
 - `Scripts\Create Debug Package.bat` creates a ZIP when explicit review artifacts are needed.
 
@@ -19,7 +20,7 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - VS Debug can use ignored `Config\AppSettings.local.json` for private local paths/toggles while tracked `Config\AppSettings.json` stays sanitized.
 - VS Debug/debug sessions write `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` when observations or automatic-count decisions occur.
 - Logs include throttled `GoblinEvidenceTimingSummary` scan-stage timing output during active Goblin Evidence scanning.
-- Test harness confirms saved fixture PNGs can reach the shared Goblin Evidence frame/template matching path without Diablo running, the explicit runner logs start/restoration while remaining on-demand only, multi-step replay suppresses stale Moon Clan Level 1 evidence in Level 2 plus Battlefields journal-history rows, and real-style encounter/manual capture folders can be loaded explicitly for the same stale-location checks.
+- Test harness confirms saved fixture PNGs can reach the shared Goblin Evidence frame/template matching path without Diablo running, the explicit runner logs start/restoration while remaining on-demand only, multi-step replay suppresses stale Moon Clan Level 1 evidence in Level 2 plus Battlefields journal-history rows, and real-style encounter/manual capture folders can be loaded explicitly through the harness command for the same stale-location checks.
 - Default areas count once per game.
 - PF1, PF2, and Stinging Winds allow two counts per game and suppress the third.
 - Blocked count areas suppress with `BlockedArea` and do not consume area slots.

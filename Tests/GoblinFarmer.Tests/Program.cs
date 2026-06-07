@@ -4,6 +4,11 @@ using System.IO.Compression;
 using System.Text.Json;
 using GoblinFarmer;
 
+if (TryRunGoblinReplayCaptureCommand(args, out int replayCommandExitCode))
+{
+    return replayCommandExitCode;
+}
+
 int failures = 0;
 
 Run("Python no-click rectangles use blacklist safety and Python boundaries", TestPythonNoClickRectangles);
@@ -39,6 +44,7 @@ Run("Goblin replay suppresses Battlefields journal history evidence", TestGoblin
 Run("Goblin replay capture folder loader suppresses old area evidence after transition", TestGoblinReplayCaptureFolderLoaderSuppressesOldAreaEvidenceAfterTransition);
 Run("Goblin replay capture folder loader suppresses journal history rows", TestGoblinReplayCaptureFolderLoaderSuppressesJournalHistoryRows);
 Run("Goblin replay capture folder loader reports missing folders clearly", TestGoblinReplayCaptureFolderLoaderReportsMissingFoldersClearly);
+Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
 Run("VS Debug diagnostics omit next test steps tab", TestVsDebugDiagnosticsOmitNextTestStepsTab);
@@ -1297,6 +1303,162 @@ static void TestGoblinReplayCaptureFolderLoaderReportsMissingFoldersClearly()
             Directory.Delete(fixtureRoot, recursive: true);
         }
     }
+}
+
+static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string programSource = File.ReadAllText(Path.Combine(repoRoot, "Tests", "GoblinFarmer.Tests", "Program.cs"));
+    string replayRunnerSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinReplayFixtureRunner.cs"));
+
+    AssertTrue(programSource.Contains("--goblin-replay-captures", StringComparison.Ordinal), "developer replay command should live in the test harness CLI");
+    AssertTrue(programSource.Contains("RunExplicitCaptureFoldersForHarness", StringComparison.Ordinal), "developer replay command should call the explicit capture-folder runner");
+    AssertTrue(programSource.Contains("writeAppLog: false", StringComparison.Ordinal), "developer replay command should avoid persistent app logs by default");
+    AssertTrue(replayRunnerSource.Contains("writeAppLog = true", StringComparison.Ordinal), "replay runner should keep existing harness logging defaults unless the command opts out");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "WinForms startup should not know about the replay command");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "live scanner should not know about the replay command");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "debug package creation should not invoke replay");
+}
+
+static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitCode)
+{
+    exitCode = 0;
+    if (commandArgs.Length == 0 ||
+        !commandArgs[0].Equals("--goblin-replay-captures", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    string repoRoot = FindRepositoryRootForTests();
+    string templateDirectory = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string scenarioName = $"Explicit capture replay {DateTime.Now:yyyyMMdd_HHmmss}";
+    List<string> captureFolders = [];
+
+    for (int i = 1; i < commandArgs.Length; i++)
+    {
+        string arg = commandArgs[i];
+        if (arg.Equals("--help", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("-h", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintGoblinReplayCaptureCommandHelp();
+            return true;
+        }
+
+        if (arg.Equals("--templates", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("--template-dir", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 >= commandArgs.Length)
+            {
+                Console.Error.WriteLine("FAIL missing value for --templates.");
+                PrintGoblinReplayCaptureCommandHelp();
+                exitCode = 1;
+                return true;
+            }
+
+            templateDirectory = Path.GetFullPath(commandArgs[++i], repoRoot);
+            continue;
+        }
+
+        if (arg.Equals("--scenario", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 >= commandArgs.Length)
+            {
+                Console.Error.WriteLine("FAIL missing value for --scenario.");
+                PrintGoblinReplayCaptureCommandHelp();
+                exitCode = 1;
+                return true;
+            }
+
+            scenarioName = commandArgs[++i];
+            continue;
+        }
+
+        if (arg.StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"FAIL unknown Goblin Replay option: {arg}");
+            PrintGoblinReplayCaptureCommandHelp();
+            exitCode = 1;
+            return true;
+        }
+
+        captureFolders.Add(Path.GetFullPath(arg, repoRoot));
+    }
+
+    if (captureFolders.Count == 0)
+    {
+        Console.Error.WriteLine("FAIL at least one capture folder path is required.");
+        PrintGoblinReplayCaptureCommandHelp();
+        exitCode = 1;
+        return true;
+    }
+
+    if (!Directory.Exists(templateDirectory))
+    {
+        Console.Error.WriteLine($"FAIL template directory does not exist: {templateDirectory}");
+        exitCode = 1;
+        return true;
+    }
+
+    try
+    {
+        Console.WriteLine("Goblin Replay Capture Folder Harness");
+        Console.WriteLine("Mode: ExplicitOnDemand");
+        Console.WriteLine("WritesPersistentDebugFiles: False");
+        Console.WriteLine($"Scenario: {scenarioName}");
+        Console.WriteLine($"TemplateDirectory: {templateDirectory}");
+        Console.WriteLine($"CaptureFolderCount: {captureFolders.Count}");
+
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitCaptureFoldersForHarness(
+            scenarioName,
+            captureFolders.Select((folder, index) => new GoblinReplayCaptureFolderStep($"Capture {index + 1}", folder)).ToList(),
+            templateDirectory,
+            log: null,
+            setFrameSourceForReplay: null,
+            writeAppLog: false);
+
+        foreach (GoblinReplayCaptureFolderLoadResult load in result.CaptureLoads)
+        {
+            string status = load.Loaded ? "PASS" : "FAIL";
+            Console.WriteLine(
+                $"{status} LOAD step=\"{load.StepName}\" reason={load.Reason} area=\"{load.AreaKey}\" folder=\"{load.CaptureFolderPath}\" journal=\"{load.JournalPath ?? ""}\" minimap=\"{load.MinimapPath ?? ""}\"");
+        }
+
+        foreach (GoblinReplayFixtureStepResult step in result.Steps)
+        {
+            string status = step.CandidateFound ? "PASS" : "FAIL";
+            Console.WriteLine(
+                $"{status} DECISION step=\"{step.StepName}\" area=\"{step.AreaKey}\" candidate={step.CandidateResult} source={step.Source} goblinType=\"{step.GoblinType}\" decision={step.CountDecision} reason={step.Reason} freshness={step.FreshnessReason} counted={step.Counted}");
+        }
+
+        int loadFailures = result.CaptureLoads.Count(load => !load.Loaded);
+        Console.WriteLine(
+            $"SUMMARY loaded={result.CaptureLoads.Count(load => load.Loaded)} skipped={loadFailures} decisions={result.Steps.Count} counted={result.Steps.Count(step => step.Counted)} suppressed={result.Steps.Count(step => !step.Counted)}");
+
+        if (loadFailures > 0 || result.Steps.Count == 0)
+        {
+            Console.Error.WriteLine("FAIL Goblin Replay completed with missing/invalid capture folders or no replay decisions.");
+            exitCode = 1;
+            return true;
+        }
+
+        Console.WriteLine("PASS Goblin Replay completed.");
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"FAIL Goblin Replay command failed: {ex.Message}");
+        exitCode = 1;
+        return true;
+    }
+}
+
+static void PrintGoblinReplayCaptureCommandHelp()
+{
+    Console.WriteLine("Usage:");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-captures [--templates \".\\Images\\Goblin Evidence\"] [--scenario \"Name\"] \"CaptureFolder1\" [\"CaptureFolder2\" ...]");
+    Console.WriteLine();
+    Console.WriteLine("Capture folders are real saved Goblin Evidence encounter/manual capture folders containing *_Metadata.txt plus *_Journal.png and/or *_Minimap.png.");
+    Console.WriteLine("Replay is explicit/on-demand only and does not run during app startup, VS Debug startup, live scanning, automation workflows, or debug package creation.");
 }
 
 static Bitmap CreateFixturePatternBitmap(int width, int height)

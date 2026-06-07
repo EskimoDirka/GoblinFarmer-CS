@@ -32,6 +32,7 @@ This file keeps backlog and historical context that no longer belongs in the sho
 - Goblin Replay Fixture Runner Phase 2B added the explicit harness-only `GoblinReplayFixtureRunner` entry point for saved Journal/Minimap PNG fixtures. Replay remains on-demand only and is not wired into startup, live scanning, automation workflows, or debug package creation.
 - Goblin Replay Fixture Runner Phase 2C added explicit multi-step stale-evidence fixture scenarios for Cave Of The Moon Clan Level 1 -> Level 2 and Battlefields journal-history rows, using the shared frame/template matcher and journal freshness policy.
 - Goblin Replay Fixture Runner Phase 2D added explicit real-style encounter/manual capture folder loading for the harness. Capture folders are converted to replay fixture steps only when requested by tests/harness code, and missing/invalid folders report clear skipped load results instead of creating debug files or running live workflows.
+- Goblin Replay Fixture Runner Phase 2E added the explicit `--goblin-replay-captures` developer harness command so real capture folders can be replayed without editing test code. The command prints load results, replay decisions, and a summary, opts out of persistent app logs by default, and remains outside app startup, live scanning, automation workflows, and debug package creation.
 - Debug package analysis helpers were added at the ZIP root:
   - `debug-package-analysis.txt`
   - `goblin-tracker-timeline.md`

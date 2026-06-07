@@ -7,7 +7,8 @@ This file contains only open work and remaining test/verifications. Historical c
 - [x] Phase 2B: build a small explicit replay fixture runner on top of the Phase 2A `IGoblinEvidenceFrameSource` seam. It consumes saved Journal/Minimap PNG fixtures on demand and does not auto-run in normal app startup, VS Debug startup, scanner start, combat, route, town, or debug package workflows.
 - [x] Phase 2C: add multi-step replay scenarios for stale journal/location transitions using explicit saved fixture PNG inputs. Covered Moon Clan Level 1 evidence replaying into Level 2 and Battlefields journal-history rows.
 - [x] Phase 2D: add optional fixture loading from real saved encounter/manual capture folders for broader replay coverage. It stays explicit/on-demand only, uses shared matcher/policy paths, and does not change production count behavior.
-- [ ] Phase 2E: add a small explicit developer harness command/script for selecting real capture folders without editing test code. Keep it out of startup, scanner, route, combat, town, and debug package workflows.
+- [x] Phase 2E: add a small explicit developer harness command for selecting real capture folders without editing test code. It stays out of startup, scanner, route, combat, town, and debug package workflows.
+- [ ] Use the explicit Goblin Replay capture-folder command on real suspicious capture folders when stale-location behavior needs a fast regression check without waiting for live goblin spawns.
 - [ ] Live-validate the `500ms` scanner interval improves notification latency without lowering evidence thresholds or increasing false positives.
 - [ ] Live-validate Battlefields no longer auto-counts stale/non-goblin journal history after pressing Enter or opening journal history.
 - [ ] Confirm logs show the new journal protections when applicable:

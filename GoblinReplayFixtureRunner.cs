@@ -93,7 +93,8 @@ namespace GoblinFarmer
             GoblinReplayFixture fixture,
             string templateDirectory,
             Action<string>? log = null,
-            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null)
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true)
         {
             ArgumentNullException.ThrowIfNull(fixture);
             ArgumentException.ThrowIfNullOrWhiteSpace(templateDirectory);
@@ -108,7 +109,10 @@ namespace GoblinFarmer
                 string message = $"{eventName}: mode=ExplicitOnDemand; fixture={LogField(fixture.Name)}; {details}";
                 logMessages.Add(message);
                 log?.Invoke(message);
-                AppLogger.Info(message);
+                if (writeAppLog)
+                {
+                    AppLogger.Info(message);
+                }
             }
 
             Emit(
@@ -181,7 +185,8 @@ namespace GoblinFarmer
             IReadOnlyList<GoblinReplayFixtureStep> steps,
             string templateDirectory,
             Action<string>? log = null,
-            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null)
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(scenarioName);
             ArgumentNullException.ThrowIfNull(steps);
@@ -197,7 +202,10 @@ namespace GoblinFarmer
                 string message = $"{eventName}: mode=ExplicitOnDemand; scenario={LogField(scenarioName)}; {details}";
                 logMessages.Add(message);
                 log?.Invoke(message);
-                AppLogger.Info(message);
+                if (writeAppLog)
+                {
+                    AppLogger.Info(message);
+                }
             }
 
             Emit(
@@ -214,7 +222,8 @@ namespace GoblinFarmer
                         logMessages.Add(message);
                         log?.Invoke(message);
                     },
-                    setFrameSourceForReplay);
+                    setFrameSourceForReplay,
+                    writeAppLog);
 
                 GoblinReplayFixtureCandidate? candidate = SelectScenarioCandidate(fixtureResult.Candidates);
                 GoblinReplayFixtureStepResult stepResult = EvaluateStep(
@@ -242,7 +251,8 @@ namespace GoblinFarmer
             IReadOnlyList<GoblinReplayCaptureFolderStep> captureSteps,
             string templateDirectory,
             Action<string>? log = null,
-            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null)
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(scenarioName);
             ArgumentNullException.ThrowIfNull(captureSteps);
@@ -257,7 +267,10 @@ namespace GoblinFarmer
                 string message = $"{eventName}: mode=ExplicitOnDemand; scenario={LogField(scenarioName)}; {details}";
                 logMessages.Add(message);
                 log?.Invoke(message);
-                AppLogger.Info(message);
+                if (writeAppLog)
+                {
+                    AppLogger.Info(message);
+                }
             }
 
             Emit(
@@ -291,7 +304,8 @@ namespace GoblinFarmer
                         logMessages.Add(message);
                         log?.Invoke(message);
                     },
-                    setFrameSourceForReplay);
+                    setFrameSourceForReplay,
+                    writeAppLog);
 
             Emit(
                 "GoblinReplayCaptureFolderScenarioCompleted",

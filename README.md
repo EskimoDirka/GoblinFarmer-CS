@@ -102,7 +102,13 @@ Journal matches validate the goblin-name portion of the template, ignore upper/h
 
 Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, and manual recognition-capture paths.
 
-Goblin Replay is an explicit developer/test harness for feeding saved Journal/Minimap PNG fixtures, including real-style encounter/manual capture folders, through the shared Goblin Evidence matcher and stale-location policy without Diablo running. It is on-demand only and is not part of normal app startup, VS Debug startup, live scanning, combat, route, town, or debug package workflows.
+Goblin Replay is an explicit developer/test harness for feeding saved Journal/Minimap PNG fixtures, including real-style encounter/manual capture folders, through the shared Goblin Evidence matcher and stale-location policy without Diablo running. It is on-demand only and is not part of normal app startup, VS Debug startup, live scanning, combat, route, town, or debug package workflows. Real capture folders can be replayed from the repository root with:
+
+```powershell
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-captures --templates ".\Images\Goblin Evidence" "D:\Path\To\CaptureFolder1" "D:\Path\To\CaptureFolder2"
+```
+
+Capture folders should contain `_Metadata.txt`, `_Journal.png`, and/or `_Minimap.png` files. The command prints load results, replay decisions, and a summary, and it does not create persistent debug files by default.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
