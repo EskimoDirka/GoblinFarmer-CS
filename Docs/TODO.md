@@ -166,7 +166,9 @@
 * [x] Replace default VS Debug Goblin replay ZIP creation with loose review files under `Debug\GoblinReplayReview\Latest`, while keeping release/export ZIP package creation available.
 * [x] Copy `Debug\GoblinTrackerNextTests.txt` and root `goblin-tracker-next-tests.txt` into the loose review folder so checked/unchecked test scenarios are reviewable without a ZIP.
 * [x] Replace broad same-goblin-type journal replay suppression with exact evidence-row suppression, so stale visible rows cannot replay across areas but fresh same-type goblins in separate levels can count.
+* [x] Make Engaged/combined journal rows area-strict so a row first seen in Cave Of The Moon Clan Level 1 suppresses with `JournalEngagedIgnoredAreaChanged` if detected again on Level 2.
 * [x] Preserve the displayed Last Observation when incoming scanner updates are suppressed as stale, already counted, duplicate, or area-limit reached.
+* [x] Reduce the observation scanner interval to 750ms to improve count-notification responsiveness without lowering confidence thresholds.
 * [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, and click `Review Files` after the first miss, wrong type, stale display, or slow notification.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
@@ -182,9 +184,10 @@
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
 * [x] Press Teleport Next when no queued/next route target exists and confirm the no-route notification appears.
-* [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
+* [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2 observations.
 * [x] Use VS Debug `Test Count Override` for synthetic limit checks: with the override on, press manual `X` three times in PF1, PF2, and Stinging Winds and confirm counts 1 and 2 are accepted while count 3 suppresses with `AreaLimitReached`; then turn the override off before real auto-count testing.
 * [x] Use VS Debug `Test Count Override` for a default-area synthetic check: press manual `X` twice in a normal allowed area and confirm the second press suppresses with `AreaAlreadyCounted`.
+* [x] Live-validate Stinging Winds Gem Hoarder auto-count notification and Last Observation were correct, and Stinging Winds two-count suppression still blocks count 3.
 * [x] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now displays/counts as Treasure Goblin.
 * [x] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
 * [ ] Live-validate a real Gilded Baron does not auto-count as Malevolent Tormentor from an early weak minimap match; confirm the accepted count, notification, and Last Observation use Gilded Baron.

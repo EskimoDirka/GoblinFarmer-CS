@@ -94,7 +94,7 @@
 - App/session startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True` by default in normal Release through `GoblinTracker.EnableObservationMode=true`
 - Existing AppSettings without `GoblinTracker.EnableObservationMode` migrate to the enabled default
 - Observation scanner logs `ObservationScanAttempted` while Diablo is active/focused and no automation workflow is running
-- Observation scanner startup reports `intervalMs=1000` so Last Observation feedback is more responsive during live goblin encounters
+- Observation scanner startup reports `intervalMs=750` so Last Observation/count feedback is more responsive during live goblin encounters without lowering evidence thresholds
 - Normal Release Diablo-active scans do not repeatedly skip with `ObservationScanSkipped reason=ObservationModeDisabled` unless `GoblinTracker.EnableObservationMode=false` is explicitly configured
 - Observation scanner logs `ObservationScanSkipped` with a reason when Diablo/scanner conditions are not eligible
 - Observation scanner logs combat state, automation state, Diablo running/active state, current area, and cooldown state in scanner attempt/skip diagnostics
@@ -130,6 +130,7 @@
 - `JournalEngagedIgnoredStale` logs when an old visible Engaged journal line is beyond the freshness window
 - Stale visible Engaged/Killed journal line signatures are based on evidence kind, goblin type, template file, and a coarse journal row `LineBucket`, not current area or absolute screen coordinates
 - Re-detecting the same old visible Engaged/Killed journal row after moving areas does not refresh first-seen time
+- Engaged or combined journal rows first seen in Cave Of The Moon Clan Level 1 must suppress with `JournalEngagedIgnoredAreaChanged` if the same visible row is later detected on Cave Of The Moon Clan Level 2
 - A later legitimate same-template Journal match in a different journal row can become fresh evidence when it passes the normal freshness and duplicate guards
 - Stale visible Engaged journal line signatures suppress with throttled `JournalEngagedIgnoredStale` and do not produce eligible observations
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
@@ -169,8 +170,9 @@
 - VS Debug loose review files include `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt`, replay log/HTML/summary/changed files, replay assets, decision bundles, latest log, and `session-info.txt` when available
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
 - In VS Debug, the `Next Tests` tab is divided into clear sections: setup, must-test route blockers, if-encountered regressions, safety/display checks, and review rule
-- In VS Debug, the must-test route blockers are listed in route logic order: Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Stinging Winds stale/fresh behavior, then Battlefields fresh Treasure Goblin validation
+- In VS Debug, the must-test route blockers are listed in route logic order: Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Battlefields fresh Treasure Goblin validation and notification latency after the 750ms scanner interval change
 - In VS Debug, PF1/PF2 live two-count checks and Gilded Baron/Malevolent Tormentor classification are labeled as if-encountered regression checks instead of primary blockers
+- In VS Debug, Stinging Winds is no longer listed as a must-test blocker after live verification confirmed count/notification/Last Observation and two-count suppression behavior
 - In VS Debug, unchecked `Next Tests` boxes mean not tested yet; checked boxes mean the tester completed that scenario during the current run
 - In VS Debug, generated Next Tests review metadata reports checked and unchecked counts plus every route-ordered test row so untested scenarios remain visible in review files
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`

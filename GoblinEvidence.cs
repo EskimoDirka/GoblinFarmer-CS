@@ -1393,6 +1393,14 @@ namespace GoblinFarmer
             return nowUtc - firstSeenUtc <= freshnessWindow;
         }
 
+        public static bool EngagedIsFresh(DateTime firstSeenUtc, string firstSeenAreaKey, string areaKey, DateTime nowUtc, TimeSpan freshnessWindow)
+        {
+            bool areaMatches = string.IsNullOrWhiteSpace(firstSeenAreaKey) ||
+                string.IsNullOrWhiteSpace(areaKey) ||
+                string.Equals(firstSeenAreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
+            return areaMatches && IsFresh(firstSeenUtc, nowUtc, freshnessWindow);
+        }
+
         public static bool StaleSuppressionActive(DateTime lastSeenUtc, DateTime nowUtc, TimeSpan freshnessWindow)
         {
             return nowUtc - lastSeenUtc <= freshnessWindow;

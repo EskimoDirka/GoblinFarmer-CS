@@ -6,7 +6,7 @@ namespace GoblinFarmer
 {
     public partial class frmMain
     {
-        private const int GoblinEvidenceScanIntervalMs = 1000;
+        private const int GoblinEvidenceScanIntervalMs = 750;
         private const int GoblinEvidenceObservationDiagnosticRetentionCount = 24;
         private static readonly TimeSpan GoblinEvidenceCooldown = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan GoblinJournalEvidenceFreshWindow = TimeSpan.FromSeconds(45);
@@ -517,7 +517,21 @@ namespace GoblinFarmer
                     }
                 }
 
-                if (!GoblinJournalFreshnessPolicy.IsFresh(firstSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                bool firstSeenAreaChanged = !string.IsNullOrWhiteSpace(firstSeenAreaKey) &&
+                    !string.IsNullOrWhiteSpace(areaKey) &&
+                    !string.Equals(firstSeenAreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
+                if (firstSeenAreaChanged)
+                {
+                    PortLogJournalEvidenceFreshnessDiagnostic(
+                        "JournalEngagedIgnoredAreaChanged",
+                        template,
+                        match,
+                        displayArea,
+                        $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(firstSeenAreaKey)}; currentArea={PortLogField(areaKey)}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
+                    return false;
+                }
+
+                if (!GoblinJournalFreshnessPolicy.EngagedIsFresh(firstSeenUtc, firstSeenAreaKey, areaKey, nowUtc, GoblinJournalEvidenceFreshWindow))
                 {
                     PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
                     PortLogJournalEvidenceFreshnessDiagnostic(

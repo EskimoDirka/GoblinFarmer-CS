@@ -840,6 +840,24 @@ static void TestGoblinJournalFreshnessStaysAreaStrictAcrossCavernsLevels()
             now,
             TimeSpan.FromSeconds(45)),
         "killed journal evidence first seen in Caverns Level 1 should not become fresh Level 2 evidence after a level transition");
+
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.EngagedIsFresh(
+            now - TimeSpan.FromSeconds(12),
+            "Cave Of The Moon Clan Level 1",
+            "Cave Of The Moon Clan Level 2",
+            now,
+            TimeSpan.FromSeconds(45)),
+        "fresh-looking Engaged journal evidence first seen on Cave Level 1 should not become fresh Level 2 evidence after a level transition");
+
+    AssertTrue(
+        GoblinJournalFreshnessPolicy.EngagedIsFresh(
+            now - TimeSpan.FromSeconds(12),
+            "Cave Of The Moon Clan Level 2",
+            "Cave Of The Moon Clan Level 2",
+            now,
+            TimeSpan.FromSeconds(45)),
+        "same-area Engaged journal evidence inside the freshness window should remain eligible");
 }
 
 static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()
@@ -1979,7 +1997,7 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(sessionStatsSource.Contains("displayHoldSeconds={PortAutomaticGoblinObservationDisplayHold.TotalSeconds:0}", StringComparison.Ordinal), "automatic observation update logs should include the display hold duration");
     AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should route through the Last Observation state helper");
-    AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 1000", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback");
+    AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 750", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback without loosening evidence thresholds");
 }
 
 static void TestGoblinObservationModeEnabledByDefaultInRelease()
@@ -2083,12 +2101,14 @@ static void TestVsDebugDiagnosticsIncludeNextTestStepsTab()
     AssertTrue(diagnosticsSource.Contains("Cave Of The Moon Clan Level 2", StringComparison.Ordinal), "Next Tests should list Cave Level 2 validation");
     AssertTrue(diagnosticsSource.Contains("Eastern Channel Level 2", StringComparison.Ordinal), "Next Tests should list Eastern Channel Level 2 validation");
     AssertTrue(diagnosticsSource.Contains("Battlefields", StringComparison.Ordinal), "Next Tests should list Battlefields validation");
-    AssertTrue(diagnosticsSource.Contains("Stinging Winds", StringComparison.Ordinal), "Next Tests should list special two-count validation");
-    AssertTrue(diagnosticsSource.Contains("Reset Stats and New Game", StringComparison.Ordinal), "Next Tests should include cleanup/reset validation");
+    AssertTrue(diagnosticsSource.Contains("Notification latency after the 750ms scanner interval", StringComparison.Ordinal), "Next Tests should include post-tuning notification latency validation");
+    AssertFalse(diagnosticsSource.Contains("Stinging Winds: old journal evidence must not count", StringComparison.Ordinal), "Stinging Winds should not remain a must-test blocker after the latest live verification");
+    AssertTrue(diagnosticsSource.Contains("New Game cleanup", StringComparison.Ordinal), "Next Tests should keep New Game cleanup validation after Reset Stats was live-confirmed");
     AssertTrue(diagnosticsSource.Contains("BlockedArea", StringComparison.Ordinal), "Next Tests should include blocked-area validation");
     AssertTrue(diagnosticsSource.Contains("Gilded Baron and Malevolent Tormentor", StringComparison.Ordinal), "Next Tests should include classification validation");
     AssertTrue(diagnosticsSource.Contains("GoblinReplay decision traces", StringComparison.Ordinal), "Next Tests should point misses toward replay decision traces");
     AssertTrue(diagnosticsSource.Contains("Review Files", StringComparison.Ordinal), "Next Tests should remind the tester to generate loose review files");
+    AssertTrue(diagnosticsSource.Contains("Check this only after you clicked Review Files", StringComparison.Ordinal), "Review rule checkbox should be explained as an action marker, not a normal gameplay test");
     int caveIndex = diagnosticsSource.IndexOf("Cave Of The Moon Clan Level 2", StringComparison.Ordinal);
     int easternChannelIndex = diagnosticsSource.IndexOf("Eastern Channel Level 2", StringComparison.Ordinal);
     AssertTrue(caveIndex > 0 && easternChannelIndex > caveIndex, "route-specific Next Tests should list Cave Of The Moon Clan Level 2 before Eastern Channel Level 2");
@@ -2391,6 +2411,8 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
     string signatureMethod = ExtractMethodBody(evidenceSource, "private string PortJournalEvidenceLineSignature");
     AssertTrue(evidenceSource.Contains("PortJournalEvidenceLineSignature", StringComparison.Ordinal), "journal freshness should use a line signature, not current area as the freshness key");
+    AssertTrue(evidenceSource.Contains("JournalEngagedIgnoredAreaChanged", StringComparison.Ordinal), "Engaged journal lines first seen in another area should log an area-change suppression");
+    AssertTrue(evidenceSource.Contains("GoblinJournalFreshnessPolicy.EngagedIsFresh", StringComparison.Ordinal), "Engaged journal evidence should use area-strict freshness before being accepted");
     AssertFalse(signatureMethod.Contains("PortDisplayLocation", StringComparison.Ordinal), "journal line freshness signatures must not include current area, or old visible lines can become fresh after moving");
     AssertTrue(signatureMethod.Contains("LineBucket", StringComparison.Ordinal), "journal line freshness signatures should include a coarse row bucket so later legitimate same-template lines can be fresh");
     AssertTrue(signatureMethod.Contains("PortJournalEvidenceLineBucket(match.MatchPoint)", StringComparison.Ordinal), "journal line freshness should bucket the match row instead of using an exact volatile point");
