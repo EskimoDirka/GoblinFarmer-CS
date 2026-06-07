@@ -143,7 +143,7 @@
 - Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
 - Fresh Journal/Minimap Last Observation entries remain readable during the short display hold and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
-- Last Observation remains visible long enough to validate the goblin type, area, source, and reason after an auto-count or accepted observation; if it disappears too quickly in VS Debug, click `Review Files` for display-state review
+- Last Observation remains visible long enough to validate the goblin type, area, source, and reason after an auto-count or accepted observation; if it disappears too quickly in VS Debug, close the form after the run and review the automatically generated loose files
 - After the short hold expires, no-candidate scanner scans preserve the last real goblin observation with `LastObservationClearSkipped preserveKind=LastObservationPersistent` instead of clearing the UI
 - Last Observation updates only when a new real goblin observation/count is accepted, or clears during Reset Stats/New Game/missing-template setup cleanup; stale cross-area journal repeats should not replace the displayed goblin
 - Last Observation clears with `LastObservationCleared reason=AreaChanged` when no-candidate scans occur after the current confirmed area changes away from the displayed observation area
@@ -163,14 +163,15 @@
 - Accepted route button clicks do not show the intrusive `Teleport queued` notification; they log `ButtonClickQueuedFeedbackSuppressed` instead
 - Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
 - In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
-- In VS Debug, `Review Files` remains the same 112x28 size/alignment as the Settings `Change...` and `Verify Paths` buttons
-- In VS Debug, `Review Files` does not show or require scenario input fields; review metadata is generated automatically
-- Clicking VS Debug `Review Files` writes `Debug\GoblinTrackerNextTests.txt` from the current `Next Tests` checkbox state and copies that metadata into `Debug\GoblinReplayReview\Latest`
-- Clicking VS Debug `Review Files` creates no ZIP by default and writes `ZipCreated=False` in `goblin-replay-review-manifest.txt`
+- In VS Debug, there is no manual `Review Files` button or review-rule checkbox; close-time review metadata is generated automatically
+- Closing the VS Debug form writes `Debug\GoblinTrackerNextTests.txt` from the current `Next Tests` checkbox state and copies that metadata into `Debug\GoblinReplayReview\Latest`
+- Closing the VS Debug form creates no ZIP by default and writes `ZipCreated=False` in `goblin-replay-review-manifest.txt`
 - VS Debug loose review files include `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt`, replay log/HTML/summary/changed files, replay assets, decision bundles, latest log, and `session-info.txt` when available
+- VS Debug accepted manual and automatic goblin counts save fullscreen, minimap, and journal encounter captures under `Debug\GoblinEvidence\EncounterCaptures`
+- VS Debug loose review files copy only the minimap and journal encounter captures and report excluded fullscreen captures in the manifest
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
-- In VS Debug, the `Next Tests` tab is divided into clear sections: setup, must-test route blockers, if-encountered regressions, safety/display checks, and review rule
-- In VS Debug, the must-test route blockers are listed in route logic order: Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Battlefields fresh Treasure Goblin validation and notification latency after the 750ms scanner interval change
+- In VS Debug, the `Next Tests` tab is divided into clear sections: baseline already validated, must-test route blockers, if-encountered regressions, and safety/display checks
+- In VS Debug, the must-test route blockers are listed in route logic order: Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, followed by notification latency
 - In VS Debug, PF1/PF2 live two-count checks and Gilded Baron/Malevolent Tormentor classification are labeled as if-encountered regression checks instead of primary blockers
 - In VS Debug, Stinging Winds is no longer listed as a must-test blocker after live verification confirmed count/notification/Last Observation and two-count suppression behavior
 - In VS Debug, unchecked `Next Tests` boxes mean not tested yet; checked boxes mean the tester completed that scenario during the current run
@@ -187,7 +188,7 @@
 - Automatic Treasure/Odious counts use the color-disambiguated goblin type when the accepted source is Minimap
 - Automatic fresh Killed-only journal counts can increment from `JournalKilledAcceptedFreshObservation` when Auto Count is enabled, while stale visible Killed lines still suppress
 - Reset Stats and New Game clear automatic-count evidence signature and encounter state
-- Combat hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=CombatHotkey`
+- Combat hotkey cancels active arrival confirmation waits, logs `ArrivalConfirmationCancelled reason=CombatHotkey`, and starts combat from the same hotkey press after the interrupted teleport workflow unwinds
 - Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
 - Teleport Next accepted with no queued/next route target logs `Teleport Next hotkey ignored: no queued/next teleport` and shows a no-route notification instead of appearing broken
 
@@ -224,7 +225,7 @@
 - GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
 - Direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots are bounded by count and size; manifest reports included, excluded, and oversized event screenshot counts
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
-- VS Debug age retention deletes known troubleshooting artifacts older than 24 hours from runtime/project debug roots, including logs, screenshots, sessions, debug packages, GoblinEvidence, and loose GoblinReplayReview files
+- VS Debug age retention deletes known troubleshooting artifacts older than 7 days from runtime/project debug roots, including logs, screenshots, sessions, debug packages, GoblinEvidence, and loose GoblinReplayReview files
 - Release/debug-mode age retention deletes known generated artifacts older than 7 days
 
 ## Debug Manager / Session Summary

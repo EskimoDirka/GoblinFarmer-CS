@@ -14,7 +14,7 @@ namespace GoblinFarmer
         /// </summary>
         private void PortToggleCombat()
         {
-            PortCancelArrivalConfirmationWait("CombatHotkey");
+            bool cancelledArrivalConfirmation = PortCancelArrivalConfirmationWait("CombatHotkey");
             if (portCombatRunning)
             {
                 AppLogger.Info($"Combat stop requested by combat hotkey: key=backtick; combatActive={portCombatRunning}; combatStopping={portCombatStopping}");
@@ -22,9 +22,63 @@ namespace GoblinFarmer
                 return;
             }
 
+            if (cancelledArrivalConfirmation && isAutomationRunning)
+            {
+                PortStartCombatAfterArrivalConfirmationCancel();
+                return;
+            }
+
+            PortStartCombatFromHotkey("hotkey", cancelledArrivalConfirmation);
+        }
+
+        private void PortStartCombatAfterArrivalConfirmationCancel()
+        {
+            AppLogger.Info($"CombatHotkeyStartDeferredUntilArrivalConfirmationCancelComplete: automationRunning={isAutomationRunning}; waitingConfirmation={portTeleportWaitingForConfirmation}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}");
+            _ = Task.Run(async () =>
+            {
+                Stopwatch wait = Stopwatch.StartNew();
+                while (wait.ElapsedMilliseconds < 2500 && (isAutomationRunning || portTeleportWaitingForConfirmation))
+                {
+                    await Task.Delay(25);
+                }
+
+                if (IsDisposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (portCombatRunning)
+                        {
+                            AppLogger.Info($"CombatHotkeyStartAfterArrivalConfirmationCancelSkipped: reason=CombatAlreadyRunning; waitMs={wait.ElapsedMilliseconds}; automationRunning={isAutomationRunning}; waitingConfirmation={portTeleportWaitingForConfirmation}");
+                            return;
+                        }
+
+                        if (isAutomationRunning || portTeleportWaitingForConfirmation)
+                        {
+                            AppLogger.Info($"CombatHotkeyStartAfterArrivalConfirmationCancelSkipped: reason=AutomationStillRunning; waitMs={wait.ElapsedMilliseconds}; automationRunning={isAutomationRunning}; waitingConfirmation={portTeleportWaitingForConfirmation}");
+                            return;
+                        }
+
+                        AppLogger.Info($"CombatHotkeyStartAfterArrivalConfirmationCancel: waitMs={wait.ElapsedMilliseconds}; automationRunning={isAutomationRunning}; waitingConfirmation={portTeleportWaitingForConfirmation}");
+                        PortStartCombatFromHotkey("hotkey-after-arrival-confirmation-cancel", true);
+                    }));
+                }
+                catch (InvalidOperationException ex)
+                {
+                    AppLogger.Error("CombatHotkeyStartAfterArrivalConfirmationCancel failed because the form was no longer available.", ex);
+                }
+            });
+        }
+
+        private void PortStartCombatFromHotkey(string source, bool afterArrivalConfirmationCancel)
+        {
             if (isAutomationRunning || !PortDiabloIsActive())
             {
-                AppLogger.Info($"Combat start ignored: isAutomationRunning={isAutomationRunning}; {PortCombatInputContext()}");
+                AppLogger.Info($"Combat start ignored: source={source}; afterArrivalConfirmationCancel={afterArrivalConfirmationCancel}; isAutomationRunning={isAutomationRunning}; {PortCombatInputContext()}");
                 return;
             }
 
@@ -37,7 +91,7 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             SetCombatStatus($"{radWD.Checked switch { true => "Witch Doctor", false when radDH.Checked => "Demon Hunter", _ => "Monk" }} Running");
             AddWorkflowStep("Combat started");
-            AppLogger.Info($"Combat started: class={portCombatClass}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; {PortCombatInputContext()}");
+            AppLogger.Info($"Combat started: source={source}; afterArrivalConfirmationCancel={afterArrivalConfirmationCancel}; class={portCombatClass}; originalCursorHandle=0x{portOriginalCursorHandle.ToInt64():X}; {PortCombatInputContext()}");
             PortLockCursorToDiablo();
             CancellationToken combatToken = portCombatCts.Token;
             PortStartCombatMenuWatcher(combatToken);

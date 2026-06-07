@@ -162,14 +162,18 @@
 * [x] Update VS Debug `Next Tests` to route-ordered checkboxes so checked means tested and unchecked means not tested yet.
 * [x] Divide VS Debug `Next Tests` into current must-test route blockers, if-encountered regressions, safety/display checks, and review rule so old regression checks do not look like equal blockers.
 * [x] Review `GoblinFarmer_Debug_20260607_074714.zip`; confirmed Reset Stats cleared duplicate guard, auto-count evidence state, evidence observation state, and Last Observation.
-* [x] Remove VS Debug Goblin Tracker scenario text input fields; `Review Files` now captures `Next Tests` checkbox state automatically without prompting.
+* [x] Remove VS Debug Goblin Tracker scenario text input fields; VS Debug form close now captures `Next Tests` checkbox state automatically without prompting.
 * [x] Replace default VS Debug Goblin replay ZIP creation with loose review files under `Debug\GoblinReplayReview\Latest`, while keeping release/export ZIP package creation available.
 * [x] Copy `Debug\GoblinTrackerNextTests.txt` and root `goblin-tracker-next-tests.txt` into the loose review folder so checked/unchecked test scenarios are reviewable without a ZIP.
+* [x] Remove the VS Debug `Review Files` button and `Review rule` checkbox so troubleshooting evidence is created automatically on form close.
+* [x] Save VS Debug accepted-count encounter captures for manual and automatic goblin counts: fullscreen, minimap crop, and journal crop under `Debug\GoblinEvidence\EncounterCaptures`, with only minimap/journal copied into loose review files.
+* [x] Change VS Debug generated-artifact age retention from 24 hours to 7 days.
+* [x] Make the combat hotkey cancel `Waiting For Location Confirmation` and start combat from the same hotkey press after the cancelled teleport workflow unwinds.
 * [x] Replace broad same-goblin-type journal replay suppression with exact evidence-row suppression, so stale visible rows cannot replay across areas but fresh same-type goblins in separate levels can count.
 * [x] Make Engaged/combined journal rows area-strict so a row first seen in Cave Of The Moon Clan Level 1 suppresses with `JournalEngagedIgnoredAreaChanged` if detected again on Level 2.
 * [x] Preserve the displayed Last Observation when incoming scanner updates are suppressed as stale, already counted, duplicate, or area-limit reached.
 * [x] Reduce the observation scanner interval to 750ms to improve count-notification responsiveness without lowering confidence thresholds.
-* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, and click `Review Files` after the first miss, wrong type, stale display, or slow notification.
+* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, then close the VS Debug form so loose review files are generated automatically after the run.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
@@ -178,7 +182,7 @@
 * [ ] Live-validate Battlefields fresh Treasure Goblin evidence auto-counts once even if an older Treasure Goblin journal template was seen earlier in the run.
 * [ ] Live-validate teleporting from Cathedral/Royal Crypts/Battlefields-style transitions clears previous-area Last Observation instead of showing stale goblin text.
 * [ ] Live-validate repeated Malevolent Tormentor journal evidence after moving between Battlefields and Rakkis Crossing does not overwrite the accepted Battlefields Last Observation or create stale display spam.
-* [ ] Review the next `Debug\GoblinReplayReview\Latest` loose review files for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
+* [ ] Review the next auto-generated `Debug\GoblinReplayReview\Latest` loose review files for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
 * [x] Consider adding a setting or quieter mode for route-button/Teleport queued notifications during Goblin Tracker validation.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
@@ -336,11 +340,11 @@ Status: first pass implemented as `DebugManager` plus `DiagnosticsSessionState`.
 * [x] Export `Sessions\Session_YYYYMMDD_HHMMSS.md` safely at app shutdown.
 * [x] Add retention cleanup for `Sessions\Session_*.md`, keeping the newest `Debug.SessionSummaryRetentionCount` entries by default.
 * [x] Add retention cleanup for `DebugPackages\GoblinFarmer_Debug_*.zip`, keeping the newest `Debug.DebugPackageRetentionCount` entries by default.
-* [x] Add age-based debug artifact cleanup: VS Debug troubleshooting artifacts older than 24 hours and release/debug-mode artifacts older than 7 days are deleted from known runtime/project artifact folders.
+* [x] Add age-based debug artifact cleanup: VS Debug troubleshooting artifacts and release/debug-mode artifacts older than 7 days are deleted from known runtime/project artifact folders.
 * [x] Route existing current-location image-recognition metadata through the manager without adding extra scans.
 * [ ] Validate the new session summary after the next live app exit.
 * [ ] Validate session/debug package count retention after enough artifacts exist to exceed the configured counts.
-* [ ] Validate VS Debug 24-hour and release 7-day artifact age retention after enough old generated artifacts exist.
+* [ ] Validate VS Debug and release 7-day artifact age retention after enough old generated artifacts exist.
 
 ### Diagnostic Overlay
 
@@ -766,7 +770,7 @@ These are future enhancements and nice-to-haves, not active blockers.
 * [ ] Investigate the Blood Thief / Cave Of The Moon Clan Level 1 live miss where the manual count worked but notification type and Last Observation data were absent; latest package confirms Cave Of The Moon Clan Level 1 can count from Journal, but Blood Thief-specific recognition still needs a same-type retest.
 * [x] Investigate Cathedral Level 3 accepting two manual count notifications in one game; latest package confirmed one accepted count followed by duplicate suppressions with `AreaAlreadyCounted`.
 * [ ] Live-validate Stinging Winds accepts manual goblin counts 1 and 2 in the same game and suppresses count 3 with `AreaLimitReached`.
-* [ ] Live-validate combat hotkey cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=CombatHotkey`.
+* [ ] Live-validate combat hotkey cancels active `Waiting For Location Confirmation`, logs `ArrivalConfirmationCancelled reason=CombatHotkey`, and starts combat from the same hotkey press.
 * [ ] Live-validate physical `2` cancels active `Waiting For Location Confirmation` and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`.
 * [ ] Live-validate journal candidate checks and `GoblinEvidenceScanResult source=Journal` include template name, best confidence, threshold, match point, template size, `templateCoveragePct`, and `journalDiagnosis`; if full-region journal templates remain below threshold, capture cropped journal text-line templates before lowering thresholds.
 * [ ] Live-validate Automation Observation Mode reports `wouldCount=False reason=BlockedArea` in blocked locations such as WhimsyDale.

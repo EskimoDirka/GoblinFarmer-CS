@@ -68,7 +68,6 @@ namespace GoblinFarmer
         private CheckBox? chkGoblinAutomaticCounting;
         private CheckBox? chkGoblinManualTestCountOverride;
         private CheckBox? chkGoblinDecisionTrace;
-        private Button? btnCreateGoblinReviewFiles;
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
@@ -439,7 +438,7 @@ namespace GoblinFarmer
             }
 
             portGoblinTrackerDebugPreferenceControlsInitialized = true;
-            portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 254);
+            portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 214);
 
             chkGoblinObservationMode = new CheckBox
             {
@@ -489,26 +488,14 @@ namespace GoblinFarmer
                 Checked = AppSettings.GoblinTracker.EnableDecisionTrace,
             };
 
-            btnCreateGoblinReviewFiles = new Button
-            {
-                Location = new Point(424, 160),
-                Name = "btnCreateGoblinReviewFiles",
-                Size = new Size(112, 28),
-                TabIndex = 4,
-                Text = "Review Files",
-                UseVisualStyleBackColor = true,
-            };
-
             chkGoblinObservationMode.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ObservationModeCheckbox");
             chkGoblinAutomaticCounting.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("AutomaticCountingCheckbox");
             chkGoblinManualTestCountOverride.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ManualTestCountOverrideCheckbox");
             chkGoblinDecisionTrace.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("DecisionTraceCheckbox");
-            btnCreateGoblinReviewFiles.Click += (_, _) => PortCreateGoblinReplayReviewFilesFromButton();
             portSettingsGroup.Controls.Add(chkGoblinObservationMode);
             portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting);
             portSettingsGroup.Controls.Add(chkGoblinManualTestCountOverride);
             portSettingsGroup.Controls.Add(chkGoblinDecisionTrace);
-            portSettingsGroup.Controls.Add(btnCreateGoblinReviewFiles);
             AppLogger.Info(
                 "Goblin Tracker VS Debug preference controls initialized: " +
                 $"enableObservationMode={chkGoblinObservationMode.Checked}; " +
@@ -588,6 +575,7 @@ namespace GoblinFarmer
             ForceReleaseAllRuntimeInputs("app closing");
             ClipCursor(IntPtr.Zero);
             PortLogSessionSummary();
+            PortCreateGoblinReplayReviewFilesOnVsDebugClose();
             base.OnFormClosing(e);
         }
 

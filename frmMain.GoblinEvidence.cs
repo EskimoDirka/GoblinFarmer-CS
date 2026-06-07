@@ -1184,43 +1184,39 @@ namespace GoblinFarmer
             PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence, screenshotPath);
         }
 
-        private void PortCreateGoblinReplayReviewFilesFromButton()
+        private void PortCreateGoblinReplayReviewFilesOnVsDebugClose()
         {
+            if (!AppSettings.IsVsDebugProfile)
+            {
+                return;
+            }
+
             string reviewRoot = PortResolveGoblinReplayReviewRoot();
             string nextTestsPath = PortWriteGoblinTrackerNextTestMetadata();
             AppLogger.Info(
                 "GoblinReplayReviewFilesRequested: " +
-                "source=Button; " +
+                "source=FormClosing; " +
                 $"vsDebugProfile={AppSettings.IsVsDebugProfile}; " +
                 $"vsDebugProjectRootConfigUsed={AppSettings.VsDebugProjectRootConfigUsed}; " +
                 $"configPath={PortLogField(AppSettings.ConfigPath)}; " +
                 $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
                 $"reviewRoot={PortLogField(reviewRoot)}; " +
                 $"nextTestsPath={PortLogField(nextTestsPath)}");
-            PortShowSplash("Creating review files...", 2500);
 
-            _ = Task.Run(() => PortCreateGoblinReplayReviewFilesForReview(nextTestsPath))
-                .ContinueWith(task =>
-                {
-                    if (task.IsFaulted)
-                    {
-                        AppLogger.Error("Goblin replay review file creation failed.", task.Exception!);
-                        BeginInvoke(new Action(() => PortShowSplash("Review files failed", 3000)));
-                        return;
-                    }
-
-                    GoblinReplayReviewFilesResult reviewResult = task.Result;
-                    BeginInvoke(new Action(() => PortShowSplash(
-                        reviewResult.Success
-                            ? $"Review files ready\r\n{reviewResult.ReviewDirectory}"
-                            : $"Review files failed\r\n{reviewResult.Reason}",
-                        6000)));
-                });
+            GoblinReplayReviewFilesResult reviewResult = PortCreateGoblinReplayReviewFilesForReview(nextTestsPath, "FormClosing");
+            AppLogger.Info(
+                "GoblinReplayReviewFilesFinished: " +
+                "source=FormClosing; " +
+                $"success={reviewResult.Success}; " +
+                $"reason={PortLogField(reviewResult.Reason)}; " +
+                $"reviewDirectory={PortLogField(reviewResult.ReviewDirectory)}; " +
+                $"summaryPath={PortLogField(reviewResult.SummaryPath)}; " +
+                $"indexPath={PortLogField(reviewResult.IndexPath)}");
         }
 
-        private GoblinReplayReviewFilesResult PortCreateGoblinReplayReviewFilesForReview(string nextTestsPath)
+        private GoblinReplayReviewFilesResult PortCreateGoblinReplayReviewFilesForReview(string nextTestsPath, string source = "Unknown")
         {
-            GoblinReplaySummary? replaySummary = PortRunGoblinReplayForReview();
+            GoblinReplaySummary? replaySummary = PortRunGoblinReplayForReview(source);
             return PortWriteGoblinReplayReviewFiles(replaySummary, nextTestsPath);
         }
 
@@ -1289,6 +1285,7 @@ namespace GoblinFarmer
                     replayAssetDirectory = PortCopyReviewDirectory(replaySummary.AssetDirectory, replayDirectory, Path.GetFileName(replaySummary.AssetDirectory));
                     replayBundleDirectory = PortCopyReviewDirectory(replaySummary.BundleDirectory, replayDirectory, Path.GetFileName(replaySummary.BundleDirectory));
                 }
+                GoblinEncounterReviewCopyResult encounterCopy = PortCopyGoblinEncounterReviewCrops(latestDirectory);
 
                 string manifestPath = Path.Combine(latestDirectory, "goblin-replay-review-manifest.txt");
                 string summaryPath = Path.Combine(latestDirectory, "goblin-tracker-summary.txt");
@@ -1307,8 +1304,9 @@ namespace GoblinFarmer
                     replaySummaryPath,
                     replayChangedPath,
                     replayAssetDirectory,
-                    replayBundleDirectory);
-                PortWriteGoblinReplayLooseReviewSummary(summaryPath, latestDirectory, replaySummary, rootNextTestsPath);
+                    replayBundleDirectory,
+                    encounterCopy);
+                PortWriteGoblinReplayLooseReviewSummary(summaryPath, latestDirectory, replaySummary, rootNextTestsPath, encounterCopy);
                 PortWriteGoblinReplayLooseReviewIndex(indexPath, latestDirectory);
 
                 AppLogger.Info(
@@ -1321,6 +1319,9 @@ namespace GoblinFarmer
                     $"nextTestsPath={PortLogField(rootNextTestsPath)}; " +
                     $"replayLogPath={PortLogField(replayLogPath)}; " +
                     $"replayHtmlPath={PortLogField(replayHtmlPath)}; " +
+                    $"encounterReviewDirectory={PortLogField(encounterCopy.DestinationDirectory)}; " +
+                    $"encounterCropCount={encounterCopy.CopiedCount}; " +
+                    $"encounterFullscreenExcluded={encounterCopy.FullscreenExcludedCount}; " +
                     $"zipCreated=False");
                 return new GoblinReplayReviewFilesResult(true, latestDirectory, summaryPath, indexPath, "Created");
             }
@@ -1390,6 +1391,59 @@ namespace GoblinFarmer
             return destinationDirectory;
         }
 
+        private static GoblinEncounterReviewCopyResult PortCopyGoblinEncounterReviewCrops(string latestDirectory)
+        {
+            string sourceDirectory = Path.Combine(DebugManager.GoblinEvidenceDirectory, "EncounterCaptures");
+            string destinationDirectory = Path.Combine(latestDirectory, "GoblinEvidence", "EncounterCaptures");
+            if (!Directory.Exists(sourceDirectory))
+            {
+                return new GoblinEncounterReviewCopyResult("", 0, 0, 0);
+            }
+
+            int copied = 0;
+            int skipped = 0;
+            int fullscreenExcluded = 0;
+            Directory.CreateDirectory(destinationDirectory);
+            foreach (FileInfo file in new DirectoryInfo(sourceDirectory)
+                .EnumerateFiles("*.png", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .Take(200))
+            {
+                bool isJournal = file.Name.Contains("_Journal", StringComparison.OrdinalIgnoreCase);
+                bool isMinimap = file.Name.Contains("_Minimap", StringComparison.OrdinalIgnoreCase);
+                bool isFullscreen = file.Name.Contains("_Fullscreen", StringComparison.OrdinalIgnoreCase);
+                if (isFullscreen)
+                {
+                    fullscreenExcluded++;
+                    continue;
+                }
+
+                if (!isJournal && !isMinimap)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                File.Copy(file.FullName, Path.Combine(destinationDirectory, file.Name), overwrite: true);
+                copied++;
+            }
+
+            if (copied == 0)
+            {
+                try
+                {
+                    Directory.Delete(destinationDirectory);
+                    destinationDirectory = "";
+                }
+                catch
+                {
+                    // A failed cleanup of an empty review crop folder should not block the review bundle.
+                }
+            }
+
+            return new GoblinEncounterReviewCopyResult(destinationDirectory, copied, fullscreenExcluded, skipped);
+        }
+
         private static void PortWriteGoblinReplayLooseReviewManifest(
             string manifestPath,
             string reviewDirectory,
@@ -1404,7 +1458,8 @@ namespace GoblinFarmer
             string replaySummaryPath,
             string replayChangedPath,
             string replayAssetDirectory,
-            string replayBundleDirectory)
+            string replayBundleDirectory,
+            GoblinEncounterReviewCopyResult encounterCopy)
         {
             List<string> lines =
             [
@@ -1429,6 +1484,10 @@ namespace GoblinFarmer
                 $"ReplayChangedPath={replayChangedPath}",
                 $"ReplayAssetDirectory={replayAssetDirectory}",
                 $"ReplayBundleDirectory={replayBundleDirectory}",
+                $"EncounterCaptureReviewDirectory={encounterCopy.DestinationDirectory}",
+                $"EncounterCaptureCropsCopied={encounterCopy.CopiedCount}",
+                $"EncounterCaptureFullscreenExcluded={encounterCopy.FullscreenExcludedCount}",
+                $"EncounterCaptureSkipped={encounterCopy.SkippedCount}",
             ];
 
             if (replaySummary != null)
@@ -1450,7 +1509,8 @@ namespace GoblinFarmer
             string summaryPath,
             string reviewDirectory,
             GoblinReplaySummary? replaySummary,
-            string nextTestsPath)
+            string nextTestsPath,
+            GoblinEncounterReviewCopyResult encounterCopy)
         {
             List<string> lines =
             [
@@ -1476,6 +1536,12 @@ namespace GoblinFarmer
                 lines.Add($"  Unknown: {replaySummary.Unknown}");
                 lines.Add($"  Comparison changed/new/same: {replaySummary.ComparisonChanged}/{replaySummary.ComparisonNew}/{replaySummary.ComparisonSame}");
             }
+
+            lines.Add("");
+            lines.Add("Encounter captures:");
+            lines.Add($"  Journal/minimap crops copied: {encounterCopy.CopiedCount}");
+            lines.Add($"  Fullscreen captures excluded from review: {encounterCopy.FullscreenExcludedCount}");
+            lines.Add($"  Review crop folder: {(!string.IsNullOrWhiteSpace(encounterCopy.DestinationDirectory) ? Path.GetRelativePath(reviewDirectory, encounterCopy.DestinationDirectory) : "none")}");
 
             if (!string.IsNullOrWhiteSpace(nextTestsPath) && File.Exists(nextTestsPath))
             {
@@ -1545,11 +1611,11 @@ namespace GoblinFarmer
             lines.Add($"<li><a href=\"{System.Net.WebUtility.HtmlEncode(href)}\">{System.Net.WebUtility.HtmlEncode(text)}</a></li>");
         }
 
-        private GoblinReplaySummary? PortRunGoblinReplayForReview()
+        private GoblinReplaySummary? PortRunGoblinReplayForReview(string source = "Unknown")
         {
             if (!AppSettings.IsVsDebugProfile)
             {
-                AppLogger.Info("ReviewGoblinReplaySkipped: reason=NonVsDebugProfile; source=Button");
+                AppLogger.Info($"ReviewGoblinReplaySkipped: reason=NonVsDebugProfile; source={PortLogField(source)}");
                 return null;
             }
 
@@ -1559,7 +1625,7 @@ namespace GoblinFarmer
                 AppLogger.Info(
                     "ReviewGoblinReplaySkipped: " +
                     "reason=InputFolderMissing; " +
-                    "source=Button; " +
+                    $"source={PortLogField(source)}; " +
                     $"inputPath={PortLogField(replayInputPath)}; " +
                     $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
                     $"packageRuntimeRoot={PortLogField(PortResolveDebugPackageRuntimeRoot())}");
@@ -1570,14 +1636,14 @@ namespace GoblinFarmer
             {
                 AppLogger.Info(
                     "ReviewGoblinReplayStarted: " +
-                    "source=Button; " +
+                    $"source={PortLogField(source)}; " +
                     $"inputPath={PortLogField(replayInputPath)}; " +
                     $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
                     $"packageRuntimeRoot={PortLogField(PortResolveDebugPackageRuntimeRoot())}");
                 GoblinReplaySummary summary = PortReplayGoblinEvidenceFolder(replayInputPath);
                 AppLogger.Info(
                     "ReviewGoblinReplayComplete: " +
-                    "source=Button; " +
+                    $"source={PortLogField(source)}; " +
                     $"totalFiles={summary.TotalFiles}; " +
                     $"evidenceFiles={summary.EvidenceFiles}; " +
                     $"accepted={summary.Accepted}; " +
@@ -2471,6 +2537,12 @@ namespace GoblinFarmer
             string IndexPath,
             string Reason);
 
+        private sealed record GoblinEncounterReviewCopyResult(
+            string DestinationDirectory,
+            int CopiedCount,
+            int FullscreenExcludedCount,
+            int SkippedCount);
+
         private sealed record GoblinReplayDebugPackageResult(
             bool Success,
             string PackagePath,
@@ -2831,6 +2903,145 @@ namespace GoblinFarmer
             catch (Exception ex)
             {
                 AppLogger.Error($"Goblin evidence screenshot capture failed: type={type}", ex);
+                return "";
+            }
+        }
+
+        private void PortQueueGoblinEncounterDebugCapture(
+            string countSource,
+            string evidenceSource,
+            string goblinType,
+            string areaKey,
+            string displayLocation,
+            int total)
+        {
+            if (!AppSettings.IsVsDebugProfile)
+            {
+                return;
+            }
+
+            string normalizedType = GoblinTypeNormalizer.Normalize(goblinType);
+            string normalizedCountSource = string.IsNullOrWhiteSpace(countSource) ? "Unknown" : countSource.Trim();
+            string normalizedEvidenceSource = string.IsNullOrWhiteSpace(evidenceSource) ? "Unknown" : evidenceSource.Trim();
+            string normalizedAreaKey = PortDisplayLocation(areaKey);
+            string normalizedDisplayLocation = PortDisplayLocation(displayLocation);
+            _ = Task.Run(() => PortSaveGoblinEncounterDebugCapture(
+                normalizedCountSource,
+                normalizedEvidenceSource,
+                normalizedType,
+                normalizedAreaKey,
+                normalizedDisplayLocation,
+                total));
+        }
+
+        private void PortSaveGoblinEncounterDebugCapture(
+            string countSource,
+            string evidenceSource,
+            string goblinType,
+            string areaKey,
+            string displayLocation,
+            int total)
+        {
+            try
+            {
+                DateTime timestamp = DateTime.Now;
+                string directory = Path.Combine(DebugManager.GoblinEvidenceDirectory, "EncounterCaptures");
+                Directory.CreateDirectory(directory);
+
+                string safeSource = PortSafeScreenshotName(countSource, "Count");
+                string safeEvidenceSource = PortSafeScreenshotName(evidenceSource, "Evidence");
+                string safeType = PortSafeScreenshotName(goblinType, "UnknownGoblin");
+                string safeArea = PortSafeScreenshotName(areaKey, "UnknownArea");
+                string prefix = $"GoblinEncounter_{timestamp:yyyyMMdd_HHmmss_fff}_{safeSource}_{safeEvidenceSource}_{safeType}_{safeArea}";
+
+                string fullscreenPath = Path.Combine(directory, $"{prefix}_Fullscreen.png");
+                string minimapPath = Path.Combine(directory, $"{prefix}_Minimap.png");
+                string journalPath = Path.Combine(directory, $"{prefix}_Journal.png");
+                string metadataPath = Path.Combine(directory, $"{prefix}_Metadata.txt");
+
+                string savedFullscreenPath = PortCaptureDiabloScreenshotToFile(fullscreenPath, $"GoblinEncounter:{countSource}:Fullscreen");
+                if (!string.IsNullOrWhiteSpace(savedFullscreenPath))
+                {
+                    DebugManager.RecordDebugScreenshotPath(savedFullscreenPath);
+                }
+
+                string savedMinimapPath = PortCaptureGoblinEncounterRegionCrop("Minimap", PortGoblinEvidenceMinimapRegion(), minimapPath, timestamp);
+                string savedJournalPath = PortCaptureGoblinEncounterRegionCrop("Journal", PortGoblinEvidenceJournalRegion(), journalPath, timestamp);
+                File.WriteAllLines(metadataPath,
+                [
+                    "Goblin Encounter Debug Capture",
+                    $"CreatedLocal={timestamp:O}",
+                    $"CreatedUtc={timestamp.ToUniversalTime():O}",
+                    $"CountSource={countSource}",
+                    $"EvidenceSource={evidenceSource}",
+                    $"GoblinType={goblinType}",
+                    $"AreaKey={areaKey}",
+                    $"DisplayLocation={displayLocation}",
+                    $"Total={total}",
+                    $"FullscreenPath={savedFullscreenPath}",
+                    $"MinimapPath={savedMinimapPath}",
+                    $"JournalPath={savedJournalPath}",
+                    $"MinimapReferenceRegion={FormatRectangle(PortGoblinEvidenceMinimapRegion())}",
+                    $"JournalReferenceRegion={FormatRectangle(PortGoblinEvidenceJournalRegion())}",
+                ]);
+
+                AppLogger.Info(
+                    "GoblinEncounterCaptureSaved: " +
+                    $"countSource={PortLogField(countSource)}; " +
+                    $"evidenceSource={PortLogField(evidenceSource)}; " +
+                    $"goblinType={PortLogField(goblinType)}; " +
+                    $"areaKey={PortLogField(areaKey)}; " +
+                    $"displayLocation={PortLogField(displayLocation)}; " +
+                    $"total={total}; " +
+                    $"fullscreenPath={PortLogField(savedFullscreenPath)}; " +
+                    $"minimapPath={PortLogField(savedMinimapPath)}; " +
+                    $"journalPath={PortLogField(savedJournalPath)}; " +
+                    $"metadataPath={PortLogField(metadataPath)}; " +
+                    "reviewIncludes=MinimapAndJournalOnly");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Goblin encounter debug capture failed: source={countSource}; type={goblinType}; area={areaKey}", ex);
+            }
+        }
+
+        private string PortCaptureGoblinEncounterRegionCrop(string label, Rectangle referenceRegion, string path, DateTime timestamp)
+        {
+            try
+            {
+                if (!PortTryGetDiabloRect(out RECT diabloRect))
+                {
+                    AppLogger.Info($"GoblinEncounterCaptureCropSkipped: label={label}; reason=DiabloRectUnavailable; scanRegion={FormatRectangle(referenceRegion)}");
+                    return "";
+                }
+
+                Rectangle screenRegion = PortScaleReferenceRectangle(referenceRegion, diabloRect);
+                screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
+                if (screenRegion.Width <= 0 || screenRegion.Height <= 0)
+                {
+                    AppLogger.Info($"GoblinEncounterCaptureCropSkipped: label={label}; reason=InvalidScreenRegion; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
+                    return "";
+                }
+
+                RECT captureRect = new()
+                {
+                    Left = screenRegion.Left,
+                    Top = screenRegion.Top,
+                    Right = screenRegion.Right,
+                    Bottom = screenRegion.Bottom,
+                };
+                string savedPath = PortCaptureScreenRectangleToFile(captureRect, path, $"GoblinEncounter:{label}");
+                if (!string.IsNullOrWhiteSpace(savedPath))
+                {
+                    DebugManager.RecordDebugScreenshotPath(savedPath);
+                }
+
+                AppLogger.Info($"GoblinEncounterCaptureCropSaved: label={label}; timestamp={timestamp:O}; path={PortLogField(savedPath)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
+                return savedPath;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Goblin encounter capture crop failed: label={label}", ex);
                 return "";
             }
         }

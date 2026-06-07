@@ -280,6 +280,7 @@ namespace GoblinFarmer
                 string notificationArea = area.Resolved ? displayLocation : "Unknown area";
                 PortPublishManualGoblinCountObservation(area, goblinType, source, guardResult);
                 PortShowSplash($"Goblin counted\r\n{notificationArea}\r\nType: {goblinType}\r\nTotal: {total}", 5000);
+                PortQueueGoblinEncounterDebugCapture(source, "ManualHotkey", goblinType, areaKey, notificationArea, total);
             }
 
             PortWriteSessionMetadata(logSuccess: false);
@@ -651,6 +652,7 @@ namespace GoblinFarmer
             AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} encounterAgeSeconds={encounterAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
             AppLogger.Info($"GoblinTracker: GoblinCountAccepted areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} blockListStatus=Allowed countResult=Accepted rawLocation='{PortLogField(PortDisplayLocation(area.RawLocation))}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(observation.GoblinType)}' source='{PortLogField(source)}' evidenceSource='{PortLogField(observation.Source)}' total={total}");
             PortShowSplash($"Goblin auto-counted\r\n{displayLocation}\r\nType: {observation.GoblinType}\r\nTotal: {total}", 5000);
+            PortQueueGoblinEncounterDebugCapture(source, observation.Source, observation.GoblinType, areaKey, displayLocation, total);
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;

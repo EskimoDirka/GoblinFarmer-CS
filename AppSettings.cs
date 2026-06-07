@@ -58,8 +58,8 @@ namespace GoblinFarmer
         public static ImageRecognitionSettings ImageRecognition => settings.ImageRecognition;
         public static GoblinTrackerSettings GoblinTracker => settings.GoblinTracker;
         public static UserSettings User => settings.User;
-        public static TimeSpan DebugArtifactRetentionAge => IsVsDebugProfile ? TimeSpan.FromHours(24) : TimeSpan.FromDays(7);
-        public static int RetentionDays => IsVsDebugProfile ? 1 : 7;
+        public static TimeSpan DebugArtifactRetentionAge => TimeSpan.FromDays(7);
+        public static int RetentionDays => 7;
 
         public static void Load()
         {
