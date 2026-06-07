@@ -36,7 +36,7 @@ This file is the current source of truth for the active release, stable behavior
 - Automatic counting requires Observation Mode and Auto Goblin Count to both be enabled.
 - Automatic counting uses existing area resolution, block list, duplicate guard, stale journal protection, and area-limit logic.
 - Goblin Evidence scanning caches discovered template metadata and loaded OpenCV template mats, captures each source scan region once per pass, and scans Minimap before Journal while preserving Journal as the primary confirmation if both match.
-- Goblin Replay Fixture Runner Phase 2A is implemented as an internal frame-source seam only: live scans still use `CopyFromScreen` by default, and fixture sources can feed saved Journal/Minimap PNGs into the shared frame/template matching path for focused tests.
+- Goblin Replay Fixture Runner Phase 2B is implemented as an explicit/on-demand harness entry point only. Live scans still use `CopyFromScreen` by default, and saved Journal/Minimap PNG fixtures can be fed through the shared frame/template matching path without normal startup, VS Debug startup, scanner, route, combat, town, or debug package workflows invoking replay.
 - Goblin Evidence timing summaries log stage histograms through `GoblinEvidenceTimingSummary`.
 - VS Debug/debug/decision-trace sessions write structured Goblin Tracker JSONL events to `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` alongside human-readable logs.
 - Default area limit: 1 count per resolved area per game.
@@ -64,7 +64,7 @@ This file is the current source of truth for the active release, stable behavior
 ## Next Development Plans
 
 - Validate the latest journal-history suppression, name-validation fix, scan timing summaries, and JSONL event output during normal VS Debug use.
-- Phase 2B should build a small replay fixture runner on top of the Phase 2A frame-source seam without auto-running during app startup or changing production count behavior.
+- Next Goblin Replay work should add multi-step fixture scenarios for stale journal/location transitions without auto-running during app startup or changing production count behavior.
 - Continue using automatic counting in real runs instead of focused specific-goblin hunts.
 - Use the `Capture` button only when an image-recognition issue is visible and extra minimap/journal/fullscreen evidence would help.
 - Keep `Docs/TODO.md` synchronized with remaining work and next test steps.

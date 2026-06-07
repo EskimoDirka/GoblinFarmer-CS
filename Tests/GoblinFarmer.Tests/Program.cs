@@ -33,6 +33,7 @@ Run("GoblinEvidence template discovery accepts per-goblin evidence files", TestG
 Run("GoblinEvidence template discovery finds source image set", TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet);
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
 Run("Goblin replay fixture frame source reaches candidate detection", TestGoblinReplayFixtureFrameSourceReachesCandidateDetection);
+Run("Goblin replay explicit fixture runner detects saved encounter frames", TestGoblinReplayExplicitFixtureRunnerDetectsSavedEncounterFrames);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
 Run("VS Debug diagnostics omit next test steps tab", TestVsDebugDiagnosticsOmitNextTestStepsTab);
@@ -977,6 +978,60 @@ static void TestGoblinReplayFixtureFrameSourceReachesCandidateDetection()
         AssertTrue(match.Confidence >= 0.99, $"fixture template should match the saved frame with high confidence, actual={match.Confidence:0.000}");
         AssertEqual(new Point(14, 17), match.MatchPoint, "fixture match point should be relative to the saved fixture frame");
         AssertEqual(match.MatchPoint, match.ScreenMatchPoint, "fixture screen match point should use fixture-local coordinates");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayExplicitFixtureRunnerDetectsSavedEncounterFrames()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayFixture_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Gem Hoarder Minimap.png");
+        string framePath = Path.Combine(fixtureRoot, "encounter-minimap.png");
+        using Bitmap template = CreateFixturePatternBitmap(11, 11);
+        template.Save(templatePath);
+
+        using (Bitmap frame = new(48, 48))
+        using (Graphics graphics = Graphics.FromImage(frame))
+        {
+            graphics.Clear(Color.Black);
+            graphics.DrawImageUnscaled(template, 21, 13);
+            frame.Save(framePath);
+        }
+
+        List<string> replayLogs = [];
+        IGoblinEvidenceFrameSource? scopedFrameSource = null;
+        bool fixtureFrameSourceInjected = false;
+        GoblinReplayFixtureRunResult result = GoblinReplayFixtureRunner.RunExplicitFixtureForHarness(
+            new GoblinReplayFixture("single saved minimap frame", null, framePath),
+            templateRoot,
+            replayLogs.Add,
+            frameSource =>
+            {
+                scopedFrameSource = frameSource;
+                fixtureFrameSourceInjected |= frameSource is FixtureGoblinEvidenceFrameSource;
+            });
+
+        AssertTrue(result.CandidateFound, "explicit replay runner should detect the saved minimap encounter frame");
+        AssertEqual(1, result.Candidates.Count, "explicit replay runner should report the best candidate for the fixture source");
+        GoblinReplayFixtureCandidate candidate = result.Candidates[0];
+        AssertEqual("Gem Hoarder", candidate.GoblinType, "explicit replay candidate should preserve goblin type from template discovery");
+        AssertEqual("MinimapCandidate", candidate.Source, "explicit replay candidate should preserve the minimap source");
+        AssertTrue(candidate.Confidence >= 0.99, $"explicit replay candidate should have high confidence, actual={candidate.Confidence:0.000}");
+        AssertEqual(new Point(21, 13), candidate.MatchPoint, "explicit replay candidate should report fixture-local match point");
+        AssertTrue(fixtureFrameSourceInjected, "explicit replay runner should scope fixture frame source injection to the replay run");
+        AssertTrue(scopedFrameSource == null, "explicit replay runner should restore the live/default frame source after replay");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureRunStarted", StringComparison.Ordinal) && line.Contains("mode=ExplicitOnDemand", StringComparison.Ordinal)), "explicit replay runner should log obvious start guard");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureFrameSourceRestored", StringComparison.Ordinal) && line.Contains("target=LiveDefault", StringComparison.Ordinal)), "explicit replay runner should log frame-source restoration");
     }
     finally
     {

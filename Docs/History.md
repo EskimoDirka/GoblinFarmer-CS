@@ -29,6 +29,7 @@ This file keeps backlog and historical context that no longer belongs in the sho
 - `frmMain.GoblinEvidence.cs` capture helpers and `frmMain.SessionStats.cs` automatic-count helpers were split into dedicated partial files to keep active Goblin Tracker development safer.
 - Goblin Evidence scanning added cached template catalogs, cached OpenCV template mats, one captured scan context per source pass, minimap-first scanning with Journal still preferred as the primary confirmation, throttled `GoblinEvidenceTimingSummary` stage histograms, and structured `GoblinTrackerEvents.jsonl` output.
 - Goblin Replay Fixture Runner Phase 2A added the internal `IGoblinEvidenceFrameSource` seam, keeping live screen capture as the default while allowing saved fixture PNGs to create the same scan context used by template matching.
+- Goblin Replay Fixture Runner Phase 2B added the explicit harness-only `GoblinReplayFixtureRunner` entry point for saved Journal/Minimap PNG fixtures. Replay remains on-demand only and is not wired into startup, live scanning, automation workflows, or debug package creation.
 - Debug package analysis helpers were added at the ZIP root:
   - `debug-package-analysis.txt`
   - `goblin-tracker-timeline.md`

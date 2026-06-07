@@ -197,6 +197,7 @@ Debug tooling includes:
 - Root debug package analysis, Goblin Tracker timeline, Goblin Evidence health report, Goblin Tracker review index and summary, encounter captures, decision bundles, and observation diagnostics collected by the package batch when GoblinEvidence is available.
 - Structured Goblin Tracker JSONL events under `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` during VS Debug, Debug Mode, or decision-trace sessions, alongside human-readable logs.
 - Goblin Evidence scan-stage timing summaries for spotting slow template, crop, or candidate stages without adding one-off stopwatch logs.
+- Explicit/on-demand Goblin Replay fixture runner support for saved Journal/Minimap PNG detection tests; replay is not wired into startup, live automation, or debug package creation.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is a separate opt-in gate and defaults off.
 - Age-based debug artifact retention: 7 days for VS Debug troubleshooting folders and release/debug-mode artifacts, plus count-based GoblinEvidence retention under `Debug\GoblinEvidence` defaulting to the newest 250 files and bounded ObservationDiagnostics crop samples in debug packages.

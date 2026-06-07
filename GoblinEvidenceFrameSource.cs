@@ -165,6 +165,61 @@ namespace GoblinFarmer
 
     internal static class GoblinEvidenceFrameTemplateMatcher
     {
+        public static GoblinEvidenceReplayCandidate? DetectBestCandidate(
+            IGoblinEvidenceFrameSource frameSource,
+            IReadOnlyList<GoblinEvidenceTemplateRequirement> templates,
+            Func<GoblinEvidenceTemplateRequirement, string> templatePathResolver,
+            Rectangle referenceRegion,
+            string reason)
+        {
+            if (templates.Count == 0)
+            {
+                return null;
+            }
+
+            string source = templates[0].Source;
+            using GoblinEvidenceScanContext? scanContext = frameSource.TryCreateScanContext(
+                source,
+                referenceRegion,
+                reason);
+            if (scanContext == null)
+            {
+                return null;
+            }
+
+            GoblinEvidenceTemplateRequirement? bestTemplate = null;
+            string bestTemplatePath = "";
+            GoblinEvidenceTemplateMatch bestMatch = new(0, Point.Empty, Point.Empty, Size.Empty);
+            foreach (GoblinEvidenceTemplateRequirement template in templates)
+            {
+                string templatePath = templatePathResolver(template);
+                if (!File.Exists(templatePath))
+                {
+                    continue;
+                }
+
+                using OpenCvSharp.Mat templateMat = OpenCvSharp.Cv2.ImRead(templatePath, OpenCvSharp.ImreadModes.Color);
+                GoblinEvidenceTemplateMatch match = MatchTemplate(scanContext, templateMat);
+                if (bestTemplate == null || match.Confidence > bestMatch.Confidence)
+                {
+                    bestTemplate = template;
+                    bestTemplatePath = templatePath;
+                    bestMatch = match;
+                }
+            }
+
+            if (bestTemplate == null)
+            {
+                return null;
+            }
+
+            return new GoblinEvidenceReplayCandidate(
+                bestTemplate,
+                bestTemplatePath,
+                bestMatch,
+                bestMatch.Confidence >= bestTemplate.Threshold);
+        }
+
         public static GoblinEvidenceTemplateMatch MatchTemplate(
             GoblinEvidenceScanContext scanContext,
             OpenCvSharp.Mat templateMat,
@@ -226,4 +281,10 @@ namespace GoblinFarmer
                 template.GoblinType);
         }
     }
+
+    internal sealed record GoblinEvidenceReplayCandidate(
+        GoblinEvidenceTemplateRequirement Template,
+        string TemplatePath,
+        GoblinEvidenceTemplateMatch Match,
+        bool PassedThreshold);
 }

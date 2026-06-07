@@ -19,7 +19,7 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - VS Debug can use ignored `Config\AppSettings.local.json` for private local paths/toggles while tracked `Config\AppSettings.json` stays sanitized.
 - VS Debug/debug sessions write `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` when observations or automatic-count decisions occur.
 - Logs include throttled `GoblinEvidenceTimingSummary` scan-stage timing output during active Goblin Evidence scanning.
-- Test harness confirms a saved fixture PNG can reach the shared Goblin Evidence frame/template matching path without Diablo running.
+- Test harness confirms saved fixture PNGs can reach the shared Goblin Evidence frame/template matching path without Diablo running, and the explicit Phase 2B runner logs start/restoration while remaining on-demand only.
 - Default areas count once per game.
 - PF1, PF2, and Stinging Winds allow two counts per game and suppress the third.
 - Blocked count areas suppress with `BlockedArea` and do not consume area slots.
