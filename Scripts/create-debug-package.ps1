@@ -19,6 +19,16 @@ $ErrorActionPreference = "Stop"
 # single intentional review package workflow and app shutdown does not create
 # packages or loose review exports.
 
+$debugAnalysisToolsPath = Join-Path $PSScriptRoot "debug-analysis-tools.ps1"
+$debugAnalysisToolsAvailable = $false
+if (Test-Path -LiteralPath $debugAnalysisToolsPath -PathType Leaf) {
+    . $debugAnalysisToolsPath
+    $debugAnalysisToolsAvailable = $true
+}
+else {
+    Write-Warning "Optional debug analysis helper missing: $debugAnalysisToolsPath"
+}
+
 function Write-Step {
     param([string]$Text)
 
@@ -1569,6 +1579,9 @@ function New-GoblinTrackerReviewIndex {
 
     $links = New-Object System.Collections.Generic.List[string]
     foreach ($relative in @(
+        "debug-package-analysis.txt",
+        "goblin-tracker-timeline.md",
+        "goblin-evidence-health.txt",
         "goblin-tracker-summary.txt",
         "debug-package-manifest.txt",
         "route-failure-summary.txt",
@@ -2061,6 +2074,9 @@ try {
     }
     Write-Host "Git metadata: $gitMetadataStatus"
 
+    $debugAnalysisFilesIncluded = $false
+    $debugAnalysisGenerationStatus = if ($debugAnalysisToolsAvailable) { "Pending" } else { "Skipped (helper missing)" }
+
     if (-not (Test-Path -LiteralPath $packageDirectory)) {
         New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
     }
@@ -2105,6 +2121,8 @@ try {
             "Debug workflow: Scripts\Create Debug Package.bat -> Scripts\create-debug-package.ps1",
             "Review export path: single batch/PowerShell ZIP package for VS Debug and Release",
             "App shutdown artifact creation: skipped by design",
+            "Debug analysis files included: $debugAnalysisFilesIncluded",
+            "Debug analysis generation status: $debugAnalysisGenerationStatus",
             "Source root: $repoRoot",
             "Resolved runtime root: $resolvedRuntimeRoot",
             "Runtime root resolution: $($runtimeRootInfo.Resolution)",
@@ -2166,6 +2184,9 @@ try {
             "- git-status.txt",
             "- git-log.txt",
             "- route-failure-summary.txt",
+            "- debug-package-analysis.txt included: $debugAnalysisFilesIncluded",
+            "- goblin-tracker-timeline.md included: $debugAnalysisFilesIncluded",
+            "- goblin-evidence-health.txt included: $debugAnalysisFilesIncluded",
             "- goblin-tracker-summary.txt",
             "- goblin-tracker-review.html",
             "- goblin-tracker-next-tests.txt included: $goblinTrackerNextTestsIncluded",
@@ -2237,6 +2258,24 @@ try {
         )
     }
 
+    & $buildManifestLines 0 "calculated during package creation" | Out-File -FilePath $manifestPath -Encoding utf8
+    if ($debugAnalysisToolsAvailable) {
+        Write-Step "Generating debug analysis files"
+        try {
+            $analysisResult = Write-DgaAnalysisFiles -Root $stagingRoot -OutputDirectory $stagingRoot
+            $debugAnalysisFilesIncluded = $true
+            $debugAnalysisGenerationStatus = "Included"
+            Write-Host "Included debug package analysis: $(Split-Path -Leaf $analysisResult.AnalysisPath)"
+            Write-Host "Included Goblin Tracker timeline: $(Split-Path -Leaf $analysisResult.TimelinePath)"
+            Write-Host "Included Goblin Evidence health report: $(Split-Path -Leaf $analysisResult.HealthPath)"
+        }
+        catch {
+            $debugAnalysisFilesIncluded = $false
+            $debugAnalysisGenerationStatus = "Skipped (generation failed: $($_.Exception.Message))"
+            Write-Warning $debugAnalysisGenerationStatus
+        }
+    }
+
     $packageSizeBytes = 0L
     for ($i = 0; $i -lt 10; $i++) {
         $packageSizeDisplay = if ($packageSizeBytes -gt 0) { Format-ByteSize $packageSizeBytes } else { "calculated during package creation" }
@@ -2303,5 +2342,6 @@ Write-Host "Git status captured: $gitStatusCaptured"
 Write-Host "Git log captured:    $gitLogCaptured"
 Write-Host "Git metadata:        $gitMetadataStatus"
 Write-Host "Git skipped installed: $gitSkippedBecauseInstalled"
+Write-Host "Analysis files:      $debugAnalysisGenerationStatus"
 Write-Host "Manifest:            debug-package-manifest.txt"
 Write-Host "==========================================="

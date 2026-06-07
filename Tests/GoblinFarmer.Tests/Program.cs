@@ -51,6 +51,7 @@ Run("Debug package limits failure and debug screenshots by default", TestDebugPa
 Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
 Run("Debug package limits goblin evidence event screenshots", TestDebugPackageLimitsGoblinEvidenceEventScreenshots);
 Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
+Run("Debug package includes built-in analysis reports", TestDebugPackageIncludesBuiltInAnalysisReports);
 Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeepsTrueAreasSeparate);
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
@@ -1635,6 +1636,95 @@ static void TestDebugPackageIncludesSuccessScreenshotsWithOptIn()
     }
 }
 
+static void TestDebugPackageIncludesBuiltInAnalysisReports()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string logs = Path.Combine(testRoot, "Logs");
+    string config = Path.Combine(testRoot, "Config");
+    string decisionBundles = Path.Combine(testRoot, "Debug", "GoblinEvidence", "DecisionBundles", "20260607_120000");
+    Directory.CreateDirectory(logs);
+    Directory.CreateDirectory(config);
+    Directory.CreateDirectory(decisionBundles);
+
+    try
+    {
+        DateTime sessionStart = DateTime.Now.AddMinutes(-5);
+        File.WriteAllLines(Path.Combine(testRoot, "session-info.txt"),
+        [
+            $"SessionStartLocal={sessionStart:O}",
+            $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
+            "GoblinCount=1",
+            "GoblinObservationCount=2",
+            "JournalObservationCount=1",
+            "MinimapObservationCount=1",
+            "LastGoblinObservationSource=ManualHotkey",
+            "LastGoblinObservationType=Treasure Goblin",
+            "LastGoblinObservationAreaKey=Cave Of The Moon Clan Level 2",
+            "LastGoblinObservationReason=Counted",
+        ]);
+        File.WriteAllText(Path.Combine(config, "AppSettings.json"), "{}");
+        File.WriteAllLines(Path.Combine(logs, "GoblinFarmer.log"),
+        [
+            "[2026-06-07 12:00:00.000] GoblinObservationCandidate source=Journal; goblinType=Treasure Goblin; areaKey=Cave Of The Moon Clan Level 2; wouldCount=True; reason=Eligible; evidenceHash=abc123",
+            "[2026-06-07 12:00:01.000] GoblinCountAccepted source=ManualHotkey; goblinType=Treasure Goblin; areaKey=Cave Of The Moon Clan Level 2; reason=Counted; evidenceHash=abc123",
+            "[2026-06-07 12:00:02.000] LastObservationUpdated source=ManualHotkey; goblinType=Treasure Goblin; areaKey=Cave Of The Moon Clan Level 2; reason=Counted",
+        ]);
+        File.WriteAllText(Path.Combine(decisionBundles, "trace.txt"), "correlationId=abc123");
+
+        string scriptPath = FindDebugPackageScript();
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -RuntimeRoot \"{testRoot}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start debug package script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed. stdout={output}; stderr={error}");
+
+        string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? "";
+        AssertTrue(File.Exists(packagePath), "debug package zip should be created");
+
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        string analysisText = ReadRequiredZipText(archive, "debug-package-analysis.txt");
+        string timelineText = ReadRequiredZipText(archive, "goblin-tracker-timeline.md");
+        string healthText = ReadRequiredZipText(archive, "goblin-evidence-health.txt");
+        string manifestText = ReadRequiredZipText(archive, "debug-package-manifest.txt");
+        string reviewIndexText = ReadRequiredZipText(archive, "goblin-tracker-review.html");
+
+        AssertTrue(analysisText.Contains("Recommended review order", StringComparison.OrdinalIgnoreCase), "analysis report should guide review order");
+        AssertTrue(analysisText.Contains("GoblinCountAccepted", StringComparison.OrdinalIgnoreCase), "analysis report should summarize count markers");
+        AssertTrue(timelineText.Contains("GoblinCountAccepted", StringComparison.OrdinalIgnoreCase), "timeline should include accepted count log markers");
+        AssertTrue(timelineText.Contains("Cave Of The Moon Clan Level 2", StringComparison.OrdinalIgnoreCase), "timeline should include the resolved area");
+        AssertTrue(healthText.Contains("DecisionBundles", StringComparison.OrdinalIgnoreCase), "evidence health report should count decision bundles");
+        AssertTrue(manifestText.Contains("Debug analysis files included: True", StringComparison.OrdinalIgnoreCase), "manifest should state that analysis reports are included");
+        AssertTrue(reviewIndexText.Contains("debug-package-analysis.txt", StringComparison.OrdinalIgnoreCase), "review index should link the analysis report");
+        AssertTrue(reviewIndexText.Contains("goblin-tracker-timeline.md", StringComparison.OrdinalIgnoreCase), "review index should link the tracker timeline");
+        AssertTrue(reviewIndexText.Contains("goblin-evidence-health.txt", StringComparison.OrdinalIgnoreCase), "review index should link the evidence health report");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
+    }
+}
+
+static string ReadRequiredZipText(ZipArchive archive, string entryName)
+{
+    ZipArchiveEntry entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException($"{entryName} missing from debug package");
+    using StreamReader reader = new(entry.Open());
+    return reader.ReadToEnd();
+}
+
 static string FindDebugPackageScript()
 {
     DirectoryInfo? directory = new(AppContext.BaseDirectory);
@@ -2251,6 +2341,15 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     string programSource = File.ReadAllText(Path.Combine(repoRoot, "Program.cs"));
     string projectSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
     string packageLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Create Debug Package.bat"));
+    string debugAnalysisToolsSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "debug-analysis-tools.ps1"));
+    string[] debugAnalysisScripts =
+    [
+        "debug-analysis-tools.ps1",
+        "analyze-latest-debug-package.ps1",
+        "build-goblin-tracker-timeline.ps1",
+        "check-goblin-evidence-health.ps1",
+        "dev-verify.ps1",
+    ];
     string retiredEvidenceToken = "Goblin" + ("Re" + "play");
     string retiredEvidenceName = "Goblin " + ("Re" + "play");
     string retiredEvidenceSwitch = "--goblin-" + ("re" + "play");
@@ -2307,6 +2406,11 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageScript.Contains("single intentional review package workflow", StringComparison.Ordinal), "debug package script should identify itself as the one review package path");
     AssertTrue(packageScript.Contains("Review export path: single batch/PowerShell ZIP package for VS Debug and Release", StringComparison.Ordinal), "debug package manifest should identify the active review export path");
     AssertTrue(packageScript.Contains("App shutdown artifact creation: skipped by design", StringComparison.Ordinal), "debug package manifest should document quiet app shutdown");
+    AssertTrue(packageScript.Contains("debug-analysis-tools.ps1", StringComparison.Ordinal), "debug package script should load the shared debug analysis helper");
+    AssertTrue(packageScript.Contains("Write-DgaAnalysisFiles", StringComparison.Ordinal), "debug package script should write analysis reports into the same ZIP workflow");
+    AssertTrue(packageScript.Contains("debug-package-analysis.txt", StringComparison.Ordinal), "debug package script should include the root analysis report");
+    AssertTrue(packageScript.Contains("goblin-tracker-timeline.md", StringComparison.Ordinal), "debug package script should include the root Goblin Tracker timeline");
+    AssertTrue(packageScript.Contains("goblin-evidence-health.txt", StringComparison.Ordinal), "debug package script should include the root Goblin Evidence health report");
     AssertTrue(packageScript.Contains("PSScriptRoot", StringComparison.Ordinal), "debug package script should self-discover from the clicked batch/script location");
     AssertTrue(packageScript.Contains("Resolve-RuntimeRoot", StringComparison.Ordinal), "debug package script should resolve VS Debug and Release runtime roots");
     AssertTrue(packageScript.Contains("Get-PackageRuntimeRoots", StringComparison.Ordinal), "debug package script should search package roots for VS Debug and Release evidence");
@@ -2334,8 +2438,16 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageLauncher.Contains("Supported debug ZIP export path for both VS Debug and Release", StringComparison.Ordinal), "debug package launcher should identify itself as the single review export path");
     AssertTrue(packageLauncher.Contains("single intentional review package workflow", StringComparison.Ordinal), "debug package launcher should make the batch workflow clear");
     AssertTrue(packageLauncher.Contains("create-debug-package.ps1", StringComparison.Ordinal), "debug package launcher should delegate to the PowerShell package script");
+    AssertTrue(debugAnalysisToolsSource.Contains("New-DgaDebugPackageAnalysisContent", StringComparison.Ordinal), "shared debug helper should build the package analysis report");
+    AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinTrackerTimelineContent", StringComparison.Ordinal), "shared debug helper should build the Goblin Tracker timeline");
+    AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinEvidenceHealthContent", StringComparison.Ordinal), "shared debug helper should build the evidence health report");
     AssertTrue(projectSource.Contains("Scripts\\create-debug-package.ps1", StringComparison.Ordinal), "release/export ZIP package script should remain published");
     AssertTrue(projectSource.Contains("Scripts\\Create Debug Package.bat", StringComparison.Ordinal), "release/export ZIP package launcher should remain published");
+    foreach (string scriptName in debugAnalysisScripts)
+    {
+        AssertTrue(File.Exists(Path.Combine(repoRoot, "Scripts", scriptName)), $"{scriptName} should exist under Scripts");
+        AssertTrue(projectSource.Contains($"Scripts\\{scriptName}", StringComparison.Ordinal), $"{scriptName} should be copied to VS Debug and Release publish outputs");
+    }
     AssertFalse(projectSource.Contains(retiredTerminalScript, StringComparison.Ordinal), "removed terminal evidence helper should not be published");
     AssertFalse(File.Exists(Path.Combine(repoRoot, "Scripts", ("re" + "play-") + "goblin-evidence.ps1")), "duplicate terminal evidence package reviewer should be removed");
 }

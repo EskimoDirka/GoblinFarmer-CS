@@ -167,6 +167,7 @@
 - The VS Debug `Next Tests` checklist writes `Debug\GoblinTrackerNextTests.txt` when the checklist is initialized or changed, so the batch package can include it
 - Closing the VS Debug form is a quiet shutdown path and should not create review files, extra evidence-processing files, screenshots, debug packages, or session markdown exports
 - The debug package batch packages existing runtime evidence only, and the ZIP includes `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt` when available, decision bundles, latest log, route summaries, screenshots, GoblinEvidence, encounter captures, observation diagnostics, and `session-info.txt` when available
+- The debug package ZIP also includes root helper reports: `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt`
 - VS Debug accepted manual and automatic goblin counts save fullscreen, minimap, and journal encounter captures under `Debug\GoblinEvidence\EncounterCaptures`
 - Debug packages include bounded GoblinEvidence and encounter-capture samples and report included/excluded counts in the manifest
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
@@ -216,7 +217,9 @@
 - Debug package manifest reports Goblin observation counters and last-observation metadata from `session-info.txt`
 - Debug package manifest reports Goblin Evidence missing-template state from the latest log
 - Debug package root includes `goblin-tracker-review.html` and `goblin-tracker-summary.txt` for release/export package review
+- Debug package root includes `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt` so package review starts with summary, timeline, and evidence-health context
 - `goblin-tracker-review.html` links to the manifest, route summary, latest logs, screenshots, GoblinEvidence images, Next Tests metadata, and live decision/encounter evidence when present
+- `goblin-tracker-review.html` links to the root analysis, timeline, and evidence-health files before lower-level evidence
 - Debug package includes `goblin-tracker-next-tests.txt` when the VS Debug `Next Tests` tab has been initialized before package creation
 - Debug package root `goblin-tracker-summary.txt` reports live evidence artifact counts for decision bundles, encounter captures, and observation diagnostics
 - `Scripts\Create Debug Package.bat` delegates to `Scripts\create-debug-package.ps1` and is the only user-facing review/export launcher for VS Debug and Release

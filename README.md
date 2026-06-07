@@ -187,7 +187,7 @@ Debug Mode is off by default for normal release use. When enabled from Settings,
 
 Debug and release artifacts keep evidence useful but bounded by default. VS Debug troubleshooting artifacts and release/debug-mode artifacts use a 7-day age-retention window. Success screenshots are excluded from release/export packages unless explicitly requested, failure screenshot groups and current-session `debug-screenshots` are capped to recent samples, and Goblin Evidence crops/event screenshots use their own count and package limits. Successful Battle.net app-click launches do not create false failure screenshots for manual-play suspicion or brief post-launch Battle.net visibility. The package manifest reports included and excluded screenshot counts and sizes.
 
-For both VS Debug and Release troubleshooting, use the single ZIP export path: `Scripts\Create Debug Package.bat`, which launches `Scripts\create-debug-package.ps1`. The batch script self-discovers the runtime/package roots, writes the ZIP under `DebugPackages`, and includes the latest logs, manifests, route summaries, Goblin Tracker summaries, Next Tests metadata when available, screenshots, GoblinEvidence, encounter captures, decision bundles, and observation diagnostics. Closing the VS Debug form is intentionally quiet and does not generate packages or loose review files.
+For both VS Debug and Release troubleshooting, use the single ZIP export path: `Scripts\Create Debug Package.bat`, which launches `Scripts\create-debug-package.ps1`. The batch script self-discovers the runtime/package roots, writes the ZIP under `DebugPackages`, and includes the latest logs, manifests, route summaries, Goblin Tracker summaries, Next Tests metadata when available, screenshots, GoblinEvidence, encounter captures, decision bundles, observation diagnostics, and root analysis files: `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt`. Closing the VS Debug form is intentionally quiet and does not generate packages or loose review files.
 
 Release and Visual Studio Debug use a taller Goblin Tracker group so the evidence and Last Observation fields remain readable. Release-user launches keep diagnostic tabs hidden until Debug Mode is enabled.
 
@@ -197,7 +197,7 @@ Debug tooling includes:
 - Optional debug screenshot retention.
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
-- Root Goblin Tracker review index and summary, Next Tests metadata, encounter captures, decision bundles, and observation diagnostics collected by the package batch when GoblinEvidence is available.
+- Root debug package analysis, Goblin Tracker timeline, Goblin Evidence health report, Goblin Tracker review index and summary, Next Tests metadata, encounter captures, decision bundles, and observation diagnostics collected by the package batch when GoblinEvidence is available.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is a separate opt-in gate and defaults off.
 - Age-based debug artifact retention: 7 days for VS Debug troubleshooting folders and release/debug-mode artifacts, plus count-based GoblinEvidence retention under `Debug\GoblinEvidence` defaulting to the newest 250 files and bounded ObservationDiagnostics crop samples in debug packages.
@@ -209,7 +209,7 @@ Generate a debug package by double-clicking `Scripts\Create Debug Package.bat`. 
 powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
 
-Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample so packages remain compact while still showing the latest scanner evidence.
+Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample so packages remain compact while still showing the latest scanner evidence. Optional focused helper scripts are available under `Scripts\` for package analysis, timeline generation, evidence-health checks, and local development verification, but normal test handoff still requires only the batch-created ZIP.
 
 ## Release v1.4
 
