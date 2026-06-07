@@ -34,6 +34,11 @@ Run("GoblinEvidence template discovery finds source image set", TestGoblinEviden
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
 Run("Goblin replay fixture frame source reaches candidate detection", TestGoblinReplayFixtureFrameSourceReachesCandidateDetection);
 Run("Goblin replay explicit fixture runner detects saved encounter frames", TestGoblinReplayExplicitFixtureRunnerDetectsSavedEncounterFrames);
+Run("Goblin replay suppresses Moon Clan Level 1 evidence after Level 2 transition", TestGoblinReplaySuppressesMoonClanLevelOneEvidenceAfterLevelTwoTransition);
+Run("Goblin replay suppresses Battlefields journal history evidence", TestGoblinReplaySuppressesBattlefieldsJournalHistoryEvidence);
+Run("Goblin replay capture folder loader suppresses old area evidence after transition", TestGoblinReplayCaptureFolderLoaderSuppressesOldAreaEvidenceAfterTransition);
+Run("Goblin replay capture folder loader suppresses journal history rows", TestGoblinReplayCaptureFolderLoaderSuppressesJournalHistoryRows);
+Run("Goblin replay capture folder loader reports missing folders clearly", TestGoblinReplayCaptureFolderLoaderReportsMissingFoldersClearly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
 Run("VS Debug diagnostics omit next test steps tab", TestVsDebugDiagnosticsOmitNextTestStepsTab);
@@ -1042,6 +1047,258 @@ static void TestGoblinReplayExplicitFixtureRunnerDetectsSavedEncounterFrames()
     }
 }
 
+static void TestGoblinReplaySuppressesMoonClanLevelOneEvidenceAfterLevelTwoTransition()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayMoonClan_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Treasure Goblin Killed Journal.png");
+        string journalFramePath = Path.Combine(fixtureRoot, "moon-clan-level-one-journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(13, 11);
+        template.Save(templatePath);
+        SaveFixtureFrame(journalFramePath, 160, 340, template, new Point(24, 300));
+
+        DateTime startUtc = new(2026, 6, 7, 12, 0, 0, DateTimeKind.Utc);
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitScenarioForHarness(
+            "Moon Clan Level 1 stale into Level 2",
+            [
+                new GoblinReplayFixtureStep(
+                    "Level 1 fresh killed line",
+                    new GoblinReplayFixture("level one journal", journalFramePath, null),
+                    "Cave Of The Moon Clan Level 1",
+                    startUtc),
+                new GoblinReplayFixtureStep(
+                    "Level 2 sees old Level 1 line",
+                    new GoblinReplayFixture("level two old journal", journalFramePath, null),
+                    "Cave Of The Moon Clan Level 2",
+                    startUtc.AddSeconds(20)),
+            ],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(2, result.Steps.Count, "Moon Clan replay should evaluate both fixture steps");
+        AssertTrue(result.Steps[0].Counted, "fresh Level 1 fixture evidence should count in Level 1");
+        AssertEqual("Eligible", result.Steps[0].Reason, "fresh Level 1 fixture evidence should be eligible");
+        AssertFalse(result.Steps[1].Counted, "old Level 1 fixture evidence must not count as Level 2");
+        AssertEqual("StaleEvidence", result.Steps[1].Reason, "old Level 1 fixture evidence should suppress as stale after Level 2 transition");
+        AssertEqual("JournalKilledIgnoredStale", result.Steps[1].FreshnessReason, "Level 2 replay should use the journal killed stale-area reason");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureStepResult", StringComparison.Ordinal) && line.Contains("areaKey=Cave Of The Moon Clan Level 2", StringComparison.Ordinal) && line.Contains("staleFreshReason=JournalKilledIgnoredStale", StringComparison.Ordinal)), "Moon Clan replay should log the stale Level 2 step clearly");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplaySuppressesBattlefieldsJournalHistoryEvidence()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayBattlefields_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Odious Collector Killed Journal.png");
+        string activeJournalFramePath = Path.Combine(fixtureRoot, "fields-active-journal.png");
+        string historyJournalFramePath = Path.Combine(fixtureRoot, "battlefields-history-journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(15, 11);
+        template.Save(templatePath);
+        SaveFixtureFrame(activeJournalFramePath, 180, 340, template, new Point(30, 300));
+        SaveFixtureFrame(historyJournalFramePath, 180, 120, template, new Point(30, 32));
+
+        DateTime startUtc = new(2026, 6, 7, 13, 0, 0, DateTimeKind.Utc);
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitScenarioForHarness(
+            "Battlefields journal history stale row",
+            [
+                new GoblinReplayFixtureStep(
+                    "Fields of Slaughter fresh journal",
+                    new GoblinReplayFixture("fields active journal", activeJournalFramePath, null),
+                    "Fields of Slaughter",
+                    startUtc),
+                new GoblinReplayFixtureStep(
+                    "Battlefields journal history row",
+                    new GoblinReplayFixture("battlefields history journal", historyJournalFramePath, null),
+                    "Battlefields",
+                    startUtc.AddSeconds(15)),
+            ],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(2, result.Steps.Count, "Battlefields replay should evaluate both fixture steps");
+        AssertTrue(result.Steps[0].Counted, "fresh Fields of Slaughter journal evidence should count before the area transition");
+        AssertFalse(result.Steps[1].Counted, "journal history row must not count after moving to Battlefields");
+        AssertEqual("JournalCandidateIgnoredHistoryRow", result.Steps[1].Reason, "Battlefields history replay should keep the production history-row suppression reason");
+        AssertEqual("JournalCandidateIgnoredHistoryRow", result.Steps[1].FreshnessReason, "Battlefields history replay should identify the stale/fresh reason");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureStepResult", StringComparison.Ordinal) && line.Contains("areaKey=Battlefields", StringComparison.Ordinal) && line.Contains("staleFreshReason=JournalCandidateIgnoredHistoryRow", StringComparison.Ordinal)), "Battlefields replay should log the history-row suppression clearly");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayCaptureFolderLoaderSuppressesOldAreaEvidenceAfterTransition()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayCaptureMoonClan_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Rainbow Goblin Killed Journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(14, 12);
+        template.Save(templatePath);
+
+        DateTime startUtc = new(2026, 6, 7, 16, 0, 0, DateTimeKind.Utc);
+        string levelOneCapture = CreateReplayCaptureFolder(
+            fixtureRoot,
+            "MoonClanLevel1Capture",
+            "GoblinEncounter_20260607_160000_000_AutomaticObservation_Journal_RainbowGoblin_CaveOfTheMoonClanLevel1",
+            "Cave Of The Moon Clan Level 1",
+            startUtc,
+            template,
+            new Point(24, 300),
+            180,
+            340);
+        string levelTwoCapture = CreateReplayCaptureFolder(
+            fixtureRoot,
+            "MoonClanLevel2OldVisibleCapture",
+            "GoblinEncounter_20260607_160020_000_AutomaticObservation_Journal_RainbowGoblin_CaveOfTheMoonClanLevel2",
+            "Cave Of The Moon Clan Level 2",
+            startUtc.AddSeconds(20),
+            template,
+            new Point(24, 300),
+            180,
+            340);
+
+        List<string> replayLogs = [];
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitCaptureFoldersForHarness(
+            "Capture folder Moon Clan Level 1 stale into Level 2",
+            [
+                new GoblinReplayCaptureFolderStep("Level 1 real capture", levelOneCapture),
+                new GoblinReplayCaptureFolderStep("Level 2 old visible real capture", levelTwoCapture),
+            ],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(2, result.CaptureLoads.Count, "capture-folder replay should load both real-style folders");
+        AssertTrue(result.CaptureLoads.All(load => load.Loaded), "both capture folders should load cleanly");
+        AssertEqual(2, result.Steps.Count, "capture-folder replay should evaluate both loaded steps");
+        AssertTrue(result.Steps[0].Counted, "fresh Level 1 capture evidence should count in Level 1");
+        AssertFalse(result.Steps[1].Counted, "old Level 1 capture evidence must not count after Level 2 transition");
+        AssertEqual("StaleEvidence", result.Steps[1].Reason, "old capture evidence should suppress as stale after area transition");
+        AssertEqual("JournalKilledIgnoredStale", result.Steps[1].FreshnessReason, "capture-folder replay should reuse the shared journal killed stale-area reason");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayCaptureFolderLoaded", StringComparison.Ordinal) && line.Contains("areaKey=Cave Of The Moon Clan Level 2", StringComparison.Ordinal)), "capture-folder loader should log the resolved Level 2 area");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureStepResult", StringComparison.Ordinal) && line.Contains("staleFreshReason=JournalKilledIgnoredStale", StringComparison.Ordinal)), "capture-folder replay should log the stale decision");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayCaptureFolderLoaderSuppressesJournalHistoryRows()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayCaptureBattlefields_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Treasure Goblin Killed Journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(16, 12);
+        template.Save(templatePath);
+
+        DateTime startUtc = new(2026, 6, 7, 17, 0, 0, DateTimeKind.Utc);
+        string fieldsCapture = CreateReplayCaptureFolder(
+            fixtureRoot,
+            "FieldsActiveCapture",
+            "GoblinEncounter_20260607_170000_000_AutomaticObservation_Journal_TreasureGoblin_FieldsOfSlaughter",
+            "Fields of Slaughter",
+            startUtc,
+            template,
+            new Point(30, 300),
+            180,
+            340);
+        string battlefieldsCapture = CreateReplayCaptureFolder(
+            fixtureRoot,
+            "BattlefieldsHistoryCapture",
+            "GoblinCapture_20260607_170015_000_VsDebugCaptureButton_Battlefields",
+            "Battlefields",
+            startUtc.AddSeconds(15),
+            template,
+            new Point(30, 32),
+            180,
+            120);
+
+        List<string> replayLogs = [];
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitCaptureFoldersForHarness(
+            "Capture folder Battlefields journal history row",
+            [
+                new GoblinReplayCaptureFolderStep("Fields active capture", fieldsCapture),
+                new GoblinReplayCaptureFolderStep("Battlefields history capture", battlefieldsCapture),
+            ],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(2, result.CaptureLoads.Count, "capture-folder history replay should load both folders");
+        AssertTrue(result.CaptureLoads.All(load => load.Loaded), "history replay capture folders should load cleanly");
+        AssertEqual(2, result.Steps.Count, "history replay should evaluate both loaded steps");
+        AssertTrue(result.Steps[0].Counted, "active Fields journal row should count before the transition");
+        AssertFalse(result.Steps[1].Counted, "Battlefields journal history row must not count");
+        AssertEqual("JournalCandidateIgnoredHistoryRow", result.Steps[1].Reason, "history-row replay should preserve the production suppression reason");
+        AssertEqual("JournalCandidateIgnoredHistoryRow", result.Steps[1].FreshnessReason, "history-row replay should identify the stale/fresh reason");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayCaptureFolderLoaded", StringComparison.Ordinal) && line.Contains("fixture=GoblinCapture_20260607_170015_000_VsDebugCaptureButton_Battlefields", StringComparison.Ordinal)), "loader should understand manual-capture style prefixes");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayCaptureFolderLoaderReportsMissingFoldersClearly()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayCaptureMissing_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string missingCaptureFolder = Path.Combine(fixtureRoot, "MissingCaptureFolder");
+        List<string> replayLogs = [];
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitCaptureFoldersForHarness(
+            "Capture folder missing case",
+            [new GoblinReplayCaptureFolderStep("Missing capture", missingCaptureFolder, "Battlefields", new DateTime(2026, 6, 7, 18, 0, 0, DateTimeKind.Utc))],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(1, result.CaptureLoads.Count, "missing-folder replay should return one load result");
+        AssertFalse(result.CaptureLoads[0].Loaded, "missing capture folder should not load");
+        AssertEqual("CaptureFolderMissing", result.CaptureLoads[0].Reason, "missing capture folder should report a clear harness reason");
+        AssertEqual(0, result.Steps.Count, "missing capture folders should not create replay steps");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayCaptureFolderSkipped", StringComparison.Ordinal) && line.Contains("reason=CaptureFolderMissing", StringComparison.Ordinal)), "missing capture folder should be logged clearly");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
 static Bitmap CreateFixturePatternBitmap(int width, int height)
 {
     Bitmap bitmap = new(width, height);
@@ -1057,6 +1314,55 @@ static Bitmap CreateFixturePatternBitmap(int width, int height)
     }
 
     return bitmap;
+}
+
+static void SaveFixtureFrame(string path, int width, int height, Bitmap template, Point matchPoint)
+{
+    using Bitmap frame = new(width, height);
+    using Graphics graphics = Graphics.FromImage(frame);
+    graphics.Clear(Color.Black);
+    graphics.DrawImageUnscaled(template, matchPoint);
+    frame.Save(path);
+}
+
+static string CreateReplayCaptureFolder(
+    string root,
+    string folderName,
+    string prefix,
+    string areaKey,
+    DateTime timestampUtc,
+    Bitmap journalTemplate,
+    Point journalMatchPoint,
+    int journalFrameWidth,
+    int journalFrameHeight)
+{
+    string folder = Path.Combine(root, folderName);
+    Directory.CreateDirectory(folder);
+    string journalPath = Path.Combine(folder, $"{prefix}_Journal.png");
+    string minimapPath = Path.Combine(folder, $"{prefix}_Minimap.png");
+    string metadataPath = Path.Combine(folder, $"{prefix}_Metadata.txt");
+
+    SaveFixtureFrame(journalPath, journalFrameWidth, journalFrameHeight, journalTemplate, journalMatchPoint);
+    using (Bitmap minimap = new(24, 24))
+    {
+        using Graphics graphics = Graphics.FromImage(minimap);
+        graphics.Clear(Color.Black);
+        minimap.Save(minimapPath);
+    }
+
+    File.WriteAllLines(metadataPath,
+    [
+        "Goblin Encounter Debug Capture",
+        $"CreatedUtc={timestampUtc:O}",
+        $"AreaKey={areaKey}",
+        $"DisplayLocation={areaKey}",
+        $"JournalPath={journalPath}",
+        $"MinimapPath={minimapPath}",
+    ]);
+    File.SetLastWriteTimeUtc(journalPath, timestampUtc);
+    File.SetLastWriteTimeUtc(minimapPath, timestampUtc);
+    File.SetLastWriteTimeUtc(metadataPath, timestampUtc);
+    return folder;
 }
 
 static string TouchGoblinEvidenceFile(string path, DateTime lastWriteTimeUtc)
@@ -2723,6 +3029,7 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
 
     string repoRoot = FindRepositoryRootForTests();
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
     string signatureMethod = ExtractMethodBody(evidenceSource, "private string PortJournalEvidenceLineSignature");
     AssertTrue(evidenceSource.Contains("PortJournalEvidenceLineSignature", StringComparison.Ordinal), "journal freshness should use a line signature, not current area as the freshness key");
     AssertTrue(evidenceSource.Contains("JournalEngagedIgnoredAreaChanged", StringComparison.Ordinal), "Engaged journal lines first seen in another area should log an area-change suppression");
@@ -2733,8 +3040,9 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     AssertTrue(evidenceSource.Contains("JournalNameValidationBelowThreshold", StringComparison.Ordinal), "journal name validation failures should be diagnosable in logs");
     AssertTrue(evidenceSource.Contains("GoblinJournalFreshnessPolicy.EngagedIsFresh", StringComparison.Ordinal), "Engaged journal evidence should use area-strict freshness before being accepted");
     AssertFalse(signatureMethod.Contains("PortDisplayLocation", StringComparison.Ordinal), "journal line freshness signatures must not include current area, or old visible lines can become fresh after moving");
-    AssertTrue(signatureMethod.Contains("LineBucket", StringComparison.Ordinal), "journal line freshness signatures should include a coarse row bucket so later legitimate same-template lines can be fresh");
-    AssertTrue(signatureMethod.Contains("PortJournalEvidenceLineBucket(match.MatchPoint)", StringComparison.Ordinal), "journal line freshness should bucket the match row instead of using an exact volatile point");
+    AssertTrue(signatureMethod.Contains("GoblinJournalEvidencePolicy.LineSignature", StringComparison.Ordinal), "journal freshness should use the shared line-signature policy");
+    AssertTrue(evidenceModelSource.Contains("LineBucket(match.MatchPoint)", StringComparison.Ordinal), "journal line freshness signatures should include a coarse row bucket so later legitimate same-template lines can be fresh");
+    AssertTrue(evidenceModelSource.Contains("Math.Max(0, matchPoint.Y) / 32", StringComparison.Ordinal), "journal line freshness should bucket the match row instead of using an exact volatile point");
     AssertFalse(signatureMethod.Contains("ScreenMatchPoint", StringComparison.Ordinal), "journal line freshness signatures should not use absolute screen coordinates");
     AssertFalse(evidenceSource.Contains("nowUtc - state.LastSeenUtc > GoblinJournalEvidenceFreshWindow", StringComparison.Ordinal), "Killed journal first-seen state should not reset just because the same visible line matched again later");
 }

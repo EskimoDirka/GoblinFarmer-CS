@@ -1422,4 +1422,31 @@ namespace GoblinFarmer
                 IsFresh(killedState.FirstSeenUtc, nowUtc, freshnessWindow);
         }
     }
+
+    internal static class GoblinJournalEvidencePolicy
+    {
+        public const int ActiveFeedMinimumY = 256;
+
+        public static string LineSignature(
+            GoblinEvidenceTemplateRequirement template,
+            string goblinType,
+            GoblinEvidenceTemplateMatch match)
+        {
+            return string.Join("|",
+                template.Kind,
+                GoblinTypeNormalizer.Normalize(goblinType),
+                template.FileName,
+                $"LineBucket={LineBucket(match.MatchPoint)}");
+        }
+
+        public static int LineBucket(System.Drawing.Point matchPoint)
+        {
+            return Math.Max(0, matchPoint.Y) / 32;
+        }
+
+        public static bool AppearsInActiveFeed(GoblinEvidenceTemplateMatch match)
+        {
+            return match.MatchPoint.Y >= ActiveFeedMinimumY;
+        }
+    }
 }

@@ -8,7 +8,7 @@ namespace GoblinFarmer
     public partial class frmMain
     {
         private const int GoblinEvidenceScanIntervalMs = 500;
-        private const int GoblinJournalActiveFeedMinimumY = 256;
+        private const int GoblinJournalActiveFeedMinimumY = GoblinJournalEvidencePolicy.ActiveFeedMinimumY;
         private const double GoblinJournalNameValidationThreshold = 0.80;
         private const int GoblinEvidenceObservationDiagnosticRetentionCount = 24;
         private static readonly TimeSpan GoblinEvidenceCooldown = TimeSpan.FromSeconds(10);
@@ -755,21 +755,17 @@ namespace GoblinFarmer
             string goblinType,
             GoblinEvidenceTemplateMatch match)
         {
-            return string.Join("|",
-                template.Kind,
-                goblinType,
-                template.FileName,
-                $"LineBucket={PortJournalEvidenceLineBucket(match.MatchPoint)}");
+            return GoblinJournalEvidencePolicy.LineSignature(template, goblinType, match);
         }
 
         private static int PortJournalEvidenceLineBucket(Point matchPoint)
         {
-            return Math.Max(0, matchPoint.Y) / 32;
+            return GoblinJournalEvidencePolicy.LineBucket(matchPoint);
         }
 
         private static bool PortJournalEvidenceAppearsInActiveFeed(GoblinEvidenceTemplateMatch match)
         {
-            return match.MatchPoint.Y >= GoblinJournalActiveFeedMinimumY;
+            return GoblinJournalEvidencePolicy.AppearsInActiveFeed(match);
         }
 
         private void PortSuppressJournalEvidenceAfterHistoryInput(string reason)
