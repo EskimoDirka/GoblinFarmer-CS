@@ -2008,6 +2008,8 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(evidenceSource.Contains("PortGoblinEvidenceSignature(candidate)", StringComparison.Ordinal), "journal/minimap candidates should carry a stable evidence signature");
     AssertTrue(evidenceSource.Contains("PortGoblinEvidenceNoteValue(candidate.Notes, \"Template\")", StringComparison.Ordinal), "evidence signatures should include the template name");
     AssertTrue(evidenceSource.Contains("PortGoblinEvidenceNoteValue(candidate.Notes, \"Kind\")", StringComparison.Ordinal), "evidence signatures should include the evidence kind");
+    AssertTrue(evidenceSource.Contains("PortGoblinEvidenceJournalLineBucket(candidate.Notes)", StringComparison.Ordinal), "journal evidence signatures should include a stable journal-row bucket");
+    AssertTrue(sessionStatsSource.Contains("GoblinAreaResolver.NormalizedKey(observation.AreaKey)", StringComparison.Ordinal), "automatic evidence signatures should be scoped by resolved area key");
     AssertFalse(ExtractMethodBody(evidenceSource, "private static string PortGoblinEvidenceSignature").Contains("MatchPoint", StringComparison.Ordinal), "evidence signatures should not include volatile match points");
     AssertFalse(ExtractMethodBody(evidenceSource, "private static string PortGoblinEvidenceSignature").Contains("candidate.Notes.Trim()", StringComparison.Ordinal), "evidence signatures should not include the whole diagnostic note string");
     AssertTrue(autoCountMethod.IndexOf("portGoblinAutoCountEvidenceBySignature[autoEvidenceKey] = evidenceState", StringComparison.Ordinal) < autoCountMethod.IndexOf("AutomaticCountingDisabled", StringComparison.Ordinal), "auto-count evidence should be remembered before the disabled gate returns");
@@ -2048,6 +2050,8 @@ static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdateSkippedPreserved", StringComparison.Ordinal), "suppressed stale cross-area observations should not overwrite the displayed Last Observation");
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdateSkippedDuringManualHold", StringComparison.Ordinal), "scanner observation updates should not overwrite accepted manual counts during the display hold");
     AssertTrue(sessionStatsSource.Contains("PortManualCountDisplayHoldActive", StringComparison.Ordinal), "manual count display hold priority should be shared by clear and update paths");
+    AssertTrue(sessionStatsSource.Contains("PortClearDisplayedGoblinObservationAfterConfirmedAreaChange", StringComparison.Ordinal), "confirmed area changes should clear stale previous-area Last Observation displays");
+    AssertTrue(sessionStatsSource.Contains("ConfirmedAreaChanged", StringComparison.Ordinal), "confirmed area changes should log Last Observation area synchronization");
 }
 
 static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
@@ -2069,10 +2073,12 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
 
     string repoRoot = FindRepositoryRootForTests();
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
-    string signatureMethod = ExtractMethodBody(evidenceSource, "PortJournalEvidenceLineSignature");
+    string signatureMethod = ExtractMethodBody(evidenceSource, "private string PortJournalEvidenceLineSignature");
     AssertTrue(evidenceSource.Contains("PortJournalEvidenceLineSignature", StringComparison.Ordinal), "journal freshness should use a line signature, not current area as the freshness key");
     AssertFalse(signatureMethod.Contains("PortDisplayLocation", StringComparison.Ordinal), "journal line freshness signatures must not include current area, or old visible lines can become fresh after moving");
-    AssertFalse(signatureMethod.Contains("MatchPoint", StringComparison.Ordinal), "journal line freshness signatures must not include match point, or old visible lines can become fresh after journal scroll shifts");
+    AssertTrue(signatureMethod.Contains("LineBucket", StringComparison.Ordinal), "journal line freshness signatures should include a coarse row bucket so later legitimate same-template lines can be fresh");
+    AssertTrue(signatureMethod.Contains("PortJournalEvidenceLineBucket(match.MatchPoint)", StringComparison.Ordinal), "journal line freshness should bucket the match row instead of using an exact volatile point");
+    AssertFalse(signatureMethod.Contains("ScreenMatchPoint", StringComparison.Ordinal), "journal line freshness signatures should not use absolute screen coordinates");
     AssertFalse(evidenceSource.Contains("nowUtc - state.LastSeenUtc > GoblinJournalEvidenceFreshWindow", StringComparison.Ordinal), "Killed journal first-seen state should not reset just because the same visible line matched again later");
 }
 

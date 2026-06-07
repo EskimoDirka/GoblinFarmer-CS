@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Globalization;
 
 namespace GoblinFarmer
 {
@@ -438,7 +439,7 @@ namespace GoblinFarmer
             acceptedCandidate = null;
             DateTime nowUtc = DateTime.UtcNow;
             string goblinType = GoblinTypeNormalizer.Normalize(template.GoblinType);
-            string journalLineSignature = PortJournalEvidenceLineSignature(template, goblinType);
+            string journalLineSignature = PortJournalEvidenceLineSignature(template, goblinType, match);
             DateTime firstSeenUtc;
             string firstSeenAreaKey = "";
             GoblinJournalEngagedState? recentEngaged = null;
@@ -531,7 +532,7 @@ namespace GoblinFarmer
 
             if (template.Kind == GoblinEvidenceTemplateKind.JournalKilled)
             {
-                string killedSignature = PortJournalEvidenceLineSignature(template, goblinType);
+                string killedSignature = PortJournalEvidenceLineSignature(template, goblinType, match);
                 GoblinJournalKilledState killedState = PortRememberJournalKilledEvidence(killedSignature, goblinType, areaKey, nowUtc);
                 TimeSpan killedFirstSeenAge = nowUtc - killedState.FirstSeenUtc;
                 bool killedFreshInCurrentArea = GoblinJournalFreshnessPolicy.KilledIsFresh(
@@ -628,12 +629,19 @@ namespace GoblinFarmer
 
         private string PortJournalEvidenceLineSignature(
             GoblinEvidenceTemplateRequirement template,
-            string goblinType)
+            string goblinType,
+            GoblinEvidenceTemplateMatch match)
         {
             return string.Join("|",
                 template.Kind,
                 goblinType,
-                template.FileName);
+                template.FileName,
+                $"LineBucket={PortJournalEvidenceLineBucket(match.MatchPoint)}");
+        }
+
+        private static int PortJournalEvidenceLineBucket(Point matchPoint)
+        {
+            return Math.Max(0, matchPoint.Y) / 32;
         }
 
         private bool PortTryTouchStaleSuppressedJournalEvidence(string signature, DateTime nowUtc)
@@ -1149,12 +1157,34 @@ namespace GoblinFarmer
         {
             string templateName = PortGoblinEvidenceNoteValue(candidate.Notes, "Template");
             string evidenceKind = PortGoblinEvidenceNoteValue(candidate.Notes, "Kind");
+            string source = PortNormalizeGoblinObservationSource(candidate.Source);
+            string lineBucket = source.Equals("Journal", StringComparison.OrdinalIgnoreCase)
+                ? PortGoblinEvidenceJournalLineBucket(candidate.Notes)
+                : "";
             return string.Join("|",
                 candidate.Type,
-                PortNormalizeGoblinObservationSource(candidate.Source),
+                source,
                 GoblinTypeNormalizer.Normalize(candidate.GoblinType),
                 $"Template={templateName}",
-                $"Kind={evidenceKind}");
+                $"Kind={evidenceKind}",
+                $"LineBucket={lineBucket}");
+        }
+
+        private static string PortGoblinEvidenceJournalLineBucket(string notes)
+        {
+            string matchPoint = PortGoblinEvidenceNoteValue(notes, "MatchPoint");
+            if (string.IsNullOrWhiteSpace(matchPoint))
+            {
+                return "";
+            }
+
+            string[] parts = matchPoint.Split(',');
+            if (parts.Length < 2 || !int.TryParse(parts[1].Trim(), out int y))
+            {
+                return "";
+            }
+
+            return (Math.Max(0, y) / 32).ToString(CultureInfo.InvariantCulture);
         }
 
         private static string PortApplyMinimapColorDisambiguation(

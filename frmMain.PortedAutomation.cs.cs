@@ -888,7 +888,9 @@ namespace GoblinFarmer
             if (PortLocationIsAlreadyAtTarget(currentLocation, displayName))
             {
                 AppLogger.Info($"Already at target location: {displayName}");
+                string previousConfirmedLocation = portLastConfirmedLocation;
                 portLastConfirmedLocation = currentLocation;
+                PortClearDisplayedGoblinObservationAfterConfirmedAreaChange(previousConfirmedLocation, currentLocation, "AlreadyAtTargetAreaChanged");
                 PortSetAppStatus("Already At Target");
                 if (source.Equals("Button", StringComparison.OrdinalIgnoreCase))
                 {
@@ -1005,7 +1007,9 @@ namespace GoblinFarmer
             }
             if (arrived)
             {
+                string previousConfirmedLocation = portLastConfirmedLocation;
                 portLastConfirmedLocation = confirmedAfter;
+                PortClearDisplayedGoblinObservationAfterConfirmedAreaChange(previousConfirmedLocation, confirmedAfter, "TeleportConfirmedAreaChanged");
                 PortCaptureSuccessScreenshot("Teleport", $"TeleportConfirmed_{displayName}");
             }
             else if (verifyArrival && PortFailureCount() == failuresBeforeArrivalConfirmation)

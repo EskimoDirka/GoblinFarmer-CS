@@ -52,12 +52,14 @@
 - New Tristram suppresses with `GoblinCountSuppressed`, `reason=BlockedArea`, and a visible blocked-area notification
 - Manual-count blocked areas do not increment the counter and do not consume an area-count slot
 - Cave Of The Moon Clan Level 1 counts once and suppresses the second press as the same area
+- With Automatic Counting enabled, Cave Of The Moon Clan Level 1 and Cave Of The Moon Clan Level 2 can each count once in the same game when each level has fresh Journal or Minimap evidence
 - Cathedral Level 1 counts once and suppresses the second press as the same area
 - Cathedral Level 2 counts once and suppresses the second press as the same area
 - Western Channel Level 1 counts once and suppresses the second press as the same area
 - Western Channel Level 2 counts once and suppresses the second press as the same area
 - Eastern Channel Level 1 counts once and suppresses the second press as the same area
 - Eastern Channel Level 2 counts once and suppresses the second press as the same area
+- With Automatic Counting enabled, Eastern Channel Level 2 fresh Blood Thief evidence counts once and does not inherit stale Blood Thief evidence from a previous area
 - Caverns of Frost Level 1 counts once and suppresses the second press as the same area
 - Caverns of Frost Level 2 counts once and suppresses the second press as the same area
 - With Automatic Counting enabled, Caverns of Frost Level 1 and Level 2 can each count once, but Level 2 must use evidence first seen after Level 2 is detected, fresh minimap evidence, or another same-area candidate
@@ -69,6 +71,7 @@
 - Stinging Winds accepts goblin counts 1 and 2 in the same game
 - Stinging Winds suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Sewers of Caldeum, Ruined Cistern, Channel, Cave, Cathedral, and Battlefields subregions still resolve separately where expected and remain capped at one count per area per game unless explicitly blocked from manual counts
+- With Automatic Counting enabled, Battlefields fresh Treasure Goblin evidence counts once even if an older Treasure Goblin Journal template was seen earlier in the run
 - Cathedral Level 3 remains a default one-count area; a second manual `X` in the same game should suppress as a duplicate unless the log shows a different resolved area key or unknown fallback
 - Reset Stats clears goblin count, tracker active time, GPH, per-area count state, Goblin Evidence cooldowns, and Last Observation/manual observation state
 - New Game clears per-area count state and Goblin Evidence observation/cooldown state while preserving the current session tracker statistics
@@ -125,8 +128,9 @@
 - Stale visible Killed journal lines suppress with `JournalKilledIgnoredStale` after the freshness window and do not satisfy manual `X`
 - Killed journal freshness state tracks first-seen timestamp and first resolved area, and Reset Stats/New Game clear it
 - `JournalEngagedIgnoredStale` logs when an old visible Engaged journal line is beyond the freshness window
-- Stale visible Engaged/Killed journal line signatures are based on evidence kind, goblin type, and template file, not current area or match point
-- Re-detecting the same old visible Engaged/Killed journal line after moving areas or after a journal-row shift does not refresh first-seen time
+- Stale visible Engaged/Killed journal line signatures are based on evidence kind, goblin type, template file, and a coarse journal row `LineBucket`, not current area or absolute screen coordinates
+- Re-detecting the same old visible Engaged/Killed journal row after moving areas does not refresh first-seen time
+- A later legitimate same-template Journal match in a different journal row can become fresh evidence when it passes the normal freshness and duplicate guards
 - Stale visible Engaged journal line signatures suppress with throttled `JournalEngagedIgnoredStale` and do not produce eligible observations
 - `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
 - `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
@@ -141,6 +145,7 @@
 - After the short hold expires, no-candidate scanner scans preserve the last real goblin observation with `LastObservationClearSkipped preserveKind=LastObservationPersistent` instead of clearing the UI
 - Last Observation updates only when a new real goblin observation/count is accepted, or clears during Reset Stats/New Game/missing-template setup cleanup; stale cross-area journal repeats should not replace the displayed goblin
 - Last Observation clears with `LastObservationCleared reason=AreaChanged` when no-candidate scans occur after the current confirmed area changes away from the displayed observation area
+- Last Observation also clears after confirmed route/current-area changes from teleport confirmation, already-at-target, already-at-queued-destination, or route-end hotkey state updates
 - Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for reset/new-game or true cleanup states
 - `GoblinTracker.EnableObservationMode` controls scanner/diagnostic behavior only; `GoblinTracker.EnableAutomaticCounting` is the separate automatic-count gate and defaults to `false`
 - Startup logs report `EnableObservationMode`, `EnableAutomaticCounting`, effective `automaticCountingEnabled`, and `manualHotkeyOnlyCountPath`
@@ -155,7 +160,8 @@
 - Route button clicks log `ButtonClickReceived`, `ButtonClickQueued`, and `ButtonClickExecuting` so a briefly unresponsive manual route button can be diagnosed from the next package
 - Accepted route button clicks show a short no-activate `Teleport queued` notification, and button clicks that immediately short-circuit because the app is already at the target show/log `Already here`
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
-- Automatic-count evidence signatures are stable across confidence/match-point drift for the same visible Journal/Minimap template
+- Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
+- Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template
 - Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`
 - Reusing a recently auto-counted goblin type through Journal evidence in a different area suppresses with `GoblinAutoCountSuppressed reason=EncounterAlreadyAutoCounted`
 - Suppressed cross-area Journal repeats report `GoblinObservationCandidate ... wouldCount=False reason=EncounterAlreadyAutoCounted` and log `LastObservationUpdateSkippedPreserved` when an older visible line tries to overwrite the displayed Last Observation

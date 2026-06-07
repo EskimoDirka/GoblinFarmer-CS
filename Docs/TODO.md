@@ -87,7 +87,7 @@
 * [x] Allow manual `X` refresh to accept fresh same-area Killed-only journal evidence without enabling auto-count.
 * [x] Track first-seen/resolved-area state for Killed journal lines and suppress stale Killed lines.
 * [x] Review `GoblinFarmer_Debug_20260606_042740.zip` for stale journal reuse, Reset Stats cleanup, blocked-area priority, and town workflow timing.
-* [x] Make Engaged/Killed journal freshness signatures area-insensitive and match-point-insensitive so old visible journal text cannot refresh itself after moving areas or shifting rows.
+* [x] Harden Engaged/Killed journal freshness signatures so old visible journal text cannot refresh itself after moving areas.
 * [x] Review `GoblinFarmer_Debug_20260606_044942.zip` for proven stale-journal suppression and accepted manual-count Last Observation display sync.
 * [x] Publish accepted manual `X` counts into Last Observation display state and briefly preserve that display from no-candidate scanner clears.
 * [x] Review `GoblinFarmer_Debug_20260606_050819.zip` for accepted manual-count display hold behavior, stale/block/reset regressions, package size, and salvage timing.
@@ -147,8 +147,17 @@
 * [x] Add no-activate feedback for manual route button clicks and already-at-target button short-circuits so very fast PF2 button completions do not look unresponsive.
 * [x] Live-validate plain Ancient Waterway blocks Teleport Next to Stinging Winds while Eastern Channel Level 2 still allows Stinging Winds and Western Channel Level 2 still returns to Ancient Waterway.
 * [x] Review `GoblinFarmer_Debug_20260606_205029.zip` and confirm stale Caverns of Frost Level 1 Menagerist journal evidence did not auto-count after moving to Level 2.
+* [x] Review `GoblinFarmer_Debug_20260607_050158.zip` for PF2 two-count validation, Cave Of The Moon Clan Level 2 missed auto-count, stale Last Observation after teleport, Eastern Channel Level 2 and Battlefields missed goblins, Malevolent Tormentor area bounce, and notification latency.
+* [x] Scope automatic-count evidence signatures by resolved area so fresh evidence in separate route subregions can count independently without weakening same-area duplicate suppression.
+* [x] Add coarse journal row `LineBucket` identity to journal freshness/evidence signatures so later legitimate same-template journal rows can become fresh while the same old visible row remains stale across area moves.
+* [x] Clear displayed Last Observation on confirmed route/current-area changes from teleport confirmation, already-at-target, already-at-queued-destination, and route-end hotkey state updates.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
+* [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
+* [ ] Live-validate Eastern Channel Level 2 fresh Blood Thief evidence auto-counts once and does not inherit stale Blood Thief evidence from a previous area.
+* [ ] Live-validate Battlefields fresh Treasure Goblin evidence auto-counts once even if an older Treasure Goblin journal template was seen earlier in the run.
+* [ ] Live-validate teleporting from Cathedral/Royal Crypts/Battlefields-style transitions clears previous-area Last Observation instead of showing stale goblin text.
+* [ ] Live-validate repeated Malevolent Tormentor journal evidence after moving between Battlefields and Rakkis Crossing does not overwrite the accepted Battlefields Last Observation or create stale display spam.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.

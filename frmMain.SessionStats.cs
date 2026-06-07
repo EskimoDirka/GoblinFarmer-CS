@@ -661,6 +661,7 @@ namespace GoblinFarmer
             return string.Join("|",
                 PortNormalizeGoblinObservationSource(observation.Source),
                 GoblinTypeNormalizer.Normalize(observation.GoblinType),
+                GoblinAreaResolver.NormalizedKey(observation.AreaKey),
                 normalizedSignature);
         }
 
@@ -1009,6 +1010,26 @@ namespace GoblinFarmer
 
             AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(normalizedReason)} previousGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} previousAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} previousSource={PortLogField(previousObservation?.Source ?? "")} previousStatus={PortLogField(previousStatus)} currentAreaKey={PortLogField(currentAreaKey)} areaChanged={areaChanged}");
             PortUpdateGoblinTrackerStats();
+        }
+
+        private void PortClearDisplayedGoblinObservationAfterConfirmedAreaChange(
+            string previousConfirmedLocation,
+            string currentConfirmedLocation,
+            string reason)
+        {
+            if (string.IsNullOrWhiteSpace(currentConfirmedLocation) ||
+                string.Equals(
+                    GoblinAreaResolver.NormalizedKey(previousConfirmedLocation),
+                    GoblinAreaResolver.NormalizedKey(currentConfirmedLocation),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            AppLogger.Info(
+                $"GoblinTracker: ConfirmedAreaChanged previous={PortLogField(PortDisplayLocation(previousConfirmedLocation))} " +
+                $"current={PortLogField(PortDisplayLocation(currentConfirmedLocation))} reason={PortLogField(reason)}");
+            PortMarkGoblinObservationNoCurrent(reason);
         }
 
         private string PortCurrentDisplayedObservationAreaKey()

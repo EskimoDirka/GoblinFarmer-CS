@@ -110,8 +110,10 @@ namespace GoblinFarmer
                 buttonLocation = queuedTarget;
             }
 
+            string previousConfirmedLocation = portLastConfirmedLocation;
             nextTarget = PortNextTeleportForConfirmedLocation(queuedTarget, freshRawLocation);
             portLastConfirmedLocation = freshRawLocation;
+            PortClearDisplayedGoblinObservationAfterConfirmedAreaChange(previousConfirmedLocation, freshRawLocation, "AlreadyAtQueuedDestinationAreaChanged");
             portLastTeleportKey = PortLocationKey(buttonLocation);
             portQueuedTeleportKey = PortLocationKey(nextTarget);
             portLastRouteDecisionOutput = PortDisplayLocation(nextTarget);
@@ -152,6 +154,7 @@ namespace GoblinFarmer
             }
 
             portLastConfirmedLocation = freshRawLocation;
+            PortClearDisplayedGoblinObservationAfterConfirmedAreaChange(previousConfirmedLocation, freshRawLocation, "RouteEndGuardAreaChanged");
             portLastTeleportKey = PortLocationKey(buttonLocation);
             portQueuedTeleportKey = PortLocationKey(recomputedTarget);
             portLastRouteDecisionOutput = PortDisplayLocation(recomputedTarget);

@@ -510,7 +510,9 @@ namespace GoblinFarmer
                     string freshRouteEndButtonLocation = PortGetButtonLocationForDetectedLocation(freshRawLocation);
                     if (!string.IsNullOrWhiteSpace(freshRouteEndButtonLocation))
                     {
+                        string previousConfirmedLocation = portLastConfirmedLocation;
                         portLastConfirmedLocation = freshRawLocation;
+                        PortClearDisplayedGoblinObservationAfterConfirmedAreaChange(previousConfirmedLocation, freshRawLocation, "RouteEndAcceptedAreaChanged");
                         portLastTeleportKey = PortLocationKey(freshRouteEndButtonLocation);
                         portQueuedTeleportKey = "";
                         portLastRouteDecisionOutput = "Unknown";
