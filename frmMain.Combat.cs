@@ -152,7 +152,14 @@ namespace GoblinFarmer
                 cts?.Dispose();
                 ClipCursor(IntPtr.Zero);
                 DebugManager.Session.EndCombatActive();
-                PortWriteSessionMetadata(logSuccess: false);
+                if (portApplicationClosing)
+                {
+                    AppLogger.Info($"CombatStopSessionMetadataSkipped: reason={PortLogField(reason)}; appClosing=True; class={PortLogField(stoppedClass)}");
+                }
+                else
+                {
+                    PortWriteSessionMetadata(logSuccess: false);
+                }
                 SetCombatStatus("Idle");
                 SetAppStatus($"Combat Stopped ({reason})");
                 AddWorkflowStep($"Combat stopped ({reason})");

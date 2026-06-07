@@ -14,10 +14,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Supported manual ZIP export path for release/export troubleshooting.
-# Normal app diagnostics stay in DebugManager/runtime folders; VS Debug Goblin
-# Tracker review files are generated automatically as loose files under
-# Debug\GoblinReplayReview\Latest.
+# Supported debug ZIP export path for both VS Debug and Release.
+# Normal app diagnostics stay in DebugManager/runtime folders; this script is the
+# single intentional review package workflow and app shutdown does not create
+# packages or loose review exports.
 
 function Write-Step {
     param([string]$Text)
@@ -1621,7 +1621,7 @@ function New-GoblinTrackerReviewIndex {
         "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#202124}li{margin:4px 0}code{background:#f6f8fa;padding:2px 4px}</style>",
         "</head><body>",
         "<h1>Goblin Tracker Review</h1>",
-        "<p>Open <code>goblin-tracker-summary.txt</code> first, then the latest replay HTML and changed-decision summary.</p>",
+        "<p>Open <code>goblin-tracker-summary.txt</code> first. Replay links are included when replay artifacts already exist.</p>",
         "<ul>",
         $links,
         "</ul>",
@@ -2169,6 +2169,9 @@ try {
         @(
             "GoblinFarmer Debug Package",
             "Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')",
+            "Debug workflow: Scripts\Create Debug Package.bat -> Scripts\create-debug-package.ps1",
+            "Review export path: single batch/PowerShell ZIP package for VS Debug and Release",
+            "App shutdown artifact creation: skipped by design",
             "Source root: $repoRoot",
             "Resolved runtime root: $resolvedRuntimeRoot",
             "Runtime root resolution: $($runtimeRootInfo.Resolution)",

@@ -163,12 +163,12 @@
 - Accepted route button clicks do not show the intrusive `Teleport queued` notification; they log `ButtonClickQueuedFeedbackSuppressed` instead
 - Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
 - In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
-- In VS Debug, there is no manual `Review Files` button or review-rule checkbox; close-time review metadata is generated automatically
-- Closing the VS Debug form writes `Debug\GoblinTrackerNextTests.txt` from the current `Next Tests` checkbox state and copies that metadata into `Debug\GoblinReplayReview\Latest`
-- Closing the VS Debug form creates no ZIP by default and writes `ZipCreated=False` in `goblin-replay-review-manifest.txt`
-- VS Debug loose review files include `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt`, replay log/HTML/summary/changed files, replay assets, decision bundles, latest log, and `session-info.txt` when available
+- In VS Debug, there is no manual `Review Files` button or review-rule checkbox; review exports are created only by `Scripts\Create Debug Package.bat`
+- The VS Debug `Next Tests` checklist writes `Debug\GoblinTrackerNextTests.txt` when the checklist is initialized or changed, so the batch package can include it
+- Closing the VS Debug form is a quiet shutdown path and should not create review files, replay files, screenshots, debug packages, or session markdown exports
+- The debug package ZIP includes `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt` when available, replay artifacts when present, decision bundles, latest log, route summaries, screenshots, GoblinEvidence, and `session-info.txt` when available
 - VS Debug accepted manual and automatic goblin counts save fullscreen, minimap, and journal encounter captures under `Debug\GoblinEvidence\EncounterCaptures`
-- VS Debug loose review files copy only the minimap and journal encounter captures and report excluded fullscreen captures in the manifest
+- Debug packages include bounded GoblinEvidence and encounter-capture samples and report included/excluded counts in the manifest
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
 - In VS Debug, the `Next Tests` tab is divided into clear sections: baseline already validated, must-test route blockers, if-encountered regressions, and safety/display checks
 - In VS Debug, the must-test route blockers are listed in route logic order: Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, followed by notification latency
@@ -193,8 +193,8 @@
 - Teleport Next accepted with no queued/next route target logs `Teleport Next hotkey ignored: no queued/next teleport` and shows a no-route notification instead of appearing broken
 
 ## Debug Package Evidence
-- VS Debug troubleshooting uses loose `Debug\GoblinReplayReview\Latest` files by default instead of a ZIP package
-- Release/export troubleshooting ZIP package creation remains available and should keep the package review index and manifest behavior below
+- VS Debug and Release troubleshooting use the single ZIP package workflow through `Scripts\Create Debug Package.bat`
+- The ZIP package should keep the package review index and manifest behavior below
 - Debug package includes latest log
 - Debug package includes `route-failure-summary.txt`
 - Debug package includes `debug-screenshot-manifest.txt`
@@ -220,12 +220,12 @@
 - Goblin replay package artifacts include `GoblinReplay_*_summary.txt`, `GoblinReplay_*_changed.txt`, and `GoblinReplay_*_bundles\...\decision.txt`
 - `GoblinReplay_*_summary.txt` groups replay decisions by area, goblin type, decision, and reason
 - `GoblinReplay_*_changed.txt` reports changed decisions compared with the previous replay or says none changed
-- `Scripts\Create Debug Package.bat` delegates to `Scripts\create-debug-package.ps1` and is the only user-facing manual ZIP export launcher
+- `Scripts\Create Debug Package.bat` delegates to `Scripts\create-debug-package.ps1` and is the only user-facing review/export launcher for VS Debug and Release
 - Debug package includes only a small recent sample from `Debug\GoblinEvidence\ObservationDiagnostics` and reports included/excluded observation crop counts
 - GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
 - Direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots are bounded by count and size; manifest reports included, excluded, and oversized event screenshot counts
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
-- VS Debug age retention deletes known troubleshooting artifacts older than 7 days from runtime/project debug roots, including logs, screenshots, sessions, debug packages, GoblinEvidence, and loose GoblinReplayReview files
+- VS Debug age retention deletes known troubleshooting artifacts older than 7 days from runtime/project debug roots, including logs, screenshots, sessions, debug packages, GoblinEvidence, and legacy loose GoblinReplayReview files
 - Release/debug-mode age retention deletes known generated artifacts older than 7 days
 
 ## Debug Manager / Session Summary

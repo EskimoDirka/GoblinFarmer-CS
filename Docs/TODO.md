@@ -162,18 +162,18 @@
 * [x] Update VS Debug `Next Tests` to route-ordered checkboxes so checked means tested and unchecked means not tested yet.
 * [x] Divide VS Debug `Next Tests` into current must-test route blockers, if-encountered regressions, safety/display checks, and review rule so old regression checks do not look like equal blockers.
 * [x] Review `GoblinFarmer_Debug_20260607_074714.zip`; confirmed Reset Stats cleared duplicate guard, auto-count evidence state, evidence observation state, and Last Observation.
-* [x] Remove VS Debug Goblin Tracker scenario text input fields; VS Debug form close now captures `Next Tests` checkbox state automatically without prompting.
-* [x] Replace default VS Debug Goblin replay ZIP creation with loose review files under `Debug\GoblinReplayReview\Latest`, while keeping release/export ZIP package creation available.
-* [x] Copy `Debug\GoblinTrackerNextTests.txt` and root `goblin-tracker-next-tests.txt` into the loose review folder so checked/unchecked test scenarios are reviewable without a ZIP.
-* [x] Remove the VS Debug `Review Files` button and `Review rule` checkbox so troubleshooting evidence is created automatically on form close.
-* [x] Save VS Debug accepted-count encounter captures for manual and automatic goblin counts: fullscreen, minimap crop, and journal crop under `Debug\GoblinEvidence\EncounterCaptures`, with only minimap/journal copied into loose review files.
+* [x] Remove VS Debug Goblin Tracker scenario text input fields; the `Next Tests` checkbox state now saves when the checklist initializes or changes without prompting.
+* [x] Consolidate VS Debug and Release troubleshooting around the single `Scripts\Create Debug Package.bat` ZIP export path.
+* [x] Save `Debug\GoblinTrackerNextTests.txt` when the VS Debug `Next Tests` checklist initializes or changes so checked/unchecked test scenarios are packaged by the batch workflow.
+* [x] Remove the VS Debug `Review Files` button and `Review rule` checkbox so troubleshooting evidence is exported only through the batch package workflow.
+* [x] Save VS Debug accepted-count encounter captures for manual and automatic goblin counts: fullscreen, minimap crop, and journal crop under `Debug\GoblinEvidence\EncounterCaptures`, with bounded package inclusion handled by the batch script.
 * [x] Change VS Debug generated-artifact age retention from 24 hours to 7 days.
 * [x] Make the combat hotkey cancel `Waiting For Location Confirmation` and start combat from the same hotkey press after the cancelled teleport workflow unwinds.
 * [x] Replace broad same-goblin-type journal replay suppression with exact evidence-row suppression, so stale visible rows cannot replay across areas but fresh same-type goblins in separate levels can count.
 * [x] Make Engaged/combined journal rows area-strict so a row first seen in Cave Of The Moon Clan Level 1 suppresses with `JournalEngagedIgnoredAreaChanged` if detected again on Level 2.
 * [x] Preserve the displayed Last Observation when incoming scanner updates are suppressed as stale, already counted, duplicate, or area-limit reached.
 * [x] Reduce the observation scanner interval to 750ms to improve count-notification responsiveness without lowering confidence thresholds.
-* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, then close the VS Debug form so loose review files are generated automatically after the run.
+* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, then click `Scripts\Create Debug Package.bat` so the newest ZIP in `DebugPackages` contains the run evidence.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
@@ -182,7 +182,7 @@
 * [ ] Live-validate Battlefields fresh Treasure Goblin evidence auto-counts once even if an older Treasure Goblin journal template was seen earlier in the run.
 * [ ] Live-validate teleporting from Cathedral/Royal Crypts/Battlefields-style transitions clears previous-area Last Observation instead of showing stale goblin text.
 * [ ] Live-validate repeated Malevolent Tormentor journal evidence after moving between Battlefields and Rakkis Crossing does not overwrite the accepted Battlefields Last Observation or create stale display spam.
-* [ ] Review the next auto-generated `Debug\GoblinReplayReview\Latest` loose review files for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
+* [ ] Review the next batch-generated debug package for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
 * [x] Consider adding a setting or quieter mode for route-button/Teleport queued notifications during Goblin Tracker validation.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.

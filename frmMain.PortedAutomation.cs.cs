@@ -110,6 +110,7 @@ namespace GoblinFarmer
         private volatile bool portRuntimeShiftHeld;
         private volatile bool portMonkSkill3Held;
         private volatile bool portDemonHunterRightHeldFromSafeRegion;
+        private volatile bool portApplicationClosing;
         private volatile bool portDiabloWasRunning;
         private volatile bool portTeleportNextHotkeyEnabled = true;
         private volatile bool portExitGameHotkeyEnabled = true;
@@ -564,6 +565,16 @@ namespace GoblinFarmer
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            portApplicationClosing = true;
+            AppLogger.Info(
+                "ShutdownCleanupStarted: " +
+                "source=FormClosing; " +
+                "debugArtifactCreationSkipped=True; " +
+                "skipped=ReviewArtifactExport|SessionSummaryExport|ShutdownScreenshots; " +
+                $"automationRunning={isAutomationRunning}; " +
+                $"combatRunning={portCombatRunning}; " +
+                $"combatStopping={portCombatStopping}; " +
+                $"vsDebugProfile={AppSettings.IsVsDebugProfile}");
             portHotkeysRunning = false;
             PortUninstallKeyboardHook();
             PortHideSplash();
@@ -574,8 +585,13 @@ namespace GoblinFarmer
             PortStopCombat("app closing");
             ForceReleaseAllRuntimeInputs("app closing");
             ClipCursor(IntPtr.Zero);
-            PortLogSessionSummary();
-            PortCreateGoblinReplayReviewFilesOnVsDebugClose();
+            PortLogSessionSummary(exportMarkdownSummary: false);
+            AppLogger.Info(
+                "ShutdownCleanupFinished: " +
+                "source=FormClosing; " +
+                "debugArtifactCreationSkipped=True; " +
+                "performed=HotkeyUninstall|InputRelease|ScannerStop|AutomationCancel|LogOnlySessionSummary; " +
+                "skipped=ReviewArtifactExport|SessionSummaryExport|ShutdownScreenshots");
             base.OnFormClosing(e);
         }
 
@@ -760,7 +776,14 @@ namespace GoblinFarmer
                 if (token.IsCancellationRequested)
                 {
                     DebugManager.Session.RecordWorkflowCancellation("Workflow cancelled");
-                    PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
+                    if (portApplicationClosing)
+                    {
+                        AppLogger.Info($"WorkflowCancelledShutdownArtifactSkipped: requested={PortLogField(work.Method.Name)}; artifact=FailureScreenshot; reason=AppClosing");
+                    }
+                    else
+                    {
+                        PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
+                    }
                     PortSetAppStatus("Cancelled");
                     AddWorkflowStep("Flow cancelled");
                 }
@@ -785,7 +808,14 @@ namespace GoblinFarmer
             catch (OperationCanceledException)
             {
                 DebugManager.Session.RecordWorkflowCancellation("Workflow cancelled by exception");
-                PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
+                if (portApplicationClosing)
+                {
+                    AppLogger.Info($"WorkflowCancelledShutdownArtifactSkipped: requested={PortLogField(work.Method.Name)}; artifact=FailureScreenshot; reason=AppClosingException");
+                }
+                else
+                {
+                    PortCaptureFailureScreenshot("WorkflowCancelled", "Workflow");
+                }
                 PortSetAppStatus("Cancelled");
                 AddWorkflowStep("Flow cancelled");
             }

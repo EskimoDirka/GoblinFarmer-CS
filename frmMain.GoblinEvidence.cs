@@ -1184,46 +1184,25 @@ namespace GoblinFarmer
             PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence, screenshotPath);
         }
 
-        private void PortCreateGoblinReplayReviewFilesOnVsDebugClose()
-        {
-            if (!AppSettings.IsVsDebugProfile)
-            {
-                return;
-            }
-
-            string reviewRoot = PortResolveGoblinReplayReviewRoot();
-            string nextTestsPath = PortWriteGoblinTrackerNextTestMetadata();
-            AppLogger.Info(
-                "GoblinReplayReviewFilesRequested: " +
-                "source=FormClosing; " +
-                $"vsDebugProfile={AppSettings.IsVsDebugProfile}; " +
-                $"vsDebugProjectRootConfigUsed={AppSettings.VsDebugProjectRootConfigUsed}; " +
-                $"configPath={PortLogField(AppSettings.ConfigPath)}; " +
-                $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
-                $"reviewRoot={PortLogField(reviewRoot)}; " +
-                $"nextTestsPath={PortLogField(nextTestsPath)}");
-
-            GoblinReplayReviewFilesResult reviewResult = PortCreateGoblinReplayReviewFilesForReview(nextTestsPath, "FormClosing");
-            AppLogger.Info(
-                "GoblinReplayReviewFilesFinished: " +
-                "source=FormClosing; " +
-                $"success={reviewResult.Success}; " +
-                $"reason={PortLogField(reviewResult.Reason)}; " +
-                $"reviewDirectory={PortLogField(reviewResult.ReviewDirectory)}; " +
-                $"summaryPath={PortLogField(reviewResult.SummaryPath)}; " +
-                $"indexPath={PortLogField(reviewResult.IndexPath)}");
-        }
-
         private GoblinReplayReviewFilesResult PortCreateGoblinReplayReviewFilesForReview(string nextTestsPath, string source = "Unknown")
         {
             GoblinReplaySummary? replaySummary = PortRunGoblinReplayForReview(source);
             return PortWriteGoblinReplayReviewFiles(replaySummary, nextTestsPath);
         }
 
-        private string PortWriteGoblinTrackerNextTestMetadata()
+        private string PortWriteGoblinTrackerNextTestMetadata(string source = "Unknown")
         {
             if (!AppSettings.IsVsDebugProfile)
             {
+                return "";
+            }
+
+            if (portApplicationClosing)
+            {
+                AppLogger.Info(
+                    "GoblinTrackerNextTestsSaveSkipped: " +
+                    "reason=AppClosing; " +
+                    $"source={PortLogField(source)}");
                 return "";
             }
 
@@ -1244,6 +1223,7 @@ namespace GoblinFarmer
             int uncheckedCount = portNextTestStepCheckboxes.Count - checkedCount;
             AppLogger.Info(
                 "GoblinTrackerNextTestsSaved: " +
+                $"source={PortLogField(source)}; " +
                 $"path={PortLogField(path)}; " +
                 $"testCount={portNextTestStepCheckboxes.Count}; " +
                 $"checkedCount={checkedCount}; " +

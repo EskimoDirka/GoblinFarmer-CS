@@ -1089,6 +1089,12 @@ namespace GoblinFarmer
         {
             actionName = string.IsNullOrWhiteSpace(actionName) ? "Unknown" : actionName.Trim();
             reason = string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason.Trim();
+            if (portApplicationClosing)
+            {
+                AppLogger.Info($"DebugScreenshotSkipped: action={PortLogField(actionName)}; reason={PortLogField(reason)}; skipReason=app closing");
+                return "";
+            }
+
             Rectangle captureRegion = region.HasValue
                 ? Rectangle.Intersect(SystemInformation.VirtualScreen, region.Value)
                 : SystemInformation.VirtualScreen;

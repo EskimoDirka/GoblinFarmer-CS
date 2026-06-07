@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -20,20 +21,66 @@ namespace GoblinFarmer
 
         private void PortQueueTeleportButtonClick(string location)
         {
-            string requestedKey = PortLocationKey(location);
             AppLogger.Info($"ButtonClickReceived: requested={PortDisplayLocation(location)}; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; waitingForConfirmation={portTeleportWaitingForConfirmation}; waitingTarget={PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey))}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; failedOrInterrupted={portTeleportRetryFailedOrInterrupted}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
-            if (isAutomationRunning &&
-                portTeleportWaitingForConfirmation &&
-                requestedKey == portTeleportWaitingConfirmationKey)
+            if (isAutomationRunning)
             {
-                AppLogger.Info($"Button click ignored because teleport is already waiting for confirmation: requested={PortDisplayLocation(location)}; waitingTarget={PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey))}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}");
-                AddWorkflowStep($"Button click ignored while waiting for {location} confirmation");
-                return;
+                string cancelReason = $"ManualTeleportButton:{PortDisplayLocation(location)}";
+                AppLogger.Info($"ButtonClickWorkflowCancellationRequested: requested={PortDisplayLocation(location)}; reason={PortLogField(cancelReason)}; waitingForConfirmation={portTeleportWaitingForConfirmation}; waitingTarget={PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey))}; currentWorkflow={PortLogField(PortDisplayLocation(portLastWorkflowStep))}");
+                AddWorkflowStep($"Teleport button cancelling active flow: {location}");
+                DebugManager.Session.RecordWorkflowCancellation($"Teleport button cancelled active workflow: {PortDisplayLocation(location)}");
+                portAutomationCts?.Cancel();
+                ForceReleaseAllRuntimeInputs($"teleport button cancelled active workflow: {location}");
+            }
+
+            if (portCombatRunning)
+            {
+                AppLogger.Info($"ButtonClickCombatStopRequested: requested={PortDisplayLocation(location)}; reason=ManualTeleportButton; combatRunning={portCombatRunning}; combatStopping={portCombatStopping}");
+                PortStopCombat($"teleport button: {location}");
             }
 
             AppLogger.Info($"ButtonClickQueued: requested={PortDisplayLocation(location)}; source=Button; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; waitingForConfirmation={portTeleportWaitingForConfirmation}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}");
             AppLogger.Info($"ButtonClickQueuedFeedbackSuppressed: requested={PortDisplayLocation(location)}; source=Button; reason=ReduceTeleportNotificationNoise");
-            _ = PortRunAutomationAsync(token => PortRunTeleportButtonClick(location, token));
+            _ = PortRunTeleportButtonClickAfterCancellationAsync(location);
+        }
+
+        private async Task PortRunTeleportButtonClickAfterCancellationAsync(string location)
+        {
+            Stopwatch wait = Stopwatch.StartNew();
+            while (!IsDisposed &&
+                wait.ElapsedMilliseconds < 3000 &&
+                (isAutomationRunning || portCombatRunning || portCombatStopping))
+            {
+                await Task.Delay(25);
+            }
+
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (isAutomationRunning && portAutomationCts?.IsCancellationRequested == true)
+            {
+                AppLogger.Info($"ButtonClickClearingStaleWorkflowState: requested={PortDisplayLocation(location)}; waitMs={wait.ElapsedMilliseconds}; currentWorkflow={PortLogField(PortDisplayLocation(portLastWorkflowStep))}; reason=CancelledAutomationStillMarkedRunning");
+                isAutomationRunning = false;
+                portAutomationBlockedByTeleportFailsafe = false;
+                ForceReleaseAllRuntimeInputs($"teleport button cleared stale workflow state: {location}");
+            }
+
+            if (isAutomationRunning || portCombatRunning || portCombatStopping)
+            {
+                AppLogger.Info($"ButtonClickStartSkippedAfterCancellation: requested={PortDisplayLocation(location)}; waitMs={wait.ElapsedMilliseconds}; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; combatStopping={portCombatStopping}; currentWorkflow={PortLogField(PortDisplayLocation(portLastWorkflowStep))}");
+                return;
+            }
+
+            AppLogger.Info($"ButtonClickCancellationWaitComplete: requested={PortDisplayLocation(location)}; waitMs={wait.ElapsedMilliseconds}; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; combatStopping={portCombatStopping}");
+            try
+            {
+                BeginInvoke(new Action(() => _ = PortRunAutomationAsync(token => PortRunTeleportButtonClick(location, token))));
+            }
+            catch (InvalidOperationException ex)
+            {
+                AppLogger.Error($"ButtonClickStartAfterCancellation failed because the form was no longer available: requested={location}", ex);
+            }
         }
 
         private bool PortRunTeleportButtonClick(string location, CancellationToken token)

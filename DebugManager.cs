@@ -635,6 +635,7 @@ namespace GoblinFarmer
                 AddTarget(Path.Combine(root, "Sessions"), "Sessions");
                 AddTarget(Path.Combine(root, "DebugPackages"), "DebugPackages");
                 AddTarget(Path.Combine(root, "Debug", "GoblinEvidence"), "GoblinEvidence");
+                // Legacy loose review folders are no longer produced; keep cleanup so old runs age out.
                 AddTarget(Path.Combine(root, "Debug", "GoblinReplayReview"), "GoblinReplayReview");
             }
 

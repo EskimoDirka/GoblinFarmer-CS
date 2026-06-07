@@ -188,9 +188,10 @@ namespace GoblinFarmer
             PortAddNextTestCheck(table, "13. Stale journal/area transition: move areas while old journal text remains visible; it must not count again or appear current in the wrong area.", 68);
             PortAddNextTestCheck(table, "14. Last Observation: accepted auto-counts should stay readable until a new goblin, reset/new game, or confirmed area change.", 58);
             PortAddNextTestCheck(table, "15. Combat hotkey during Waiting For Location Confirmation: should cancel the wait and start combat from the same hotkey press.", 58);
-            PortAddNextTestCheck(table, "16. Close the VS Debug form after the run; loose review files should be created automatically with no Review Files click or prompt.", 58);
+            PortAddNextTestCheck(table, "16. Do not rely on form close for review artifacts; Use the explicit debug package export only when review artifacts are needed.", 58);
 
             panel.Controls.Add(table);
+            PortWriteGoblinTrackerNextTestMetadata("NextTestsPanelInitialized");
             return panel;
         }
 
@@ -225,6 +226,7 @@ namespace GoblinFarmer
                 TextAlign = ContentAlignment.TopLeft,
                 UseMnemonic = false,
             };
+            checkBox.CheckedChanged += (_, _) => PortWriteGoblinTrackerNextTestMetadata("NextTestsCheckboxChanged");
             table.Controls.Add(checkBox, 0, row);
             portNextTestStepCheckboxes.Add(checkBox);
         }
