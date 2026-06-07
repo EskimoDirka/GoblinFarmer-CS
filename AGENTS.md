@@ -36,6 +36,7 @@
 - For Goblin Tracker evidence issues, ask the user to click the VS Debug `Create Debug Package` button when fresh runtime evidence is needed; it self-discovers the active runtime/package folder, runs Goblin replay against the current runtime `Debug\GoblinEvidence` folder, records any VS Debug scenario tags, and creates a new ZIP without prompting. Review the newest package starting with root `goblin-tracker-review.html` and `goblin-tracker-summary.txt`, then compare `Logs\GoblinReplay\GoblinReplay_*` log/HTML/summary/changed files and replay decision bundles with the live notes.
 - For terminal-only Goblin Tracker package review, use `Scripts\replay-goblin-evidence.ps1` to summarize the latest package artifacts before deciding whether code changes are needed.
 - When Goblin Tracker live-validation priorities change, keep the VS Debug `Next Tests` diagnostics tab synchronized with the current in-game test scenarios so the app shows the next validation checklist during play.
+- When providing Goblin Tracker next test steps, list route-specific scenarios in the official route-logic order from `Docs/Project_Status.md` first, then list general reset, stale evidence, display, classification, package, and documentation checks.
 
 ## Coding Rules
 

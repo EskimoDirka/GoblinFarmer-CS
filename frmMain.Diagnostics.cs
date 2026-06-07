@@ -73,7 +73,7 @@ namespace GoblinFarmer
 
             compactTab.Controls.Add(table);
             inspectorTab.Controls.Add(inspectorTable);
-            nextTestsTab.Controls.Add(PortCreateNextTestStepsBox());
+            nextTestsTab.Controls.Add(PortCreateNextTestStepsPanel());
             if (showOverlay)
             {
                 tabs.TabPages.Add(compactTab);
@@ -143,50 +143,86 @@ namespace GoblinFarmer
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Diablo Active Status", "DiabloActiveStatus");
         }
 
-        private TextBox PortCreateNextTestStepsBox()
+        private Panel PortCreateNextTestStepsPanel()
         {
-            return new TextBox
+            Panel panel = new()
             {
-                BorderStyle = BorderStyle.None,
+                AutoScroll = true,
                 Dock = DockStyle.Fill,
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Text = PortNextTestStepsText(),
-                WordWrap = true,
+                Padding = new Padding(10, 10, 10, 10),
             };
+
+            TableLayoutPanel table = new()
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                Dock = DockStyle.Top,
+                GrowStyle = TableLayoutPanelGrowStyle.AddRows,
+            };
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
+            PortAddNextTestHeader(table, "Goblin Tracker Automatic Count Readiness");
+            PortAddNextTestHeader(table, "Setup");
+            PortAddNextTestCheck(table, "1. Observation Mode and Auto Goblin Count are on.");
+            PortAddNextTestCheck(table, "2. Test Count Override is off before real automatic-count validation.");
+            PortAddNextTestCheck(table, "3. Start a fresh game or press Reset Stats; confirm Goblins, GPH, and Last Observation reset.");
+
+            PortAddNextTestHeader(table, "Route-order auto-count checks");
+            PortAddNextTestCheck(table, "4. Southern Highlands / Cave Of The Moon Clan Level 2: after Level 1, find a fresh Level 2 goblin; expect Level 2 to count independently and never reuse Level 1 evidence.", 68);
+            PortAddNextTestCheck(table, "5. Eastern Channel Level 2: find a fresh goblin, preferably Blood Thief; expect exactly one auto-count, notification, and Last Observation.", 58);
+            PortAddNextTestCheck(table, "6. Stinging Winds: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 48);
+            PortAddNextTestCheck(table, "7. Battlefields: find Treasure Goblin; expect one auto-count and notification, with no stale Treasure journal replay into later areas.", 58);
+            PortAddNextTestCheck(table, "8. Pandemonium Fortress Level 1: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 54);
+            PortAddNextTestCheck(table, "9. Pandemonium Fortress Level 2: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 54);
+
+            PortAddNextTestHeader(table, "Safety and display checks");
+            PortAddNextTestCheck(table, "10. Blocked areas with evidence: New Tristram and Caldeum blocked areas notify BlockedArea and never consume area slots.", 56);
+            PortAddNextTestCheck(table, "11. Stale journal/area transition: count a goblin, move areas while old journal text remains visible, and confirm it does not count again or appear current in the wrong area.", 72);
+            PortAddNextTestCheck(table, "12. Reset Stats and New Game: fresh evidence in the same area can count again after cleanup, while old evidence cannot.", 56);
+            PortAddNextTestCheck(table, "13. Gilded Baron and Malevolent Tormentor: notification and Last Observation match the accepted evidence type.", 50);
+            PortAddNextTestCheck(table, "14. Last Observation: latest real goblin stays readable until a new goblin, reset/new game, or confirmed area change replaces it.", 58);
+            PortAddNextTestCheck(table, "15. Notification latency: note area, source, and goblin type if a count notification feels delayed.", 48);
+
+            PortAddNextTestHeader(table, "Package rule");
+            PortAddNextTestCheck(table, "16. After any miss, wrong type, stale display, or slow notification, click Create Debug Package and review goblin-tracker-review.html plus GoblinReplay decision traces.", 72);
+
+            panel.Controls.Add(table);
+            return panel;
         }
 
-        private static string PortNextTestStepsText()
+        private void PortAddNextTestHeader(TableLayoutPanel table, string text)
         {
-            return string.Join(Environment.NewLine,
-            [
-                "Goblin Tracker Automatic Count Readiness",
-                "",
-                "Setup",
-                "1. Turn Observation Mode and Auto Goblin Count on.",
-                "2. Turn Test Count Override off before real automatic-count validation.",
-                "3. Start a fresh game or press Reset Stats, then confirm Goblins/GPH/Last Observation reset.",
-                "",
-                "Must-pass live scenarios",
-                "4. Eastern Channel Level 2: find a fresh goblin, preferably Blood Thief; expect exactly one auto-count, notification, and Last Observation.",
-                "5. Cave Of The Moon Clan Level 2: after testing Level 1, find a fresh Level 2 goblin; expect Level 2 to count independently and never reuse Level 1 evidence.",
-                "6. Battlefields: find Treasure Goblin; expect one auto-count and notification, with no stale Treasure journal replay into later areas.",
-                "7. PF1: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.",
-                "8. PF2: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.",
-                "9. Stinging Winds: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.",
-                "",
-                "Safety and display checks",
-                "10. Stale journal/area transition: count a goblin, move areas while old journal text remains visible, and confirm it does not count again or appear current in the wrong area.",
-                "11. Blocked areas with evidence: New Tristram and Caldeum blocked areas should notify BlockedArea and never consume area slots.",
-                "12. Reset Stats and New Game: fresh evidence in the same area can count again after cleanup, while old evidence cannot.",
-                "13. Gilded Baron and Malevolent Tormentor: notification and Last Observation must match the accepted evidence type.",
-                "14. Last Observation: keep the latest real goblin readable until a new goblin, reset/new game, or confirmed area change replaces it.",
-                "15. Notification latency: note area, source, and goblin type if a count notification feels delayed.",
-                "",
-                "Package rule",
-                "16. After any miss, wrong type, stale display, or slow notification, click Create Debug Package and review goblin-tracker-review.html plus GoblinReplay decision traces.",
-            ]);
+            int row = table.RowCount++;
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            Label label = new()
+            {
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                Font = new Font(Font, FontStyle.Bold),
+                Text = text,
+                TextAlign = ContentAlignment.MiddleLeft,
+                UseMnemonic = false,
+            };
+            table.Controls.Add(label, 0, row);
+        }
+
+        private static void PortAddNextTestCheck(TableLayoutPanel table, string text, int rowHeight = 38)
+        {
+            int row = table.RowCount++;
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
+            CheckBox checkBox = new()
+            {
+                AutoSize = false,
+                CheckAlign = ContentAlignment.TopLeft,
+                Checked = false,
+                Dock = DockStyle.Fill,
+                Padding = new Padding(2, 3, 0, 0),
+                Text = text,
+                TextAlign = ContentAlignment.TopLeft,
+                UseMnemonic = false,
+            };
+            table.Controls.Add(checkBox, 0, row);
         }
 
         private TableLayoutPanel PortCreateDiagnosticTable(float labelWidth)
