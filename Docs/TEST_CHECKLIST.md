@@ -142,7 +142,7 @@
 - Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
 - The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
 - Fresh Journal/Minimap Last Observation entries remain readable during the short display hold and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
-- Last Observation remains visible long enough to validate the goblin type, area, source, and reason after an auto-count or accepted observation; if it disappears too quickly, generate a debug package for display-state review
+- Last Observation remains visible long enough to validate the goblin type, area, source, and reason after an auto-count or accepted observation; if it disappears too quickly in VS Debug, click `Review Files` for display-state review
 - After the short hold expires, no-candidate scanner scans preserve the last real goblin observation with `LastObservationClearSkipped preserveKind=LastObservationPersistent` instead of clearing the UI
 - Last Observation updates only when a new real goblin observation/count is accepted, or clears during Reset Stats/New Game/missing-template setup cleanup; stale cross-area journal repeats should not replace the displayed goblin
 - Last Observation clears with `LastObservationCleared reason=AreaChanged` when no-candidate scans occur after the current confirmed area changes away from the displayed observation area
@@ -162,13 +162,15 @@
 - Accepted route button clicks do not show the intrusive `Teleport queued` notification; they log `ButtonClickQueuedFeedbackSuppressed` instead
 - Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
 - In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
-- In VS Debug, `Create Debug Package` remains the same 112x28 size/alignment as the Settings `Change...` and `Verify Paths` buttons
-- In VS Debug, `Create Debug Package` does not show or require scenario input fields; debug-package metadata is generated automatically
-- Clicking VS Debug `Create Debug Package` writes `Debug\GoblinTrackerNextTests.txt` from the current `Next Tests` checkbox state and includes that metadata in the resulting package
+- In VS Debug, `Review Files` remains the same 112x28 size/alignment as the Settings `Change...` and `Verify Paths` buttons
+- In VS Debug, `Review Files` does not show or require scenario input fields; review metadata is generated automatically
+- Clicking VS Debug `Review Files` writes `Debug\GoblinTrackerNextTests.txt` from the current `Next Tests` checkbox state and copies that metadata into `Debug\GoblinReplayReview\Latest`
+- Clicking VS Debug `Review Files` creates no ZIP by default and writes `ZipCreated=False` in `goblin-replay-review-manifest.txt`
+- VS Debug loose review files include `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt`, replay log/HTML/summary/changed files, replay assets, decision bundles, latest log, and `session-info.txt` when available
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
 - In VS Debug, the `Next Tests` tab shows the automatic-count readiness checklist in route logic order: Observation Mode and Auto Goblin Count on, `Test Count Override` off, fresh game or Reset Stats setup, Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Stinging Winds, Battlefields fresh goblin, PF1/PF2 live two-count rules, blocked-area evidence, stale journal/area transition, Reset Stats/New Game cleanup, Gilded Baron/Malevolent Tormentor classification, Last Observation persistence, notification latency, and debug-package follow-up
 - In VS Debug, unchecked `Next Tests` boxes mean not tested yet; checked boxes mean the tester completed that scenario during the current run
-- In VS Debug, generated Next Tests package metadata reports checked and unchecked counts plus every route-ordered test row so untested scenarios remain visible in package review
+- In VS Debug, generated Next Tests review metadata reports checked and unchecked counts plus every route-ordered test row so untested scenarios remain visible in review files
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
 - Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template
@@ -186,6 +188,8 @@
 - Teleport Next accepted with no queued/next route target logs `Teleport Next hotkey ignored: no queued/next teleport` and shows a no-route notification instead of appearing broken
 
 ## Debug Package Evidence
+- VS Debug troubleshooting uses loose `Debug\GoblinReplayReview\Latest` files by default instead of a ZIP package
+- Release/export troubleshooting ZIP package creation remains available and should keep the package review index and manifest behavior below
 - Debug package includes latest log
 - Debug package includes `route-failure-summary.txt`
 - Debug package includes `debug-screenshot-manifest.txt`
@@ -205,7 +209,7 @@
 - Debug package manifest reports package size, session start, session duration, total screenshots, success screenshot availability, failure screenshots, folder totals, and stale screenshot exclusions
 - Debug package manifest reports Goblin observation counters and last-observation metadata from `session-info.txt`
 - Debug package manifest reports Goblin Evidence missing-template state from the latest log
-- Debug package root includes `goblin-tracker-review.html` and `goblin-tracker-summary.txt`
+- Debug package root includes `goblin-tracker-review.html` and `goblin-tracker-summary.txt` for release/export package review
 - `goblin-tracker-review.html` links to the manifest, route summary, latest logs, replay HTML, changed-decision summaries, Next Tests metadata, and replay decision bundles when present
 - Debug package includes `goblin-tracker-next-tests.txt` when the VS Debug `Next Tests` tab has been initialized before package creation
 - Goblin replay package artifacts include `GoblinReplay_*_summary.txt`, `GoblinReplay_*_changed.txt`, and `GoblinReplay_*_bundles\...\decision.txt`
@@ -216,6 +220,8 @@
 - GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
 - Direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots are bounded by count and size; manifest reports included, excluded, and oversized event screenshot counts
 - Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
+- VS Debug age retention deletes known troubleshooting artifacts older than 24 hours from runtime/project debug roots, including logs, screenshots, sessions, debug packages, GoblinEvidence, and loose GoblinReplayReview files
+- Release/debug-mode age retention deletes known generated artifacts older than 7 days
 
 ## Debug Manager / Session Summary
 - VS Debug starts with Debug Mode, diagnostic overlay, route inspector, debug screenshots, missing-asset prompts, and verbose logging enabled in memory
@@ -231,6 +237,7 @@
 - Startup retention keeps only the newest `Debug.SessionSummaryRetentionCount` matching `Sessions\Session_*.md` files
 - Startup retention keeps only the newest `Debug.DebugPackageRetentionCount` matching `DebugPackages\GoblinFarmer_Debug_*.zip` files
 - Retention cleanup does not delete unrelated files in `Sessions\` or unrelated zip files in `DebugPackages\`
+- Age-based retention is layered on top of count retention and is scoped to known runtime/project debug artifact folders only
 - Image-recognition diagnostic logs appear only when diagnostic logging is enabled and are throttled; no extra scans occur
 
 ## Town And Exit

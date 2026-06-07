@@ -22,6 +22,7 @@ Run("Diablo discovery stays bounded to known roots", TestDiabloDiscoveryStaysBou
 Run("Configured valid Diablo path wins over discovery", TestConfiguredValidDiabloPathWinsOverDiscovery);
 Run("DebugManager profile helpers separate VS, release debug, and normal release", TestDebugManagerProfileHelpers);
 Run("DebugManager retention cleanup only deletes matching artifacts", TestDebugManagerRetentionCleanupFilters);
+Run("DebugManager age retention deletes old debug artifacts", TestDebugManagerAgeRetentionDeletesOldArtifacts);
 Run("GoblinEvidence retention keeps newest 250 files", TestGoblinEvidenceRetentionKeepsNewest250Files);
 Run("GoblinEvidence retention breaks timestamp ties by filename", TestGoblinEvidenceRetentionBreaksTimestampTiesByFilename);
 Run("GoblinEvidence retention ignores missing folder", TestGoblinEvidenceRetentionMissingFolderDoesNotThrow);
@@ -66,7 +67,7 @@ Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCount
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
 Run("Goblin VS Debug manual test count override is safety-scoped", TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
-Run("Goblin replay tool is dry-run and review package button auto-runs replay", TestGoblinReplayToolIsDryRunAndPackaged);
+Run("Goblin replay tool is dry-run and VS Debug review files are loose", TestGoblinReplayToolIsDryRunAndPackaged);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
@@ -515,6 +516,55 @@ static void TestDebugManagerRetentionCleanupFilters()
     {
         File.WriteAllText(path, Path.GetFileName(path));
         DateTime timestamp = DateTime.UtcNow.AddMinutes(ageMinutes);
+        File.SetCreationTimeUtc(path, timestamp);
+        File.SetLastWriteTimeUtc(path, timestamp);
+        return path;
+    }
+}
+
+static void TestDebugManagerAgeRetentionDeletesOldArtifacts()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string programSource = File.ReadAllText(Path.Combine(repoRoot, "Program.cs"));
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.AgeRetentionTests", Guid.NewGuid().ToString("N"));
+    string logs = Path.Combine(root, "Logs");
+    string review = Path.Combine(root, "Debug", "GoblinReplayReview", "Latest");
+    Directory.CreateDirectory(logs);
+    Directory.CreateDirectory(review);
+
+    try
+    {
+        AssertTrue(appSettingsSource.Contains("TimeSpan.FromHours(24)", StringComparison.Ordinal), "VS Debug artifact retention should be 24 hours");
+        AssertTrue(appSettingsSource.Contains("TimeSpan.FromDays(7)", StringComparison.Ordinal), "Release artifact retention should be 7 days");
+        AssertTrue(programSource.Contains("DebugManager.CleanupDebugArtifactsByAge(AppSettings.DebugArtifactRetentionAge)", StringComparison.Ordinal), "startup should apply age-based debug artifact cleanup");
+
+        string oldLog = Touch(Path.Combine(logs, "old.log"), TimeSpan.FromHours(-25));
+        string newLog = Touch(Path.Combine(logs, "new.log"), TimeSpan.FromHours(-23));
+        string oldReview = Touch(Path.Combine(review, "goblin-tracker-review.html"), TimeSpan.FromHours(-25));
+        string newReview = Touch(Path.Combine(review, "goblin-tracker-summary.txt"), TimeSpan.FromMinutes(-10));
+
+        CleanupResult result = DebugManager.CleanupOldFilesByAge(root, TimeSpan.FromHours(24), "test debug artifacts");
+
+        AssertEqual(4, result.Scanned, "age cleanup should scan all debug files recursively");
+        AssertEqual(2, result.Deleted, "age cleanup should delete files older than the retention window");
+        AssertFalse(File.Exists(oldLog), "old log should be deleted after 24 hours");
+        AssertTrue(File.Exists(newLog), "new log should be kept inside the 24-hour VS Debug window");
+        AssertFalse(File.Exists(oldReview), "old loose review file should be deleted after 24 hours");
+        AssertTrue(File.Exists(newReview), "new loose review file should be kept");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    static string Touch(string path, TimeSpan age)
+    {
+        File.WriteAllText(path, Path.GetFileName(path));
+        DateTime timestamp = DateTime.UtcNow + age;
         File.SetCreationTimeUtc(path, timestamp);
         File.SetLastWriteTimeUtc(path, timestamp);
         return path;
@@ -1991,13 +2041,13 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(automationSource.Contains("chkGoblinAutomaticCounting", StringComparison.Ordinal), "VS Debug form should expose an Automatic Counting checkbox");
     AssertTrue(automationSource.Contains("chkGoblinManualTestCountOverride", StringComparison.Ordinal), "VS Debug form should expose a manual test count override checkbox");
     AssertTrue(automationSource.Contains("chkGoblinDecisionTrace", StringComparison.Ordinal), "VS Debug form should expose a Decision Trace checkbox");
-    AssertTrue(automationSource.Contains("btnReplayGoblinEvidenceFolder", StringComparison.Ordinal), "VS Debug form should expose a replay button");
+    AssertTrue(automationSource.Contains("btnCreateGoblinReviewFiles", StringComparison.Ordinal), "VS Debug form should expose a loose review files button");
     AssertTrue(releaseSource.Contains("PortInitializeGoblinTrackerDebugPreferenceControls();", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should initialize before runtime validation can stop startup");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinObservationMode)", StringComparison.Ordinal), "Observation Mode checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting)", StringComparison.Ordinal), "Automatic Counting checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinManualTestCountOverride)", StringComparison.Ordinal), "manual test count override checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinDecisionTrace)", StringComparison.Ordinal), "Decision Trace checkbox should be placed inside the visible Settings group");
-    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(btnReplayGoblinEvidenceFolder)", StringComparison.Ordinal), "replay button should be placed inside the visible Settings group");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(btnCreateGoblinReviewFiles)", StringComparison.Ordinal), "review files button should be placed inside the visible Settings group");
     AssertFalse(automationSource.Contains("Controls.Add(grpGoblinTrackerDebugSettings)", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should not be added as a layered top-level overlay");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked", StringComparison.Ordinal), "Observation Mode checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked", StringComparison.Ordinal), "Automatic Counting checkbox changes should persist to AppSettings");
@@ -2005,8 +2055,8 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableDecisionTrace = chkGoblinDecisionTrace.Checked", StringComparison.Ordinal), "Decision Trace checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("PortSetGoblinAutomaticCountingArmedState(source)", StringComparison.Ordinal), "toggling automatic counting should re-arm the freshness gate");
     AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
-    AssertTrue(automationSource.Contains("Size = new Size(112, 28)", StringComparison.Ordinal), "Create Debug Package button should match the Change and Verify Paths button width");
-    AssertTrue(automationSource.Contains("Location = new Point(424, 160)", StringComparison.Ordinal), "Create Debug Package button should align with the Settings action buttons");
+    AssertTrue(automationSource.Contains("Size = new Size(112, 28)", StringComparison.Ordinal), "Review Files button should match the Change and Verify Paths button width");
+    AssertTrue(automationSource.Contains("Location = new Point(424, 160)", StringComparison.Ordinal), "Review Files button should align with the Settings action buttons");
     AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 254)", StringComparison.Ordinal), "VS Debug Settings group should expand for the added Goblin Tracker test controls");
 }
 
@@ -2037,7 +2087,7 @@ static void TestVsDebugDiagnosticsIncludeNextTestStepsTab()
     AssertTrue(diagnosticsSource.Contains("BlockedArea", StringComparison.Ordinal), "Next Tests should include blocked-area validation");
     AssertTrue(diagnosticsSource.Contains("Gilded Baron and Malevolent Tormentor", StringComparison.Ordinal), "Next Tests should include classification validation");
     AssertTrue(diagnosticsSource.Contains("GoblinReplay decision traces", StringComparison.Ordinal), "Next Tests should point misses toward replay decision traces");
-    AssertTrue(diagnosticsSource.Contains("Create Debug Package", StringComparison.Ordinal), "Next Tests should remind the tester to package confusing runs");
+    AssertTrue(diagnosticsSource.Contains("Review Files", StringComparison.Ordinal), "Next Tests should remind the tester to generate loose review files");
     int caveIndex = diagnosticsSource.IndexOf("Cave Of The Moon Clan Level 2", StringComparison.Ordinal);
     int easternChannelIndex = diagnosticsSource.IndexOf("Eastern Channel Level 2", StringComparison.Ordinal);
     AssertTrue(caveIndex > 0 && easternChannelIndex > caveIndex, "route-specific Next Tests should list Cave Of The Moon Clan Level 2 before Eastern Channel Level 2");
@@ -2171,32 +2221,40 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
     string replayCliScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "replay-goblin-evidence.ps1"));
-    string createPackageButtonMethod = ExtractMethodBody(evidenceSource, "private void PortCreateReviewDebugPackageFromButton");
-    string createPackageForReviewMethod = ExtractMethodBody(evidenceSource, "private GoblinReplayDebugPackageResult PortCreateDebugPackageForReview");
+    string createReviewButtonMethod = ExtractMethodBody(evidenceSource, "private void PortCreateGoblinReplayReviewFilesFromButton");
+    string createReviewFilesMethod = ExtractMethodBody(evidenceSource, "private GoblinReplayReviewFilesResult PortCreateGoblinReplayReviewFilesForReview");
+    string writeReviewFilesMethod = ExtractMethodBody(evidenceSource, "private GoblinReplayReviewFilesResult PortWriteGoblinReplayReviewFiles");
     string runReplayForReviewMethod = ExtractMethodBody(evidenceSource, "private GoblinReplaySummary? PortRunGoblinReplayForReview");
 
     AssertTrue(appSettingsSource.Contains("public bool EnableDecisionTrace { get; set; } = false", StringComparison.Ordinal), "Release decision trace should default off unless Debug Mode enables it");
     AssertTrue(appSettingsSource.Contains("settings.GoblinTracker.EnableDecisionTrace = true", StringComparison.Ordinal), "VS Debug/dev defaults should enable decision trace");
     AssertTrue(configSource.Contains("\"EnableDecisionTrace\": true", StringComparison.Ordinal), "project VS Debug config should explicitly expose decision trace");
     AssertTrue(evidenceSource.Contains("PortReplayGoblinEvidenceFolder", StringComparison.Ordinal), "replay folder runner should exist");
-    AssertTrue(automationSource.Contains("Text = \"Create Debug Package\"", StringComparison.Ordinal), "VS Debug button should clearly create a debug package");
-    AssertTrue(automationSource.Contains("PortCreateReviewDebugPackageFromButton()", StringComparison.Ordinal), "VS Debug button should create a package without prompting for replay input");
+    AssertTrue(automationSource.Contains("Text = \"Review Files\"", StringComparison.Ordinal), "VS Debug button should clearly create loose review files");
+    AssertTrue(automationSource.Contains("PortCreateGoblinReplayReviewFilesFromButton()", StringComparison.Ordinal), "VS Debug button should create loose review files without prompting for replay input");
     AssertFalse(automationSource.Contains("txtGoblinScenarioArea", StringComparison.Ordinal), "VS Debug package creation should not require scenario area text input");
     AssertFalse(automationSource.Contains("txtGoblinScenarioGoblin", StringComparison.Ordinal), "VS Debug package creation should not require expected goblin text input");
     AssertFalse(automationSource.Contains("txtGoblinScenarioExpected", StringComparison.Ordinal), "VS Debug package creation should not require expected outcome text input");
-    AssertFalse(releaseSource.Contains("PortCreateReviewDebugPackageFromButton", StringComparison.Ordinal), "Release form should not wire the one-click package button unless explicitly requested");
+    AssertFalse(releaseSource.Contains("PortCreateGoblinReplayReviewFilesFromButton", StringComparison.Ordinal), "Release form should not wire the VS Debug loose review button unless explicitly requested");
     AssertFalse(releaseSource.Contains("Create Package", StringComparison.Ordinal), "Release form package UI should remain unchanged unless explicitly requested");
-    AssertFalse(createPackageButtonMethod.Contains("OpenFileDialog", StringComparison.Ordinal), "create package button should not ask for a debug package ZIP");
-    AssertFalse(createPackageButtonMethod.Contains("FolderBrowserDialog", StringComparison.Ordinal), "create package button should not ask for a folder");
-    AssertFalse(createPackageButtonMethod.Contains("InputBox", StringComparison.Ordinal), "create package button should not ask for freeform debug metadata");
-    AssertTrue(createPackageButtonMethod.Contains("PortCreateDebugPackageForReview", StringComparison.Ordinal), "create package button should package the active runtime immediately");
-    AssertTrue(createPackageButtonMethod.Contains("PortWriteGoblinTrackerNextTestMetadata", StringComparison.Ordinal), "create package button should persist Next Tests checkbox state before packaging");
-    AssertTrue(evidenceSource.Contains("GoblinTrackerNextTests.txt", StringComparison.Ordinal), "VS Debug package creation should write automatic Next Tests metadata");
+    AssertFalse(createReviewButtonMethod.Contains("OpenFileDialog", StringComparison.Ordinal), "review files button should not ask for a debug package ZIP");
+    AssertFalse(createReviewButtonMethod.Contains("FolderBrowserDialog", StringComparison.Ordinal), "review files button should not ask for a folder");
+    AssertFalse(createReviewButtonMethod.Contains("InputBox", StringComparison.Ordinal), "review files button should not ask for freeform debug metadata");
+    AssertFalse(createReviewButtonMethod.Contains("PortCreateDebugPackage", StringComparison.Ordinal), "VS Debug review files button should not invoke ZIP package creation");
+    AssertTrue(createReviewButtonMethod.Contains("PortCreateGoblinReplayReviewFilesForReview", StringComparison.Ordinal), "review files button should publish loose review files immediately");
+    AssertTrue(createReviewButtonMethod.Contains("PortWriteGoblinTrackerNextTestMetadata", StringComparison.Ordinal), "review files button should persist Next Tests checkbox state before replay");
+    AssertTrue(evidenceSource.Contains("GoblinTrackerNextTests.txt", StringComparison.Ordinal), "VS Debug review file creation should write automatic Next Tests metadata");
     AssertTrue(evidenceSource.Contains("PortNextTestStepMetadataLines()", StringComparison.Ordinal), "Next Tests metadata should be generated from the in-app checklist");
     AssertFalse(evidenceSource.Contains("PortWriteGoblinTrackerReviewScenarioMetadata", StringComparison.Ordinal), "legacy scenario metadata writer should be removed");
-    AssertTrue(createPackageForReviewMethod.Contains("PortRunGoblinReplayForReview()", StringComparison.Ordinal), "review package creation should run Goblin replay before packaging");
-    AssertTrue(createPackageForReviewMethod.Contains("replaySummary?.LogPath", StringComparison.Ordinal), "review package creation should pass the fresh replay log into package diagnostics");
-    AssertTrue(runReplayForReviewMethod.Contains("PortReplayGoblinEvidenceFolder(replayInputPath)", StringComparison.Ordinal), "review package button should invoke the replay engine");
+    AssertTrue(createReviewFilesMethod.Contains("PortRunGoblinReplayForReview()", StringComparison.Ordinal), "review file creation should run Goblin replay before publishing loose files");
+    AssertTrue(createReviewFilesMethod.Contains("PortWriteGoblinReplayReviewFiles(replaySummary, nextTestsPath)", StringComparison.Ordinal), "review file creation should publish the fresh replay outputs into the loose review folder");
+    AssertTrue(evidenceSource.Contains("\"Debug\", \"GoblinReplayReview\"", StringComparison.Ordinal), "loose review files should be written under a stable Debug/GoblinReplayReview folder");
+    AssertTrue(writeReviewFilesMethod.Contains("Latest", StringComparison.Ordinal), "loose review files should refresh a stable Latest folder");
+    AssertTrue(writeReviewFilesMethod.Contains("goblin-tracker-review.html", StringComparison.Ordinal), "loose review files should include a root review index");
+    AssertTrue(writeReviewFilesMethod.Contains("goblin-tracker-summary.txt", StringComparison.Ordinal), "loose review files should include a root summary");
+    AssertTrue(writeReviewFilesMethod.Contains("goblin-tracker-next-tests.txt", StringComparison.Ordinal), "loose review files should include Next Tests metadata at the root");
+    AssertTrue(evidenceSource.Contains("ZipCreated=False", StringComparison.Ordinal), "loose review metadata should make clear that no ZIP was created");
+    AssertTrue(runReplayForReviewMethod.Contains("PortReplayGoblinEvidenceFolder(replayInputPath)", StringComparison.Ordinal), "review files button should invoke the replay engine");
     AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplayStarted", StringComparison.Ordinal), "review replay should log startup");
     AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplayComplete", StringComparison.Ordinal), "review replay should log completion");
     AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplaySkipped", StringComparison.Ordinal), "review replay should clearly log skipped states");
@@ -2219,10 +2277,10 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(evidenceSource.Contains("GoblinReplayCandidateRanking", StringComparison.Ordinal), "replay should log ranked candidate matches");
     AssertTrue(evidenceSource.Contains("GoblinReplayAreaInference", StringComparison.Ordinal), "replay should log area inference decisions");
     AssertTrue(evidenceSource.Contains("replayComparison", StringComparison.Ordinal), "replay should compare decisions to the previous replay log");
-    AssertTrue(evidenceSource.Contains("create-debug-package.ps1", StringComparison.Ordinal), "automatic replay packaging should call the tracked debug package script");
-    AssertTrue(evidenceSource.Contains("process.StartInfo.ArgumentList.Add(\"-RuntimeRoot\")", StringComparison.Ordinal), "automatic replay packaging should pass the active runtime root");
-    AssertTrue(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "automatic package creation should log the package result");
-    AssertTrue(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "automatic replay packaging should parse the generated package path");
+    AssertTrue(evidenceSource.Contains("create-debug-package.ps1", StringComparison.Ordinal), "ZIP package creation should remain available for release/export workflows");
+    AssertTrue(evidenceSource.Contains("process.StartInfo.ArgumentList.Add(\"-RuntimeRoot\")", StringComparison.Ordinal), "ZIP package creation should still pass the active runtime root");
+    AssertTrue(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "ZIP package creation should still log the package result when explicitly used");
+    AssertTrue(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "ZIP package creation should still parse the generated package path when explicitly used");
     AssertTrue(evidenceSource.Contains("GoblinDecisionTracePolicy.ToLogLine(trace)", StringComparison.Ordinal), "replay should write structured decision trace lines");
     AssertFalse(ExtractMethodBody(evidenceSource, "private GoblinReplaySummary PortReplayGoblinEvidenceFolder").Contains("RecordGoblinFound(", StringComparison.Ordinal), "replay dry-run should not increment live GoblinCount");
     AssertTrue(sessionStatsSource.Contains("PortWriteGoblinDecisionBundle(trace)", StringComparison.Ordinal), "live decision traces should write evidence bundles");

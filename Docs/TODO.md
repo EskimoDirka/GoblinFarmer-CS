@@ -154,18 +154,19 @@
 * [x] Record 2026-06-07 live auto-count notes: blocked areas, duplicate suppression, and stale-evidence count prevention looked good; Cave Level 2, special two-count areas, and classification edge cases still need encounters.
 * [x] Remove the accepted route-button `Teleport queued` overlay during Goblin Tracker validation while preserving route-button receipt/queue/execution diagnostics.
 * [x] Add a VS Debug-only `Test Count Override` checkbox that lets manual `X` simulate fresh evidence while preserving block-list, duplicate, and PF1/PF2/Stinging Winds area-limit behavior.
-* [x] Widen/reposition the VS Debug `Create Debug Package` button in Settings for easier live-test package creation.
-* [x] Restore the VS Debug `Create Debug Package` button to the same width/alignment as the `Change...` and `Verify Paths` Settings buttons.
+* [x] Widen/reposition the VS Debug debug-review button in Settings for easier live-test evidence creation.
+* [x] Restore the VS Debug debug-review button to the same width/alignment as the `Change...` and `Verify Paths` Settings buttons.
 * [x] Add a VS Debug `Next Tests` diagnostics tab beside `Overlay` and `Route State` with the current in-game Goblin Tracker validation checklist.
 * [x] Review `GoblinFarmer_Debug_20260607_071907.zip`; confirmed PF1/PF2/Stinging Winds synthetic two-count rules, Southern Highlands default duplicate suppression, New Tristram blocked suppression, and Southern Highlands Gem Hoarder auto-count.
 * [x] Update the VS Debug `Next Tests` tab to an automatic-count readiness checklist covering setup, must-pass live encounters, stale/display safety checks, classification, reset/new-game cleanup, latency notes, and debug-package follow-up.
 * [x] Update VS Debug `Next Tests` to route-ordered checkboxes so checked means tested and unchecked means not tested yet.
 * [x] Review `GoblinFarmer_Debug_20260607_074714.zip`; confirmed Reset Stats cleared duplicate guard, auto-count evidence state, evidence observation state, and Last Observation.
-* [x] Remove VS Debug Goblin Tracker scenario text input fields; `Create Debug Package` now captures `Next Tests` checkbox state automatically without prompting.
-* [x] Package `Debug\GoblinTrackerNextTests.txt` and root `goblin-tracker-next-tests.txt` so checked/unchecked test scenarios are reviewable from the generated ZIP.
+* [x] Remove VS Debug Goblin Tracker scenario text input fields; `Review Files` now captures `Next Tests` checkbox state automatically without prompting.
+* [x] Replace default VS Debug Goblin replay ZIP creation with loose review files under `Debug\GoblinReplayReview\Latest`, while keeping release/export ZIP package creation available.
+* [x] Copy `Debug\GoblinTrackerNextTests.txt` and root `goblin-tracker-next-tests.txt` into the loose review folder so checked/unchecked test scenarios are reviewable without a ZIP.
 * [x] Replace broad same-goblin-type journal replay suppression with exact evidence-row suppression, so stale visible rows cannot replay across areas but fresh same-type goblins in separate levels can count.
 * [x] Preserve the displayed Last Observation when incoming scanner updates are suppressed as stale, already counted, duplicate, or area-limit reached.
-* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, and create a debug package after the first miss, wrong type, stale display, or slow notification.
+* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, and click `Review Files` after the first miss, wrong type, stale display, or slow notification.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
@@ -174,7 +175,7 @@
 * [ ] Live-validate Battlefields fresh Treasure Goblin evidence auto-counts once even if an older Treasure Goblin journal template was seen earlier in the run.
 * [ ] Live-validate teleporting from Cathedral/Royal Crypts/Battlefields-style transitions clears previous-area Last Observation instead of showing stale goblin text.
 * [ ] Live-validate repeated Malevolent Tormentor journal evidence after moving between Battlefields and Rakkis Crossing does not overwrite the accepted Battlefields Last Observation or create stale display spam.
-* [ ] Review the next debug package for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
+* [ ] Review the next `Debug\GoblinReplayReview\Latest` loose review files for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
 * [x] Consider adding a setting or quieter mode for route-button/Teleport queued notifications during Goblin Tracker validation.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
@@ -331,9 +332,11 @@ Status: first pass implemented as `DebugManager` plus `DiagnosticsSessionState`.
 * [x] Export `Sessions\Session_YYYYMMDD_HHMMSS.md` safely at app shutdown.
 * [x] Add retention cleanup for `Sessions\Session_*.md`, keeping the newest `Debug.SessionSummaryRetentionCount` entries by default.
 * [x] Add retention cleanup for `DebugPackages\GoblinFarmer_Debug_*.zip`, keeping the newest `Debug.DebugPackageRetentionCount` entries by default.
+* [x] Add age-based debug artifact cleanup: VS Debug troubleshooting artifacts older than 24 hours and release/debug-mode artifacts older than 7 days are deleted from known runtime/project artifact folders.
 * [x] Route existing current-location image-recognition metadata through the manager without adding extra scans.
 * [ ] Validate the new session summary after the next live app exit.
-* [ ] Validate session/debug package retention after enough artifacts exist to exceed the configured counts.
+* [ ] Validate session/debug package count retention after enough artifacts exist to exceed the configured counts.
+* [ ] Validate VS Debug 24-hour and release 7-day artifact age retention after enough old generated artifacts exist.
 
 ### Diagnostic Overlay
 

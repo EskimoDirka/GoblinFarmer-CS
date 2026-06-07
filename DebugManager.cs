@@ -340,6 +340,11 @@ namespace GoblinFarmer
 
         private static List<FileInfo> EnumerateFilesInsideDirectory(string root, ref int skipped)
         {
+            return EnumerateFilesInsideDirectory(root, ref skipped, "GoblinEvidence");
+        }
+
+        private static List<FileInfo> EnumerateFilesInsideDirectory(string root, ref int skipped, string artifactName)
+        {
             List<FileInfo> discoveredFiles = [];
             Stack<DirectoryInfo> directories = new();
             directories.Push(new DirectoryInfo(root));
@@ -355,7 +360,7 @@ namespace GoblinFarmer
                 catch (Exception ex)
                 {
                     skipped++;
-                    AppLogger.Error($"GoblinEvidence retention cleanup scan skipped folder: folder={directory.FullName}", ex);
+                    AppLogger.Error($"{artifactName} retention cleanup scan skipped folder: folder={directory.FullName}", ex);
                     continue;
                 }
 
@@ -368,7 +373,7 @@ namespace GoblinFarmer
                     else
                     {
                         skipped++;
-                        AppLogger.Info($"GoblinEvidence retention cleanup skipped outside folder: path={file.FullName}; folder={root}");
+                        AppLogger.Info($"{artifactName} retention cleanup skipped outside folder: path={file.FullName}; folder={root}");
                     }
                 }
 
@@ -380,7 +385,7 @@ namespace GoblinFarmer
                 catch (Exception ex)
                 {
                     skipped++;
-                    AppLogger.Error($"GoblinEvidence retention cleanup scan skipped child folders: folder={directory.FullName}", ex);
+                    AppLogger.Error($"{artifactName} retention cleanup scan skipped child folders: folder={directory.FullName}", ex);
                     continue;
                 }
 
@@ -389,7 +394,7 @@ namespace GoblinFarmer
                     if ((childDirectory.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
                     {
                         skipped++;
-                        AppLogger.Info($"GoblinEvidence retention cleanup skipped linked folder: folder={childDirectory.FullName}");
+                        AppLogger.Info($"{artifactName} retention cleanup skipped linked folder: folder={childDirectory.FullName}");
                         continue;
                     }
 
@@ -400,12 +405,147 @@ namespace GoblinFarmer
                     else
                     {
                         skipped++;
-                        AppLogger.Info($"GoblinEvidence retention cleanup skipped outside folder: folder={childDirectory.FullName}; root={root}");
+                        AppLogger.Info($"{artifactName} retention cleanup skipped outside folder: folder={childDirectory.FullName}; root={root}");
                     }
                 }
             }
 
             return discoveredFiles;
+        }
+
+        public static CleanupResult CleanupDebugArtifactsByAge(TimeSpan retentionAge)
+        {
+            if (retentionAge <= TimeSpan.Zero)
+            {
+                AppLogger.Info($"Debug artifact age retention cleanup disabled: retentionAge={retentionAge}");
+                return new CleanupResult(0, 0, 0);
+            }
+
+            CleanupResult total = new(0, 0, 0);
+            foreach ((string Directory, string Name) target in FindDebugArtifactRetentionTargets())
+            {
+                CleanupResult result = CleanupOldFilesByAge(target.Directory, retentionAge, target.Name);
+                total = total.Add(result);
+            }
+
+            AppLogger.Info($"Debug artifact age retention cleanup complete: scanned={total.Scanned}; deleted={total.Deleted}; skipped={total.Skipped}; kept={total.Kept}; retentionAgeHours={retentionAge.TotalHours:0.##}; mode={(IsVisualStudioDebugSession ? "VsDebug" : "Release")}");
+            return total;
+        }
+
+        internal static CleanupResult CleanupOldFilesByAge(string directory, TimeSpan retentionAge, string artifactName)
+        {
+            if (retentionAge <= TimeSpan.Zero)
+            {
+                AppLogger.Info($"{artifactName} age retention cleanup disabled: retentionAge={retentionAge}; folder={directory}");
+                return new CleanupResult(0, 0, 0);
+            }
+
+            if (!Directory.Exists(directory))
+            {
+                return new CleanupResult(0, 0, 0);
+            }
+
+            string root;
+            try
+            {
+                root = Path.GetFullPath(directory);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"{artifactName} age retention cleanup skipped: invalid folder={directory}", ex);
+                return new CleanupResult(0, 0, 0, 1);
+            }
+
+            int skipped = 0;
+            FileInfo[] files;
+            try
+            {
+                files = EnumerateFilesInsideDirectory(root, ref skipped, artifactName).ToArray();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"{artifactName} age retention cleanup scan failed: folder={root}", ex);
+                return new CleanupResult(0, 0, 0, 1);
+            }
+
+            DateTime cutoffUtc = DateTime.UtcNow - retentionAge;
+            int deleted = 0;
+            foreach (FileInfo file in files.Where(file => file.LastWriteTimeUtc < cutoffUtc))
+            {
+                if (!IsPathInsideDirectory(root, file.FullName))
+                {
+                    skipped++;
+                    AppLogger.Info($"{artifactName} age retention cleanup skipped outside folder: path={file.FullName}; folder={root}");
+                    continue;
+                }
+
+                try
+                {
+                    file.Delete();
+                    deleted++;
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    AppLogger.Error($"{artifactName} age retention cleanup delete skipped: path={file.FullName}", ex);
+                }
+            }
+
+            CleanupEmptyDirectories(root, artifactName, ref skipped);
+            return new CleanupResult(files.Length, deleted, files.Length - deleted, skipped);
+        }
+
+        private static void CleanupEmptyDirectories(string root, string artifactName, ref int skipped)
+        {
+            if (!Directory.Exists(root))
+            {
+                return;
+            }
+
+            List<DirectoryInfo> directories;
+            try
+            {
+                directories = new DirectoryInfo(root)
+                    .EnumerateDirectories("*", SearchOption.AllDirectories)
+                    .OrderByDescending(directory => directory.FullName.Length)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                skipped++;
+                AppLogger.Error($"{artifactName} age retention cleanup empty-folder scan skipped: folder={root}", ex);
+                return;
+            }
+
+            foreach (DirectoryInfo directory in directories)
+            {
+                if ((directory.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
+                {
+                    skipped++;
+                    AppLogger.Info($"{artifactName} age retention cleanup skipped linked empty-folder check: folder={directory.FullName}");
+                    continue;
+                }
+
+                if (!IsPathInsideDirectory(root, directory.FullName))
+                {
+                    skipped++;
+                    AppLogger.Info($"{artifactName} age retention cleanup skipped outside empty-folder check: folder={directory.FullName}; root={root}");
+                    continue;
+                }
+
+                try
+                {
+                    if (!directory.EnumerateFileSystemInfos().Any())
+                    {
+                        directory.Delete();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    AppLogger.Error($"{artifactName} age retention cleanup empty-folder delete skipped: folder={directory.FullName}", ex);
+                }
+            }
         }
 
         private static CleanupResult CleanupOldFilesByCount(string directory, string searchPattern, int retentionCount, string artifactName)
@@ -462,6 +602,61 @@ namespace GoblinFarmer
                 Path.DirectorySeparatorChar;
             string fullPath = Path.GetFullPath(path);
             return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static IEnumerable<(string Directory, string Name)> FindDebugArtifactRetentionTargets()
+        {
+            HashSet<string> directories = new(StringComparer.OrdinalIgnoreCase);
+            List<(string Directory, string Name)> targets = [];
+            void AddTarget(string path, string name)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !directories.Add(path))
+                {
+                    return;
+                }
+
+                targets.Add((path, name));
+            }
+
+            HashSet<string> roots = new(StringComparer.OrdinalIgnoreCase)
+            {
+                BaseDirectory,
+            };
+            if (TryResolveConfigRoot(out string configRoot))
+            {
+                roots.Add(configRoot);
+            }
+
+            foreach (string root in roots)
+            {
+                AddTarget(Path.Combine(root, "Logs"), "Logs");
+                AddTarget(Path.Combine(root, "Screenshots"), "Screenshots");
+                AddTarget(Path.Combine(root, "debug-screenshots"), "DebugScreenshots");
+                AddTarget(Path.Combine(root, "Sessions"), "Sessions");
+                AddTarget(Path.Combine(root, "DebugPackages"), "DebugPackages");
+                AddTarget(Path.Combine(root, "Debug", "GoblinEvidence"), "GoblinEvidence");
+                AddTarget(Path.Combine(root, "Debug", "GoblinReplayReview"), "GoblinReplayReview");
+            }
+
+            return targets;
+        }
+
+        private static bool TryResolveConfigRoot(out string configRoot)
+        {
+            string? configDirectory = Path.GetDirectoryName(AppSettings.ConfigPath);
+            if (!string.IsNullOrWhiteSpace(configDirectory) &&
+                string.Equals(Path.GetFileName(configDirectory), "Config", StringComparison.OrdinalIgnoreCase))
+            {
+                DirectoryInfo? root = Directory.GetParent(configDirectory);
+                if (root != null)
+                {
+                    configRoot = root.FullName;
+                    return true;
+                }
+            }
+
+            configRoot = "";
+            return false;
         }
 
         private static IEnumerable<string> FindDebugPackageDirectories()

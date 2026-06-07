@@ -188,7 +188,7 @@ namespace GoblinFarmer
             PortAddNextTestCheck(table, "15. Notification latency: note area, source, and goblin type if a count notification feels delayed.", 48);
 
             PortAddNextTestHeader(table, "Package rule");
-            PortAddNextTestCheck(table, "16. After any miss, wrong type, stale display, or slow notification, click Create Debug Package and review goblin-tracker-review.html plus GoblinReplay decision traces.", 72);
+            PortAddNextTestCheck(table, "16. After any miss, wrong type, stale display, or slow notification, click Review Files and review goblin-tracker-review.html plus GoblinReplay decision traces.", 72);
 
             panel.Controls.Add(table);
             return panel;

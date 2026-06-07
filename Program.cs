@@ -13,6 +13,7 @@ namespace GoblinFarmer
             ApplicationConfiguration.Initialize();
             AppSettings.Load();
             AppLogger.CleanupOldLogs(AppSettings.RetentionDays);
+            DebugManager.CleanupDebugArtifactsByAge(AppSettings.DebugArtifactRetentionAge);
             DebugManager.CleanupOldSessionSummaries(AppSettings.Debug.SessionSummaryRetentionCount);
             DebugManager.CleanupOldDebugPackages(AppSettings.Debug.DebugPackageRetentionCount);
             DebugManager.CleanupOldGoblinEvidence(AppSettings.Debug.GoblinEvidenceRetentionCount);

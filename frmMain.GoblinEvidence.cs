@@ -1170,48 +1170,44 @@ namespace GoblinFarmer
             PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence, screenshotPath);
         }
 
-        private void PortCreateReviewDebugPackageFromButton()
+        private void PortCreateGoblinReplayReviewFilesFromButton()
         {
-            string packageRuntimeRoot = PortResolveDebugPackageRuntimeRoot();
-            string packageDirectory = Path.Combine(packageRuntimeRoot, "DebugPackages");
+            string reviewRoot = PortResolveGoblinReplayReviewRoot();
             string nextTestsPath = PortWriteGoblinTrackerNextTestMetadata();
             AppLogger.Info(
-                "ReviewDebugPackageRequested: " +
+                "GoblinReplayReviewFilesRequested: " +
                 "source=Button; " +
                 $"vsDebugProfile={AppSettings.IsVsDebugProfile}; " +
                 $"vsDebugProjectRootConfigUsed={AppSettings.VsDebugProjectRootConfigUsed}; " +
                 $"configPath={PortLogField(AppSettings.ConfigPath)}; " +
-                $"packageRuntimeRoot={PortLogField(packageRuntimeRoot)}; " +
-                $"packageDirectory={PortLogField(packageDirectory)}; " +
+                $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
+                $"reviewRoot={PortLogField(reviewRoot)}; " +
                 $"nextTestsPath={PortLogField(nextTestsPath)}");
-            PortShowSplash("Creating debug package...", 2500);
+            PortShowSplash("Creating review files...", 2500);
 
-            _ = Task.Run(PortCreateDebugPackageForReview)
+            _ = Task.Run(() => PortCreateGoblinReplayReviewFilesForReview(nextTestsPath))
                 .ContinueWith(task =>
                 {
                     if (task.IsFaulted)
                     {
-                        AppLogger.Error("Review debug package creation failed.", task.Exception!);
-                        BeginInvoke(new Action(() => PortShowSplash("Debug package creation failed", 3000)));
+                        AppLogger.Error("Goblin replay review file creation failed.", task.Exception!);
+                        BeginInvoke(new Action(() => PortShowSplash("Review files failed", 3000)));
                         return;
                     }
 
-                    GoblinReplayDebugPackageResult packageResult = task.Result;
+                    GoblinReplayReviewFilesResult reviewResult = task.Result;
                     BeginInvoke(new Action(() => PortShowSplash(
-                        packageResult.Success
-                            ? $"Debug package ready\r\n{Path.GetFileName(packageResult.PackagePath)}"
-                            : "Debug package creation failed",
+                        reviewResult.Success
+                            ? $"Review files ready\r\n{reviewResult.ReviewDirectory}"
+                            : $"Review files failed\r\n{reviewResult.Reason}",
                         6000)));
                 });
         }
 
-        private GoblinReplayDebugPackageResult PortCreateDebugPackageForReview()
+        private GoblinReplayReviewFilesResult PortCreateGoblinReplayReviewFilesForReview(string nextTestsPath)
         {
             GoblinReplaySummary? replaySummary = PortRunGoblinReplayForReview();
-            return PortCreateDebugPackage(
-                "Button",
-                replaySummary?.LogPath ?? "",
-                replaySummary?.HtmlReportPath ?? "");
+            return PortWriteGoblinReplayReviewFiles(replaySummary, nextTestsPath);
         }
 
         private GoblinReplayDebugPackageResult PortCreateDebugPackageAfterGoblinReplay(GoblinReplaySummary summary)
@@ -1226,7 +1222,7 @@ namespace GoblinFarmer
                 return "";
             }
 
-            string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Debug");
+            string directory = Path.Combine(PortResolveDebugPackageRuntimeRoot(), "Debug");
             string path = Path.Combine(directory, "GoblinTrackerNextTests.txt");
             string legacyScenarioPath = Path.Combine(directory, "GoblinTrackerScenario.txt");
             Directory.CreateDirectory(directory);
@@ -1249,6 +1245,290 @@ namespace GoblinFarmer
                 $"uncheckedCount={uncheckedCount}; " +
                 $"legacyScenarioDeleted={legacyScenarioDeleted}");
             return path;
+        }
+
+        private GoblinReplayReviewFilesResult PortWriteGoblinReplayReviewFiles(
+            GoblinReplaySummary? replaySummary,
+            string nextTestsPath)
+        {
+            try
+            {
+                string reviewRoot = PortResolveGoblinReplayReviewRoot();
+                string latestDirectory = Path.Combine(reviewRoot, "Latest");
+                PortPrepareGoblinReplayReviewDirectory(reviewRoot, latestDirectory);
+
+                string rootNextTestsPath = PortCopyReviewFile(nextTestsPath, latestDirectory, "goblin-tracker-next-tests.txt");
+                string debugNextTestsPath = PortCopyReviewFile(nextTestsPath, Path.Combine(latestDirectory, "Debug"), "GoblinTrackerNextTests.txt");
+                string sessionInfoPath = PortCopyReviewFile(DebugManager.SessionInfoPath, latestDirectory, "session-info.txt");
+                string latestLogPath = PortCopyReviewFile(AppLogger.CurrentLogFilePath, Path.Combine(latestDirectory, "Logs"), Path.GetFileName(AppLogger.CurrentLogFilePath));
+
+                string replayDirectory = Path.Combine(latestDirectory, "Logs", "GoblinReplay");
+                Directory.CreateDirectory(replayDirectory);
+                string replayLogPath = replaySummary == null ? "" : PortCopyReviewFile(replaySummary.LogPath, replayDirectory, Path.GetFileName(replaySummary.LogPath));
+                string replayHtmlPath = replaySummary == null ? "" : PortCopyReviewFile(replaySummary.HtmlReportPath, replayDirectory, Path.GetFileName(replaySummary.HtmlReportPath));
+                string replaySummaryPath = replaySummary == null ? "" : PortCopyReviewFile(replaySummary.SummaryPath, replayDirectory, Path.GetFileName(replaySummary.SummaryPath));
+                string replayChangedPath = replaySummary == null ? "" : PortCopyReviewFile(replaySummary.ChangedSummaryPath, replayDirectory, Path.GetFileName(replaySummary.ChangedSummaryPath));
+                string replayAssetDirectory = "";
+                string replayBundleDirectory = "";
+                if (replaySummary != null)
+                {
+                    replayAssetDirectory = PortCopyReviewDirectory(replaySummary.AssetDirectory, replayDirectory, Path.GetFileName(replaySummary.AssetDirectory));
+                    replayBundleDirectory = PortCopyReviewDirectory(replaySummary.BundleDirectory, replayDirectory, Path.GetFileName(replaySummary.BundleDirectory));
+                }
+
+                string manifestPath = Path.Combine(latestDirectory, "goblin-replay-review-manifest.txt");
+                string summaryPath = Path.Combine(latestDirectory, "goblin-tracker-summary.txt");
+                string indexPath = Path.Combine(latestDirectory, "goblin-tracker-review.html");
+                PortWriteGoblinReplayLooseReviewManifest(
+                    manifestPath,
+                    latestDirectory,
+                    replaySummary,
+                    nextTestsPath,
+                    rootNextTestsPath,
+                    debugNextTestsPath,
+                    sessionInfoPath,
+                    latestLogPath,
+                    replayLogPath,
+                    replayHtmlPath,
+                    replaySummaryPath,
+                    replayChangedPath,
+                    replayAssetDirectory,
+                    replayBundleDirectory);
+                PortWriteGoblinReplayLooseReviewSummary(summaryPath, latestDirectory, replaySummary, rootNextTestsPath);
+                PortWriteGoblinReplayLooseReviewIndex(indexPath, latestDirectory);
+
+                AppLogger.Info(
+                    "GoblinReplayReviewFilesComplete: " +
+                    "success=True; " +
+                    $"reviewDirectory={PortLogField(latestDirectory)}; " +
+                    $"summaryPath={PortLogField(summaryPath)}; " +
+                    $"indexPath={PortLogField(indexPath)}; " +
+                    $"manifestPath={PortLogField(manifestPath)}; " +
+                    $"nextTestsPath={PortLogField(rootNextTestsPath)}; " +
+                    $"replayLogPath={PortLogField(replayLogPath)}; " +
+                    $"replayHtmlPath={PortLogField(replayHtmlPath)}; " +
+                    $"zipCreated=False");
+                return new GoblinReplayReviewFilesResult(true, latestDirectory, summaryPath, indexPath, "Created");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Goblin replay review files failed: nextTestsPath={nextTestsPath}", ex);
+                return new GoblinReplayReviewFilesResult(false, "", "", "", "Exception");
+            }
+        }
+
+        private static string PortResolveGoblinReplayReviewRoot()
+        {
+            return Path.Combine(PortResolveDebugPackageRuntimeRoot(), "Debug", "GoblinReplayReview");
+        }
+
+        private static void PortPrepareGoblinReplayReviewDirectory(string reviewRoot, string latestDirectory)
+        {
+            string fullReviewRoot = Path.GetFullPath(reviewRoot);
+            string fullLatestDirectory = Path.GetFullPath(latestDirectory);
+            if (!fullLatestDirectory.StartsWith(fullReviewRoot, StringComparison.OrdinalIgnoreCase) ||
+                fullLatestDirectory.Equals(fullReviewRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Unsafe Goblin replay review directory: {latestDirectory}");
+            }
+
+            if (Directory.Exists(fullLatestDirectory))
+            {
+                Directory.Delete(fullLatestDirectory, recursive: true);
+            }
+
+            Directory.CreateDirectory(fullLatestDirectory);
+        }
+
+        private static string PortCopyReviewFile(string sourcePath, string destinationDirectory, string destinationFileName)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath) ||
+                string.IsNullOrWhiteSpace(destinationFileName) ||
+                !File.Exists(sourcePath))
+            {
+                return "";
+            }
+
+            Directory.CreateDirectory(destinationDirectory);
+            string destinationPath = Path.Combine(destinationDirectory, destinationFileName);
+            File.Copy(sourcePath, destinationPath, overwrite: true);
+            return destinationPath;
+        }
+
+        private static string PortCopyReviewDirectory(string sourceDirectory, string destinationParentDirectory, string destinationDirectoryName)
+        {
+            if (string.IsNullOrWhiteSpace(sourceDirectory) ||
+                string.IsNullOrWhiteSpace(destinationDirectoryName) ||
+                !Directory.Exists(sourceDirectory))
+            {
+                return "";
+            }
+
+            string destinationDirectory = Path.Combine(destinationParentDirectory, destinationDirectoryName);
+            foreach (string sourcePath in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(sourceDirectory, sourcePath);
+                string destinationPath = Path.Combine(destinationDirectory, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? destinationDirectory);
+                File.Copy(sourcePath, destinationPath, overwrite: true);
+            }
+
+            return destinationDirectory;
+        }
+
+        private static void PortWriteGoblinReplayLooseReviewManifest(
+            string manifestPath,
+            string reviewDirectory,
+            GoblinReplaySummary? replaySummary,
+            string sourceNextTestsPath,
+            string rootNextTestsPath,
+            string debugNextTestsPath,
+            string sessionInfoPath,
+            string latestLogPath,
+            string replayLogPath,
+            string replayHtmlPath,
+            string replaySummaryPath,
+            string replayChangedPath,
+            string replayAssetDirectory,
+            string replayBundleDirectory)
+        {
+            List<string> lines =
+            [
+                "Goblin Replay Loose Review Manifest",
+                $"CreatedLocal={DateTime.Now:O}",
+                $"CreatedUtc={DateTime.UtcNow:O}",
+                $"ReviewDirectory={reviewDirectory}",
+                $"RuntimeRoot={AppDomain.CurrentDomain.BaseDirectory}",
+                $"ReviewRoot={PortResolveGoblinReplayReviewRoot()}",
+                $"VsDebugProfile={AppSettings.IsVsDebugProfile}",
+                $"ConfigPath={AppSettings.ConfigPath}",
+                $"ZipCreated=False",
+                $"ReplayRan={replaySummary != null}",
+                $"SourceNextTestsPath={sourceNextTestsPath}",
+                $"RootNextTestsPath={rootNextTestsPath}",
+                $"DebugNextTestsPath={debugNextTestsPath}",
+                $"SessionInfoPath={sessionInfoPath}",
+                $"LatestLogPath={latestLogPath}",
+                $"ReplayLogPath={replayLogPath}",
+                $"ReplayHtmlPath={replayHtmlPath}",
+                $"ReplaySummaryPath={replaySummaryPath}",
+                $"ReplayChangedPath={replayChangedPath}",
+                $"ReplayAssetDirectory={replayAssetDirectory}",
+                $"ReplayBundleDirectory={replayBundleDirectory}",
+            ];
+
+            if (replaySummary != null)
+            {
+                lines.Add($"ReplayTotalFiles={replaySummary.TotalFiles}");
+                lines.Add($"ReplayEvidenceFiles={replaySummary.EvidenceFiles}");
+                lines.Add($"ReplayAccepted={replaySummary.Accepted}");
+                lines.Add($"ReplayRejected={replaySummary.Rejected}");
+                lines.Add($"ReplayUnknown={replaySummary.Unknown}");
+                lines.Add($"ReplayComparisonChanged={replaySummary.ComparisonChanged}");
+                lines.Add($"ReplayComparisonNew={replaySummary.ComparisonNew}");
+                lines.Add($"ReplayComparisonSame={replaySummary.ComparisonSame}");
+            }
+
+            File.WriteAllLines(manifestPath, lines);
+        }
+
+        private static void PortWriteGoblinReplayLooseReviewSummary(
+            string summaryPath,
+            string reviewDirectory,
+            GoblinReplaySummary? replaySummary,
+            string nextTestsPath)
+        {
+            List<string> lines =
+            [
+                "Goblin Tracker Loose Review Summary",
+                $"CreatedLocal={DateTime.Now:O}",
+                $"ReviewDirectory={reviewDirectory}",
+                $"ZipCreated=False",
+                $"NextTests={(string.IsNullOrWhiteSpace(nextTestsPath) ? "Missing" : Path.GetRelativePath(reviewDirectory, nextTestsPath))}",
+                "",
+            ];
+
+            if (replaySummary == null)
+            {
+                lines.Add("Replay: skipped or unavailable");
+            }
+            else
+            {
+                lines.Add("Replay:");
+                lines.Add($"  Total files: {replaySummary.TotalFiles}");
+                lines.Add($"  Evidence files: {replaySummary.EvidenceFiles}");
+                lines.Add($"  Accepted: {replaySummary.Accepted}");
+                lines.Add($"  Rejected: {replaySummary.Rejected}");
+                lines.Add($"  Unknown: {replaySummary.Unknown}");
+                lines.Add($"  Comparison changed/new/same: {replaySummary.ComparisonChanged}/{replaySummary.ComparisonNew}/{replaySummary.ComparisonSame}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(nextTestsPath) && File.Exists(nextTestsPath))
+            {
+                lines.Add("");
+                lines.Add("Next tests:");
+                foreach (string line in File.ReadLines(nextTestsPath))
+                {
+                    lines.Add($"  {line}");
+                }
+            }
+
+            File.WriteAllLines(summaryPath, lines);
+        }
+
+        private static void PortWriteGoblinReplayLooseReviewIndex(string indexPath, string reviewDirectory)
+        {
+            static string Html(string value) => System.Net.WebUtility.HtmlEncode(value ?? "");
+
+            List<string> lines =
+            [
+                "<!doctype html>",
+                "<html><head><meta charset=\"utf-8\"><title>Goblin Replay Review Files</title>",
+                "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:20px;color:#202124}li{margin:6px 0}</style>",
+                "</head><body>",
+                "<h1>Goblin Replay Review Files</h1>",
+                $"<p><strong>Created:</strong> {DateTime.Now:O}<br><strong>Folder:</strong> {Html(reviewDirectory)}<br><strong>ZIP:</strong> not created</p>",
+                "<ul>",
+            ];
+
+            foreach (string relativePath in new[]
+            {
+                "goblin-tracker-summary.txt",
+                "goblin-replay-review-manifest.txt",
+                "goblin-tracker-next-tests.txt",
+                "session-info.txt",
+            })
+            {
+                PortAddLooseReviewIndexLink(lines, reviewDirectory, relativePath);
+            }
+
+            foreach (FileInfo file in new DirectoryInfo(reviewDirectory)
+                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .Where(file =>
+                    file.Name.StartsWith("GoblinReplay_", StringComparison.OrdinalIgnoreCase) &&
+                    (file.Extension.Equals(".html", StringComparison.OrdinalIgnoreCase) ||
+                    file.Extension.Equals(".log", StringComparison.OrdinalIgnoreCase) ||
+                    file.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(file => file.FullName, StringComparer.OrdinalIgnoreCase))
+            {
+                PortAddLooseReviewIndexLink(lines, reviewDirectory, Path.GetRelativePath(reviewDirectory, file.FullName));
+            }
+
+            lines.Add("</ul></body></html>");
+            File.WriteAllLines(indexPath, lines);
+        }
+
+        private static void PortAddLooseReviewIndexLink(List<string> lines, string reviewDirectory, string relativePath)
+        {
+            string path = Path.Combine(reviewDirectory, relativePath);
+            if (!File.Exists(path))
+            {
+                return;
+            }
+
+            string href = relativePath.Replace('\\', '/');
+            string text = relativePath.Replace('\\', '/');
+            lines.Add($"<li><a href=\"{System.Net.WebUtility.HtmlEncode(href)}\">{System.Net.WebUtility.HtmlEncode(text)}</a></li>");
         }
 
         private GoblinReplaySummary? PortRunGoblinReplayForReview()
@@ -1295,7 +1575,7 @@ namespace GoblinFarmer
             }
             catch (Exception ex)
             {
-                AppLogger.Error($"Review Goblin replay failed before debug package creation: inputPath={replayInputPath}", ex);
+                AppLogger.Error($"Review Goblin replay failed before loose review file creation: inputPath={replayInputPath}", ex);
                 return null;
             }
         }
@@ -1632,7 +1912,21 @@ namespace GoblinFarmer
                 }
             }
 
-            GoblinReplaySummary summary = new(files.Count, evidenceFiles, accepted, rejected, unknown, logPath, htmlPath, comparisonChanged, comparisonNew, comparisonSame);
+            GoblinReplaySummary summary = new(
+                files.Count,
+                evidenceFiles,
+                accepted,
+                rejected,
+                unknown,
+                logPath,
+                htmlPath,
+                summaryPath,
+                changedPath,
+                bundleDirectory,
+                assetDirectory,
+                comparisonChanged,
+                comparisonNew,
+                comparisonSame);
             lines.Add($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; comparisonChanged={summary.ComparisonChanged}; comparisonNew={summary.ComparisonNew}; comparisonSame={summary.ComparisonSame}; logPath={summary.LogPath}; htmlReportPath={summary.HtmlReportPath}; summaryPath={summaryPath}; changedSummaryPath={changedPath}; bundleDirectory={bundleDirectory}");
             File.WriteAllLines(logPath, lines);
             PortWriteGoblinReplayHtmlReport(htmlPath, summary, reportRows, folder, started);
@@ -2148,9 +2442,20 @@ namespace GoblinFarmer
             int Unknown,
             string LogPath,
             string HtmlReportPath,
+            string SummaryPath,
+            string ChangedSummaryPath,
+            string BundleDirectory,
+            string AssetDirectory,
             int ComparisonChanged,
             int ComparisonNew,
             int ComparisonSame);
+
+        private sealed record GoblinReplayReviewFilesResult(
+            bool Success,
+            string ReviewDirectory,
+            string SummaryPath,
+            string IndexPath,
+            string Reason);
 
         private sealed record GoblinReplayDebugPackageResult(
             bool Success,
