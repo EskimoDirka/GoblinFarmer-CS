@@ -220,7 +220,7 @@
 - Goblin replay package artifacts include `GoblinReplay_*_summary.txt`, `GoblinReplay_*_changed.txt`, and `GoblinReplay_*_bundles\...\decision.txt`
 - `GoblinReplay_*_summary.txt` groups replay decisions by area, goblin type, decision, and reason
 - `GoblinReplay_*_changed.txt` reports changed decisions compared with the previous replay or says none changed
-- `Scripts\replay-goblin-evidence.ps1` self-discovers the latest `DebugPackages\GoblinFarmer_Debug_*.zip` and writes `Logs\GoblinReplayCli_*.txt`
+- `Scripts\Create Debug Package.bat` delegates to `Scripts\create-debug-package.ps1` and is the only user-facing manual ZIP export launcher
 - Debug package includes only a small recent sample from `Debug\GoblinEvidence\ObservationDiagnostics` and reports included/excluded observation crop counts
 - GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
 - Direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots are bounded by count and size; manifest reports included, excluded, and oversized event screenshot counts

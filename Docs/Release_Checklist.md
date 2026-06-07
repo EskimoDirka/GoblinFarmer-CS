@@ -12,7 +12,7 @@ Use this before publishing a final Windows release.
 - [ ] Run `dotnet build GoblinFarmer.csproj`.
 - [ ] Publish from Visual Studio with the `GoblinFarmerRelease` profile or run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1`.
 - [ ] Confirm the generated publish folder exists at `artifacts\publish\GoblinFarmer`.
-- [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, `Images\`, and `Scripts\create-debug-package.ps1`.
+- [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, `Images\`, `Scripts\create-debug-package.ps1`, and `Scripts\Create Debug Package.bat`.
 - [ ] Compile `Installer\GoblinFarmer.iss` only after `artifacts\publish\GoblinFarmer\GoblinFarmer.exe` exists.
 - [ ] If Inno Setup is installed, confirm `artifacts\installer\GoblinFarmerSetup-1.4.0.exe` is created for v1.4.
 - [ ] Confirm the app title bar shows the expected version, for example `GoblinFarmer v1.4.0`.

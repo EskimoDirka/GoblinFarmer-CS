@@ -187,7 +187,7 @@ Debug Mode is off by default for normal release use. When enabled from Settings,
 
 Debug and release artifacts keep evidence useful but bounded by default. VS Debug troubleshooting artifacts and release/debug-mode artifacts use a 7-day age-retention window. Success screenshots are excluded from release/export packages unless explicitly requested, failure screenshot groups and current-session `debug-screenshots` are capped to recent samples, and Goblin Evidence crops/event screenshots use their own count and package limits. Successful Battle.net app-click launches do not create false failure screenshots for manual-play suspicion or brief post-launch Battle.net visibility. The package manifest reports included and excluded screenshot counts and sizes.
 
-In VS Debug, closing the form automatically captures the current route-ordered `Next Tests` checkbox state, runs Goblin replay, and refreshes loose files under `Debug\GoblinReplayReview\Latest`. That folder includes `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt`, the replay log, HTML report, grouped summary, changed-decision summary, per-observation decision bundles when available, and journal/minimap encounter crops. There are no freeform scenario input prompts and no ZIP is created for the default VS Debug troubleshooting workflow. Release/export troubleshooting can still create a debug package ZIP from the script or release package button when needed. A terminal helper is also available at `Scripts\replay-goblin-evidence.ps1` to summarize the latest package artifacts from `DebugPackages`.
+In VS Debug, closing the form automatically captures the current route-ordered `Next Tests` checkbox state, runs Goblin replay, and refreshes loose files under `Debug\GoblinReplayReview\Latest`. That folder includes `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt`, the replay log, HTML report, grouped summary, changed-decision summary, per-observation decision bundles when available, and journal/minimap encounter crops. There are no freeform scenario input prompts and no ZIP is created for the default VS Debug troubleshooting workflow. Release/export troubleshooting uses the single ZIP export path: `Scripts\Create Debug Package.bat`, which launches `Scripts\create-debug-package.ps1`.
 
 Release and Visual Studio Debug use a taller Goblin Tracker group so the evidence and Last Observation fields remain readable. Release-user launches keep diagnostic tabs hidden until Debug Mode is enabled.
 
@@ -210,12 +210,6 @@ powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
 
 Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample so packages remain compact while still showing the latest scanner evidence.
-
-To review the latest Goblin Tracker package artifacts from a terminal:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Scripts\replay-goblin-evidence.ps1
-```
 
 ## Release v1.4
 

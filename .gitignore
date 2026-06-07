@@ -452,7 +452,6 @@ debug-screenshot-manifest.txt
 Scripts/*
 Scripts/Local Tools/
 !Scripts/create-debug-package.ps1
-!Scripts/replay-goblin-evidence.ps1
 !Scripts/Create Debug Package.bat
 !Scripts/Git Commit Push.bat
 !Scripts/publish-release.ps1

@@ -112,7 +112,6 @@
     <None Remove="Images\Teleport Function\Map X Y Coordinates.txt" />
     <None Remove="Images\Teleport Function\World Map.png" />
     <None Remove="Scripts\create-debug-package.ps1" />
-    <None Remove="Scripts\replay-goblin-evidence.ps1" />
     <None Remove="Scripts\Create Debug Package.bat" />
   </ItemGroup>
 
@@ -393,10 +392,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="Scripts\replay-goblin-evidence.ps1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
     <Content Include="Scripts\Create Debug Package.bat">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -407,9 +402,6 @@
     <Error
       Condition="!Exists('$(PublishDir)Scripts\create-debug-package.ps1')"
       Text="Published debug package script missing: $(PublishDir)Scripts\create-debug-package.ps1" />
-    <Error
-      Condition="!Exists('$(PublishDir)Scripts\replay-goblin-evidence.ps1')"
-      Text="Published goblin replay CLI script missing: $(PublishDir)Scripts\replay-goblin-evidence.ps1" />
     <Error
       Condition="!Exists('$(PublishDir)Scripts\Create Debug Package.bat')"
       Text="Published debug package launcher missing: $(PublishDir)Scripts\Create Debug Package.bat" />

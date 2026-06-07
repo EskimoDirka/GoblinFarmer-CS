@@ -14,6 +14,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Supported manual ZIP export path for release/export troubleshooting.
+# Normal app diagnostics stay in DebugManager/runtime folders; VS Debug Goblin
+# Tracker review files are generated automatically as loose files under
+# Debug\GoblinReplayReview\Latest.
+
 function Write-Step {
     param([string]$Text)
 

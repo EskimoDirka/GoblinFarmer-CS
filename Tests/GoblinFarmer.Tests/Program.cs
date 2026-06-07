@@ -2242,7 +2242,8 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
-    string replayCliScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "replay-goblin-evidence.ps1"));
+    string projectSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
+    string packageLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Create Debug Package.bat"));
     string createReviewCloseMethod = ExtractMethodBody(evidenceSource, "private void PortCreateGoblinReplayReviewFilesOnVsDebugClose");
     string createReviewFilesMethod = ExtractMethodBody(evidenceSource, "private GoblinReplayReviewFilesResult PortCreateGoblinReplayReviewFilesForReview");
     string writeReviewFilesMethod = ExtractMethodBody(evidenceSource, "private GoblinReplayReviewFilesResult PortWriteGoblinReplayReviewFiles");
@@ -2286,9 +2287,8 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplayComplete", StringComparison.Ordinal), "review replay should log completion");
     AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplaySkipped", StringComparison.Ordinal), "review replay should clearly log skipped states");
     AssertTrue(evidenceSource.Contains("return DebugManager.GoblinEvidenceDirectory", StringComparison.Ordinal), "review replay should self-discover current runtime GoblinEvidence input");
-    AssertTrue(evidenceSource.Contains("PortResolveDebugPackageRuntimeRoot", StringComparison.Ordinal), "debug package creation should resolve the correct runtime root");
-    AssertTrue(evidenceSource.Contains("AppSettings.IsVsDebugProfile && PortTryResolveConfigRoot", StringComparison.Ordinal), "VS Debug packaging should use the project-root config parent");
-    AssertTrue(evidenceSource.Contains("Path.Combine(packageRuntimeRoot, \"DebugPackages\")", StringComparison.Ordinal), "debug package creation should log/discover the package folder from the resolved runtime root");
+    AssertTrue(evidenceSource.Contains("PortResolveDebugPackageRuntimeRoot", StringComparison.Ordinal), "loose review file creation should resolve the correct runtime root");
+    AssertTrue(evidenceSource.Contains("AppSettings.IsVsDebugProfile && PortTryResolveConfigRoot", StringComparison.Ordinal), "VS Debug loose review files should use the project-root config parent");
     AssertTrue(evidenceSource.Contains("SearchOption.AllDirectories", StringComparison.Ordinal), "replay should recursively scan debug package folders");
     AssertTrue(evidenceSource.Contains("PortExtractGoblinReplayZip", StringComparison.Ordinal), "replay should scan ZIP debug packages");
     AssertTrue(evidenceSource.Contains("ZipFile.ExtractToDirectory", StringComparison.Ordinal), "replay ZIP support should extract packages into a bounded temporary workspace");
@@ -2304,10 +2304,9 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(evidenceSource.Contains("GoblinReplayCandidateRanking", StringComparison.Ordinal), "replay should log ranked candidate matches");
     AssertTrue(evidenceSource.Contains("GoblinReplayAreaInference", StringComparison.Ordinal), "replay should log area inference decisions");
     AssertTrue(evidenceSource.Contains("replayComparison", StringComparison.Ordinal), "replay should compare decisions to the previous replay log");
-    AssertTrue(evidenceSource.Contains("create-debug-package.ps1", StringComparison.Ordinal), "ZIP package creation should remain available for release/export workflows");
-    AssertTrue(evidenceSource.Contains("process.StartInfo.ArgumentList.Add(\"-RuntimeRoot\")", StringComparison.Ordinal), "ZIP package creation should still pass the active runtime root");
-    AssertTrue(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "ZIP package creation should still log the package result when explicitly used");
-    AssertTrue(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "ZIP package creation should still parse the generated package path when explicitly used");
+    AssertFalse(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "app code should not carry a duplicate in-app ZIP package creation flow");
+    AssertFalse(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "app code should not parse package script output when ZIP export is script-only");
+    AssertFalse(evidenceSource.Contains("PortCreateDebugPackage(", StringComparison.Ordinal), "app code should not spawn the ZIP package script from VS Debug review flow");
     AssertTrue(evidenceSource.Contains("GoblinDecisionTracePolicy.ToLogLine(trace)", StringComparison.Ordinal), "replay should write structured decision trace lines");
     AssertFalse(ExtractMethodBody(evidenceSource, "private GoblinReplaySummary PortReplayGoblinEvidenceFolder").Contains("RecordGoblinFound(", StringComparison.Ordinal), "replay dry-run should not increment live GoblinCount");
     AssertTrue(sessionStatsSource.Contains("PortWriteGoblinDecisionBundle(trace)", StringComparison.Ordinal), "live decision traces should write evidence bundles");
@@ -2324,11 +2323,13 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(packageScript.Contains("goblin-tracker-review.html", StringComparison.Ordinal), "debug packages should include a root review index");
     AssertTrue(packageScript.Contains("$($replayReport.BaseName)_files", StringComparison.Ordinal), "debug packages should include replay report thumbnail assets");
     AssertTrue(packageScript.Contains("Logs\\GoblinReplay", StringComparison.Ordinal), "replay logs should have a stable package destination");
-    AssertTrue(replayCliScript.Contains("Goblin replay CLI summary", StringComparison.Ordinal), "terminal replay runner should write a concise CLI summary");
-    AssertTrue(replayCliScript.Contains("GoblinFarmer_Debug_*.zip", StringComparison.Ordinal), "terminal replay runner should self-discover the latest debug package");
-    AssertTrue(replayCliScript.Contains("ChangedDecisionSummaries", StringComparison.Ordinal), "terminal replay runner should surface changed-decision summaries");
-    AssertTrue(replayCliScript.Contains("DecisionBundles", StringComparison.Ordinal), "terminal replay runner should surface per-observation bundles");
-    AssertTrue(File.Exists(Path.Combine(repoRoot, "Scripts", "replay-goblin-evidence.ps1")), "terminal Goblin replay runner should be tracked in Scripts");
+    AssertTrue(packageScript.Contains("Supported manual ZIP export path", StringComparison.Ordinal), "debug package script should identify itself as the single manual ZIP export path");
+    AssertTrue(packageLauncher.Contains("Supported manual ZIP export path", StringComparison.Ordinal), "debug package launcher should identify itself as the single manual ZIP export path");
+    AssertTrue(packageLauncher.Contains("create-debug-package.ps1", StringComparison.Ordinal), "debug package launcher should delegate to the PowerShell package script");
+    AssertTrue(projectSource.Contains("Scripts\\create-debug-package.ps1", StringComparison.Ordinal), "release/export ZIP package script should remain published");
+    AssertTrue(projectSource.Contains("Scripts\\Create Debug Package.bat", StringComparison.Ordinal), "release/export ZIP package launcher should remain published");
+    AssertFalse(projectSource.Contains("Scripts\\replay-goblin-evidence.ps1", StringComparison.Ordinal), "removed terminal replay helper should not be published");
+    AssertFalse(File.Exists(Path.Combine(repoRoot, "Scripts", "replay-goblin-evidence.ps1")), "duplicate terminal Goblin replay package reviewer should be removed");
 }
 
 static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
