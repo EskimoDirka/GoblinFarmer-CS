@@ -152,6 +152,9 @@
 * [x] Add coarse journal row `LineBucket` identity to journal freshness/evidence signatures so later legitimate same-template journal rows can become fresh while the same old visible row remains stale across area moves.
 * [x] Clear displayed Last Observation on confirmed route/current-area changes from teleport confirmation, already-at-target, already-at-queued-destination, and route-end hotkey state updates.
 * [x] Record 2026-06-07 live auto-count notes: blocked areas, duplicate suppression, and stale-evidence count prevention looked good; Cave Level 2, special two-count areas, and classification edge cases still need encounters.
+* [x] Remove the accepted route-button `Teleport queued` overlay during Goblin Tracker validation while preserving route-button receipt/queue/execution diagnostics.
+* [x] Add a VS Debug-only `Test Count Override` checkbox that lets manual `X` simulate fresh evidence while preserving block-list, duplicate, and PF1/PF2/Stinging Winds area-limit behavior.
+* [x] Widen/reposition the VS Debug `Create Debug Package` button in Settings for easier live-test package creation.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
@@ -160,12 +163,14 @@
 * [ ] Live-validate teleporting from Cathedral/Royal Crypts/Battlefields-style transitions clears previous-area Last Observation instead of showing stale goblin text.
 * [ ] Live-validate repeated Malevolent Tormentor journal evidence after moving between Battlefields and Rakkis Crossing does not overwrite the accepted Battlefields Last Observation or create stale display spam.
 * [ ] Review the next debug package for Last Observation clearing too quickly; determine whether display-hold duration, area-change clearing, no-candidate scans, or stale-journal display suppression needs adjustment.
-* [ ] Consider adding a setting or quieter mode for route-button/Teleport queued notifications during Goblin Tracker validation.
+* [x] Consider adding a setting or quieter mode for route-button/Teleport queued notifications during Goblin Tracker validation.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
 * [x] Press Teleport Next when no queued/next route target exists and confirm the no-route notification appears.
 * [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
+* [ ] Use VS Debug `Test Count Override` for synthetic limit checks: with the override on, press manual `X` three times in PF1, PF2, and Stinging Winds and confirm counts 1 and 2 are accepted while count 3 suppresses with `AreaLimitReached`; then turn the override off before real auto-count testing.
+* [ ] Use VS Debug `Test Count Override` for a default-area synthetic check: press manual `X` twice in a normal allowed area and confirm the second press suppresses with `AreaAlreadyCounted`.
 * [x] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now displays/counts as Treasure Goblin.
 * [x] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
 * [ ] Live-validate a real Gilded Baron does not auto-count as Malevolent Tormentor from an early weak minimap match; confirm the accepted count, notification, and Last Observation use Gilded Baron.

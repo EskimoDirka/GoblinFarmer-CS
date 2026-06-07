@@ -457,6 +457,7 @@ namespace GoblinFarmer
                     goblinTrackerElement.TryGetProperty("AllowUnknownManualCount", out _) &&
                     goblinTrackerElement.TryGetProperty("EnableObservationMode", out _) &&
                     goblinTrackerElement.TryGetProperty("EnableAutomaticCounting", out _) &&
+                    goblinTrackerElement.TryGetProperty("EnableManualTestCountOverride", out _) &&
                     goblinTrackerElement.TryGetProperty("EnableDecisionTrace", out _);
             }
             catch (Exception ex)
@@ -1178,6 +1179,7 @@ namespace GoblinFarmer
                 $"GoblinTracker.AllowUnknownManualCount={GoblinTracker.AllowUnknownManualCount}; " +
                 $"GoblinTracker.EnableObservationMode={GoblinTracker.EnableObservationMode}; " +
                 $"GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}; " +
+                $"GoblinTracker.EnableManualTestCountOverride={GoblinTracker.EnableManualTestCountOverride}; " +
                 $"GoblinTracker.EnableDecisionTrace={GoblinTracker.EnableDecisionTrace}; " +
                 $"User.CombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatProfile={User.CombatProfile}; " +
@@ -1303,6 +1305,7 @@ namespace GoblinFarmer
             public bool AllowUnknownManualCount { get; set; } = false;
             public bool EnableObservationMode { get; set; } = true;
             public bool EnableAutomaticCounting { get; set; } = false;
+            public bool EnableManualTestCountOverride { get; set; } = false;
             public bool EnableDecisionTrace { get; set; } = false;
 
             public void Normalize()

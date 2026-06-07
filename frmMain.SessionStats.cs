@@ -119,8 +119,11 @@ namespace GoblinFarmer
             }
 
             goblinType = PortResolveGoblinTypeForManualCount(source, goblinType, area.AreaKey);
+            bool manualTestCountOverrideEnabled = manualUnknownResolved &&
+                area.Resolved &&
+                PortGoblinManualTestCountOverrideEnabled();
             bool hasFreshManualObservationForUnknown = area.Resolved &&
-                PortHasFreshManualCountObservation(area.AreaKey);
+                (PortHasFreshManualCountObservation(area.AreaKey) || manualTestCountOverrideEnabled);
             string rawLocation = PortDisplayLocation(area.RawLocation);
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
@@ -213,6 +216,11 @@ namespace GoblinFarmer
                         area.Resolved,
                         AppSettings.GoblinTracker.AllowUnknownManualCount,
                         hasFreshManualObservationForUnknown);
+                    if (manualTestCountOverrideEnabled)
+                    {
+                        AppLogger.Info($"GoblinTracker: ManualTestCountOverrideFreshObservationBypass source={PortLogField(source)} areaKey={areaKey} displayLocation={displayLocation} effective=True respectsBlockListAndAreaLimits=True");
+                    }
+
                     if (suppressUnknownManualCount)
                     {
                         suppressionReason = "NoFreshObservation";
@@ -277,6 +285,12 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;
+        }
+
+        private static bool PortGoblinManualTestCountOverrideEnabled()
+        {
+            return AppSettings.IsVsDebugProfile &&
+                AppSettings.GoblinTracker.EnableManualTestCountOverride;
         }
 
         private void PortPublishManualGoblinCountObservation(

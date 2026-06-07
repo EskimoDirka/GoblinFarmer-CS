@@ -159,8 +159,9 @@
 - Enabled automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
 - Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
 - Route button clicks log `ButtonClickReceived`, `ButtonClickQueued`, and `ButtonClickExecuting` so a briefly unresponsive manual route button can be diagnosed from the next package
-- Accepted route button clicks show a short no-activate `Teleport queued` notification, and button clicks that immediately short-circuit because the app is already at the target show/log `Already here`
-- During Goblin Tracker validation, Teleport queued notifications should not obscure or distract from count/Last Observation validation; consider a quieter notification mode if they remain intrusive
+- Accepted route button clicks do not show the intrusive `Teleport queued` notification; they log `ButtonClickQueuedFeedbackSuppressed` instead
+- Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
+- In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
 - Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template

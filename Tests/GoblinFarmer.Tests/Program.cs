@@ -63,6 +63,7 @@ Run("Goblin observation UI state logs update and clear", TestGoblinObservationUi
 Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
+Run("Goblin VS Debug manual test count override is safety-scoped", TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
 Run("Goblin replay tool is dry-run and review package button is one-click", TestGoblinReplayToolIsDryRunAndPackaged);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
@@ -1987,19 +1988,45 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
 
     AssertTrue(automationSource.Contains("chkGoblinObservationMode", StringComparison.Ordinal), "VS Debug form should expose an Observation Mode checkbox");
     AssertTrue(automationSource.Contains("chkGoblinAutomaticCounting", StringComparison.Ordinal), "VS Debug form should expose an Automatic Counting checkbox");
+    AssertTrue(automationSource.Contains("chkGoblinManualTestCountOverride", StringComparison.Ordinal), "VS Debug form should expose a manual test count override checkbox");
     AssertTrue(automationSource.Contains("chkGoblinDecisionTrace", StringComparison.Ordinal), "VS Debug form should expose a Decision Trace checkbox");
     AssertTrue(automationSource.Contains("btnReplayGoblinEvidenceFolder", StringComparison.Ordinal), "VS Debug form should expose a replay button");
     AssertTrue(releaseSource.Contains("PortInitializeGoblinTrackerDebugPreferenceControls();", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should initialize before runtime validation can stop startup");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinObservationMode)", StringComparison.Ordinal), "Observation Mode checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting)", StringComparison.Ordinal), "Automatic Counting checkbox should be placed inside the visible Settings group");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinManualTestCountOverride)", StringComparison.Ordinal), "manual test count override checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinDecisionTrace)", StringComparison.Ordinal), "Decision Trace checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(btnReplayGoblinEvidenceFolder)", StringComparison.Ordinal), "replay button should be placed inside the visible Settings group");
     AssertFalse(automationSource.Contains("Controls.Add(grpGoblinTrackerDebugSettings)", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should not be added as a layered top-level overlay");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked", StringComparison.Ordinal), "Observation Mode checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked", StringComparison.Ordinal), "Automatic Counting checkbox changes should persist to AppSettings");
+    AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableManualTestCountOverride = chkGoblinManualTestCountOverride.Checked", StringComparison.Ordinal), "manual test count override checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableDecisionTrace = chkGoblinDecisionTrace.Checked", StringComparison.Ordinal), "Decision Trace checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("PortSetGoblinAutomaticCountingArmedState(source)", StringComparison.Ordinal), "toggling automatic counting should re-arm the freshness gate");
     AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
+    AssertTrue(automationSource.Contains("Size = new Size(522, 28)", StringComparison.Ordinal), "Create Debug Package button should be wide enough for VS Debug testing runs");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 198)", StringComparison.Ordinal), "VS Debug Settings group should expand for the added Goblin Tracker test control");
+}
+
+static void TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string recordMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordGoblinFound");
+    string overrideMethod = ExtractMethodBody(sessionStatsSource, "private static bool PortGoblinManualTestCountOverrideEnabled");
+
+    AssertTrue(appSettingsSource.Contains("public bool EnableManualTestCountOverride { get; set; } = false", StringComparison.Ordinal), "manual test count override should default off");
+    AssertTrue(appSettingsSource.Contains("TryGetProperty(\"EnableManualTestCountOverride\"", StringComparison.Ordinal), "installed configs missing the manual test count override setting should migrate to the disabled default");
+    AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableManualTestCountOverride={GoblinTracker.EnableManualTestCountOverride}", StringComparison.Ordinal), "startup AppSettings logs should expose the manual test count override setting");
+    AssertTrue(configSource.Contains("\"EnableManualTestCountOverride\": false", StringComparison.Ordinal), "project config should expose the manual test count override disabled by default");
+    AssertTrue(overrideMethod.Contains("AppSettings.IsVsDebugProfile", StringComparison.Ordinal), "manual test count override should only be effective in VS Debug/dev profile");
+    AssertTrue(overrideMethod.Contains("AppSettings.GoblinTracker.EnableManualTestCountOverride", StringComparison.Ordinal), "manual test count override should require the explicit setting");
+    AssertTrue(sessionStatsSource.Contains("ManualTestCountOverrideFreshObservationBypass", StringComparison.Ordinal), "manual test count override should log when it bypasses the fresh-evidence gate");
+    AssertTrue(sessionStatsSource.Contains("respectsBlockListAndAreaLimits=True", StringComparison.Ordinal), "manual test count override log should make clear that normal protections still apply");
+    AssertTrue(recordMethod.IndexOf("GoblinManualCountBlockList.IsBlocked(area.AreaKey)", StringComparison.Ordinal) < recordMethod.IndexOf("ManualTestCountOverrideFreshObservationBypass", StringComparison.Ordinal), "blocked areas should still be evaluated before the manual test count override can count");
+    AssertTrue(recordMethod.IndexOf("portGoblinAreaDuplicateGuard.Peek(area.AreaKey)", StringComparison.Ordinal) < recordMethod.IndexOf("ManualTestCountOverrideFreshObservationBypass", StringComparison.Ordinal), "area-limit state should still be read before the manual test count override can count");
 }
 
 static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()
@@ -2342,8 +2369,8 @@ static void TestTeleportNextNoRouteStateNotifiesUser()
     AssertTrue(buttonSource.Contains("ButtonClickReceived", StringComparison.Ordinal), "route button clicks should log receipt before any workflow gate can make them look silent");
     AssertTrue(buttonSource.Contains("ButtonClickQueued", StringComparison.Ordinal), "route button clicks should log when they are queued into the workflow runner");
     AssertTrue(buttonSource.Contains("ButtonClickExecuting", StringComparison.Ordinal), "route button clicks should log when the workflow body starts executing");
-    AssertTrue(buttonSource.Contains("Teleport queued", StringComparison.Ordinal), "route button clicks should show immediate no-focus feedback after the click is accepted");
-    AssertTrue(buttonSource.Contains("ButtonClickFeedbackShown", StringComparison.Ordinal), "route button click feedback should be logged for package diagnosis");
+    AssertFalse(buttonSource.Contains("PortShowSplash($\"Teleport queued", StringComparison.Ordinal), "accepted route button clicks should not show the intrusive Teleport queued overlay during Goblin Tracker validation");
+    AssertTrue(buttonSource.Contains("ButtonClickQueuedFeedbackSuppressed", StringComparison.Ordinal), "suppressed route button queued feedback should be logged for package diagnosis");
     AssertTrue(File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs")).Contains("ButtonClickAlreadyAtTargetFeedbackShown", StringComparison.Ordinal), "button clicks that short-circuit as already at target should show/log visible feedback");
 }
 
