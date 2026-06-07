@@ -2122,6 +2122,11 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(evidenceSource.Contains("GoblinReplayCandidateRanking", StringComparison.Ordinal), "replay should log ranked candidate matches");
     AssertTrue(evidenceSource.Contains("GoblinReplayAreaInference", StringComparison.Ordinal), "replay should log area inference decisions");
     AssertTrue(evidenceSource.Contains("replayComparison", StringComparison.Ordinal), "replay should compare decisions to the previous replay log");
+    AssertTrue(evidenceSource.Contains("PortCreateDebugPackageAfterGoblinReplay(summary)", StringComparison.Ordinal), "replay completion should automatically create a debug package");
+    AssertTrue(evidenceSource.Contains("create-debug-package.ps1", StringComparison.Ordinal), "automatic replay packaging should call the tracked debug package script");
+    AssertTrue(evidenceSource.Contains("process.StartInfo.ArgumentList.Add(\"-RuntimeRoot\")", StringComparison.Ordinal), "automatic replay packaging should pass the active runtime root");
+    AssertTrue(evidenceSource.Contains("GoblinReplayDebugPackageComplete", StringComparison.Ordinal), "automatic replay packaging should log the package result");
+    AssertTrue(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "automatic replay packaging should parse the generated package path");
     AssertTrue(evidenceSource.Contains("GoblinDecisionTracePolicy.ToLogLine(trace)", StringComparison.Ordinal), "replay should write structured decision trace lines");
     AssertFalse(ExtractMethodBody(evidenceSource, "private GoblinReplaySummary PortReplayGoblinEvidenceFolder").Contains("RecordGoblinFound(", StringComparison.Ordinal), "replay dry-run should not increment live GoblinCount");
     AssertTrue(sessionStatsSource.Contains("PortWriteGoblinDecisionBundle(trace)", StringComparison.Ordinal), "live decision traces should write evidence bundles");
