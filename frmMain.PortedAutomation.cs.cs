@@ -67,6 +67,8 @@ namespace GoblinFarmer
         private CheckBox? chkGoblinAutomaticCounting;
         private CheckBox? chkGoblinDecisionTrace;
         private Button? btnGoblinRecognitionCapture;
+        private ComboBox? cboGoblinDebugSimulationArea;
+        private Button? btnGoblinDebugSimulateCount;
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
@@ -437,7 +439,7 @@ namespace GoblinFarmer
             }
 
             portGoblinTrackerDebugPreferenceControlsInitialized = true;
-            portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 214);
+            portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 244);
 
             chkGoblinObservationMode = new CheckBox
             {
@@ -485,20 +487,53 @@ namespace GoblinFarmer
                 UseVisualStyleBackColor = true,
             };
 
+            cboGoblinDebugSimulationArea = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Location = new Point(214, 132),
+                Name = "cboGoblinDebugSimulationArea",
+                Size = new Size(204, 23),
+                TabIndex = 4,
+            };
+            cboGoblinDebugSimulationArea.Items.AddRange(
+            [
+                "Current Area",
+                "Southern Highlands",
+                "Pandemonium Fortress Level 1",
+                "Pandemonium Fortress Level 2",
+                "Stinging Winds",
+                "New Tristram",
+            ]);
+            cboGoblinDebugSimulationArea.SelectedIndex = 0;
+
+            btnGoblinDebugSimulateCount = new Button
+            {
+                Location = new Point(424, 130),
+                Name = "btnGoblinDebugSimulateCount",
+                Size = new Size(112, 28),
+                TabIndex = 5,
+                Text = "Sim Count",
+                UseVisualStyleBackColor = true,
+            };
+
             chkGoblinObservationMode.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ObservationModeCheckbox");
             chkGoblinAutomaticCounting.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("AutomaticCountingCheckbox");
             chkGoblinDecisionTrace.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("DecisionTraceCheckbox");
             btnGoblinRecognitionCapture.Click += (_, _) => PortQueueGoblinRecognitionDebugCapture("VsDebugCaptureButton");
+            btnGoblinDebugSimulateCount.Click += (_, _) => PortSimulateGoblinTrackerVsDebugCount();
             portSettingsGroup.Controls.Add(chkGoblinObservationMode);
             portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting);
             portSettingsGroup.Controls.Add(chkGoblinDecisionTrace);
             portSettingsGroup.Controls.Add(btnGoblinRecognitionCapture);
+            portSettingsGroup.Controls.Add(cboGoblinDebugSimulationArea);
+            portSettingsGroup.Controls.Add(btnGoblinDebugSimulateCount);
             AppLogger.Info(
                 "Goblin Tracker VS Debug preference controls initialized: " +
                 $"enableObservationMode={chkGoblinObservationMode.Checked}; " +
                 $"enableAutomaticCounting={chkGoblinAutomaticCounting.Checked}; " +
                 $"enableDecisionTrace={chkGoblinDecisionTrace.Checked}; " +
                 "captureButtonVisible=True; " +
+                "simulationControlsVisible=True; " +
                 $"configPath={PortLogField(AppSettings.ConfigPath)}");
         }
 
@@ -533,6 +568,119 @@ namespace GoblinFarmer
                 $"enableDecisionTrace={AppSettings.GoblinTracker.EnableDecisionTrace}; " +
                 $"automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; " +
                 "captureButtonCreatesFilesOnlyOnClick=True");
+        }
+
+        private void PortSimulateGoblinTrackerVsDebugCount()
+        {
+            const string source = "VsDebugSimulation";
+            if (!AppSettings.IsVsDebugProfile)
+            {
+                AppLogger.Info("GoblinTracker: VsDebugGoblinCountSimulationSkipped reason=NotVsDebugProfile");
+                return;
+            }
+
+            string selectedArea = cboGoblinDebugSimulationArea?.SelectedItem?.ToString() ?? "Current Area";
+            PortGoblinTrackerAreaResolution? currentAreaResult = null;
+            GoblinAreaResolution area;
+            if (selectedArea.Equals("Current Area", StringComparison.OrdinalIgnoreCase))
+            {
+                currentAreaResult = PortResolveCurrentGoblinArea(source);
+                area = currentAreaResult.Area;
+            }
+            else
+            {
+                area = GoblinAreaResolver.Resolve(selectedArea);
+            }
+
+            string goblinType = "Debug Simulated Goblin";
+            string areaKey = PortDisplayLocation(area.AreaKey);
+            string displayLocation = PortDisplayLocation(area.DisplayLocation);
+            string suppressionReason = "";
+            GoblinAreaDuplicateGuardResult guardResult = new(false, 0, 0);
+            int total = 0;
+
+            lock (portGoblinTrackerLock)
+            {
+                if (currentAreaResult?.Blocked == true)
+                {
+                    suppressionReason = currentAreaResult.SuppressionReason;
+                }
+                else if (!area.Resolved)
+                {
+                    suppressionReason = "AreaUnresolved";
+                }
+                else if (GoblinManualCountBlockList.IsBlocked(area.AreaKey))
+                {
+                    suppressionReason = "BlockedArea";
+                }
+                else if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey, out guardResult))
+                {
+                    suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                }
+                else
+                {
+                    GoblinFoundRecord countedRecord = new(
+                        area.AreaKey,
+                        area.DisplayLocation,
+                        goblinType,
+                        source,
+                        DateTime.UtcNow,
+                        true,
+                        "");
+                    total = DebugManager.Session.RecordGoblinFound(countedRecord);
+                }
+
+                if (!string.IsNullOrWhiteSpace(suppressionReason))
+                {
+                    GoblinFoundRecord suppressedRecord = new(
+                        area.AreaKey,
+                        area.DisplayLocation,
+                        goblinType,
+                        source,
+                        DateTime.UtcNow,
+                        false,
+                        suppressionReason);
+                    DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(suppressionReason))
+            {
+                AppLogger.Info($"GoblinTracker: GoblinCountSuppressed areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={suppressionReason} blockListStatus={(suppressionReason == "BlockedArea" ? "Blocked" : "Allowed")} countResult=Suppressed rawLocation='{PortLogField(PortDisplayLocation(area.RawLocation))}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' source='{source}' selectedArea='{PortLogField(selectedArea)}'");
+                PortWriteGoblinTrackerJsonEvent(
+                    "GoblinDebugSimulationSuppressed",
+                    new Dictionary<string, object?>
+                    {
+                        ["source"] = source,
+                        ["selectedArea"] = selectedArea,
+                        ["areaKey"] = areaKey,
+                        ["displayLocation"] = displayLocation,
+                        ["reason"] = suppressionReason,
+                        ["areaCount"] = guardResult.AreaCount,
+                        ["areaLimit"] = guardResult.AreaLimit,
+                    });
+                PortShowSplash($"Debug count skipped\r\n{displayLocation}\r\nReason: {suppressionReason}", 2500);
+                PortUpdateGoblinTrackerStats();
+                return;
+            }
+
+            AppLogger.Info($"GoblinTracker: GoblinCountAccepted areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} blockListStatus=Allowed countResult=Accepted rawLocation='{PortLogField(PortDisplayLocation(area.RawLocation))}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(goblinType)}' source='{source}' selectedArea='{PortLogField(selectedArea)}' total={total}");
+            PortWriteGoblinTrackerJsonEvent(
+                "GoblinDebugSimulationAccepted",
+                new Dictionary<string, object?>
+                {
+                    ["source"] = source,
+                    ["selectedArea"] = selectedArea,
+                    ["areaKey"] = areaKey,
+                    ["displayLocation"] = displayLocation,
+                    ["areaCount"] = guardResult.AreaCount,
+                    ["areaLimit"] = guardResult.AreaLimit,
+                    ["total"] = total,
+                });
+            PortPublishManualGoblinCountObservation(area, goblinType, source, guardResult);
+            PortShowSplash($"Debug goblin count simulated\r\n{displayLocation}\r\nTotal: {total}", 3000);
+            PortWriteSessionMetadata(logSuccess: false);
+            PortUpdateGoblinTrackerStats();
         }
 
         private void PortLogDebugStartupState()

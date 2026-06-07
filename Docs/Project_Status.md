@@ -8,16 +8,19 @@ This file is the current source of truth for the active release, stable behavior
 - Current focus: Goblin Tracker full automatic counting readiness in VS Debug.
 - Automatic counting: implemented behind `GoblinTracker.EnableObservationMode=true` and `GoblinTracker.EnableAutomaticCounting=true`.
 - Manual count hotkey: physical `X` has been retired. Goblin counts should come from automatic eligible evidence.
-- VS Debug Goblin Tracker controls: `Observation Mode`, `Auto Goblin Count`, `Enable Goblin Decision Trace`, and `Capture`.
+- VS Debug Goblin Tracker controls: `Observation Mode`, `Auto Goblin Count`, `Enable Goblin Decision Trace`, `Capture`, a debug-only simulation area selector, and `Sim Count`.
 - VS Debug `Capture` button: manual image-recognition aid only. It writes fullscreen, minimap, journal, and metadata files under `Debug\GoblinEvidence\ManualCaptures` only when clicked.
+- VS Debug `Sim Count` button: developer-only count-policy simulator. It uses existing area-key resolution, blocked-area checks, duplicate guard, and area-limit logic so accepted counts, duplicate suppression, and PF1/PF2/Stinging Winds `AreaLimitReached` behavior can be tested without waiting for rare live spawns.
 - Automatic debug artifacts: accepted Goblin Tracker count workflows still automatically write decision bundles and encounter captures needed for debugging.
 - `Next Tests` tab: removed. Current validation steps are tracked in `Docs/TODO.md`.
 - Latest change: Goblin Replay now accepts explicit capture folders, specific `*_Metadata.txt` files, specific capture prefixes, and DecisionBundle folders from the developer harness. This changed replay usability only; live Goblin Tracker counting behavior was not changed.
 
 ## Latest Review Finding
 
-- Latest reviewed package `GoblinFarmer_Debug_20260607_140848.zip` showed stale Battlefields journal-history replay after Enter/journal history.
-- Current fix validates the goblin-name portion of Journal templates, ignores upper/history rows, and briefly suppresses Journal candidates after physical Enter/journal-history input.
+- Latest reviewed package `GoblinFarmer_Debug_20260607_175901.zip` showed Southern Highlands Gelatinous Sire and Eastern Channel Level 2 Blood Thief auto-counting correctly.
+- Battlefields stale Blood Thief `JournalKilled` evidence after teleport was detected but suppressed as `EncounterAlreadyAutoCounted`, which matches intended stale-transition behavior.
+- Battlefields later accepted a Blood Thief count from fresh `JournalEngaged` evidence in the Battlefields area, then suppressed repeats through duplicate/evidence guards.
+- Goblin Replay against the Battlefields manual Capture metadata returned `NoCandidate`; replay against the accepted Battlefields EncounterCapture returned `Count/Eligible`. DecisionBundle-only folders reported `DecisionBundleMissingReplayFrames` because the package contains `evidence.png` and `decision-trace.txt`, not replay-ready Journal/Minimap crop pairs.
 
 ## Stable Systems
 
@@ -39,6 +42,7 @@ This file is the current source of truth for the active release, stable behavior
 - Goblin Evidence scanning caches discovered template metadata and loaded OpenCV template mats, captures each source scan region once per pass, and scans Minimap before Journal while preserving Journal as the primary confirmation if both match.
 - Goblin Replay Fixture Runner Phase 2E is implemented as explicit/on-demand harness support. Live scans still use `CopyFromScreen` by default, saved Journal/Minimap PNG fixtures can be fed through the shared frame/template matching path, and real saved encounter/manual capture folders can be loaded from the test harness command line for stale-location regression coverage without normal startup, VS Debug startup, scanner, route, combat, town, or debug package workflows invoking replay.
 - Goblin Replay supported inputs: shared capture folders through `--goblin-replay-captures`, specific `*_Metadata.txt` files through `--goblin-replay-metadata`, exact capture prefixes through `--goblin-replay-prefix`, and DecisionBundle folders through `--goblin-replay-decision-bundle`. DecisionBundle replay runs only when replay-ready Journal/Minimap capture frames can be resolved; otherwise it reports the trace/evidence files it found and explains the limitation.
+- VS Debug `Sim Count` is not a replay feature and is not wired into live scanning. It is an explicit developer button that records through the existing session count path only when clicked.
 - Goblin Evidence timing summaries log stage histograms through `GoblinEvidenceTimingSummary`.
 - VS Debug/debug/decision-trace sessions write structured Goblin Tracker JSONL events to `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` alongside human-readable logs.
 - Default area limit: 1 count per resolved area per game.
@@ -65,9 +69,10 @@ This file is the current source of truth for the active release, stable behavior
 
 ## Next Development Plans
 
-- Validate the latest journal-history suppression, name-validation fix, scan timing summaries, and JSONL event output during normal VS Debug use.
+- Continue validating auto-count during normal VS Debug use, with special attention to Level 2 area independence, stale journal/location transitions, and notification latency.
+- Use VS Debug `Sim Count` when a rare count-policy edge case needs deterministic verification, especially PF1/PF2/Stinging Winds third-count suppression.
 - Next Goblin Replay work should use the explicit harness command against real capture folders, specific metadata files/prefixes, or DecisionBundle folders from suspicious live sessions and only promote narrowly proven stale-location fixes into production code.
-- Latest validation for the replay usability change: `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`, `dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`, and `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false` passed. Still needs testing: use the new metadata/prefix/DecisionBundle commands against a real suspicious live session.
+- Latest replay validation used `--goblin-replay-metadata` against the `GoblinFarmer_Debug_20260607_175901.zip` Battlefields manual Capture and accepted EncounterCapture. Still needs validation after this change: build/tests and one VS Debug click-through of the new `Sim Count` control.
 - Continue using automatic counting in real runs instead of focused specific-goblin hunts.
 - Use the `Capture` button only when an image-recognition issue is visible and extra minimap/journal/fullscreen evidence would help.
 - Keep `Docs/TODO.md` synchronized with remaining work and next test steps.

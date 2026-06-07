@@ -86,6 +86,7 @@ Run("Goblin observation mode is enabled by default in Release", TestGoblinObserv
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
 Run("Goblin VS Debug recognition Capture button is manual-only", TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly);
+Run("Goblin VS Debug simulation controls use count guards", TestGoblinVsDebugSimulationControlsUseCountGuards);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
 Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLiveEvidenceOnly);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
@@ -3109,7 +3110,10 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(automationSource.Contains("chkGoblinAutomaticCounting", StringComparison.Ordinal), "VS Debug form should expose an Automatic Counting checkbox");
     AssertTrue(automationSource.Contains("chkGoblinDecisionTrace", StringComparison.Ordinal), "VS Debug form should expose a Decision Trace checkbox");
     AssertTrue(automationSource.Contains("btnGoblinRecognitionCapture", StringComparison.Ordinal), "VS Debug form should expose a manual recognition Capture button");
+    AssertTrue(automationSource.Contains("btnGoblinDebugSimulateCount", StringComparison.Ordinal), "VS Debug form should expose a safe count simulation button");
+    AssertTrue(automationSource.Contains("cboGoblinDebugSimulationArea", StringComparison.Ordinal), "VS Debug form should expose a count simulation area selector");
     AssertTrue(automationSource.Contains("Text = \"Capture\"", StringComparison.Ordinal), "manual recognition capture button should be labeled Capture");
+    AssertTrue(automationSource.Contains("Text = \"Sim Count\"", StringComparison.Ordinal), "VS Debug count simulation button should be labeled Sim Count");
     AssertFalse(automationSource.Contains("chkGoblinManualTestCountOverride", StringComparison.Ordinal), "VS Debug form should not expose the retired manual test count override checkbox");
     AssertFalse(automationSource.Contains("btnCreateGoblinReviewFiles", StringComparison.Ordinal), "VS Debug form should not require a manual review files button");
     AssertFalse(automationSource.Contains(retiredEvidenceReviewCloseMethod, StringComparison.Ordinal), "VS Debug form close should not create loose review files or derived evidence artifacts");
@@ -3120,6 +3124,8 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting)", StringComparison.Ordinal), "Automatic Counting checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinDecisionTrace)", StringComparison.Ordinal), "Decision Trace checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(btnGoblinRecognitionCapture)", StringComparison.Ordinal), "Capture button should be placed inside the visible Settings group");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(cboGoblinDebugSimulationArea)", StringComparison.Ordinal), "VS Debug count simulation area selector should be placed inside the visible Settings group");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(btnGoblinDebugSimulateCount)", StringComparison.Ordinal), "VS Debug count simulation button should be placed inside the visible Settings group");
     AssertFalse(automationSource.Contains("Controls.Add(grpGoblinTrackerDebugSettings)", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should not be added as a layered top-level overlay");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked", StringComparison.Ordinal), "Observation Mode checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked", StringComparison.Ordinal), "Automatic Counting checkbox changes should persist to AppSettings");
@@ -3127,7 +3133,8 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(automationSource.Contains("PortSetGoblinAutomaticCountingArmedState(source)", StringComparison.Ordinal), "toggling automatic counting should re-arm the freshness gate");
     AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
     AssertTrue(automationSource.Contains("PortQueueGoblinRecognitionDebugCapture(\"VsDebugCaptureButton\")", StringComparison.Ordinal), "Capture button should create a manual recognition capture only when clicked");
-    AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 214)", StringComparison.Ordinal), "VS Debug Settings group should still expand for the added Goblin Tracker test controls");
+    AssertTrue(automationSource.Contains("PortSimulateGoblinTrackerVsDebugCount()", StringComparison.Ordinal), "VS Debug simulation button should invoke the safe simulation path");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 244)", StringComparison.Ordinal), "VS Debug Settings group should still expand for the added Goblin Tracker test controls");
 }
 
 static void TestVsDebugDiagnosticsOmitNextTestStepsTab()
@@ -3165,6 +3172,26 @@ static void TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly()
     AssertTrue(evidenceCaptureSource.Contains("_Minimap.png", StringComparison.Ordinal), "manual recognition capture should save a minimap crop");
     AssertTrue(evidenceCaptureSource.Contains("_Journal.png", StringComparison.Ordinal), "manual recognition capture should save a journal crop");
     AssertTrue(autoCountSource.Contains("PortQueueGoblinEncounterDebugCapture(source, observation.Source", StringComparison.Ordinal), "automatic accepted counts should continue creating encounter captures automatically");
+}
+
+static void TestGoblinVsDebugSimulationControlsUseCountGuards()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string method = ExtractMethodBody(automationSource, "private void PortSimulateGoblinTrackerVsDebugCount");
+
+    AssertTrue(method.Contains("if (!AppSettings.IsVsDebugProfile)", StringComparison.Ordinal), "VS Debug simulation path should be guarded out of release profiles");
+    AssertTrue(method.Contains("const string source = \"VsDebugSimulation\"", StringComparison.Ordinal), "simulation count source should be explicit in logs and session records");
+    AssertTrue(method.Contains("PortResolveCurrentGoblinArea(source)", StringComparison.Ordinal), "simulation should be able to use the existing current-area resolution path");
+    AssertTrue(method.Contains("GoblinAreaResolver.Resolve(selectedArea)", StringComparison.Ordinal), "simulation should use existing area-key resolution for selected test areas");
+    AssertTrue(method.Contains("GoblinManualCountBlockList.IsBlocked(area.AreaKey)", StringComparison.Ordinal), "simulation should preserve blocked-area behavior");
+    AssertTrue(method.Contains("portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey, out guardResult)", StringComparison.Ordinal), "simulation should consume the existing duplicate guard");
+    AssertTrue(method.Contains("suppressionReason = guardResult.AreaLimit > 1 ? \"AreaLimitReached\" : \"AreaAlreadyCounted\"", StringComparison.Ordinal), "simulation should expose duplicate and area-limit suppression paths");
+    AssertTrue(method.Contains("DebugManager.Session.RecordGoblinFound(countedRecord)", StringComparison.Ordinal), "accepted simulations should use the same session count path");
+    AssertTrue(method.Contains("DebugManager.Session.RecordGoblinFoundRecord(suppressedRecord)", StringComparison.Ordinal), "suppressed simulations should be recorded for diagnostics");
+    AssertTrue(method.Contains("GoblinCountAccepted", StringComparison.Ordinal), "accepted simulations should log the standard accepted marker");
+    AssertTrue(method.Contains("GoblinCountSuppressed", StringComparison.Ordinal), "suppressed simulations should log the standard suppressed marker");
+    AssertTrue(method.Contains("PortPublishManualGoblinCountObservation(area, goblinType, source, guardResult)", StringComparison.Ordinal), "accepted simulations should refresh the Last Observation UI");
 }
 
 static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()
