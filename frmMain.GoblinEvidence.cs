@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Globalization;
+using System.IO.Compression;
 
 namespace GoblinFarmer
 {
@@ -311,7 +312,7 @@ namespace GoblinFarmer
 
             if (bestTemplate == null)
             {
-                return new GoblinEvidenceDetectionResult(null, null, bestImagePath, bestMatch);
+                return new GoblinEvidenceDetectionResult(null, null, bestImagePath, bestMatch, []);
             }
 
             if (bestMatch.Confidence < bestTemplate.Threshold)
@@ -324,7 +325,7 @@ namespace GoblinFarmer
                     referenceRegion,
                     bestMatch,
                     force: false);
-                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch);
+                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch, []);
             }
 
             PortLogGoblinEvidenceDetectorDiagnostic(
@@ -342,14 +343,24 @@ namespace GoblinFarmer
                 bestTemplate.Source,
                 $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}{PortMinimapColorNotes(bestTemplate, bestMatch)}",
                 goblinType);
-            return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch);
+            return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch, []);
         }
 
         private sealed record GoblinEvidenceDetectionResult(
             GoblinEvidenceCandidate? Candidate,
             GoblinEvidenceTemplateRequirement? BestTemplate,
             string BestImagePath,
-            GoblinEvidenceTemplateMatch BestMatch);
+            GoblinEvidenceTemplateMatch BestMatch,
+            IReadOnlyList<GoblinEvidenceCandidateRank> CandidateRanking);
+
+        private sealed record GoblinEvidenceCandidateRank(
+            string TemplateName,
+            string GoblinType,
+            string Source,
+            GoblinEvidenceTemplateKind Kind,
+            double Confidence,
+            double Threshold,
+            string MatchPoint);
 
         private sealed record GoblinJournalEvidenceSeenState(
             string GoblinType,
@@ -1156,31 +1167,49 @@ namespace GoblinFarmer
 
             DebugManager.Session.RecordGoblinEvidence(evidenceEvent);
             AppLogger.Info($"GoblinEvidence: Type={candidate.Type}; Confidence={candidate.Confidence:0.00}; Source={candidate.Source}; Screenshot={PortLogField(PortDisplayLocation(screenshotPath))}; Notes={PortLogField(candidate.Notes)}");
-            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence);
+            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence, screenshotPath);
         }
 
         private void PortPromptReplayGoblinEvidenceFolder()
         {
-            using FolderBrowserDialog dialog = new()
+            string selectedPath = "";
+            using OpenFileDialog zipDialog = new()
             {
-                Description = "Select a debug package or folder containing Goblin Tracker Journal/Minimap evidence",
-                UseDescriptionForTitle = true,
-                ShowNewFolderButton = false,
+                Title = "Select a GoblinFarmer debug package ZIP, or Cancel to choose a folder",
+                Filter = "GoblinFarmer debug package (*.zip)|*.zip|All files (*.*)|*.*",
+                CheckFileExists = true,
+                Multiselect = false,
             };
 
-            if (dialog.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            if (zipDialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(zipDialog.FileName))
             {
-                return;
+                selectedPath = zipDialog.FileName;
             }
 
-            string selectedFolder = dialog.SelectedPath;
-            AppLogger.Info($"GoblinReplay: Replay requested folder={PortLogField(selectedFolder)} dryRun=True");
-            _ = Task.Run(() => PortReplayGoblinEvidenceFolder(selectedFolder))
+            if (string.IsNullOrWhiteSpace(selectedPath))
+            {
+                using FolderBrowserDialog dialog = new()
+                {
+                    Description = "Select a debug package folder or folder containing Goblin Tracker Journal/Minimap evidence",
+                    UseDescriptionForTitle = true,
+                    ShowNewFolderButton = false,
+                };
+
+                if (dialog.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                {
+                    return;
+                }
+
+                selectedPath = dialog.SelectedPath;
+            }
+
+            AppLogger.Info($"GoblinReplay: Replay requested inputPath={PortLogField(selectedPath)} dryRun=True");
+            _ = Task.Run(() => PortReplayGoblinEvidenceFolder(selectedPath))
                 .ContinueWith(task =>
                 {
                     if (task.IsFaulted)
                     {
-                        AppLogger.Error($"GoblinReplay: Replay failed folder={selectedFolder}", task.Exception!);
+                        AppLogger.Error($"GoblinReplay: Replay failed inputPath={selectedPath}", task.Exception!);
                         BeginInvoke(new Action(() => PortShowSplash("Goblin evidence replay failed", 3000)));
                         return;
                     }
@@ -1197,130 +1226,186 @@ namespace GoblinFarmer
             DateTime started = DateTime.Now;
             string logDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
             Directory.CreateDirectory(logDirectory);
-            string logPath = Path.Combine(logDirectory, $"GoblinReplay_{started:yyyyMMdd_HHmmss}.log");
-            string[] supportedExtensions = [".png", ".jpg", ".jpeg", ".bmp"];
-            List<FileInfo> files = Directory.Exists(folder)
-                ? new DirectoryInfo(folder)
-                    .EnumerateFiles("*.*", SearchOption.AllDirectories)
-                    .Where(file => supportedExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase))
-                    .OrderBy(file => file.LastWriteTimeUtc)
-                    .ThenBy(file => file.FullName, StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                : [];
+            string timestamp = started.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
+            string logPath = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}.log");
+            string htmlPath = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}.html");
+            string assetDirectory = Path.Combine(logDirectory, $"GoblinReplay_{timestamp}_files");
+            string extractionRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplay_{timestamp}_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(assetDirectory);
+            Directory.CreateDirectory(extractionRoot);
 
             GoblinEvidenceTemplateCatalog templateCatalog = GoblinEvidenceTemplateRequirements.DiscoverTemplates(PortGoblinEvidenceTemplateDirectory());
+            List<GoblinReplayInputFile> files = PortCollectGoblinReplayInputFiles(folder, extractionRoot);
+            Dictionary<string, GoblinReplayPreviousDecision> previousDecisions = PortLoadPreviousGoblinReplayDecisions(logDirectory, logPath);
             GoblinAreaDuplicateGuard replayDuplicateGuard = new();
+            List<GoblinReplayReportRow> reportRows = [];
             int evidenceFiles = 0;
             int accepted = 0;
             int rejected = 0;
             int unknown = 0;
             int replayTotal = 0;
+            int comparisonChanged = 0;
+            int comparisonNew = 0;
+            int comparisonSame = 0;
             List<string> lines =
             [
-                $"GoblinReplayStart: folder={folder}; started={started:O}; dryRun=True; templateCount={templateCatalog.Templates.Count}; enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode}; enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}; enableDecisionTrace={AppSettings.GoblinTracker.EnableDecisionTrace}",
+                $"GoblinReplayStart: inputPath={folder}; started={started:O}; dryRun=True; templateCount={templateCatalog.Templates.Count}; inputFiles={files.Count}; extractedZipWorkspace={extractionRoot}; enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode}; enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}; enableDecisionTrace={AppSettings.GoblinTracker.EnableDecisionTrace}; previousReplayDecisionCount={previousDecisions.Count}",
             ];
 
-            foreach (FileInfo file in files)
+            try
             {
-                string source = PortInferGoblinReplaySource(file);
-                if (string.IsNullOrWhiteSpace(source))
+                foreach (GoblinReplayInputFile file in files)
                 {
-                    unknown++;
-                    lines.Add($"GoblinReplayFile: file={file.FullName}; evidenceFile=False; reason=SourceUnknown");
-                    continue;
-                }
+                    string source = PortInferGoblinReplaySource(file);
+                    if (string.IsNullOrWhiteSpace(source))
+                    {
+                        unknown++;
+                        lines.Add($"GoblinReplayFile: file={file.DisplayPath}; evidenceFile=False; archivePath={PortLogField(file.ArchivePath)}; reason=SourceUnknown");
+                        continue;
+                    }
 
-                evidenceFiles++;
-                GoblinEvidenceDetectionResult detection = PortDetectBestGoblinEvidenceTemplateInImageFile(source, templateCatalog.Templates, file.FullName);
-                if (detection.Candidate == null)
-                {
-                    unknown++;
-                    lines.Add($"GoblinReplayFile: file={file.FullName}; evidenceFile=True; source={PortNormalizeGoblinObservationSource(source)}; candidateFound=False; bestTemplate={PortLogField(detection.BestTemplate?.FileName ?? "")}; bestConfidence={detection.BestMatch.Confidence:0.000}");
-                    continue;
-                }
+                    evidenceFiles++;
+                    GoblinReplayAreaInference areaInference = PortInferGoblinReplayArea(file);
+                    lines.Add($"GoblinReplayAreaInference: imageFile={PortLogField(file.DisplayPath)}; archivePath={PortLogField(file.ArchivePath)}; relativePath={PortLogField(file.RelativePath)}; areaRaw={PortLogField(areaInference.Area.RawLocation)}; areaKey={PortLogField(areaInference.Area.AreaKey)}; inferenceSource={PortLogField(areaInference.Source)}; reason={PortLogField(areaInference.Reason)}");
 
-                GoblinEvidenceCandidate candidate = detection.Candidate with
-                {
-                    GoblinType = GoblinTypeNormalizer.Normalize(detection.Candidate.GoblinType),
-                    Source = PortNormalizeGoblinObservationSource(detection.Candidate.Source),
-                };
-                GoblinAreaResolution area = PortInferGoblinReplayArea(file);
-                DateTime nowUtc = DateTime.UtcNow;
-                DateTime evidenceSeenUtc = file.LastWriteTimeUtc == DateTime.MinValue ? nowUtc : file.LastWriteTimeUtc;
-                double evidenceAgeSeconds = Math.Max(0, (nowUtc - evidenceSeenUtc).TotalSeconds);
-                bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled();
-                GoblinAreaDuplicateGuardResult guardResult = area.Resolved
-                    ? replayDuplicateGuard.Peek(area.AreaKey)
-                    : new GoblinAreaDuplicateGuardResult(false, 0, 0);
-                string suppressionReason = "";
+                    GoblinEvidenceDetectionResult detection = PortDetectBestGoblinEvidenceTemplateInImageFile(source, templateCatalog.Templates, file.ExtractedPath);
+                    int rank = 0;
+                    foreach (GoblinEvidenceCandidateRank candidateRank in detection.CandidateRanking.Take(5))
+                    {
+                        rank++;
+                        lines.Add($"GoblinReplayCandidateRanking: imageFile={PortLogField(file.DisplayPath)}; rank={rank}; source={PortNormalizeGoblinObservationSource(candidateRank.Source)}; goblinType={PortLogField(candidateRank.GoblinType)}; evidenceKind={candidateRank.Kind}; templateName={PortLogField(candidateRank.TemplateName)}; confidence={candidateRank.Confidence:0.000}; threshold={candidateRank.Threshold:0.000}; matchPoint={PortLogField(candidateRank.MatchPoint)}");
+                    }
 
-                if (!autoCountingEnabled)
-                {
-                    suppressionReason = "AutomaticCountingDisabled";
-                }
-                else if (portGoblinAutomaticCountingArmedAtUtc != DateTime.MinValue &&
-                    evidenceSeenUtc < portGoblinAutomaticCountingArmedAtUtc)
-                {
-                    suppressionReason = "EvidenceSeenBeforeAutoCountEnabled";
-                }
-                else if (!GoblinJournalFreshnessPolicy.IsFresh(evidenceSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
-                {
-                    suppressionReason = "StaleEvidence";
-                }
-                else if (!area.Resolved)
-                {
-                    suppressionReason = "AreaUnresolved";
-                }
-                else if (GoblinManualCountBlockList.IsBlocked(area.AreaKey))
-                {
-                    suppressionReason = "BlockedArea";
-                    guardResult = new GoblinAreaDuplicateGuardResult(false, 0, 0);
-                }
-                else if (!guardResult.Accepted)
-                {
-                    suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
-                }
+                    if (detection.Candidate == null)
+                    {
+                        unknown++;
+                        lines.Add($"GoblinReplayFile: file={file.DisplayPath}; evidenceFile=True; source={PortNormalizeGoblinObservationSource(source)}; candidateFound=False; bestTemplate={PortLogField(detection.BestTemplate?.FileName ?? "")}; bestConfidence={detection.BestMatch.Confidence:0.000}; htmlReportPath={PortLogField(htmlPath)}");
+                        reportRows.Add(PortCreateGoblinReplayReportRow(file, null, detection, areaInference, null, "Unknown", "", "", assetDirectory));
+                        continue;
+                    }
 
-                bool counted = string.IsNullOrWhiteSpace(suppressionReason);
-                int areaCountBefore = guardResult.AreaCount;
-                if (counted)
-                {
-                    replayDuplicateGuard.TryAccept(area.AreaKey, out guardResult);
-                    replayTotal++;
-                    accepted++;
-                }
-                else
-                {
-                    rejected++;
-                }
+                    GoblinEvidenceCandidate candidate = detection.Candidate with
+                    {
+                        GoblinType = GoblinTypeNormalizer.Normalize(detection.Candidate.GoblinType),
+                        Source = PortNormalizeGoblinObservationSource(detection.Candidate.Source),
+                    };
+                    GoblinAreaResolution area = areaInference.Area;
+                    DateTime nowUtc = DateTime.UtcNow;
+                    DateTime evidenceSeenUtc = file.LastWriteTimeUtc == DateTime.MinValue ? nowUtc : file.LastWriteTimeUtc;
+                    double evidenceAgeSeconds = Math.Max(0, (nowUtc - evidenceSeenUtc).TotalSeconds);
+                    bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled();
+                    GoblinAreaDuplicateGuardResult guardResult = area.Resolved
+                        ? replayDuplicateGuard.Peek(area.AreaKey)
+                        : new GoblinAreaDuplicateGuardResult(false, 0, 0);
+                    string suppressionReason = "";
 
-                string evidenceSignature = PortGoblinEvidenceSignature(candidate);
-                GoblinDecisionTraceRecord trace = GoblinDecisionTracePolicy.Create(
-                    nowUtc,
-                    "Replay",
-                    candidate.Source,
-                    file.Name,
-                    file.FullName,
-                    area.RawLocation,
-                    area.AreaKey,
-                    candidate.GoblinType,
-                    evidenceSignature,
-                    evidenceAgeSeconds,
-                    evidenceAgeSeconds,
-                    autoCountingEnabled,
-                    AppSettings.GoblinTracker.EnableObservationMode,
-                    suppressionReason,
-                    counted,
-                    areaCountBefore,
-                    guardResult.AreaLimit,
-                    replayTotal - (counted ? 1 : 0));
-                lines.Add(GoblinDecisionTracePolicy.ToLogLine(trace));
+                    if (!autoCountingEnabled)
+                    {
+                        suppressionReason = "AutomaticCountingDisabled";
+                    }
+                    else if (portGoblinAutomaticCountingArmedAtUtc != DateTime.MinValue &&
+                        evidenceSeenUtc < portGoblinAutomaticCountingArmedAtUtc)
+                    {
+                        suppressionReason = "EvidenceSeenBeforeAutoCountEnabled";
+                    }
+                    else if (!GoblinJournalFreshnessPolicy.IsFresh(evidenceSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                    {
+                        suppressionReason = "StaleEvidence";
+                    }
+                    else if (!area.Resolved)
+                    {
+                        suppressionReason = "AreaUnresolved";
+                    }
+                    else if (GoblinManualCountBlockList.IsBlocked(area.AreaKey))
+                    {
+                        suppressionReason = "BlockedArea";
+                        guardResult = new GoblinAreaDuplicateGuardResult(false, 0, 0);
+                    }
+                    else if (!guardResult.Accepted)
+                    {
+                        suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                    }
+
+                    bool counted = string.IsNullOrWhiteSpace(suppressionReason);
+                    int areaCountBefore = guardResult.AreaCount;
+                    if (counted)
+                    {
+                        replayDuplicateGuard.TryAccept(area.AreaKey, out guardResult);
+                        replayTotal++;
+                        accepted++;
+                    }
+                    else
+                    {
+                        rejected++;
+                    }
+
+                    string evidenceSignature = PortGoblinEvidenceSignature(candidate);
+                    GoblinDecisionTraceRecord trace = GoblinDecisionTracePolicy.Create(
+                        nowUtc,
+                        "Replay",
+                        candidate.Source,
+                        Path.GetFileName(file.DisplayPath),
+                        file.DisplayPath,
+                        area.RawLocation,
+                        area.AreaKey,
+                        candidate.GoblinType,
+                        evidenceSignature,
+                        evidenceAgeSeconds,
+                        evidenceAgeSeconds,
+                        autoCountingEnabled,
+                        AppSettings.GoblinTracker.EnableObservationMode,
+                        suppressionReason,
+                        counted,
+                        areaCountBefore,
+                        guardResult.AreaLimit,
+                        replayTotal - (counted ? 1 : 0));
+                    string comparisonKey = PortGoblinReplayComparisonKey(trace);
+                    string comparison = "New";
+                    string previousDecision = "";
+                    string previousReason = "";
+                    if (previousDecisions.TryGetValue(comparisonKey, out GoblinReplayPreviousDecision? previous))
+                    {
+                        previousDecision = previous.Decision;
+                        previousReason = previous.Reason;
+                        comparison = previous.Decision.Equals(trace.Decision, StringComparison.OrdinalIgnoreCase) &&
+                            previous.Reason.Equals(trace.Reason, StringComparison.OrdinalIgnoreCase)
+                                ? "Same"
+                                : "Changed";
+                    }
+
+                    if (comparison.Equals("Same", StringComparison.OrdinalIgnoreCase))
+                    {
+                        comparisonSame++;
+                    }
+                    else if (comparison.Equals("Changed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        comparisonChanged++;
+                    }
+                    else
+                    {
+                        comparisonNew++;
+                    }
+
+                    lines.Add($"{GoblinDecisionTracePolicy.ToLogLine(trace)}; replayComparison={comparison}; previousDecision={PortLogField(previousDecision)}; previousReason={PortLogField(previousReason)}; replayComparisonKey={PortLogField(comparisonKey)}");
+                    reportRows.Add(PortCreateGoblinReplayReportRow(file, candidate, detection, areaInference, trace, comparison, previousDecision, previousReason, assetDirectory));
+                }
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(extractionRoot, recursive: true);
+                }
+                catch
+                {
+                }
             }
 
-            GoblinReplaySummary summary = new(files.Count, evidenceFiles, accepted, rejected, unknown, logPath);
-            lines.Add($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; logPath={summary.LogPath}");
+            GoblinReplaySummary summary = new(files.Count, evidenceFiles, accepted, rejected, unknown, logPath, htmlPath, comparisonChanged, comparisonNew, comparisonSame);
+            lines.Add($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; comparisonChanged={summary.ComparisonChanged}; comparisonNew={summary.ComparisonNew}; comparisonSame={summary.ComparisonSame}; logPath={summary.LogPath}; htmlReportPath={summary.HtmlReportPath}");
             File.WriteAllLines(logPath, lines);
-            AppLogger.Info($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; logPath={PortLogField(summary.LogPath)}");
+            PortWriteGoblinReplayHtmlReport(htmlPath, summary, reportRows, folder, started);
+            AppLogger.Info($"GoblinReplaySummary: totalFiles={summary.TotalFiles}; evidenceFiles={summary.EvidenceFiles}; accepted={summary.Accepted}; rejected={summary.Rejected}; unknown={summary.Unknown}; comparisonChanged={summary.ComparisonChanged}; comparisonNew={summary.ComparisonNew}; comparisonSame={summary.ComparisonSame}; logPath={PortLogField(summary.LogPath)}; htmlReportPath={PortLogField(summary.HtmlReportPath)}");
             return summary;
         }
 
@@ -1336,11 +1421,20 @@ namespace GoblinFarmer
             GoblinEvidenceTemplateRequirement? bestTemplate = null;
             string bestImagePath = "";
             GoblinEvidenceTemplateMatch bestMatch = new(0, Point.Empty, Point.Empty, Size.Empty);
+            List<GoblinEvidenceCandidateRank> ranking = [];
 
             foreach (GoblinEvidenceTemplateRequirement template in sourceTemplates)
             {
                 string imagePath = Path.Combine(PortGoblinEvidenceTemplateDirectory(), template.FileName);
                 GoblinEvidenceTemplateMatch match = PortBestGoblinEvidenceTemplateMatchInImageFile(evidenceImagePath, imagePath, observationSource);
+                ranking.Add(new GoblinEvidenceCandidateRank(
+                    template.FileName,
+                    template.GoblinType,
+                    template.Source,
+                    template.Kind,
+                    match.Confidence,
+                    template.Threshold,
+                    FormatPoint(match.MatchPoint)));
                 if (bestTemplate == null || match.Confidence > bestMatch.Confidence)
                 {
                     bestTemplate = template;
@@ -1351,7 +1445,12 @@ namespace GoblinFarmer
 
             if (bestTemplate == null || bestMatch.Confidence < bestTemplate.Threshold)
             {
-                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch);
+                return new GoblinEvidenceDetectionResult(
+                    null,
+                    bestTemplate,
+                    bestImagePath,
+                    bestMatch,
+                    ranking.OrderByDescending(item => item.Confidence).Take(5).ToList());
             }
 
             string goblinType = PortApplyMinimapColorDisambiguation(bestTemplate, bestMatch);
@@ -1361,7 +1460,12 @@ namespace GoblinFarmer
                 observationSource,
                 $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}{PortMinimapColorNotes(bestTemplate, bestMatch)}",
                 goblinType);
-            return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch);
+            return new GoblinEvidenceDetectionResult(
+                candidate,
+                bestTemplate,
+                bestImagePath,
+                bestMatch,
+                ranking.OrderByDescending(item => item.Confidence).Take(5).ToList());
         }
 
         private static GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatchInImageFile(
@@ -1396,9 +1500,70 @@ namespace GoblinFarmer
             return new GoblinEvidenceTemplateMatch(maxVal, matchPoint, matchPoint, templateSize, minimapColor);
         }
 
-        private static string PortInferGoblinReplaySource(FileInfo file)
+        private static List<GoblinReplayInputFile> PortCollectGoblinReplayInputFiles(string inputPath, string extractionRoot)
         {
-            string value = $"{file.DirectoryName} {Path.GetFileNameWithoutExtension(file.Name)}";
+            string[] supportedExtensions = [".png", ".jpg", ".jpeg", ".bmp"];
+            List<GoblinReplayInputFile> files = [];
+            if (File.Exists(inputPath) && inputPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                PortExtractGoblinReplayZip(inputPath, extractionRoot, files, supportedExtensions);
+            }
+            else if (Directory.Exists(inputPath))
+            {
+                foreach (FileInfo file in new DirectoryInfo(inputPath)
+                    .EnumerateFiles("*.*", SearchOption.AllDirectories)
+                    .Where(file => supportedExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase)))
+                {
+                    files.Add(new GoblinReplayInputFile(
+                        file.FullName,
+                        file.FullName,
+                        file.LastWriteTimeUtc,
+                        "",
+                        Path.GetRelativePath(inputPath, file.FullName)));
+                }
+
+                foreach (FileInfo zip in new DirectoryInfo(inputPath)
+                    .EnumerateFiles("*.zip", SearchOption.AllDirectories)
+                    .OrderBy(file => file.LastWriteTimeUtc)
+                    .ThenBy(file => file.FullName, StringComparer.OrdinalIgnoreCase))
+                {
+                    PortExtractGoblinReplayZip(zip.FullName, extractionRoot, files, supportedExtensions);
+                }
+            }
+
+            return files
+                .OrderBy(file => file.LastWriteTimeUtc)
+                .ThenBy(file => file.DisplayPath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static void PortExtractGoblinReplayZip(
+            string zipPath,
+            string extractionRoot,
+            List<GoblinReplayInputFile> files,
+            string[] supportedExtensions)
+        {
+            string safeName = System.Text.RegularExpressions.Regex.Replace(Path.GetFileNameWithoutExtension(zipPath), @"[^A-Za-z0-9_.-]+", "_");
+            string extractDirectory = Path.Combine(extractionRoot, $"{safeName}_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(extractDirectory);
+            ZipFile.ExtractToDirectory(zipPath, extractDirectory, overwriteFiles: true);
+            foreach (FileInfo file in new DirectoryInfo(extractDirectory)
+                .EnumerateFiles("*.*", SearchOption.AllDirectories)
+                .Where(file => supportedExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase)))
+            {
+                string relativePath = Path.GetRelativePath(extractDirectory, file.FullName);
+                files.Add(new GoblinReplayInputFile(
+                    $"{zipPath}!{relativePath}",
+                    file.FullName,
+                    file.LastWriteTimeUtc,
+                    zipPath,
+                    relativePath));
+            }
+        }
+
+        private static string PortInferGoblinReplaySource(GoblinReplayInputFile file)
+        {
+            string value = $"{file.DisplayPath} {file.RelativePath}";
             if (value.Contains("Journal", StringComparison.OrdinalIgnoreCase))
             {
                 return "JournalCandidate";
@@ -1412,20 +1577,215 @@ namespace GoblinFarmer
             return "";
         }
 
-        private static GoblinAreaResolution PortInferGoblinReplayArea(FileInfo file)
+        private static GoblinReplayAreaInference PortInferGoblinReplayArea(GoblinReplayInputFile file)
         {
-            string normalizedPath = GoblinAreaResolver.NormalizedKey($"{file.DirectoryName} {Path.GetFileNameWithoutExtension(file.Name)}");
+            string normalizedPath = GoblinAreaResolver.NormalizedKey($"{file.DisplayPath} {file.RelativePath}");
             foreach (string areaName in GoblinAreaResolver.KnownAreas.OrderByDescending(area => area.Length))
             {
                 string areaKey = GoblinAreaResolver.NormalizedKey(areaName);
                 if (normalizedPath.Contains(areaKey, StringComparison.OrdinalIgnoreCase))
                 {
-                    return GoblinAreaResolver.Resolve(areaName);
+                    return new GoblinReplayAreaInference(
+                        GoblinAreaResolver.Resolve(areaName),
+                        "PathKnownArea",
+                        $"MatchedKnownArea:{areaName}");
                 }
             }
 
-            return GoblinAreaResolver.Resolve("");
+            return new GoblinReplayAreaInference(
+                GoblinAreaResolver.Resolve(""),
+                "Unresolved",
+                "NoKnownAreaNameInPath");
         }
+
+        private static Dictionary<string, GoblinReplayPreviousDecision> PortLoadPreviousGoblinReplayDecisions(string logDirectory, string currentLogPath)
+        {
+            Dictionary<string, GoblinReplayPreviousDecision> decisions = new(StringComparer.OrdinalIgnoreCase);
+            if (!Directory.Exists(logDirectory))
+            {
+                return decisions;
+            }
+
+            FileInfo? previousLog = new DirectoryInfo(logDirectory)
+                .EnumerateFiles("GoblinReplay_*.log", SearchOption.TopDirectoryOnly)
+                .Where(file => !file.FullName.Equals(currentLogPath, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .FirstOrDefault();
+            if (previousLog == null)
+            {
+                return decisions;
+            }
+
+            foreach (string line in File.ReadLines(previousLog.FullName))
+            {
+                if (!line.Contains("GoblinDecisionTrace:", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                Dictionary<string, string> fields = PortParseGoblinReplayLogFields(line);
+                string key = string.Join("|",
+                    fields.GetValueOrDefault("source", ""),
+                    fields.GetValueOrDefault("imageFile", ""),
+                    fields.GetValueOrDefault("areaKey", ""),
+                    fields.GetValueOrDefault("goblinType", ""));
+                if (string.IsNullOrWhiteSpace(key.Replace("|", "")))
+                {
+                    continue;
+                }
+
+                decisions[key] = new GoblinReplayPreviousDecision(
+                    fields.GetValueOrDefault("decision", ""),
+                    fields.GetValueOrDefault("reason", ""),
+                    previousLog.FullName);
+            }
+
+            return decisions;
+        }
+
+        private static Dictionary<string, string> PortParseGoblinReplayLogFields(string line)
+        {
+            Dictionary<string, string> fields = new(StringComparer.OrdinalIgnoreCase);
+            string payload = line.Contains(':') ? line[(line.IndexOf(':') + 1)..] : line;
+            foreach (string part in payload.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                int separator = part.IndexOf('=');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                fields[part[..separator].Trim()] = part[(separator + 1)..].Trim();
+            }
+
+            return fields;
+        }
+
+        private static string PortGoblinReplayComparisonKey(GoblinDecisionTraceRecord trace)
+        {
+            return string.Join("|",
+                trace.Source,
+                trace.ImageFile,
+                trace.AreaKey,
+                trace.GoblinType);
+        }
+
+        private static GoblinReplayReportRow PortCreateGoblinReplayReportRow(
+            GoblinReplayInputFile file,
+            GoblinEvidenceCandidate? candidate,
+            GoblinEvidenceDetectionResult detection,
+            GoblinReplayAreaInference areaInference,
+            GoblinDecisionTraceRecord? trace,
+            string comparison,
+            string previousDecision,
+            string previousReason,
+            string assetDirectory)
+        {
+            string assetPath = "";
+            try
+            {
+                string extension = Path.GetExtension(file.ExtractedPath);
+                if (string.IsNullOrWhiteSpace(extension))
+                {
+                    extension = ".png";
+                }
+
+                string baseName = trace == null
+                    ? System.Text.RegularExpressions.Regex.Replace(Path.GetFileNameWithoutExtension(file.DisplayPath), @"[^A-Za-z0-9_.-]+", "_")
+                    : trace.CorrelationId;
+                string destination = Path.Combine(assetDirectory, $"{baseName}{extension}");
+                File.Copy(file.ExtractedPath, destination, overwrite: true);
+                assetPath = Path.GetRelativePath(Path.GetDirectoryName(assetDirectory)!, destination);
+            }
+            catch
+            {
+            }
+
+            return new GoblinReplayReportRow(
+                file.DisplayPath,
+                assetPath,
+                candidate?.GoblinType ?? detection.BestTemplate?.GoblinType ?? "Unknown",
+                candidate?.Source ?? detection.BestTemplate?.Source ?? "Unknown",
+                detection.BestTemplate?.FileName ?? "None",
+                detection.BestMatch.Confidence,
+                areaInference.Area.AreaKey,
+                areaInference.Source,
+                areaInference.Reason,
+                trace?.Decision ?? "Unknown",
+                trace?.Reason ?? "NoCandidate",
+                comparison,
+                previousDecision,
+                previousReason,
+                detection.CandidateRanking);
+        }
+
+        private static void PortWriteGoblinReplayHtmlReport(
+            string htmlPath,
+            GoblinReplaySummary summary,
+            IReadOnlyList<GoblinReplayReportRow> rows,
+            string inputPath,
+            DateTime started)
+        {
+            static string Html(string value) => System.Net.WebUtility.HtmlEncode(value ?? "");
+            List<string> lines =
+            [
+                "<!doctype html>",
+                "<html><head><meta charset=\"utf-8\"><title>Goblin Replay Report</title>",
+                "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:20px;color:#202124}table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #d0d7de;padding:6px;vertical-align:top}th{background:#f6f8fa;text-align:left}img{max-width:220px;max-height:160px}.Count{background:#e6ffed}.Stale,.Block,.Duplicate,.Suppress,.Unknown{background:#fff5b1}.Changed{outline:2px solid #d1242f}.Same{outline:2px solid #1a7f37}.New{outline:2px solid #0969da}</style>",
+                "</head><body>",
+                "<h1>Goblin Replay Report</h1>",
+                $"<p><strong>Input:</strong> {Html(inputPath)}<br><strong>Started:</strong> {started:O}<br><strong>Log:</strong> {Html(summary.LogPath)}</p>",
+                $"<p><strong>Total files:</strong> {summary.TotalFiles} <strong>Evidence:</strong> {summary.EvidenceFiles} <strong>Accepted:</strong> {summary.Accepted} <strong>Rejected:</strong> {summary.Rejected} <strong>Unknown:</strong> {summary.Unknown} <strong>Comparison changed/new/same:</strong> {summary.ComparisonChanged}/{summary.ComparisonNew}/{summary.ComparisonSame}</p>",
+                "<table><thead><tr><th>Evidence</th><th>Image</th><th>Decision</th><th>Area</th><th>Best Match</th><th>Top Candidates</th><th>Comparison</th></tr></thead><tbody>",
+            ];
+
+            foreach (GoblinReplayReportRow row in rows)
+            {
+                string candidates = string.Join("<br>", row.CandidateRanking.Select((candidate, index) =>
+                    $"{index + 1}. {Html(candidate.TemplateName)} ({Html(candidate.GoblinType)}) {candidate.Confidence:0.000}/{candidate.Threshold:0.000}"));
+                string image = string.IsNullOrWhiteSpace(row.AssetPath)
+                    ? ""
+                    : $"<img src=\"{Html(row.AssetPath.Replace('\\', '/'))}\" alt=\"evidence\">";
+                lines.Add($"<tr class=\"{Html(row.Decision)} {Html(row.Comparison)}\"><td>{Html(row.DisplayPath)}</td><td>{image}</td><td><strong>{Html(row.Decision)}</strong><br>{Html(row.Reason)}</td><td>{Html(row.AreaKey)}<br>{Html(row.AreaInferenceSource)}<br>{Html(row.AreaInferenceReason)}</td><td>{Html(row.BestTemplate)}<br>{Html(row.GoblinType)}<br>{row.BestConfidence:0.000}</td><td>{candidates}</td><td>{Html(row.Comparison)}<br>previous={Html(row.PreviousDecision)}<br>{Html(row.PreviousReason)}</td></tr>");
+            }
+
+            lines.Add("</tbody></table></body></html>");
+            File.WriteAllLines(htmlPath, lines);
+        }
+
+        private sealed record GoblinReplayInputFile(
+            string DisplayPath,
+            string ExtractedPath,
+            DateTime LastWriteTimeUtc,
+            string ArchivePath,
+            string RelativePath);
+
+        private sealed record GoblinReplayAreaInference(
+            GoblinAreaResolution Area,
+            string Source,
+            string Reason);
+
+        private sealed record GoblinReplayPreviousDecision(
+            string Decision,
+            string Reason,
+            string LogPath);
+
+        private sealed record GoblinReplayReportRow(
+            string DisplayPath,
+            string AssetPath,
+            string GoblinType,
+            string Source,
+            string BestTemplate,
+            double BestConfidence,
+            string AreaKey,
+            string AreaInferenceSource,
+            string AreaInferenceReason,
+            string Decision,
+            string Reason,
+            string Comparison,
+            string PreviousDecision,
+            string PreviousReason,
+            IReadOnlyList<GoblinEvidenceCandidateRank> CandidateRanking);
 
         private sealed record GoblinReplaySummary(
             int TotalFiles,
@@ -1433,7 +1793,11 @@ namespace GoblinFarmer
             int Accepted,
             int Rejected,
             int Unknown,
-            string LogPath);
+            string LogPath,
+            string HtmlReportPath,
+            int ComparisonChanged,
+            int ComparisonNew,
+            int ComparisonSame);
 
         private static string PortGoblinEvidenceSignature(GoblinEvidenceCandidate candidate)
         {

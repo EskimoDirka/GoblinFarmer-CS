@@ -317,7 +317,8 @@ namespace GoblinFarmer
             string source,
             string goblinType,
             string evidenceSignature = "",
-            double evidenceConfidence = 0)
+            double evidenceConfidence = 0,
+            string evidenceImagePath = "")
         {
             string observationSource = PortNormalizeGoblinObservationSource(source);
             PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea(observationSource);
@@ -430,7 +431,7 @@ namespace GoblinFarmer
                     : "LastObservationUpdateSkippedPreserved";
                 AppLogger.Info($"GoblinTracker: {eventName} incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preserveKind={PortLogField(displaySkipKind)} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
             }
-            PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature);
+            PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath);
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return wouldCount;
@@ -439,7 +440,8 @@ namespace GoblinFarmer
         private bool PortTryRecordAutomaticGoblinCount(
             GoblinObservationRecord observation,
             GoblinAreaResolution area,
-            string evidenceSignature)
+            string evidenceSignature,
+            string evidenceImagePath)
         {
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
@@ -598,12 +600,12 @@ namespace GoblinFarmer
             int areaCountBefore = counted ? Math.Max(0, guardResult.AreaCount - 1) : guardResult.AreaCount;
             if (PortGoblinDecisionTraceEnabled())
             {
-                PortLogGoblinDecisionTrace(GoblinDecisionTracePolicy.Create(
+                GoblinDecisionTraceRecord trace = GoblinDecisionTracePolicy.Create(
                     nowUtc,
                     "Live",
                     observation.Source,
-                    "",
-                    "",
+                    Path.GetFileName(evidenceImagePath),
+                    evidenceImagePath,
                     area.RawLocation,
                     area.AreaKey,
                     observation.GoblinType,
@@ -616,7 +618,9 @@ namespace GoblinFarmer
                     counted,
                     areaCountBefore,
                     guardResult.AreaLimit,
-                    totalGoblinCountBefore));
+                    totalGoblinCountBefore);
+                PortLogGoblinDecisionTrace(trace);
+                PortWriteGoblinDecisionBundle(trace);
             }
 
             if (!string.IsNullOrWhiteSpace(suppressionReason))
@@ -639,6 +643,49 @@ namespace GoblinFarmer
         private void PortLogGoblinDecisionTrace(GoblinDecisionTraceRecord trace)
         {
             AppLogger.Info(GoblinDecisionTracePolicy.ToLogLine(trace));
+        }
+
+        private void PortWriteGoblinDecisionBundle(GoblinDecisionTraceRecord trace)
+        {
+            try
+            {
+                string root = Path.Combine(DebugManager.GoblinEvidenceDirectory, "DecisionBundles");
+                string safeCorrelationId = System.Text.RegularExpressions.Regex.Replace(trace.CorrelationId, @"[^A-Za-z0-9_.-]+", "_");
+                if (string.IsNullOrWhiteSpace(safeCorrelationId))
+                {
+                    safeCorrelationId = $"gdt-{DateTime.Now:yyyyMMddHHmmssfff}";
+                }
+
+                string bundleDirectory = Path.Combine(root, safeCorrelationId);
+                Directory.CreateDirectory(bundleDirectory);
+                string tracePath = Path.Combine(bundleDirectory, "decision-trace.txt");
+                File.WriteAllLines(tracePath,
+                [
+                    GoblinDecisionTracePolicy.ToLogLine(trace),
+                    $"createdLocal={DateTime.Now:O}",
+                    $"sourceImagePath={trace.ImagePath}",
+                ]);
+
+                bool imageCopied = false;
+                if (!string.IsNullOrWhiteSpace(trace.ImagePath) && File.Exists(trace.ImagePath))
+                {
+                    string extension = Path.GetExtension(trace.ImagePath);
+                    if (string.IsNullOrWhiteSpace(extension))
+                    {
+                        extension = ".png";
+                    }
+
+                    string imageDestination = Path.Combine(bundleDirectory, $"evidence{extension}");
+                    File.Copy(trace.ImagePath, imageDestination, overwrite: true);
+                    imageCopied = true;
+                }
+
+                AppLogger.Info($"GoblinDecisionBundleSaved: correlationId={PortLogField(trace.CorrelationId)}; bundleDirectory={PortLogField(bundleDirectory)}; tracePath={PortLogField(tracePath)}; imageCopied={imageCopied}; sourceImagePath={PortLogField(trace.ImagePath)}");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Goblin decision bundle failed: correlationId={trace.CorrelationId}", ex);
+            }
         }
 
         private bool PortShouldSuppressJournalEncounterAlreadyAutoCounted(

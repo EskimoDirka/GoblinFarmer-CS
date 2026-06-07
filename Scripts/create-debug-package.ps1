@@ -1596,16 +1596,26 @@ try {
     Write-Host "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
 
     $replayLogs = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*.log") 10)
+    $replayReports = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*.html") 10)
     if ($replayLogs.Count -gt 0) {
         $replayLogDestinationDirectory = Join-Path $stagingRoot "Logs\GoblinReplay"
         New-Item -ItemType Directory -Path $replayLogDestinationDirectory -Force | Out-Null
         foreach ($replayLog in $replayLogs) {
             Copy-Item -LiteralPath $replayLog.FullName -Destination (Join-Path $replayLogDestinationDirectory $replayLog.Name) -Force
         }
+        foreach ($replayReport in $replayReports) {
+            Copy-Item -LiteralPath $replayReport.FullName -Destination (Join-Path $replayLogDestinationDirectory $replayReport.Name) -Force
+            $assetFolder = Join-Path (Split-Path -Parent $replayReport.FullName) "$($replayReport.BaseName)_files"
+            if (Test-Path -LiteralPath $assetFolder -PathType Container) {
+                Copy-Item -LiteralPath $assetFolder -Destination (Join-Path $replayLogDestinationDirectory (Split-Path -Leaf $assetFolder)) -Recurse -Force
+            }
+        }
         Write-Host "Included Goblin replay logs: $($replayLogs.Count)"
+        Write-Host "Included Goblin replay HTML reports: $($replayReports.Count)"
     }
     else {
         Write-Host "Included Goblin replay logs: 0"
+        Write-Host "Included Goblin replay HTML reports: 0"
     }
 
     $debugSkipInfo = Get-DebugScreenshotSkipInfo $latestLog
@@ -2004,6 +2014,7 @@ try {
             "Selected log folder: $selectedLogFolder",
             "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
             "Goblin replay logs included: $($replayLogs.Count)",
+            "Goblin replay HTML reports included: $($replayReports.Count)",
             "Selected screenshot folder: $selectedScreenshotFolder",
             "Selected debug screenshot folder: $selectedDebugScreenshotFolder",
             "Runtime session-info included: $runtimeSessionInfoIncluded",
@@ -2022,6 +2033,7 @@ try {
             "- debug-screenshot-manifest.txt",
             "- Latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
             "- Goblin replay logs included: $($replayLogs.Count)",
+            "- Goblin replay HTML reports included: $($replayReports.Count)",
             "- Total screenshots included: $totalScreenshotCount",
             "- Failure screenshots included: $($failureScreenshots.Count)",
             "- Failure screenshots excluded: $excludedFailureScreenshots",

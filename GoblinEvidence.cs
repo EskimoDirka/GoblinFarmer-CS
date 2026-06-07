@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace GoblinFarmer
 {
     internal enum GoblinJournalEventKind
@@ -509,6 +511,7 @@ namespace GoblinFarmer
 
     internal sealed record GoblinDecisionTraceRecord(
         DateTime TimestampUtc,
+        string CorrelationId,
         string Mode,
         string Source,
         string ImageFile,
@@ -1154,12 +1157,16 @@ namespace GoblinFarmer
             double evidenceFirstSeenAgeSeconds,
             bool autoCountEnabled,
             bool observationModeEnabled,
-            string suppressionReason,
-            bool counted,
-            int areaCountBefore,
-            int areaLimit,
-            int totalGoblinCountBefore)
+        string suppressionReason,
+        bool counted,
+        int areaCountBefore,
+        int areaLimit,
+        int totalGoblinCountBefore,
+        string correlationId = "")
         {
+            correlationId = string.IsNullOrWhiteSpace(correlationId)
+                ? CreateCorrelationId(timestampUtc, mode, source, evidenceSignature, imageFile, imagePath)
+                : correlationId.Trim();
             string reason = counted
                 ? "Eligible"
                 : string.IsNullOrWhiteSpace(suppressionReason) ? "Suppressed" : suppressionReason;
@@ -1172,6 +1179,7 @@ namespace GoblinFarmer
 
             return new GoblinDecisionTraceRecord(
                 timestampUtc,
+                correlationId,
                 string.IsNullOrWhiteSpace(mode) ? "Live" : mode.Trim(),
                 string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim(),
                 Path.GetFileName(imageFile ?? ""),
@@ -1200,6 +1208,7 @@ namespace GoblinFarmer
         public static string ToLogLine(GoblinDecisionTraceRecord trace)
         {
             return "GoblinDecisionTrace: " +
+                $"correlationId={LogValue(trace.CorrelationId)}; " +
                 $"mode={LogValue(trace.Mode)}; " +
                 $"source={LogValue(trace.Source)}; " +
                 $"imageFile={LogValue(trace.ImageFile)}; " +
@@ -1223,6 +1232,25 @@ namespace GoblinFarmer
                 $"decision={trace.Decision}; " +
                 $"reason={LogValue(trace.Reason)}; " +
                 $"notificationShown={trace.NotificationShown}";
+        }
+
+        public static string CreateCorrelationId(
+            DateTime timestampUtc,
+            string mode,
+            string source,
+            string evidenceSignature,
+            string imageFile,
+            string imagePath)
+        {
+            string seed = string.Join("|",
+                timestampUtc.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture),
+                mode ?? "",
+                source ?? "",
+                evidenceSignature ?? "",
+                imageFile ?? "",
+                imagePath ?? "");
+            int hash = seed.GetHashCode(StringComparison.Ordinal);
+            return $"gdt-{timestampUtc:yyyyMMddHHmmssfff}-{Math.Abs(hash):x8}";
         }
 
         private static string LogValue(string value)

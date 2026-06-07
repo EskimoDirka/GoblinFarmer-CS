@@ -1969,7 +1969,7 @@ static void TestGoblinAutomaticCountingGateDefaultsDisabled()
     AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}", StringComparison.Ordinal), "startup AppSettings logs should expose the automatic-count setting");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableObservationMode", StringComparison.Ordinal), "automatic counting should require Observation Mode");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting", StringComparison.Ordinal), "automatic counting should require the explicit automatic-count setting");
-    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper with evidence identity");
+    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper with evidence identity and image path");
     AssertTrue(autoCountMethod.Contains("bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled()", StringComparison.Ordinal), "automatic count helper should snapshot the effective gate");
     AssertTrue(autoCountMethod.Contains("AutomaticCountingDisabled", StringComparison.Ordinal), "automatic count helper should skip incrementing when the gate is disabled");
     AssertTrue(autoCountMethod.Contains("GoblinAutoCountSkippedDisabled", StringComparison.Ordinal), "disabled automatic counts should log that evidence was tracked but no count was attempted");
@@ -2025,7 +2025,9 @@ static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()
         0);
     AssertEqual("Count", count.Decision, "fresh eligible evidence should trace Count");
     AssertEqual(2, count.AreaLimit, "PF1 traces should report areaLimit=2");
+    AssertTrue(count.CorrelationId.StartsWith("gdt-", StringComparison.Ordinal), "decision traces should include a stable correlation id");
     AssertTrue(GoblinDecisionTracePolicy.ToLogLine(count).Contains("decision=Count", StringComparison.Ordinal), "trace log should include the Count decision");
+    AssertTrue(GoblinDecisionTracePolicy.ToLogLine(count).Contains("correlationId=", StringComparison.Ordinal), "trace log should include the correlation id");
 
     GoblinDecisionTraceRecord stale = GoblinDecisionTracePolicy.Create(
         DateTime.UtcNow,
@@ -2103,18 +2105,30 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
     string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
     string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
 
     AssertTrue(appSettingsSource.Contains("public bool EnableDecisionTrace { get; set; } = false", StringComparison.Ordinal), "Release decision trace should default off unless Debug Mode enables it");
     AssertTrue(appSettingsSource.Contains("settings.GoblinTracker.EnableDecisionTrace = true", StringComparison.Ordinal), "VS Debug/dev defaults should enable decision trace");
     AssertTrue(configSource.Contains("\"EnableDecisionTrace\": true", StringComparison.Ordinal), "project VS Debug config should explicitly expose decision trace");
     AssertTrue(evidenceSource.Contains("PortReplayGoblinEvidenceFolder", StringComparison.Ordinal), "replay folder runner should exist");
+    AssertTrue(evidenceSource.Contains("OpenFileDialog zipDialog", StringComparison.Ordinal), "VS Debug replay should allow selecting a debug package ZIP directly");
     AssertTrue(evidenceSource.Contains("SearchOption.AllDirectories", StringComparison.Ordinal), "replay should recursively scan debug package folders");
+    AssertTrue(evidenceSource.Contains("PortExtractGoblinReplayZip", StringComparison.Ordinal), "replay should scan ZIP debug packages");
+    AssertTrue(evidenceSource.Contains("ZipFile.ExtractToDirectory", StringComparison.Ordinal), "replay ZIP support should extract packages into a bounded temporary workspace");
     AssertTrue(evidenceSource.Contains("PortDetectBestGoblinEvidenceTemplateInImageFile", StringComparison.Ordinal), "replay should run template detection against saved images without Diablo");
     AssertTrue(evidenceSource.Contains("dryRun=True", StringComparison.Ordinal), "replay should be logged as a dry run");
     AssertTrue(evidenceSource.Contains("GoblinReplay_", StringComparison.Ordinal), "replay should write deterministic GoblinReplay logs");
+    AssertTrue(evidenceSource.Contains("PortWriteGoblinReplayHtmlReport", StringComparison.Ordinal), "replay should write an HTML report");
+    AssertTrue(evidenceSource.Contains("GoblinReplayCandidateRanking", StringComparison.Ordinal), "replay should log ranked candidate matches");
+    AssertTrue(evidenceSource.Contains("GoblinReplayAreaInference", StringComparison.Ordinal), "replay should log area inference decisions");
+    AssertTrue(evidenceSource.Contains("replayComparison", StringComparison.Ordinal), "replay should compare decisions to the previous replay log");
     AssertTrue(evidenceSource.Contains("GoblinDecisionTracePolicy.ToLogLine(trace)", StringComparison.Ordinal), "replay should write structured decision trace lines");
     AssertFalse(ExtractMethodBody(evidenceSource, "private GoblinReplaySummary PortReplayGoblinEvidenceFolder").Contains("RecordGoblinFound(", StringComparison.Ordinal), "replay dry-run should not increment live GoblinCount");
+    AssertTrue(sessionStatsSource.Contains("PortWriteGoblinDecisionBundle(trace)", StringComparison.Ordinal), "live decision traces should write evidence bundles");
+    AssertTrue(sessionStatsSource.Contains("GoblinDecisionBundleSaved", StringComparison.Ordinal), "live decision bundles should log their saved folder");
     AssertTrue(packageScript.Contains("GoblinReplay_*.log", StringComparison.Ordinal), "debug packages should include replay logs");
+    AssertTrue(packageScript.Contains("GoblinReplay_*.html", StringComparison.Ordinal), "debug packages should include replay HTML reports");
+    AssertTrue(packageScript.Contains("$($replayReport.BaseName)_files", StringComparison.Ordinal), "debug packages should include replay report thumbnail assets");
     AssertTrue(packageScript.Contains("Logs\\GoblinReplay", StringComparison.Ordinal), "replay logs should have a stable package destination");
 }
 
