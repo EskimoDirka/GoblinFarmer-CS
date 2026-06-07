@@ -158,6 +158,8 @@
 * [x] Restore the VS Debug `Create Debug Package` button to the same width/alignment as the `Change...` and `Verify Paths` Settings buttons.
 * [x] Add a VS Debug `Next Tests` diagnostics tab beside `Overlay` and `Route State` with the current in-game Goblin Tracker validation checklist.
 * [x] Review `GoblinFarmer_Debug_20260607_071907.zip`; confirmed PF1/PF2/Stinging Winds synthetic two-count rules, Southern Highlands default duplicate suppression, New Tristram blocked suppression, and Southern Highlands Gem Hoarder auto-count.
+* [x] Update the VS Debug `Next Tests` tab to an automatic-count readiness checklist covering setup, must-pass live encounters, stale/display safety checks, classification, reset/new-game cleanup, latency notes, and debug-package follow-up.
+* [ ] Run the updated VS Debug `Next Tests` checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, and create a debug package after the first miss, wrong type, stale display, or slow notification.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.

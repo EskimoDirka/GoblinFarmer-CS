@@ -166,6 +166,7 @@
 - In VS Debug, scenario fields for area, expected goblin, and expected count/block outcome can be filled before clicking `Create Debug Package`
 - Clicking VS Debug `Create Debug Package` writes `Debug\GoblinTrackerScenario.txt` and includes that metadata in the resulting package
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios
+- In VS Debug, the `Next Tests` tab shows the automatic-count readiness checklist: Observation Mode and Auto Goblin Count on, `Test Count Override` off, fresh game or Reset Stats setup, Eastern Channel Level 2, Cave Of The Moon Clan Level 2, Battlefields Treasure Goblin, PF1/PF2/Stinging Winds live two-count rules, stale journal/area transition, blocked-area evidence, Reset Stats/New Game cleanup, Gilded Baron/Malevolent Tormentor classification, Last Observation persistence, notification latency, and debug-package follow-up
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
 - Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template

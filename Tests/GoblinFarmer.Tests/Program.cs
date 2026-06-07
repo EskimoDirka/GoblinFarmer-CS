@@ -2019,10 +2019,17 @@ static void TestVsDebugDiagnosticsIncludeNextTestStepsTab()
     AssertTrue(diagnosticsSource.Contains("Name = \"tabNextTestSteps\"", StringComparison.Ordinal), "diagnostics should include a dedicated Next Tests tab");
     AssertTrue(diagnosticsSource.Contains("Text = \"Next Tests\"", StringComparison.Ordinal), "Next Tests tab should have a readable tab title");
     AssertTrue(diagnosticsSource.Contains("PortCreateNextTestStepsBox", StringComparison.Ordinal), "Next Tests tab should use a read-only text surface");
+    AssertTrue(diagnosticsSource.Contains("Goblin Tracker Automatic Count Readiness", StringComparison.Ordinal), "Next Tests should be framed around automatic-count readiness");
+    AssertTrue(diagnosticsSource.Contains("Auto Goblin Count", StringComparison.Ordinal), "Next Tests should remind the tester to enable automatic counting for real validation");
+    AssertTrue(diagnosticsSource.Contains("Test Count Override off", StringComparison.Ordinal), "Next Tests should require the synthetic override off during real validation");
     AssertTrue(diagnosticsSource.Contains("Eastern Channel Level 2", StringComparison.Ordinal), "Next Tests should list Eastern Channel Level 2 validation");
     AssertTrue(diagnosticsSource.Contains("Cave Of The Moon Clan Level 2", StringComparison.Ordinal), "Next Tests should list Cave Level 2 validation");
     AssertTrue(diagnosticsSource.Contains("Battlefields", StringComparison.Ordinal), "Next Tests should list Battlefields validation");
-    AssertTrue(diagnosticsSource.Contains("PF1/PF2/Stinging Winds", StringComparison.Ordinal), "Next Tests should list special two-count validation");
+    AssertTrue(diagnosticsSource.Contains("Stinging Winds", StringComparison.Ordinal), "Next Tests should list special two-count validation");
+    AssertTrue(diagnosticsSource.Contains("Reset Stats and New Game", StringComparison.Ordinal), "Next Tests should include cleanup/reset validation");
+    AssertTrue(diagnosticsSource.Contains("BlockedArea", StringComparison.Ordinal), "Next Tests should include blocked-area validation");
+    AssertTrue(diagnosticsSource.Contains("Gilded Baron and Malevolent Tormentor", StringComparison.Ordinal), "Next Tests should include classification validation");
+    AssertTrue(diagnosticsSource.Contains("GoblinReplay decision traces", StringComparison.Ordinal), "Next Tests should point misses toward replay decision traces");
     AssertTrue(diagnosticsSource.Contains("Create Debug Package", StringComparison.Ordinal), "Next Tests should remind the tester to package confusing runs");
 }
 
