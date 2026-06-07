@@ -82,6 +82,7 @@ Run("Goblin observation counters are diagnostic only", TestGoblinObservationCoun
 Run("Goblin observation type reuse requires recent matching area", TestGoblinObservationTypeReuseRequiresRecentMatchingArea);
 Run("Goblin manual unknown count requires fresh observation by default", TestGoblinManualUnknownCountRequiresFreshObservationByDefault);
 Run("Goblin observation UI state logs update and clear", TestGoblinObservationUiStateLogsUpdateAndClear);
+Run("Goblin tracker stats UI refreshes after count changes", TestGoblinTrackerStatsUiRefreshesAfterCountChanges);
 Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
@@ -3049,6 +3050,20 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 500", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback without loosening evidence thresholds");
 }
 
+static void TestGoblinTrackerStatsUiRefreshesAfterCountChanges()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string updateMethod = ExtractMethodBody(sessionStatsSource, "private void PortUpdateGoblinTrackerStats");
+
+    AssertTrue(updateMethod.Contains("DiagnosticsSessionSnapshot snapshot = DebugManager.Session.Snapshot(DateTime.Now)", StringComparison.Ordinal), "Goblin Tracker UI should refresh from the current session snapshot");
+    AssertTrue(updateMethod.Contains("lblGoblinCount.Text = $\"Goblins: {snapshot.GoblinCount}\"", StringComparison.Ordinal), "Goblin count label should use the latest session total");
+    AssertTrue(updateMethod.Contains("lblGoblinCount.Refresh()", StringComparison.Ordinal), "Goblin count label should repaint immediately after count changes");
+    AssertTrue(updateMethod.Contains("lblGoblinObservation.Refresh()", StringComparison.Ordinal), "Last Observation label should repaint immediately after count/observation changes");
+    AssertTrue(updateMethod.Contains("StatsUiRefreshed", StringComparison.Ordinal), "stats refresh should log visible count changes for future UI investigations");
+    AssertTrue(updateMethod.Contains("snapshot.GoblinCount != portLastLoggedGoblinStatsUiCount", StringComparison.Ordinal), "stats refresh logs should be throttled to actual visible state changes");
+}
+
 static void TestGoblinObservationModeEnabledByDefaultInRelease()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -3192,6 +3207,7 @@ static void TestGoblinVsDebugSimulationControlsUseCountGuards()
     AssertTrue(method.Contains("GoblinCountAccepted", StringComparison.Ordinal), "accepted simulations should log the standard accepted marker");
     AssertTrue(method.Contains("GoblinCountSuppressed", StringComparison.Ordinal), "suppressed simulations should log the standard suppressed marker");
     AssertTrue(method.Contains("PortPublishManualGoblinCountObservation(area, goblinType, source, guardResult)", StringComparison.Ordinal), "accepted simulations should refresh the Last Observation UI");
+    AssertFalse(method.Contains("PortQueueGoblinEncounterDebugCapture", StringComparison.Ordinal), "debug simulations should not create encounter captures or replay artifacts");
 }
 
 static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()

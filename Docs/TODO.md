@@ -10,6 +10,7 @@ This file contains only open work and remaining test/verifications. Historical c
 - [x] Phase 2E: add a small explicit developer harness command for selecting real capture folders without editing test code. It stays out of startup, scanner, route, combat, town, and debug package workflows.
 - [x] Review `GoblinFarmer_Debug_20260607_175901.zip`: Southern Highlands and Eastern Channel Level 2 auto-counted correctly, stale Battlefields killed evidence suppressed after teleport, and the later Battlefields accepted count came from fresh engaged evidence.
 - [x] Add VS Debug-only `Sim Count` controls for deterministic accepted-count, duplicate-suppression, and area-limit-suppression testing without changing live detection/counting behavior.
+- [x] Validate VS Debug `Sim Count` controls from loose runtime logs: Southern Highlands accepted once then duplicate-suppressed, PF1 and Stinging Winds accepted two then `AreaLimitReached`, New Tristram suppressed as `BlockedArea`, and Reset Stats cleared simulated count state.
 - [ ] Use the explicit Goblin Replay commands on real suspicious evidence when stale-location behavior needs a fast regression check without waiting for live goblin spawns. Prefer `--goblin-replay-metadata` or `--goblin-replay-prefix` for a specific older encounter in shared capture folders, `--goblin-replay-captures` for whole capture folders, and `--goblin-replay-decision-bundle` when starting from a DecisionBundle folder.
 - [ ] Live-validate the `500ms` scanner interval improves notification latency without lowering evidence thresholds or increasing false positives.
 - [ ] Live-validate Battlefields no longer auto-counts stale/non-goblin journal history after pressing Enter or opening journal history.
@@ -29,7 +30,7 @@ This file contains only open work and remaining test/verifications. Historical c
 - [ ] Live-validate New Game clears per-game Goblin Tracker duplicate/evidence state and allows fresh evidence to count again.
 - [ ] Live-validate blocked count areas still suppress and notify without consuming area slots when evidence is visible.
 - [ ] If encountered, live-validate PF1, PF2, and Stinging Winds still allow exactly two automatic counts and suppress the third with `AreaLimitReached`.
-- [ ] In VS Debug, click through the new `Sim Count` area selector for Southern Highlands, PF1, PF2, Stinging Winds, and New Tristram to confirm accepted, duplicate, area-limit, and blocked notifications/logs are readable.
+- [ ] If needed, use VS Debug `Sim Count` only for rare count-policy edge cases; prioritize real automatic-count validation for the remaining location/evidence issues.
 - [ ] If encountered, live-validate Gilded Baron and Malevolent Tormentor classification remains correct.
 
 ## VS Debug Capture Workflow

@@ -21,6 +21,9 @@ This file is the current source of truth for the active release, stable behavior
 - Battlefields stale Blood Thief `JournalKilled` evidence after teleport was detected but suppressed as `EncounterAlreadyAutoCounted`, which matches intended stale-transition behavior.
 - Battlefields later accepted a Blood Thief count from fresh `JournalEngaged` evidence in the Battlefields area, then suppressed repeats through duplicate/evidence guards.
 - Goblin Replay against the Battlefields manual Capture metadata returned `NoCandidate`; replay against the accepted Battlefields EncounterCapture returned `Count/Eligible`. DecisionBundle-only folders reported `DecisionBundleMissingReplayFrames` because the package contains `evidence.png` and `decision-trace.txt`, not replay-ready Journal/Minimap crop pairs.
+- Loose VS Debug log review from the Sim Count validation run confirmed the new controls are visible in VS Debug and use the intended count policy: Southern Highlands accepted once then suppressed duplicates, PF1 accepted two then suppressed the third, Stinging Winds accepted two then suppressed the third, and New Tristram suppressed as `BlockedArea`.
+- Southern Highlands Sim Count did persist internally: logs showed `GoblinCountAccepted ... total=1` and JSONL showed `GoblinDebugSimulationAccepted ... total=1`. The visible-count concern was treated as a UI refresh/readability issue, so Goblin Tracker stats labels now force an immediate repaint and log `StatsUiRefreshed` only when visible state changes.
+- Reset Stats after the simulation run cleared duplicate guard, auto-count evidence state, observation state, Last Observation, and session GoblinCount back to zero.
 
 ## Stable Systems
 
@@ -69,10 +72,10 @@ This file is the current source of truth for the active release, stable behavior
 
 ## Next Development Plans
 
-- Continue validating auto-count during normal VS Debug use, with special attention to Level 2 area independence, stale journal/location transitions, and notification latency.
+- Continue validating real auto-count during normal VS Debug use, with special attention to Level 2 area independence, stale journal/location transitions, and notification latency.
 - Use VS Debug `Sim Count` when a rare count-policy edge case needs deterministic verification, especially PF1/PF2/Stinging Winds third-count suppression.
 - Next Goblin Replay work should use the explicit harness command against real capture folders, specific metadata files/prefixes, or DecisionBundle folders from suspicious live sessions and only promote narrowly proven stale-location fixes into production code.
-- Latest replay validation used `--goblin-replay-metadata` against the `GoblinFarmer_Debug_20260607_175901.zip` Battlefields manual Capture and accepted EncounterCapture. Still needs validation after this change: build/tests and one VS Debug click-through of the new `Sim Count` control.
+- Latest replay validation used `--goblin-replay-metadata` against the `GoblinFarmer_Debug_20260607_175901.zip` Battlefields manual Capture and accepted EncounterCapture. Latest Sim Count validation used loose VS Debug logs from `GoblinFarmer_20260607_181728.log`; no new debug package was created for that run.
 - Continue using automatic counting in real runs instead of focused specific-goblin hunts.
 - Use the `Capture` button only when an image-recognition issue is visible and extra minimap/journal/fullscreen evidence would help.
 - Keep `Docs/TODO.md` synchronized with remaining work and next test steps.

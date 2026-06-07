@@ -10,6 +10,9 @@ namespace GoblinFarmer
         private int sessionFailures;
         private DateTime sessionStartTime;
         private readonly DateTime sessionScreenshotRetentionStartTime = DateTime.Now;
+        private int portLastLoggedGoblinStatsUiCount = -1;
+        private string portLastLoggedGoblinStatsUiActiveTime = "";
+        private string portLastLoggedGoblinStatsUiObservation = "";
         private const double PortAutomaticGoblinMinimapCountMinimumConfidence = 0.85;
         private const double PortAutomaticGoblinAmbiguousMinimapCountMinimumConfidence = 0.90;
 
@@ -695,7 +698,22 @@ namespace GoblinFarmer
                 displayedObservationStatus = portDisplayedGoblinObservationStatus;
             }
 
-            lblGoblinObservation.Text = PortGoblinObservationLabel(displayedObservation, displayedObservationStatus);
+            string observationLabel = PortGoblinObservationLabel(displayedObservation, displayedObservationStatus);
+            lblGoblinObservation.Text = observationLabel;
+            lblGoblinCount.Refresh();
+            lblGoblinGph.Refresh();
+            lblGoblinActiveTime.Refresh();
+            lblGoblinObservation.Refresh();
+            string activeTimeText = snapshot.GoblinActiveCombatTime.ToString(@"hh\:mm\:ss");
+            if (snapshot.GoblinCount != portLastLoggedGoblinStatsUiCount ||
+                !string.Equals(activeTimeText, portLastLoggedGoblinStatsUiActiveTime, StringComparison.Ordinal) ||
+                !string.Equals(observationLabel, portLastLoggedGoblinStatsUiObservation, StringComparison.Ordinal))
+            {
+                portLastLoggedGoblinStatsUiCount = snapshot.GoblinCount;
+                portLastLoggedGoblinStatsUiActiveTime = activeTimeText;
+                portLastLoggedGoblinStatsUiObservation = observationLabel;
+                AppLogger.Info($"GoblinTracker: StatsUiRefreshed goblins={snapshot.GoblinCount} gph={snapshot.GoblinsPerHour:0.00} activeTime={activeTimeText}");
+            }
         }
 
         private void PortMarkGoblinObservationNoCurrent(string reason)
