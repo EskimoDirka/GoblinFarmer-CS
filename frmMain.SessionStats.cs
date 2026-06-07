@@ -523,8 +523,7 @@ namespace GoblinFarmer
                     suppressionReason = "EvidenceSeenBeforeAutoCountEnabled";
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
-                    evidenceState!.Counted &&
-                    !PortAllowsLinkedJournalAreaRepeat(observation, evidenceState.AreaKey, area.AreaKey))
+                    evidenceState!.Counted)
                 {
                     suppressionReason = "EvidenceAlreadyAutoCounted";
                 }
@@ -637,8 +636,7 @@ namespace GoblinFarmer
                 !string.Equals(PortNormalizeGoblinObservationSource(source), "Journal", StringComparison.OrdinalIgnoreCase) ||
                 !GoblinTypeNormalizer.Normalize(encounterState.GoblinType).Equals(GoblinTypeNormalizer.Normalize(goblinType), StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(encounterState.AreaKey) ||
-                encounterState.AreaKey.Equals(areaKey, StringComparison.OrdinalIgnoreCase) ||
-                GoblinJournalFreshnessPolicy.AllowsLinkedDungeonLevelRepeat(encounterState.AreaKey, areaKey))
+                encounterState.AreaKey.Equals(areaKey, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
@@ -686,15 +684,6 @@ namespace GoblinFarmer
                 normalized.Equals("Malevolent Tormentor", StringComparison.OrdinalIgnoreCase)
                 ? PortAutomaticGoblinAmbiguousMinimapCountMinimumConfidence
                 : PortAutomaticGoblinMinimapCountMinimumConfidence;
-        }
-
-        private static bool PortAllowsLinkedJournalAreaRepeat(
-            GoblinObservationRecord observation,
-            string firstAreaKey,
-            string currentAreaKey)
-        {
-            return string.Equals(PortNormalizeGoblinObservationSource(observation.Source), "Journal", StringComparison.OrdinalIgnoreCase) &&
-                GoblinJournalFreshnessPolicy.AllowsLinkedDungeonLevelRepeat(firstAreaKey, currentAreaKey);
         }
 
         private static string PortShortEvidenceSignature(string evidenceSignature)
@@ -995,11 +984,17 @@ namespace GoblinFarmer
             string previousStatus;
             DateTime nowUtc = DateTime.UtcNow;
             string normalizedReason = string.IsNullOrWhiteSpace(reason) ? "NoCandidate" : reason.Trim();
+            string currentAreaKey = PortCurrentDisplayedObservationAreaKey();
+            bool areaChanged = false;
             lock (portGoblinTrackerLock)
             {
                 previousObservation = portDisplayedGoblinObservation;
                 previousStatus = portDisplayedGoblinObservationStatus;
-                if (PortShouldPreserveDisplayedGoblinObservation(previousObservation, normalizedReason, nowUtc, out string preserveKind))
+                areaChanged = previousObservation != null &&
+                    !PortDisplayedObservationMatchesCurrentArea(previousObservation, currentAreaKey);
+                string effectiveReason = areaChanged ? "AreaChanged" : normalizedReason;
+                if (!areaChanged &&
+                    PortShouldPreserveDisplayedGoblinObservation(previousObservation, normalizedReason, nowUtc, out string preserveKind))
                 {
                     double remainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - nowUtc).TotalMilliseconds);
                     AppLogger.Info($"GoblinTracker: LastObservationClearSkipped reason={PortLogField(normalizedReason)} preserveKind={PortLogField(preserveKind)} preservedSource={PortLogField(previousObservation?.Source ?? "")} preservedGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} preservedReason={PortLogField(previousObservation?.Reason ?? "")} remainingMs={remainingMs:0}");
@@ -1007,12 +1002,33 @@ namespace GoblinFarmer
                 }
 
                 portDisplayedGoblinObservation = null;
-                portDisplayedGoblinObservationStatus = normalizedReason;
+                portDisplayedGoblinObservationStatus = effectiveReason;
                 portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
+                normalizedReason = effectiveReason;
             }
 
-            AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(normalizedReason)} previousGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} previousAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} previousSource={PortLogField(previousObservation?.Source ?? "")} previousStatus={PortLogField(previousStatus)}");
+            AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(normalizedReason)} previousGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} previousAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} previousSource={PortLogField(previousObservation?.Source ?? "")} previousStatus={PortLogField(previousStatus)} currentAreaKey={PortLogField(currentAreaKey)} areaChanged={areaChanged}");
             PortUpdateGoblinTrackerStats();
+        }
+
+        private string PortCurrentDisplayedObservationAreaKey()
+        {
+            string currentArea = portLastConfirmedLocation;
+            return string.IsNullOrWhiteSpace(currentArea)
+                ? ""
+                : PortLocationKey(currentArea);
+        }
+
+        private bool PortDisplayedObservationMatchesCurrentArea(GoblinObservationRecord observation, string currentAreaKey)
+        {
+            if (string.IsNullOrWhiteSpace(currentAreaKey))
+            {
+                return true;
+            }
+
+            string observationAreaKey = PortLocationKey(observation.AreaKey);
+            return !string.IsNullOrWhiteSpace(observationAreaKey) &&
+                observationAreaKey.Equals(currentAreaKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private bool PortShouldPreserveDisplayedManualCountObservation(

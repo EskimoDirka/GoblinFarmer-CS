@@ -60,7 +60,8 @@
 - Eastern Channel Level 2 counts once and suppresses the second press as the same area
 - Caverns of Frost Level 1 counts once and suppresses the second press as the same area
 - Caverns of Frost Level 2 counts once and suppresses the second press as the same area
-- With Automatic Counting enabled, a fresh same-type Killed journal encounter can count once in Caverns of Frost Level 1 and once in Caverns of Frost Level 2, while unrelated stale same-type journal evidence from other areas still suppresses
+- With Automatic Counting enabled, Caverns of Frost Level 1 and Level 2 can each count once, but Level 2 must use evidence first seen after Level 2 is detected, fresh minimap evidence, or another same-area candidate
+- Killed journal evidence first seen in Caverns of Frost Level 1 must not auto-count after moving to Caverns of Frost Level 2
 - Pandemonium Fortress Level 1 accepts goblin counts 1 and 2 in the same game
 - Pandemonium Fortress Level 1 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Pandemonium Fortress Level 2 accepts goblin counts 1 and 2 in the same game
@@ -139,6 +140,7 @@
 - Fresh Journal/Minimap Last Observation entries remain readable during the short display hold and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
 - After the short hold expires, no-candidate scanner scans preserve the last real goblin observation with `LastObservationClearSkipped preserveKind=LastObservationPersistent` instead of clearing the UI
 - Last Observation updates only when a new real goblin observation/count is accepted, or clears during Reset Stats/New Game/missing-template setup cleanup; stale cross-area journal repeats should not replace the displayed goblin
+- Last Observation clears with `LastObservationCleared reason=AreaChanged` when no-candidate scans occur after the current confirmed area changes away from the displayed observation area
 - Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for reset/new-game or true cleanup states
 - `GoblinTracker.EnableObservationMode` controls scanner/diagnostic behavior only; `GoblinTracker.EnableAutomaticCounting` is the separate automatic-count gate and defaults to `false`
 - Startup logs report `EnableObservationMode`, `EnableAutomaticCounting`, effective `automaticCountingEnabled`, and `manualHotkeyOnlyCountPath`
@@ -150,6 +152,7 @@
 - When explicitly enabled, automatic goblin counting must count only from fresh eligible observations and must log accepted/suppressed decisions separately from observation-only diagnostics
 - Enabled automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
 - Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
+- Route button clicks log `ButtonClickReceived`, `ButtonClickQueued`, and `ButtonClickExecuting` so a briefly unresponsive manual route button can be diagnosed from the next package
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are stable across confidence/match-point drift for the same visible Journal/Minimap template
 - Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`

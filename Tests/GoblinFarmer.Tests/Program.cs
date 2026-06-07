@@ -43,7 +43,7 @@ Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGe
 Run("Goblin minimap color disambiguates Treasure and Odious", TestGoblinMinimapColorDisambiguatesTreasureAndOdious);
 Run("Goblin minimap color disambiguates Gilded and Malevolent", TestGoblinMinimapColorDisambiguatesGildedAndMalevolent);
 Run("Goblin automatic minimap counts require strong confidence", TestGoblinAutomaticMinimapCountsRequireStrongConfidence);
-Run("Goblin journal freshness allows linked Caverns levels", TestGoblinJournalFreshnessAllowsLinkedCavernsLevels);
+Run("Goblin journal freshness stays area strict across Caverns levels", TestGoblinJournalFreshnessStaysAreaStrictAcrossCavernsLevels);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
 Run("Debug package limits failure and debug screenshots by default", TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault);
 Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
@@ -770,25 +770,22 @@ static void TestGoblinAutomaticMinimapCountsRequireStrongConfidence()
     AssertTrue(sessionSource.Contains("minimapAutoCountMinConfidence", StringComparison.Ordinal), "auto-count diagnostics should report the minimap confidence gate");
 }
 
-static void TestGoblinJournalFreshnessAllowsLinkedCavernsLevels()
+static void TestGoblinJournalFreshnessStaysAreaStrictAcrossCavernsLevels()
 {
     DateTime now = DateTime.UtcNow;
     GoblinJournalKilledState killedState = new(
-        "Menagerist",
+        "Treasure Goblin",
         "Caverns of Frost Level 1",
         now - TimeSpan.FromSeconds(30),
         now);
 
-    AssertTrue(
+    AssertFalse(
         GoblinJournalFreshnessPolicy.KilledIsFresh(
             killedState,
             "Caverns of Frost Level 2",
             now,
             TimeSpan.FromSeconds(45)),
-        "fresh killed journal evidence from Caverns Level 1 should be reusable for a same-type linked Level 2 encounter");
-    AssertFalse(
-        GoblinJournalFreshnessPolicy.AllowsLinkedDungeonLevelRepeat("Fields of Slaughter", "Pandemonium Fortress Level 2"),
-        "linked-level repeat exceptions should not apply to unrelated areas");
+        "killed journal evidence first seen in Caverns Level 1 should not become fresh Level 2 evidence after a level transition");
 }
 
 static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()
@@ -1923,6 +1920,8 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinObservationDisplayHold", StringComparison.Ordinal), "automatic observations should stay readable briefly after the first no-candidate scan");
     AssertTrue(sessionStatsSource.Contains("ObservationDisplayHold", StringComparison.Ordinal), "no-candidate clears should report when they preserve a recent automatic observation");
     AssertTrue(sessionStatsSource.Contains("LastObservationPersistent", StringComparison.Ordinal), "no-candidate scans should preserve the latest real observation after the short hold expires");
+    AssertTrue(sessionStatsSource.Contains("AreaChanged", StringComparison.Ordinal), "no-candidate clears should drop stale persisted observations when the current area changes");
+    AssertTrue(sessionStatsSource.Contains("currentAreaKey", StringComparison.Ordinal), "Last Observation clear logs should report the current area used for stale-area decisions");
     AssertTrue(sessionStatsSource.Contains("displayHoldSeconds={PortAutomaticGoblinObservationDisplayHold.TotalSeconds:0}", StringComparison.Ordinal), "automatic observation update logs should include the display hold duration");
     AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should route through the Last Observation state helper");
@@ -2014,6 +2013,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountMethod.IndexOf("portGoblinAutoCountEvidenceBySignature[autoEvidenceKey] = evidenceState", StringComparison.Ordinal) < autoCountMethod.IndexOf("AutomaticCountingDisabled", StringComparison.Ordinal), "auto-count evidence should be remembered before the disabled gate returns");
     AssertTrue(autoCountMethod.Contains("EvidenceSeenBeforeAutoCountEnabled", StringComparison.Ordinal), "automatic counting should suppress evidence seen before the auto-count gate was armed");
     AssertTrue(autoCountMethod.Contains("EvidenceAlreadyAutoCounted", StringComparison.Ordinal), "automatic counting should suppress the same evidence signature after it counts once");
+    AssertFalse(autoCountMethod.Contains("PortAllowsLinkedJournalAreaRepeat", StringComparison.Ordinal), "automatic counting should not bypass exact evidence suppression for linked Caverns levels");
     AssertTrue(autoCountMethod.Contains("EncounterAlreadyAutoCounted", StringComparison.Ordinal), "automatic counting should suppress recently counted journal evidence when it appears again in another area");
     AssertTrue(autoCountMethod.Contains("PortShouldSuppressJournalEncounterAlreadyAutoCounted", StringComparison.Ordinal), "automatic counting should use encounter-level protection in addition to exact evidence signatures");
     AssertTrue(observeMethod.Contains("EncounterAlreadyAutoCounted", StringComparison.Ordinal), "observation summaries should report cross-area journal repeats as not countable before auto-count attempts run");
@@ -2171,6 +2171,7 @@ static void TestTeleportNextNoRouteStateNotifiesUser()
     string repoRoot = FindRepositoryRootForTests();
     string hotkeysSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Hotkeys.cs"));
     string routingSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.TeleportRouting.cs"));
+    string buttonSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ButtonColors.cs"));
 
     AssertTrue(hotkeysSource.Contains("Teleport Next hotkey ignored: no queued/next teleport", StringComparison.Ordinal), "no-route Teleport Next state should still log the ignored hotkey");
     AssertTrue(hotkeysSource.Contains("Teleport Next skipped", StringComparison.Ordinal), "no-route Teleport Next state should show a player-visible notification");
@@ -2179,6 +2180,9 @@ static void TestTeleportNextNoRouteStateNotifiesUser()
     AssertTrue(routingSource.Contains("Eastern Channel Level 2 allows hotkey teleportation to Stinging Winds", StringComparison.Ordinal), "Eastern Channel Level 2 should continue to Stinging Winds");
     AssertTrue(routingSource.Contains("Western Channel Level 2 should return to Ancient Waterway, not Stinging Winds", StringComparison.Ordinal), "Western Channel Level 2 should not skip back to Stinging Winds");
     AssertTrue(routingSource.Contains("Already inside Ancient Waterway; Ancient Waterway button is blocked", StringComparison.Ordinal), "the Ancient Waterway waypoint button should still block when already inside Ancient Waterway");
+    AssertTrue(buttonSource.Contains("ButtonClickReceived", StringComparison.Ordinal), "route button clicks should log receipt before any workflow gate can make them look silent");
+    AssertTrue(buttonSource.Contains("ButtonClickQueued", StringComparison.Ordinal), "route button clicks should log when they are queued into the workflow runner");
+    AssertTrue(buttonSource.Contains("ButtonClickExecuting", StringComparison.Ordinal), "route button clicks should log when the workflow body starts executing");
 }
 
 static void TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext()

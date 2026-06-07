@@ -140,9 +140,12 @@
 * [x] Extend minimap color diagnostics/overrides to the Gilded Baron / Malevolent Tormentor pair with `MinimapOrangePixels` diagnostics.
 * [x] Review `GoblinFarmer_Debug_20260606_185434.zip` for Gilded Baron notification validation, Ancient Waterway hotkey blocking, Caverns of Frost Level 1/2 same-type auto-count behavior, and PF2 missed auto-count evidence.
 * [x] Lower the non-ambiguous automatic minimap confidence gate to `0.85` while keeping Gilded Baron / Malevolent Tormentor at `0.90`.
-* [x] Add a narrow Caverns of Frost Level 1/2 linked-level journal freshness exception so same-type fresh Killed journal evidence can count once per level.
-* [ ] Live-validate plain Ancient Waterway blocks Teleport Next to Stinging Winds while Eastern Channel Level 2 still allows Stinging Winds and Western Channel Level 2 still returns to Ancient Waterway.
-* [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count the same goblin type once in the same game when the second encounter is fresh.
+* [x] Review `GoblinFarmer_Debug_20260606_203300.zip` for Ancient Waterway route validation, Caverns Level 1 -> Level 2 journal reuse, Last Observation stale-area persistence, and PF2 button-click evidence.
+* [x] Remove the Caverns of Frost Level 1/2 linked-level journal freshness exception because the latest package showed it could reuse Level 1 journal text in Level 2.
+* [x] Clear persisted Last Observation with `AreaChanged` when no-candidate scans happen after the current confirmed area differs from the displayed observation area.
+* [x] Add route-button click receipt/queue/execution diagnostics for future PF2 button no-op investigation.
+* [x] Live-validate plain Ancient Waterway blocks Teleport Next to Stinging Winds while Eastern Channel Level 2 still allows Stinging Winds and Western Channel Level 2 still returns to Ancient Waterway.
+* [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.

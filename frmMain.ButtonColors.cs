@@ -21,6 +21,7 @@ namespace GoblinFarmer
         private void PortQueueTeleportButtonClick(string location)
         {
             string requestedKey = PortLocationKey(location);
+            AppLogger.Info($"ButtonClickReceived: requested={PortDisplayLocation(location)}; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; waitingForConfirmation={portTeleportWaitingForConfirmation}; waitingTarget={PortDisplayLocation(PortTeleportLocationForKey(portTeleportWaitingConfirmationKey))}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; failedOrInterrupted={portTeleportRetryFailedOrInterrupted}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
             if (isAutomationRunning &&
                 portTeleportWaitingForConfirmation &&
                 requestedKey == portTeleportWaitingConfirmationKey)
@@ -30,12 +31,14 @@ namespace GoblinFarmer
                 return;
             }
 
+            AppLogger.Info($"ButtonClickQueued: requested={PortDisplayLocation(location)}; source=Button; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; waitingForConfirmation={portTeleportWaitingForConfirmation}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}");
             _ = PortRunAutomationAsync(token => PortRunTeleportButtonClick(location, token));
         }
 
         private bool PortRunTeleportButtonClick(string location, CancellationToken token)
         {
             string requestedKey = PortLocationKey(location);
+            AppLogger.Info($"ButtonClickExecuting: requested={PortDisplayLocation(location)}; automationRunning={isAutomationRunning}; combatRunning={portCombatRunning}; waitingForConfirmation={portTeleportWaitingForConfirmation}; retryTarget={PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey))}; failedOrInterrupted={portTeleportRetryFailedOrInterrupted}; confirmed={PortDisplayLocation(portLastConfirmedLocation)}; current={PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey))}; queued={PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey))}");
             if (portTeleportRetryFailedOrInterrupted &&
                 !string.IsNullOrWhiteSpace(portQueuedRetryTeleportKey) &&
                 requestedKey == portQueuedRetryTeleportKey)
