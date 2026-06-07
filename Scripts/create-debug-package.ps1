@@ -6,6 +6,8 @@ param(
     [int]$MaxDiagnosticScreenshots = 10,
     [int]$MaxDebugScreenshots = 4,
     [switch]$IncludeSuccessScreenshots,
+    [switch]$SkipGoblinReplay,
+    [string]$GoblinReplayInputPath = "",
     [int]$MaxGoblinEvidenceFullImages = 0,
     [int]$MaxGoblinEvidenceEventScreenshots = 3,
     [long]$MaxGoblinEvidenceEventScreenshotBytes = 1048576,
@@ -89,6 +91,46 @@ function Get-LatestFilesFromFolders {
     $files | Sort-Object LastWriteTime -Descending | Select-Object -First $Limit
 }
 
+function Test-ReplayGeneratedLog {
+    param([System.IO.FileInfo]$File)
+
+    if ($null -eq $File) {
+        return $false
+    }
+
+    if ($File.Name -like "GoblinReplay*") {
+        return $true
+    }
+
+    if ($File.Name -notlike "GoblinFarmer_*.log") {
+        return $false
+    }
+
+    try {
+        $firstLines = @(Get-Content -LiteralPath $File.FullName -TotalCount 120 -ErrorAction Stop)
+        return ($firstLines -match "GoblinReplayCliRunStarted").Count -gt 0
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-LatestLiveLogFromFolders {
+    param(
+        [string[]]$Folders,
+        [string[]]$Patterns
+    )
+
+    $files = @(Get-LatestFilesFromFolders $Folders $Patterns 50)
+    foreach ($file in $files) {
+        if (-not (Test-ReplayGeneratedLog $file)) {
+            return $file
+        }
+    }
+
+    return $null
+}
+
 function Read-KeyValueFile {
     param([string]$Path)
 
@@ -167,7 +209,7 @@ function Get-RuntimeRootSignals {
         [void]$signals.Add("session-info.txt")
     }
     if (Test-Path -LiteralPath (Join-Path $Path "Logs") -PathType Container) {
-        $latestLog = Get-LatestFileFromFolders @((Join-Path $Path "Logs")) @("*.log", "*.txt")
+        $latestLog = Get-LatestLiveLogFromFolders @((Join-Path $Path "Logs")) @("*.log", "*.txt")
         if ($null -ne $latestLog) {
             [void]$signals.Add("Logs\$($latestLog.Name)")
         }
@@ -261,7 +303,7 @@ function Find-InferredRuntimeRoot {
             continue
         }
 
-        $latestLog = Get-LatestFileFromFolders @((Join-Path $candidate "Logs")) @("*.log", "*.txt")
+        $latestLog = Get-LatestLiveLogFromFolders @((Join-Path $candidate "Logs")) @("*.log", "*.txt")
         $latestLogTime = if ($null -ne $latestLog) { $latestLog.LastWriteTime } else { [DateTime]::MinValue }
 
         $candidateInfo = [pscustomobject]@{
@@ -371,6 +413,254 @@ function Get-PackageRuntimeRoots {
     }
 
     return $paths.ToArray()
+}
+
+function Find-GoblinReplayInput {
+    param(
+        [string[]]$RuntimeRoots,
+        [string]$RequestedInputPath
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedInputPath)) {
+        $requested = Resolve-FullPath $RequestedInputPath
+        if (Test-Path -LiteralPath $requested) {
+            return [pscustomobject]@{
+                Path = $requested
+                SourceRoot = ""
+                Reason = "-GoblinReplayInputPath"
+                FileCount = 0
+                LatestWriteTime = [DateTime]::MinValue
+            }
+        }
+
+        return [pscustomobject]@{
+            Path = $requested
+            SourceRoot = ""
+            Reason = "Requested input missing"
+            FileCount = 0
+            LatestWriteTime = [DateTime]::MinValue
+        }
+    }
+
+    $best = $null
+    foreach ($root in $RuntimeRoots) {
+        $candidate = Join-Path $root "Debug\GoblinEvidence"
+        if (-not (Test-Path -LiteralPath $candidate -PathType Container)) {
+            continue
+        }
+
+        $files = @(Get-ChildItem -LiteralPath $candidate -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt)$' })
+        if ($files.Count -eq 0) {
+            continue
+        }
+
+        $latest = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $info = [pscustomobject]@{
+            Path = (Resolve-FullPath $candidate)
+            SourceRoot = (Resolve-FullPath $root)
+            Reason = "Latest Debug\GoblinEvidence activity"
+            FileCount = $files.Count
+            LatestWriteTime = $latest.LastWriteTime
+        }
+
+        if ($null -eq $best -or $info.LatestWriteTime -gt $best.LatestWriteTime) {
+            $best = $info
+        }
+    }
+
+    if ($null -ne $best) {
+        return $best
+    }
+
+    return [pscustomobject]@{
+        Path = ""
+        SourceRoot = ""
+        Reason = "No Debug\GoblinEvidence folder with files found"
+        FileCount = 0
+        LatestWriteTime = [DateTime]::MinValue
+    }
+}
+
+function Find-GoblinReplayRunner {
+    param(
+        [string[]]$RuntimeRoots,
+        [string]$PreferredRoot
+    )
+
+    $roots = New-Object System.Collections.Generic.List[string]
+    Add-UniquePath $roots $PreferredRoot
+    foreach ($root in $RuntimeRoots) {
+        Add-UniquePath $roots $root
+    }
+
+    foreach ($root in $roots.ToArray()) {
+        $exe = Join-Path $root "GoblinFarmer.exe"
+        if (Test-Path -LiteralPath $exe -PathType Leaf) {
+            return [pscustomobject]@{
+                Path = (Resolve-FullPath $exe)
+                Root = (Resolve-FullPath $root)
+                Kind = "exe"
+            }
+        }
+
+        $dll = Join-Path $root "GoblinFarmer.dll"
+        if (Test-Path -LiteralPath $dll -PathType Leaf) {
+            return [pscustomobject]@{
+                Path = (Resolve-FullPath $dll)
+                Root = (Resolve-FullPath $root)
+                Kind = "dll"
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Path = ""
+        Root = ""
+        Kind = "missing"
+    }
+}
+
+function Find-GoblinReplayConfigPath {
+    param(
+        [string[]]$RuntimeRoots,
+        [string]$PreferredRoot
+    )
+
+    foreach ($root in @($PreferredRoot) + $RuntimeRoots) {
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            continue
+        }
+
+        $candidate = Join-Path $root "Config\AppSettings.json"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-FullPath $candidate)
+        }
+    }
+
+    return ""
+}
+
+function Invoke-GoblinReplayForPackage {
+    param(
+        [string[]]$RuntimeRoots,
+        [string]$RequestedInputPath,
+        [string]$PreferredConfigRoot,
+        [switch]$Skip
+    )
+
+    if ($Skip) {
+        return [pscustomobject]@{
+            Attempted = $false
+            Succeeded = $false
+            ExitCode = -1
+            StartedAt = [DateTime]::MinValue
+            CompletedAt = [DateTime]::MinValue
+            InputPath = ""
+            RunnerPath = ""
+            ConfigPath = ""
+            Reason = "Skipped by -SkipGoblinReplay"
+        }
+    }
+
+    $input = Find-GoblinReplayInput $RuntimeRoots $RequestedInputPath
+    if ([string]::IsNullOrWhiteSpace($input.Path) -or -not (Test-Path -LiteralPath $input.Path)) {
+        Write-Warning "Goblin Replay skipped: $($input.Reason)."
+        return [pscustomobject]@{
+            Attempted = $false
+            Succeeded = $false
+            ExitCode = -1
+            StartedAt = [DateTime]::MinValue
+            CompletedAt = [DateTime]::MinValue
+            InputPath = $input.Path
+            RunnerPath = ""
+            ConfigPath = ""
+            Reason = $input.Reason
+        }
+    }
+
+    $runner = Find-GoblinReplayRunner $RuntimeRoots $input.SourceRoot
+    if ([string]::IsNullOrWhiteSpace($runner.Path)) {
+        Write-Warning "Goblin Replay skipped: no GoblinFarmer executable or DLL found in package runtime roots."
+        return [pscustomobject]@{
+            Attempted = $false
+            Succeeded = $false
+            ExitCode = -1
+            StartedAt = [DateTime]::MinValue
+            CompletedAt = [DateTime]::MinValue
+            InputPath = $input.Path
+            RunnerPath = ""
+            ConfigPath = ""
+            Reason = "Runner missing"
+        }
+    }
+
+    $configPath = Find-GoblinReplayConfigPath $RuntimeRoots $PreferredConfigRoot
+    Write-Step "Running Goblin Replay"
+    Write-Host "Goblin Replay input: $($input.Path)"
+    Write-Host "Goblin Replay input reason: $($input.Reason); files=$($input.FileCount); latest=$($input.LatestWriteTime)"
+    Write-Host "Goblin Replay runner: $($runner.Path) ($($runner.Kind))"
+    Write-Host "Goblin Replay config: $(if ([string]::IsNullOrWhiteSpace($configPath)) { 'app default' } else { $configPath })"
+
+    $oldConfigPath = $env:GOBLINFARMER_APPSETTINGS_PATH
+    if (-not [string]::IsNullOrWhiteSpace($configPath)) {
+        $env:GOBLINFARMER_APPSETTINGS_PATH = $configPath
+    }
+
+    $startedAt = Get-Date
+    try {
+        Push-Location $runner.Root
+        try {
+            if ($runner.Kind -eq "dll") {
+                & dotnet $runner.Path --goblin-replay --input $input.Path
+                $exitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+            }
+            else {
+                $escapedInputPath = $input.Path.Replace('"', '\"')
+                $arguments = "--goblin-replay --input `"$escapedInputPath`""
+                $process = Start-Process `
+                    -FilePath $runner.Path `
+                    -ArgumentList $arguments `
+                    -WorkingDirectory $runner.Root `
+                    -WindowStyle Hidden `
+                    -Wait `
+                    -PassThru
+                $exitCode = if ($null -ne $process) { [int]$process.ExitCode } else { 1 }
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    finally {
+        if ($null -eq $oldConfigPath) {
+            Remove-Item Env:\GOBLINFARMER_APPSETTINGS_PATH -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GOBLINFARMER_APPSETTINGS_PATH = $oldConfigPath
+        }
+    }
+
+    $completedAt = Get-Date
+    $succeeded = $exitCode -eq 0
+    if ($succeeded) {
+        Write-Host "Goblin Replay completed successfully."
+    }
+    else {
+        Write-Warning "Goblin Replay exited with code $exitCode. The package will still be created with live evidence."
+    }
+
+    return [pscustomobject]@{
+        Attempted = $true
+        Succeeded = $succeeded
+        ExitCode = $exitCode
+        StartedAt = $startedAt
+        CompletedAt = $completedAt
+        InputPath = $input.Path
+        RunnerPath = $runner.Path
+        ConfigPath = $configPath
+        Reason = if ($succeeded) { "Completed" } else { "ExitCode=$exitCode" }
+    }
 }
 
 function Get-CurrentSessionInfo {
@@ -1699,6 +1989,8 @@ Write-Host "Max success screenshot groups: $MaxSuccessScreenshots"
 Write-Host "Max diagnostic screenshot groups: $MaxDiagnosticScreenshots"
 Write-Host "Max debug screenshots: $MaxDebugScreenshots"
 Write-Host "Include success screenshots: $($IncludeSuccessScreenshots.IsPresent)"
+Write-Host "Run Goblin Replay before packaging: $(-not $SkipGoblinReplay.IsPresent)"
+Write-Host "Goblin Replay input override: $(if ([string]::IsNullOrWhiteSpace($GoblinReplayInputPath)) { 'auto' } else { $GoblinReplayInputPath })"
 Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
 Write-Host "Max goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots"
 Write-Host "Max goblin evidence event screenshot bytes: $MaxGoblinEvidenceEventScreenshotBytes"
@@ -1750,7 +2042,7 @@ try {
     }
 
     Write-Step "Collecting latest log"
-    $latestLog = Get-LatestFileFromFolders $logFolders @("*.log", "*.txt")
+    $latestLog = Get-LatestLiveLogFromFolders $logFolders @("*.log", "*.txt")
     if ($null -eq $latestLog) {
         Write-Warning "No log files found in known Logs folders."
     }
@@ -1766,6 +2058,11 @@ try {
     Write-Host "Selected log folder: $selectedLogFolder"
     Write-Host "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
 
+    $goblinReplayPackageRun = Invoke-GoblinReplayForPackage $packageRuntimeRoots $GoblinReplayInputPath $resolvedRuntimeRoot -Skip:$SkipGoblinReplay
+    Write-Host "Goblin Replay package run attempted: $($goblinReplayPackageRun.Attempted)"
+    Write-Host "Goblin Replay package run succeeded: $($goblinReplayPackageRun.Succeeded)"
+    Write-Host "Goblin Replay package run reason: $($goblinReplayPackageRun.Reason)"
+
     $replayLogs = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*.log") 10)
     $replayReports = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*.html") 10)
     $replaySummaries = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*_summary.txt") 10)
@@ -1776,6 +2073,17 @@ try {
         }
     }
     $replayBundleDirectories = @($replayBundleDirectoryCandidates | Sort-Object LastWriteTime -Descending | Select-Object -First 10)
+    $replayCollectionScope = "Latest existing replay artifacts"
+    if ($goblinReplayPackageRun.Attempted -and $goblinReplayPackageRun.Succeeded) {
+        $replayCollectionStart = ([DateTime]$goblinReplayPackageRun.StartedAt).AddSeconds(-2)
+        $replayLogs = @($replayLogs | Where-Object { $_.LastWriteTime -ge $replayCollectionStart })
+        $replayReports = @($replayReports | Where-Object { $_.LastWriteTime -ge $replayCollectionStart })
+        $replaySummaries = @($replaySummaries | Where-Object { $_.LastWriteTime -ge $replayCollectionStart })
+        $replayChangedSummaries = @($replayChangedSummaries | Where-Object { $_.LastWriteTime -ge $replayCollectionStart })
+        $replayBundleDirectories = @($replayBundleDirectories | Where-Object { $_.LastWriteTime -ge $replayCollectionStart })
+        $replayCollectionScope = "Current auto-run only"
+    }
+
     if (($replayLogs.Count + $replayReports.Count + $replaySummaries.Count + $replayChangedSummaries.Count + $replayBundleDirectories.Count) -gt 0) {
         $replayLogDestinationDirectory = Join-Path $stagingRoot "Logs\GoblinReplay"
         New-Item -ItemType Directory -Path $replayLogDestinationDirectory -Force | Out-Null
@@ -1803,6 +2111,7 @@ try {
         Write-Host "Included Goblin replay summaries: $($replaySummaries.Count)"
         Write-Host "Included Goblin replay changed summaries: $($replayChangedSummaries.Count)"
         Write-Host "Included Goblin replay decision bundle folders: $($replayBundleDirectories.Count)"
+        Write-Host "Goblin replay collection scope: $replayCollectionScope"
     }
     else {
         Write-Host "Included Goblin replay logs: 0"
@@ -1810,6 +2119,7 @@ try {
         Write-Host "Included Goblin replay summaries: 0"
         Write-Host "Included Goblin replay changed summaries: 0"
         Write-Host "Included Goblin replay decision bundle folders: 0"
+        Write-Host "Goblin replay collection scope: $replayCollectionScope"
     }
 
     $debugSkipInfo = Get-DebugScreenshotSkipInfo $latestLog
@@ -2209,6 +2519,16 @@ try {
             "Goblin evidence full-image package policy: most recent $MaxGoblinEvidenceFullImages included; $excludedGoblinEvidenceFullImages excluded",
             "Goblin evidence event screenshot package policy: most recent $MaxGoblinEvidenceEventScreenshots included when <= $MaxGoblinEvidenceEventScreenshotBytes bytes; $excludedGoblinEvidenceEventScreenshots excluded; $oversizedGoblinEvidenceEventScreenshots oversized",
             "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
+            "Goblin Replay auto-run attempted: $($goblinReplayPackageRun.Attempted)",
+            "Goblin Replay auto-run succeeded: $($goblinReplayPackageRun.Succeeded)",
+            "Goblin Replay auto-run exit code: $($goblinReplayPackageRun.ExitCode)",
+            "Goblin Replay auto-run started: $($goblinReplayPackageRun.StartedAt)",
+            "Goblin Replay auto-run completed: $($goblinReplayPackageRun.CompletedAt)",
+            "Goblin Replay auto-run reason: $($goblinReplayPackageRun.Reason)",
+            "Goblin Replay collection scope: $replayCollectionScope",
+            "Goblin Replay auto-run input: $($goblinReplayPackageRun.InputPath)",
+            "Goblin Replay auto-run runner: $($goblinReplayPackageRun.RunnerPath)",
+            "Goblin Replay auto-run config: $($goblinReplayPackageRun.ConfigPath)",
             "Failure screenshot package policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; includedSize=$failureScreenshotSizeDisplay ($failureScreenshotSizeBytes bytes); excludedSize=$excludedFailureScreenshotSizeDisplay ($excludedFailureScreenshotSizeBytes bytes); availableSize=$availableFailureScreenshotSizeDisplay ($availableFailureScreenshotSizeBytes bytes)",
             "Debug screenshot package policy: most recent $MaxDebugScreenshots files included from current session",
             $goblinEvidenceSourceSummaryLine,
@@ -2268,6 +2588,10 @@ try {
             "- Goblin evidence event screenshots oversized: $oversizedGoblinEvidenceEventScreenshots",
             "- Goblin observation diagnostic crops included: $($selectedGoblinObservationDiagnosticCrops.Count)",
             "- Goblin observation diagnostic crops excluded: $excludedGoblinObservationDiagnosticCrops",
+            "- Goblin Replay auto-run attempted: $($goblinReplayPackageRun.Attempted)",
+            "- Goblin Replay auto-run succeeded: $($goblinReplayPackageRun.Succeeded)",
+            "- Goblin Replay collection scope: $replayCollectionScope",
+            "- Goblin Replay auto-run input: $($goblinReplayPackageRun.InputPath)",
             "- All discovered screenshots: $($allScreenshots.Count)",
             "- Current-session screenshots: $($sessionScreenshots.Count)",
             "- Excluded stale screenshots: $excludedStaleScreenshots",
@@ -2352,6 +2676,9 @@ Write-Host "Observations:        $($goblinTrackerInfo.ObservationCount)"
 Write-Host "Evidence events:     $($goblinTrackerInfo.EvidenceEventCount)"
 Write-Host "Last evidence:       $($goblinTrackerInfo.LastEvidenceType) ($($goblinTrackerInfo.LastEvidenceConfidence))"
 Write-Host "Evidence folder:     $selectedGoblinEvidenceFolder"
+Write-Host "Replay auto-run:     attempted=$($goblinReplayPackageRun.Attempted); succeeded=$($goblinReplayPackageRun.Succeeded); reason=$($goblinReplayPackageRun.Reason)"
+Write-Host "Replay scope:        $replayCollectionScope"
+Write-Host "Replay input:        $($goblinReplayPackageRun.InputPath)"
 Write-Host "Missing templates:   detected=$($goblinEvidenceMissingTemplateInfo.Detected); logEntries=$($goblinEvidenceMissingTemplateInfo.LogEntries)"
 Write-Host "Latest log:          $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
 Write-Host "Selected log folder: $selectedLogFolder"

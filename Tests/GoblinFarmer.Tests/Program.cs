@@ -67,7 +67,7 @@ Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCount
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
 Run("Goblin VS Debug manual test count override is safety-scoped", TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
-Run("Debug package batch is the sole review export path", TestGoblinReplayToolIsDryRunAndPackaged);
+Run("Debug package batch runs Goblin Replay before export", TestGoblinReplayToolIsDryRunAndPackaged);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
@@ -2247,6 +2247,7 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
     string debugManagerSource = File.ReadAllText(Path.Combine(repoRoot, "DebugManager.cs"));
+    string programSource = File.ReadAllText(Path.Combine(repoRoot, "Program.cs"));
     string projectSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
     string packageLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Create Debug Package.bat"));
 
@@ -2282,6 +2283,14 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(evidenceSource.Contains("_Fullscreen", StringComparison.Ordinal), "VS Debug encounter capture should save fullscreen evidence locally");
     AssertTrue(evidenceSource.Contains("_Minimap", StringComparison.Ordinal), "VS Debug encounter capture should save minimap evidence");
     AssertTrue(evidenceSource.Contains("_Journal", StringComparison.Ordinal), "VS Debug encounter capture should save journal evidence");
+    AssertTrue(programSource.Contains("--goblin-replay", StringComparison.Ordinal), "app should expose a headless Goblin Replay CLI for package generation");
+    AssertTrue(programSource.Contains("PortRunGoblinReplayForCommandLine(inputPath)", StringComparison.Ordinal), "Goblin Replay CLI should call the shared replay engine wrapper");
+    AssertTrue(programSource.Contains("ReadArgumentValue(args, \"--input\")", StringComparison.Ordinal), "Goblin Replay CLI should accept an explicit input folder or package");
+    int cliBranchIndex = programSource.IndexOf("if (TryHandleCommandLine(args, out int exitCode))", StringComparison.Ordinal);
+    int cleanupIndex = programSource.IndexOf("CleanupOldGoblinEvidence", StringComparison.Ordinal);
+    AssertTrue(cliBranchIndex >= 0 && cleanupIndex >= 0 && cliBranchIndex < cleanupIndex, "Goblin Replay CLI should run before startup retention cleanup trims evidence");
+    AssertTrue(evidenceSource.Contains("internal bool PortRunGoblinReplayForCommandLine", StringComparison.Ordinal), "shared replay engine should have a package/CLI wrapper");
+    AssertTrue(evidenceSource.Contains("GoblinReplayCliComplete", StringComparison.Ordinal), "Goblin Replay CLI should report output paths for package diagnostics");
     AssertFalse(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "app code should not carry a duplicate in-app ZIP package creation flow");
     AssertFalse(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "app code should not parse package script output when ZIP export is script-only");
     AssertFalse(evidenceSource.Contains("PortCreateDebugPackage(", StringComparison.Ordinal), "app code should not spawn the ZIP package script from VS Debug review flow");
@@ -2294,6 +2303,23 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(packageScript.Contains("PSScriptRoot", StringComparison.Ordinal), "debug package script should self-discover from the clicked batch/script location");
     AssertTrue(packageScript.Contains("Resolve-RuntimeRoot", StringComparison.Ordinal), "debug package script should resolve VS Debug and Release runtime roots");
     AssertTrue(packageScript.Contains("Get-PackageRuntimeRoots", StringComparison.Ordinal), "debug package script should search package roots for VS Debug and Release evidence");
+    AssertTrue(packageScript.Contains("[switch]$SkipGoblinReplay", StringComparison.Ordinal), "debug package script should allow explicit replay skip for emergency package generation");
+    AssertTrue(packageScript.Contains("Invoke-GoblinReplayForPackage", StringComparison.Ordinal), "debug package script should run Goblin Replay before collecting replay artifacts");
+    AssertTrue(packageScript.Contains("Find-GoblinReplayInput", StringComparison.Ordinal), "debug package script should auto-discover the freshest GoblinEvidence input");
+    AssertTrue(packageScript.Contains("Find-GoblinReplayRunner", StringComparison.Ordinal), "debug package script should find the matching app executable or DLL");
+    AssertTrue(packageScript.Contains("Get-LatestLiveLogFromFolders", StringComparison.Ordinal), "debug package script should distinguish live app logs from replay-only logs");
+    AssertTrue(packageScript.Contains("GoblinReplayCliRunStarted", StringComparison.Ordinal), "debug package script should detect replay CLI app logs so they do not replace live session logs");
+    AssertTrue(packageScript.Contains("GOBLINFARMER_APPSETTINGS_PATH", StringComparison.Ordinal), "debug package script should run replay with the same active config path");
+    AssertTrue(packageScript.Contains("--goblin-replay --input", StringComparison.Ordinal), "debug package script should invoke the Goblin Replay CLI");
+    AssertTrue(packageScript.Contains("Start-Process", StringComparison.Ordinal) && packageScript.Contains("-Wait", StringComparison.Ordinal), "debug package script should wait for WinExe replay completion before zipping artifacts");
+    AssertTrue(packageScript.Contains("StartedAt = $startedAt", StringComparison.Ordinal), "debug package script should record replay start time for current-run artifact filtering");
+    AssertTrue(packageScript.Contains("Current auto-run only", StringComparison.Ordinal), "debug package script should include only the current replay run after a successful auto-run");
+    AssertTrue(packageScript.Contains("Goblin Replay auto-run attempted", StringComparison.Ordinal), "debug package manifest should report replay auto-run state");
+    AssertTrue(packageScript.Contains("Goblin Replay auto-run succeeded", StringComparison.Ordinal), "debug package manifest should report replay success state");
+    AssertTrue(packageScript.Contains("Goblin Replay collection scope", StringComparison.Ordinal), "debug package manifest should report whether replay artifacts came from the current auto-run");
+    AssertTrue(packageScript.Contains("Goblin Replay auto-run runner", StringComparison.Ordinal), "debug package manifest should report replay runner path");
+    AssertTrue(packageScript.Contains("Goblin Replay auto-run config", StringComparison.Ordinal), "debug package manifest should report replay config path");
+    AssertTrue(packageScript.Contains("Goblin Replay auto-run input", StringComparison.Ordinal), "debug package manifest should report the replay evidence input path");
     AssertTrue(packageScript.Contains("session-info.txt", StringComparison.Ordinal), "debug packages should include runtime session metadata");
     AssertTrue(packageScript.Contains("Config\\AppSettings.json", StringComparison.Ordinal), "debug packages should include active runtime config");
     AssertTrue(packageScript.Contains("route-failure-summary.txt", StringComparison.Ordinal), "debug packages should include route failure summaries");

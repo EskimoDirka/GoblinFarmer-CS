@@ -1586,6 +1586,44 @@ namespace GoblinFarmer
             lines.Add($"<li><a href=\"{System.Net.WebUtility.HtmlEncode(href)}\">{System.Net.WebUtility.HtmlEncode(text)}</a></li>");
         }
 
+        internal bool PortRunGoblinReplayForCommandLine(string inputPath)
+        {
+            inputPath = string.IsNullOrWhiteSpace(inputPath)
+                ? DebugManager.GoblinEvidenceDirectory
+                : Path.GetFullPath(inputPath);
+            if (!Directory.Exists(inputPath) && !File.Exists(inputPath))
+            {
+                AppLogger.Info(
+                    "GoblinReplayCliSkipped: " +
+                    "reason=InputMissing; " +
+                    $"inputPath={PortLogField(inputPath)}");
+                Console.Error.WriteLine($"GoblinReplayCliSkipped: reason=InputMissing; inputPath={inputPath}");
+                return false;
+            }
+
+            AppLogger.Info(
+                "GoblinReplayCliRunStarted: " +
+                $"inputPath={PortLogField(inputPath)}; " +
+                $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
+                $"configPath={PortLogField(AppSettings.ConfigPath)}");
+            GoblinReplaySummary summary = PortReplayGoblinEvidenceFolder(inputPath);
+            string output =
+                "GoblinReplayCliComplete: " +
+                $"totalFiles={summary.TotalFiles}; " +
+                $"evidenceFiles={summary.EvidenceFiles}; " +
+                $"accepted={summary.Accepted}; " +
+                $"rejected={summary.Rejected}; " +
+                $"unknown={summary.Unknown}; " +
+                $"logPath={summary.LogPath}; " +
+                $"htmlReportPath={summary.HtmlReportPath}; " +
+                $"summaryPath={summary.SummaryPath}; " +
+                $"changedSummaryPath={summary.ChangedSummaryPath}; " +
+                $"bundleDirectory={summary.BundleDirectory}";
+            AppLogger.Info(output);
+            Console.WriteLine(output);
+            return true;
+        }
+
         private GoblinReplaySummary? PortRunGoblinReplayForReview(string source = "Unknown")
         {
             if (!AppSettings.IsVsDebugProfile)
