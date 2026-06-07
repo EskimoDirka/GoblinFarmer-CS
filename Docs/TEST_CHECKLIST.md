@@ -168,7 +168,9 @@
 - Clicking VS Debug `Review Files` creates no ZIP by default and writes `ZipCreated=False` in `goblin-replay-review-manifest.txt`
 - VS Debug loose review files include `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt`, replay log/HTML/summary/changed files, replay assets, decision bundles, latest log, and `session-info.txt` when available
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
-- In VS Debug, the `Next Tests` tab shows the automatic-count readiness checklist in route logic order: Observation Mode and Auto Goblin Count on, `Test Count Override` off, fresh game or Reset Stats setup, Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Stinging Winds, Battlefields fresh goblin, PF1/PF2 live two-count rules, blocked-area evidence, stale journal/area transition, Reset Stats/New Game cleanup, Gilded Baron/Malevolent Tormentor classification, Last Observation persistence, notification latency, and debug-package follow-up
+- In VS Debug, the `Next Tests` tab is divided into clear sections: setup, must-test route blockers, if-encountered regressions, safety/display checks, and review rule
+- In VS Debug, the must-test route blockers are listed in route logic order: Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Stinging Winds stale/fresh behavior, then Battlefields fresh Treasure Goblin validation
+- In VS Debug, PF1/PF2 live two-count checks and Gilded Baron/Malevolent Tormentor classification are labeled as if-encountered regression checks instead of primary blockers
 - In VS Debug, unchecked `Next Tests` boxes mean not tested yet; checked boxes mean the tester completed that scenario during the current run
 - In VS Debug, generated Next Tests review metadata reports checked and unchecked counts plus every route-ordered test row so untested scenarios remain visible in review files
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`

@@ -165,30 +165,31 @@ namespace GoblinFarmer
 
             portNextTestStepCheckboxes.Clear();
 
-            PortAddNextTestHeader(table, "Goblin Tracker Automatic Count Readiness");
+            PortAddNextTestHeader(table, "Goblin Tracker Auto-Count Next Pass");
             PortAddNextTestHeader(table, "Setup");
             PortAddNextTestCheck(table, "1. Observation Mode and Auto Goblin Count are on.");
             PortAddNextTestCheck(table, "2. Test Count Override is off before real automatic-count validation.");
-            PortAddNextTestCheck(table, "3. Start a fresh game or press Reset Stats; confirm Goblins, GPH, and Last Observation reset.");
+            PortAddNextTestCheck(table, "3. Start a fresh game or press Reset Stats; confirm Goblins, GPH, and Last Observation reset.", 48);
 
-            PortAddNextTestHeader(table, "Route-order auto-count checks");
-            PortAddNextTestCheck(table, "4. Southern Highlands / Cave Of The Moon Clan Level 2: after Level 1, find a fresh Level 2 goblin; expect Level 2 to count independently and never reuse Level 1 evidence.", 68);
+            PortAddNextTestHeader(table, "Must-test route blockers");
+            PortAddNextTestCheck(table, "4. Southern Highlands / Cave Of The Moon Clan Level 2: count a Level 1 goblin if found, then find a fresh Level 2 goblin; Level 2 must count independently and never reuse Level 1 evidence.", 78);
             PortAddNextTestCheck(table, "5. Eastern Channel Level 2: find a fresh goblin, preferably Blood Thief; expect exactly one auto-count, notification, and Last Observation.", 58);
-            PortAddNextTestCheck(table, "6. Stinging Winds: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 48);
-            PortAddNextTestCheck(table, "7. Battlefields: find a fresh goblin; expect one auto-count and notification, with no stale journal replay into later areas.", 58);
-            PortAddNextTestCheck(table, "8. Pandemonium Fortress Level 1: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 54);
-            PortAddNextTestCheck(table, "9. Pandemonium Fortress Level 2: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 54);
+            PortAddNextTestCheck(table, "6. Stinging Winds: old journal evidence must not count; if fresh goblins appear, #1 and #2 count, then #3 suppresses with AreaLimitReached.", 68);
+            PortAddNextTestCheck(table, "7. Battlefields: prioritize a fresh Treasure Goblin; expect one auto-count and notification, with no stale journal replay into later areas.", 58);
+
+            PortAddNextTestHeader(table, "If encountered regressions");
+            PortAddNextTestCheck(table, "8. Pandemonium Fortress Level 1: if live goblins appear, verify automatic counts #1 and #2, then #3 suppresses with AreaLimitReached.", 58);
+            PortAddNextTestCheck(table, "9. Pandemonium Fortress Level 2: quick regression if live goblins appear; PF2 should still count #1 and #2, then suppress #3.", 58);
 
             PortAddNextTestHeader(table, "Safety and display checks");
             PortAddNextTestCheck(table, "10. Blocked areas with evidence: New Tristram and Caldeum blocked areas notify BlockedArea and never consume area slots.", 56);
-            PortAddNextTestCheck(table, "11. Stale journal/area transition: count a goblin, move areas while old journal text remains visible, and confirm it does not count again or appear current in the wrong area.", 72);
-            PortAddNextTestCheck(table, "12. Reset Stats and New Game: fresh evidence in the same area can count again after cleanup, while old evidence cannot.", 56);
-            PortAddNextTestCheck(table, "13. Gilded Baron and Malevolent Tormentor: notification and Last Observation match the accepted evidence type.", 50);
-            PortAddNextTestCheck(table, "14. Last Observation: latest real goblin stays readable until a new goblin, reset/new game, or confirmed area change replaces it.", 58);
-            PortAddNextTestCheck(table, "15. Notification latency: note area, source, and goblin type if a count notification feels delayed.", 48);
+            PortAddNextTestCheck(table, "11. Reset Stats and New Game after a successful count: fresh evidence can count again after cleanup, while old evidence cannot.", 58);
+            PortAddNextTestCheck(table, "12. Stale journal/area transition: move areas while old journal text remains visible; it must not count again or appear current in the wrong area.", 68);
+            PortAddNextTestCheck(table, "13. Gilded Baron and Malevolent Tormentor if encountered: notification and Last Observation match the accepted evidence type.", 56);
+            PortAddNextTestCheck(table, "14. Last Observation and notification latency: accepted auto-counts should show promptly and stay readable until a new goblin, reset/new game, or confirmed area change.", 68);
 
-            PortAddNextTestHeader(table, "Package rule");
-            PortAddNextTestCheck(table, "16. After any miss, wrong type, stale display, or slow notification, click Review Files and review goblin-tracker-review.html plus GoblinReplay decision traces.", 72);
+            PortAddNextTestHeader(table, "Review rule");
+            PortAddNextTestCheck(table, "15. After any miss, wrong type, stale display, or slow notification, click Review Files and review goblin-tracker-review.html plus GoblinReplay decision traces.", 72);
 
             panel.Controls.Add(table);
             return panel;

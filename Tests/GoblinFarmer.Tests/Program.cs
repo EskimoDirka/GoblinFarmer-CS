@@ -2075,10 +2075,11 @@ static void TestVsDebugDiagnosticsIncludeNextTestStepsTab()
     AssertTrue(diagnosticsSource.Contains("PortNextTestStepMetadataLines", StringComparison.Ordinal), "Next Tests should export checked/unchecked state without a prompt");
     AssertTrue(diagnosticsSource.Contains("CheckedCount", StringComparison.Ordinal), "Next Tests metadata should summarize checked items");
     AssertTrue(diagnosticsSource.Contains("UncheckedCount", StringComparison.Ordinal), "Next Tests metadata should summarize unchecked items");
-    AssertTrue(diagnosticsSource.Contains("Goblin Tracker Automatic Count Readiness", StringComparison.Ordinal), "Next Tests should be framed around automatic-count readiness");
+    AssertTrue(diagnosticsSource.Contains("Goblin Tracker Auto-Count Next Pass", StringComparison.Ordinal), "Next Tests should be framed around the current automatic-count pass");
     AssertTrue(diagnosticsSource.Contains("Auto Goblin Count", StringComparison.Ordinal), "Next Tests should remind the tester to enable automatic counting for real validation");
     AssertTrue(diagnosticsSource.Contains("Test Count Override is off", StringComparison.Ordinal), "Next Tests should require the synthetic override off during real validation");
-    AssertTrue(diagnosticsSource.Contains("Route-order auto-count checks", StringComparison.Ordinal), "Next Tests should call out route-ordered validation");
+    AssertTrue(diagnosticsSource.Contains("Must-test route blockers", StringComparison.Ordinal), "Next Tests should call out the current must-test route blockers");
+    AssertTrue(diagnosticsSource.Contains("If encountered regressions", StringComparison.Ordinal), "Next Tests should separate opportunistic regression checks from must-test blockers");
     AssertTrue(diagnosticsSource.Contains("Cave Of The Moon Clan Level 2", StringComparison.Ordinal), "Next Tests should list Cave Level 2 validation");
     AssertTrue(diagnosticsSource.Contains("Eastern Channel Level 2", StringComparison.Ordinal), "Next Tests should list Eastern Channel Level 2 validation");
     AssertTrue(diagnosticsSource.Contains("Battlefields", StringComparison.Ordinal), "Next Tests should list Battlefields validation");

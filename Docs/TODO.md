@@ -160,6 +160,7 @@
 * [x] Review `GoblinFarmer_Debug_20260607_071907.zip`; confirmed PF1/PF2/Stinging Winds synthetic two-count rules, Southern Highlands default duplicate suppression, New Tristram blocked suppression, and Southern Highlands Gem Hoarder auto-count.
 * [x] Update the VS Debug `Next Tests` tab to an automatic-count readiness checklist covering setup, must-pass live encounters, stale/display safety checks, classification, reset/new-game cleanup, latency notes, and debug-package follow-up.
 * [x] Update VS Debug `Next Tests` to route-ordered checkboxes so checked means tested and unchecked means not tested yet.
+* [x] Divide VS Debug `Next Tests` into current must-test route blockers, if-encountered regressions, safety/display checks, and review rule so old regression checks do not look like equal blockers.
 * [x] Review `GoblinFarmer_Debug_20260607_074714.zip`; confirmed Reset Stats cleared duplicate guard, auto-count evidence state, evidence observation state, and Last Observation.
 * [x] Remove VS Debug Goblin Tracker scenario text input fields; `Review Files` now captures `Next Tests` checkbox state automatically without prompting.
 * [x] Replace default VS Debug Goblin replay ZIP creation with loose review files under `Debug\GoblinReplayReview\Latest`, while keeping release/export ZIP package creation available.
