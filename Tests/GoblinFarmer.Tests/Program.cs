@@ -44,6 +44,11 @@ Run("Goblin replay suppresses Battlefields journal history evidence", TestGoblin
 Run("Goblin replay capture folder loader suppresses old area evidence after transition", TestGoblinReplayCaptureFolderLoaderSuppressesOldAreaEvidenceAfterTransition);
 Run("Goblin replay capture folder loader suppresses journal history rows", TestGoblinReplayCaptureFolderLoaderSuppressesJournalHistoryRows);
 Run("Goblin replay capture folder loader reports missing folders clearly", TestGoblinReplayCaptureFolderLoaderReportsMissingFoldersClearly);
+Run("Goblin replay metadata-file loader replays a specific capture", TestGoblinReplayMetadataFileLoaderReplaysSpecificCapture);
+Run("Goblin replay capture-prefix loader replays a specific capture", TestGoblinReplayCapturePrefixLoaderReplaysSpecificCapture);
+Run("Goblin replay prefix loader reports missing metadata clearly", TestGoblinReplayCapturePrefixLoaderReportsMissingMetadataClearly);
+Run("Goblin replay decision-bundle loader reports available evidence", TestGoblinReplayDecisionBundleLoaderReportsAvailableEvidence);
+Run("Goblin replay decision-bundle loader can resolve replay-ready prefix", TestGoblinReplayDecisionBundleLoaderCanResolveReplayReadyPrefix);
 Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
@@ -1305,6 +1310,228 @@ static void TestGoblinReplayCaptureFolderLoaderReportsMissingFoldersClearly()
     }
 }
 
+static void TestGoblinReplayMetadataFileLoaderReplaysSpecificCapture()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayMetadata_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Gem Hoarder Killed Journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(14, 12);
+        template.Save(templatePath);
+
+        DateTime timestampUtc = new(2026, 6, 7, 19, 2, 45, DateTimeKind.Utc);
+        string captureFolder = CreateReplayCaptureFolder(
+            fixtureRoot,
+            "SharedEncounterCaptures",
+            "GoblinEncounter_20260607_190245_000_AutomaticObservation_Journal_GemHoarder_Battlefields",
+            "Battlefields",
+            timestampUtc,
+            template,
+            new Point(30, 300),
+            180,
+            340);
+        string metadataPath = Directory.GetFiles(captureFolder, "*_Metadata.txt").Single();
+
+        List<string> replayLogs = [];
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitMetadataFilesForHarness(
+            "Specific metadata replay",
+            [new GoblinReplayCaptureFolderStep("Specific metadata", metadataPath)],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(1, result.CaptureLoads.Count, "metadata replay should return one load result");
+        AssertTrue(result.CaptureLoads[0].Loaded, "specific metadata replay should load");
+        AssertEqual(metadataPath[..^"_Metadata.txt".Length], result.CaptureLoads[0].CaptureFolderPath, "metadata replay should use the exact capture prefix");
+        AssertEqual("Battlefields", result.CaptureLoads[0].AreaKey, "metadata replay should resolve the metadata area");
+        AssertEqual(1, result.Steps.Count, "metadata replay should evaluate one decision");
+        AssertTrue(result.Steps[0].Counted, "metadata replay should feed the saved journal frame through detection");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayCapturePrefixLoaded", StringComparison.Ordinal) && line.Contains("areaKey=Battlefields", StringComparison.Ordinal)), "metadata replay should log the resolved prefix");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayCapturePrefixLoaderReplaysSpecificCapture()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayPrefix_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Blood Thief Killed Journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(12, 12);
+        template.Save(templatePath);
+
+        string captureFolder = CreateReplayCaptureFolder(
+            fixtureRoot,
+            "SharedEncounterCaptures",
+            "GoblinEncounter_20260607_191500_000_AutomaticObservation_Journal_BloodThief_EasternChannelLevel2",
+            "Eastern Channel Level 2",
+            new DateTime(2026, 6, 7, 19, 15, 0, DateTimeKind.Utc),
+            template,
+            new Point(24, 300),
+            170,
+            340);
+        string prefix = Directory.GetFiles(captureFolder, "*_Metadata.txt").Single()[..^"_Metadata.txt".Length];
+
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitCapturePrefixesForHarness(
+            "Specific prefix replay",
+            [new GoblinReplayCaptureFolderStep("Specific prefix", prefix)],
+            templateRoot);
+
+        AssertEqual(1, result.CaptureLoads.Count, "prefix replay should return one load result");
+        AssertTrue(result.CaptureLoads[0].Loaded, "specific prefix replay should load");
+        AssertEqual("Eastern Channel Level 2", result.CaptureLoads[0].AreaKey, "prefix replay should keep the exact Level 2 area");
+        AssertEqual(1, result.Steps.Count, "prefix replay should evaluate one step");
+        AssertTrue(result.Steps[0].Counted, "prefix replay should detect the saved journal frame");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayCapturePrefixLoaderReportsMissingMetadataClearly()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayPrefixMissing_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string captureFolder = Path.Combine(fixtureRoot, "SharedEncounterCaptures");
+        Directory.CreateDirectory(captureFolder);
+        string prefix = Path.Combine(captureFolder, "GoblinEncounter_20260607_192000_000_MissingMetadata");
+        using Bitmap frame = new(20, 20);
+        frame.Save($"{prefix}_Journal.png");
+
+        List<string> replayLogs = [];
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitCapturePrefixesForHarness(
+            "Missing metadata prefix replay",
+            [new GoblinReplayCaptureFolderStep("Missing metadata prefix", prefix)],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(1, result.CaptureLoads.Count, "missing metadata replay should return one load result");
+        AssertFalse(result.CaptureLoads[0].Loaded, "missing metadata prefix should not load");
+        AssertEqual("MetadataFileMissing", result.CaptureLoads[0].Reason, "missing metadata should report a clear reason");
+        AssertEqual(0, result.Steps.Count, "missing metadata should not create replay decisions");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayCapturePrefixSkipped", StringComparison.Ordinal) && line.Contains("reason=MetadataFileMissing", StringComparison.Ordinal)), "missing metadata should be logged clearly");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayDecisionBundleLoaderReportsAvailableEvidence()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayDecisionBundle_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string bundleFolder = Path.Combine(fixtureRoot, "DecisionBundles", "gdt-20260607190245219-19fd3ca7");
+        Directory.CreateDirectory(bundleFolder);
+        string tracePath = Path.Combine(bundleFolder, "decision-trace.txt");
+        string evidencePath = Path.Combine(bundleFolder, "evidence.png");
+        File.WriteAllLines(tracePath,
+        [
+            "GoblinDecisionTrace: correlationId=gdt-20260607190245219-19fd3ca7; mode=Live; source=Journal; imageFile=GoblinEvidence_20260607_190245_JournalKill.png; imagePath=D:\\Missing\\GoblinEvidence_20260607_190245_JournalKill.png; areaRaw=Battlefields; areaKey=Battlefields; goblinType=Blood Thief; reason=Eligible",
+            $"sourceImagePath={evidencePath}",
+        ]);
+        using (Bitmap evidence = new(160, 90))
+        {
+            evidence.Save(evidencePath);
+        }
+
+        List<string> replayLogs = [];
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitDecisionBundlesForHarness(
+            "Decision bundle not replay-ready",
+            [new GoblinReplayCaptureFolderStep("Decision bundle", bundleFolder)],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(1, result.CaptureLoads.Count, "decision bundle replay should return one load result");
+        AssertFalse(result.CaptureLoads[0].Loaded, "fullscreen-only decision bundle should not claim replay-ready frames");
+        AssertEqual("DecisionBundleMissingReplayFrames", result.CaptureLoads[0].Reason, "decision bundle should explain missing replay crop frames");
+        AssertTrue(result.CaptureLoads[0].Metadata.ContainsKey("DecisionTracePath"), "decision bundle result should expose the trace path");
+        AssertTrue(result.CaptureLoads[0].Metadata.ContainsKey("EvidencePath"), "decision bundle result should expose the evidence path");
+        AssertEqual(0, result.Steps.Count, "non-replay-ready decision bundle should not create replay decisions");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayDecisionBundleSkipped", StringComparison.Ordinal) && line.Contains("Decision bundles usually contain", StringComparison.Ordinal)), "decision bundle should log a plain explanation");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayDecisionBundleLoaderCanResolveReplayReadyPrefix()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayDecisionBundleReady_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Menagerist Killed Journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(13, 13);
+        template.Save(templatePath);
+
+        string captureFolder = CreateReplayCaptureFolder(
+            fixtureRoot,
+            "SharedEncounterCaptures",
+            "GoblinEncounter_20260607_193000_000_AutomaticObservation_Journal_Menagerist_CavernsOfFrostLevel2",
+            "Caverns of Frost Level 2",
+            new DateTime(2026, 6, 7, 19, 30, 0, DateTimeKind.Utc),
+            template,
+            new Point(26, 300),
+            180,
+            340);
+        string journalPath = Directory.GetFiles(captureFolder, "*_Journal.png").Single();
+        string bundleFolder = Path.Combine(fixtureRoot, "DecisionBundles", "gdt-replay-ready");
+        Directory.CreateDirectory(bundleFolder);
+        File.WriteAllLines(Path.Combine(bundleFolder, "decision-trace.txt"),
+        [
+            $"GoblinDecisionTrace: correlationId=gdt-replay-ready; mode=Live; source=Journal; imageFile={Path.GetFileName(journalPath)}; imagePath={journalPath}; areaRaw=Caverns of Frost Level 2; areaKey=Caverns of Frost Level 2; goblinType=Menagerist; reason=Eligible",
+            $"sourceImagePath={journalPath}",
+        ]);
+
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitDecisionBundlesForHarness(
+            "Decision bundle replay-ready source path",
+            [new GoblinReplayCaptureFolderStep("Decision bundle", bundleFolder)],
+            templateRoot);
+
+        AssertEqual(1, result.CaptureLoads.Count, "replay-ready decision bundle should return one load result");
+        AssertTrue(result.CaptureLoads[0].Loaded, "decision bundle with a replay-ready source prefix should load");
+        AssertEqual("LoadedFromDecisionBundle", result.CaptureLoads[0].Reason, "decision bundle should report that it loaded through a replay prefix");
+        AssertEqual("Caverns of Frost Level 2", result.CaptureLoads[0].AreaKey, "decision bundle prefix replay should keep the metadata area");
+        AssertEqual(1, result.Steps.Count, "decision bundle prefix replay should evaluate one decision");
+        AssertTrue(result.Steps[0].Counted, "decision bundle prefix replay should reach candidate detection");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
 static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -1312,19 +1539,33 @@ static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
     string replayRunnerSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinReplayFixtureRunner.cs"));
 
     AssertTrue(programSource.Contains("--goblin-replay-captures", StringComparison.Ordinal), "developer replay command should live in the test harness CLI");
+    AssertTrue(programSource.Contains("--goblin-replay-metadata", StringComparison.Ordinal), "metadata replay command should live in the test harness CLI");
+    AssertTrue(programSource.Contains("--goblin-replay-prefix", StringComparison.Ordinal), "prefix replay command should live in the test harness CLI");
+    AssertTrue(programSource.Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "decision-bundle replay command should live in the test harness CLI");
     AssertTrue(programSource.Contains("RunExplicitCaptureFoldersForHarness", StringComparison.Ordinal), "developer replay command should call the explicit capture-folder runner");
+    AssertTrue(programSource.Contains("RunExplicitMetadataFilesForHarness", StringComparison.Ordinal), "developer replay command should call the explicit metadata-file runner");
+    AssertTrue(programSource.Contains("RunExplicitCapturePrefixesForHarness", StringComparison.Ordinal), "developer replay command should call the explicit capture-prefix runner");
+    AssertTrue(programSource.Contains("RunExplicitDecisionBundlesForHarness", StringComparison.Ordinal), "developer replay command should call the explicit decision-bundle runner");
     AssertTrue(programSource.Contains("writeAppLog: false", StringComparison.Ordinal), "developer replay command should avoid persistent app logs by default");
     AssertTrue(replayRunnerSource.Contains("writeAppLog = true", StringComparison.Ordinal), "replay runner should keep existing harness logging defaults unless the command opts out");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "WinForms startup should not know about the replay command");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-metadata", StringComparison.Ordinal), "WinForms startup should not know about metadata replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-prefix", StringComparison.Ordinal), "WinForms startup should not know about prefix replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "WinForms startup should not know about decision-bundle replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "live scanner should not know about the replay command");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-metadata", StringComparison.Ordinal), "live scanner should not know about metadata replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-prefix", StringComparison.Ordinal), "live scanner should not know about prefix replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "live scanner should not know about decision-bundle replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "debug package creation should not invoke replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-metadata", StringComparison.Ordinal), "debug package creation should not invoke metadata replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-prefix", StringComparison.Ordinal), "debug package creation should not invoke prefix replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "debug package creation should not invoke decision-bundle replay");
 }
 
 static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitCode)
 {
     exitCode = 0;
-    if (commandArgs.Length == 0 ||
-        !commandArgs[0].Equals("--goblin-replay-captures", StringComparison.OrdinalIgnoreCase))
+    if (commandArgs.Length == 0 || !GoblinReplayCommandIsSupported(commandArgs[0]))
     {
         return false;
     }
@@ -1332,7 +1573,9 @@ static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitC
     string repoRoot = FindRepositoryRootForTests();
     string templateDirectory = Path.Combine(repoRoot, "Images", "Goblin Evidence");
     string scenarioName = $"Explicit capture replay {DateTime.Now:yyyyMMdd_HHmmss}";
-    List<string> captureFolders = [];
+    string command = commandArgs[0];
+    string inputMode = GoblinReplayInputMode(command);
+    List<string> replayInputs = [];
 
     for (int i = 1; i < commandArgs.Length; i++)
     {
@@ -1381,12 +1624,12 @@ static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitC
             return true;
         }
 
-        captureFolders.Add(Path.GetFullPath(arg, repoRoot));
+        replayInputs.Add(Path.GetFullPath(arg, repoRoot));
     }
 
-    if (captureFolders.Count == 0)
+    if (replayInputs.Count == 0)
     {
-        Console.Error.WriteLine("FAIL at least one capture folder path is required.");
+        Console.Error.WriteLine($"FAIL at least one {inputMode} path is required.");
         PrintGoblinReplayCaptureCommandHelp();
         exitCode = 1;
         return true;
@@ -1404,23 +1647,54 @@ static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitC
         Console.WriteLine("Goblin Replay Capture Folder Harness");
         Console.WriteLine("Mode: ExplicitOnDemand");
         Console.WriteLine("WritesPersistentDebugFiles: False");
+        Console.WriteLine($"InputMode: {inputMode}");
         Console.WriteLine($"Scenario: {scenarioName}");
         Console.WriteLine($"TemplateDirectory: {templateDirectory}");
-        Console.WriteLine($"CaptureFolderCount: {captureFolders.Count}");
+        Console.WriteLine($"InputCount: {replayInputs.Count}");
 
-        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitCaptureFoldersForHarness(
-            scenarioName,
-            captureFolders.Select((folder, index) => new GoblinReplayCaptureFolderStep($"Capture {index + 1}", folder)).ToList(),
-            templateDirectory,
-            log: null,
-            setFrameSourceForReplay: null,
-            writeAppLog: false);
+        IReadOnlyList<GoblinReplayCaptureFolderStep> inputSteps = replayInputs
+            .Select((input, index) => new GoblinReplayCaptureFolderStep($"{inputMode} {index + 1}", input))
+            .ToList();
+        GoblinReplayCaptureFolderScenarioResult result = command.ToLowerInvariant() switch
+        {
+            "--goblin-replay-metadata" => GoblinReplayFixtureRunner.RunExplicitMetadataFilesForHarness(
+                scenarioName,
+                inputSteps,
+                templateDirectory,
+                log: null,
+                setFrameSourceForReplay: null,
+                writeAppLog: false),
+            "--goblin-replay-prefix" => GoblinReplayFixtureRunner.RunExplicitCapturePrefixesForHarness(
+                scenarioName,
+                inputSteps,
+                templateDirectory,
+                log: null,
+                setFrameSourceForReplay: null,
+                writeAppLog: false),
+            "--goblin-replay-decision-bundle" => GoblinReplayFixtureRunner.RunExplicitDecisionBundlesForHarness(
+                scenarioName,
+                inputSteps,
+                templateDirectory,
+                log: null,
+                setFrameSourceForReplay: null,
+                writeAppLog: false),
+            _ => GoblinReplayFixtureRunner.RunExplicitCaptureFoldersForHarness(
+                scenarioName,
+                inputSteps,
+                templateDirectory,
+                log: null,
+                setFrameSourceForReplay: null,
+                writeAppLog: false),
+        };
 
         foreach (GoblinReplayCaptureFolderLoadResult load in result.CaptureLoads)
         {
             string status = load.Loaded ? "PASS" : "FAIL";
+            string available = load.Metadata.Count == 0
+                ? ""
+                : $" metadata=\"{string.Join(",", load.Metadata.Select(pair => $"{pair.Key}={pair.Value}"))}\"";
             Console.WriteLine(
-                $"{status} LOAD step=\"{load.StepName}\" reason={load.Reason} area=\"{load.AreaKey}\" folder=\"{load.CaptureFolderPath}\" journal=\"{load.JournalPath ?? ""}\" minimap=\"{load.MinimapPath ?? ""}\"");
+                $"{status} LOAD step=\"{load.StepName}\" reason={load.Reason} area=\"{load.AreaKey}\" input=\"{load.CaptureFolderPath}\" journal=\"{load.JournalPath ?? ""}\" minimap=\"{load.MinimapPath ?? ""}\"{available}");
         }
 
         foreach (GoblinReplayFixtureStepResult step in result.Steps)
@@ -1452,12 +1726,36 @@ static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitC
     }
 }
 
+static bool GoblinReplayCommandIsSupported(string command)
+{
+    return command.Equals("--goblin-replay-captures", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("--goblin-replay-metadata", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("--goblin-replay-prefix", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("--goblin-replay-decision-bundle", StringComparison.OrdinalIgnoreCase);
+}
+
+static string GoblinReplayInputMode(string command)
+{
+    return command.ToLowerInvariant() switch
+    {
+        "--goblin-replay-metadata" => "Metadata",
+        "--goblin-replay-prefix" => "Prefix",
+        "--goblin-replay-decision-bundle" => "DecisionBundle",
+        _ => "CaptureFolder",
+    };
+}
+
 static void PrintGoblinReplayCaptureCommandHelp()
 {
     Console.WriteLine("Usage:");
     Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-captures [--templates \".\\Images\\Goblin Evidence\"] [--scenario \"Name\"] \"CaptureFolder1\" [\"CaptureFolder2\" ...]");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-metadata [--templates \".\\Images\\Goblin Evidence\"] \"Capture_Metadata.txt\"");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-prefix [--templates \".\\Images\\Goblin Evidence\"] \"CapturePrefix\"");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-decision-bundle [--templates \".\\Images\\Goblin Evidence\"] \"DecisionBundleFolder\"");
     Console.WriteLine();
     Console.WriteLine("Capture folders are real saved Goblin Evidence encounter/manual capture folders containing *_Metadata.txt plus *_Journal.png and/or *_Minimap.png.");
+    Console.WriteLine("Metadata and prefix inputs let you target a specific older capture inside shared EncounterCaptures or ManualCaptures folders.");
+    Console.WriteLine("Decision bundles can replay only when they contain or point to replay-ready Journal/Minimap capture frames; otherwise they report available evidence and explain the limitation.");
     Console.WriteLine("Replay is explicit/on-demand only and does not run during app startup, VS Debug startup, live scanning, automation workflows, or debug package creation.");
 }
 

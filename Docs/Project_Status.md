@@ -12,6 +12,7 @@ This file is the current source of truth for the active release, stable behavior
 - VS Debug `Capture` button: manual image-recognition aid only. It writes fullscreen, minimap, journal, and metadata files under `Debug\GoblinEvidence\ManualCaptures` only when clicked.
 - Automatic debug artifacts: accepted Goblin Tracker count workflows still automatically write decision bundles and encounter captures needed for debugging.
 - `Next Tests` tab: removed. Current validation steps are tracked in `Docs/TODO.md`.
+- Latest change: Goblin Replay now accepts explicit capture folders, specific `*_Metadata.txt` files, specific capture prefixes, and DecisionBundle folders from the developer harness. This changed replay usability only; live Goblin Tracker counting behavior was not changed.
 
 ## Latest Review Finding
 
@@ -37,6 +38,7 @@ This file is the current source of truth for the active release, stable behavior
 - Automatic counting uses existing area resolution, block list, duplicate guard, stale journal protection, and area-limit logic.
 - Goblin Evidence scanning caches discovered template metadata and loaded OpenCV template mats, captures each source scan region once per pass, and scans Minimap before Journal while preserving Journal as the primary confirmation if both match.
 - Goblin Replay Fixture Runner Phase 2E is implemented as explicit/on-demand harness support. Live scans still use `CopyFromScreen` by default, saved Journal/Minimap PNG fixtures can be fed through the shared frame/template matching path, and real saved encounter/manual capture folders can be loaded from the test harness command line for stale-location regression coverage without normal startup, VS Debug startup, scanner, route, combat, town, or debug package workflows invoking replay.
+- Goblin Replay supported inputs: shared capture folders through `--goblin-replay-captures`, specific `*_Metadata.txt` files through `--goblin-replay-metadata`, exact capture prefixes through `--goblin-replay-prefix`, and DecisionBundle folders through `--goblin-replay-decision-bundle`. DecisionBundle replay runs only when replay-ready Journal/Minimap capture frames can be resolved; otherwise it reports the trace/evidence files it found and explains the limitation.
 - Goblin Evidence timing summaries log stage histograms through `GoblinEvidenceTimingSummary`.
 - VS Debug/debug/decision-trace sessions write structured Goblin Tracker JSONL events to `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` alongside human-readable logs.
 - Default area limit: 1 count per resolved area per game.
@@ -64,7 +66,8 @@ This file is the current source of truth for the active release, stable behavior
 ## Next Development Plans
 
 - Validate the latest journal-history suppression, name-validation fix, scan timing summaries, and JSONL event output during normal VS Debug use.
-- Next Goblin Replay work should use the explicit harness command against real capture folders from suspicious live sessions and only promote narrowly proven stale-location fixes into production code.
+- Next Goblin Replay work should use the explicit harness command against real capture folders, specific metadata files/prefixes, or DecisionBundle folders from suspicious live sessions and only promote narrowly proven stale-location fixes into production code.
+- Latest validation for the replay usability change: `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`, `dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`, and `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false` passed. Still needs testing: use the new metadata/prefix/DecisionBundle commands against a real suspicious live session.
 - Continue using automatic counting in real runs instead of focused specific-goblin hunts.
 - Use the `Capture` button only when an image-recognition issue is visible and extra minimap/journal/fullscreen evidence would help.
 - Keep `Docs/TODO.md` synchronized with remaining work and next test steps.

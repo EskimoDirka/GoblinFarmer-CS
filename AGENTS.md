@@ -55,6 +55,7 @@ Do not assume GitHub reflects the user's latest local state.
 ## Goblin Replay Rules
 
 * Goblin Replay must remain explicit/on-demand.
+* For real-session Goblin Replay investigations, prefer the explicit test-harness inputs that target the smallest relevant evidence: `--goblin-replay-metadata` for one `*_Metadata.txt`, `--goblin-replay-prefix` for one capture prefix in a shared capture folder, `--goblin-replay-captures` for whole capture folders, and `--goblin-replay-decision-bundle` when starting from a DecisionBundle folder.
 * Do not wire Goblin Replay into:
 
   * normal startup

@@ -64,6 +64,21 @@ namespace GoblinFarmer
         string? AreaKeyOverride = null,
         DateTime? TimestampUtcOverride = null);
 
+    internal enum GoblinReplayCaptureInputKind
+    {
+        CaptureFolder,
+        MetadataFile,
+        CapturePrefix,
+        DecisionBundle,
+    }
+
+    internal sealed record GoblinReplayCaptureInputStep(
+        string Name,
+        string InputPath,
+        GoblinReplayCaptureInputKind Kind,
+        string? AreaKeyOverride = null,
+        DateTime? TimestampUtcOverride = null);
+
     internal sealed record GoblinReplayCaptureFolderLoadResult(
         string StepName,
         string CaptureFolderPath,
@@ -254,6 +269,106 @@ namespace GoblinFarmer
             Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
             bool writeAppLog = true)
         {
+            ArgumentNullException.ThrowIfNull(captureSteps);
+            return RunExplicitCaptureInputsForHarness(
+                scenarioName,
+                captureSteps
+                    .Select(step => new GoblinReplayCaptureInputStep(
+                        step.Name,
+                        step.CaptureFolderPath,
+                        GoblinReplayCaptureInputKind.CaptureFolder,
+                        step.AreaKeyOverride,
+                        step.TimestampUtcOverride))
+                    .ToList(),
+                templateDirectory,
+                log,
+                setFrameSourceForReplay,
+                writeAppLog);
+        }
+
+        public static GoblinReplayCaptureFolderScenarioResult RunExplicitMetadataFilesForHarness(
+            string scenarioName,
+            IReadOnlyList<GoblinReplayCaptureFolderStep> metadataSteps,
+            string templateDirectory,
+            Action<string>? log = null,
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true)
+        {
+            ArgumentNullException.ThrowIfNull(metadataSteps);
+            return RunExplicitCaptureInputsForHarness(
+                scenarioName,
+                metadataSteps
+                    .Select(step => new GoblinReplayCaptureInputStep(
+                        step.Name,
+                        step.CaptureFolderPath,
+                        GoblinReplayCaptureInputKind.MetadataFile,
+                        step.AreaKeyOverride,
+                        step.TimestampUtcOverride))
+                    .ToList(),
+                templateDirectory,
+                log,
+                setFrameSourceForReplay,
+                writeAppLog);
+        }
+
+        public static GoblinReplayCaptureFolderScenarioResult RunExplicitCapturePrefixesForHarness(
+            string scenarioName,
+            IReadOnlyList<GoblinReplayCaptureFolderStep> prefixSteps,
+            string templateDirectory,
+            Action<string>? log = null,
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true)
+        {
+            ArgumentNullException.ThrowIfNull(prefixSteps);
+            return RunExplicitCaptureInputsForHarness(
+                scenarioName,
+                prefixSteps
+                    .Select(step => new GoblinReplayCaptureInputStep(
+                        step.Name,
+                        step.CaptureFolderPath,
+                        GoblinReplayCaptureInputKind.CapturePrefix,
+                        step.AreaKeyOverride,
+                        step.TimestampUtcOverride))
+                    .ToList(),
+                templateDirectory,
+                log,
+                setFrameSourceForReplay,
+                writeAppLog);
+        }
+
+        public static GoblinReplayCaptureFolderScenarioResult RunExplicitDecisionBundlesForHarness(
+            string scenarioName,
+            IReadOnlyList<GoblinReplayCaptureFolderStep> decisionBundleSteps,
+            string templateDirectory,
+            Action<string>? log = null,
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true)
+        {
+            ArgumentNullException.ThrowIfNull(decisionBundleSteps);
+            return RunExplicitCaptureInputsForHarness(
+                scenarioName,
+                decisionBundleSteps
+                    .Select(step => new GoblinReplayCaptureInputStep(
+                        step.Name,
+                        step.CaptureFolderPath,
+                        GoblinReplayCaptureInputKind.DecisionBundle,
+                        step.AreaKeyOverride,
+                        step.TimestampUtcOverride))
+                    .ToList(),
+                templateDirectory,
+                log,
+                setFrameSourceForReplay,
+                writeAppLog);
+        }
+
+        public static GoblinReplayCaptureFolderScenarioResult RunExplicitCaptureInputsForHarness(
+            string scenarioName,
+            IReadOnlyList<GoblinReplayCaptureInputStep> captureSteps,
+            string templateDirectory,
+            Action<string>? log = null,
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true)
+        {
             ArgumentException.ThrowIfNullOrWhiteSpace(scenarioName);
             ArgumentNullException.ThrowIfNull(captureSteps);
             ArgumentException.ThrowIfNullOrWhiteSpace(templateDirectory);
@@ -274,12 +389,12 @@ namespace GoblinFarmer
             }
 
             Emit(
-                "GoblinReplayCaptureFolderScenarioStarted",
+                "GoblinReplayCaptureInputScenarioStarted",
                 $"captureStepCount={captureSteps.Count}; templateDirectory={LogField(templateDirectory)}");
 
-            foreach (GoblinReplayCaptureFolderStep captureStep in captureSteps)
+            foreach (GoblinReplayCaptureInputStep captureStep in captureSteps)
             {
-                GoblinReplayCaptureFolderLoadResult loadResult = LoadExplicitCaptureFolderForHarness(captureStep, Emit);
+                GoblinReplayCaptureFolderLoadResult loadResult = LoadExplicitCaptureInputForHarness(captureStep, Emit);
                 captureLoads.Add(loadResult);
                 if (!loadResult.Loaded)
                 {
@@ -308,7 +423,7 @@ namespace GoblinFarmer
                     writeAppLog);
 
             Emit(
-                "GoblinReplayCaptureFolderScenarioCompleted",
+                "GoblinReplayCaptureInputScenarioCompleted",
                 $"loadedSteps={captureLoads.Count(load => load.Loaded)}; skippedSteps={captureLoads.Count(load => !load.Loaded)}; replaySteps={fixtureScenarioResult.Steps.Count}");
 
             return new GoblinReplayCaptureFolderScenarioResult(
@@ -322,10 +437,37 @@ namespace GoblinFarmer
             GoblinReplayCaptureFolderStep captureStep,
             Action<string, string> emit)
         {
+            return LoadExplicitCaptureInputForHarness(
+                new GoblinReplayCaptureInputStep(
+                    captureStep.Name,
+                    captureStep.CaptureFolderPath,
+                    GoblinReplayCaptureInputKind.CaptureFolder,
+                    captureStep.AreaKeyOverride,
+                    captureStep.TimestampUtcOverride),
+                emit);
+        }
+
+        private static GoblinReplayCaptureFolderLoadResult LoadExplicitCaptureInputForHarness(
+            GoblinReplayCaptureInputStep captureStep,
+            Action<string, string> emit)
+        {
+            return captureStep.Kind switch
+            {
+                GoblinReplayCaptureInputKind.MetadataFile => LoadExplicitMetadataFileForHarness(captureStep, emit),
+                GoblinReplayCaptureInputKind.CapturePrefix => LoadExplicitCapturePrefixForHarness(captureStep, emit),
+                GoblinReplayCaptureInputKind.DecisionBundle => LoadExplicitDecisionBundleForHarness(captureStep, emit),
+                _ => LoadExplicitCaptureFolderForHarnessCore(captureStep, emit),
+            };
+        }
+
+        private static GoblinReplayCaptureFolderLoadResult LoadExplicitCaptureFolderForHarnessCore(
+            GoblinReplayCaptureInputStep captureStep,
+            Action<string, string> emit)
+        {
             string stepName = string.IsNullOrWhiteSpace(captureStep.Name)
                 ? "Unnamed capture step"
                 : captureStep.Name.Trim();
-            string captureFolderPath = captureStep.CaptureFolderPath ?? "";
+            string captureFolderPath = captureStep.InputPath ?? "";
             if (string.IsNullOrWhiteSpace(captureFolderPath) || !Directory.Exists(captureFolderPath))
             {
                 GoblinReplayCaptureFolderLoadResult missing = EmptyCaptureLoad(
@@ -385,6 +527,196 @@ namespace GoblinFarmer
                 "GoblinReplayCaptureFolderLoaded",
                 $"step={LogField(stepName)}; captureFolder={LogField(root)}; fixture={LogField(fixtureName)}; areaKey={LogField(areaKey)}; timestampUtc={timestampUtc:O}; journalPath={LogField(journalPath)}; minimapPath={LogField(minimapPath)}; metadataPath={LogField(metadataPath)}");
             return loaded;
+        }
+
+        private static GoblinReplayCaptureFolderLoadResult LoadExplicitMetadataFileForHarness(
+            GoblinReplayCaptureInputStep captureStep,
+            Action<string, string> emit)
+        {
+            string stepName = string.IsNullOrWhiteSpace(captureStep.Name)
+                ? "Unnamed metadata step"
+                : captureStep.Name.Trim();
+            string metadataPath = captureStep.InputPath ?? "";
+            if (string.IsNullOrWhiteSpace(metadataPath) || !File.Exists(metadataPath))
+            {
+                GoblinReplayCaptureFolderLoadResult missing = EmptyCaptureLoad(
+                    stepName,
+                    metadataPath,
+                    "MetadataFileMissing",
+                    captureStep.AreaKeyOverride,
+                    captureStep.TimestampUtcOverride);
+                emit(
+                    "GoblinReplayCaptureMetadataSkipped",
+                    $"step={LogField(stepName)}; metadataPath={LogField(metadataPath)}; reason={missing.Reason}");
+                return missing;
+            }
+
+            return LoadExplicitCapturePrefixForHarness(
+                captureStep with { InputPath = PrefixFromMetadataPath(Path.GetFullPath(metadataPath)) },
+                emit,
+                explicitMetadataPath: Path.GetFullPath(metadataPath));
+        }
+
+        private static GoblinReplayCaptureFolderLoadResult LoadExplicitCapturePrefixForHarness(
+            GoblinReplayCaptureInputStep captureStep,
+            Action<string, string> emit,
+            string? explicitMetadataPath = null)
+        {
+            string stepName = string.IsNullOrWhiteSpace(captureStep.Name)
+                ? "Unnamed prefix step"
+                : captureStep.Name.Trim();
+            string prefix = captureStep.InputPath ?? "";
+            if (string.IsNullOrWhiteSpace(prefix))
+            {
+                GoblinReplayCaptureFolderLoadResult missingPrefix = EmptyCaptureLoad(
+                    stepName,
+                    prefix,
+                    "CapturePrefixMissing",
+                    captureStep.AreaKeyOverride,
+                    captureStep.TimestampUtcOverride);
+                emit(
+                    "GoblinReplayCapturePrefixSkipped",
+                    $"step={LogField(stepName)}; prefix={LogField(prefix)}; reason={missingPrefix.Reason}");
+                return missingPrefix;
+            }
+
+            prefix = Path.GetFullPath(prefix);
+            string root = Path.GetDirectoryName(prefix) ?? "";
+            string metadataPath = explicitMetadataPath ?? $"{prefix}_Metadata.txt";
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                GoblinReplayCaptureFolderLoadResult missingFolder = EmptyCaptureLoad(
+                    stepName,
+                    prefix,
+                    "CaptureFolderMissing",
+                    captureStep.AreaKeyOverride,
+                    captureStep.TimestampUtcOverride);
+                emit(
+                    "GoblinReplayCapturePrefixSkipped",
+                    $"step={LogField(stepName)}; prefix={LogField(prefix)}; reason={missingFolder.Reason}");
+                return missingFolder;
+            }
+
+            if (!File.Exists(metadataPath))
+            {
+                GoblinReplayCaptureFolderLoadResult missingMetadata = EmptyCaptureLoad(
+                    stepName,
+                    prefix,
+                    "MetadataFileMissing",
+                    captureStep.AreaKeyOverride,
+                    captureStep.TimestampUtcOverride);
+                emit(
+                    "GoblinReplayCapturePrefixSkipped",
+                    $"step={LogField(stepName)}; prefix={LogField(prefix)}; metadataPath={LogField(metadataPath)}; reason={missingMetadata.Reason}");
+                return missingMetadata;
+            }
+
+            Dictionary<string, string> metadata = ReadCaptureMetadataFile(metadataPath);
+            string? journalPath = ResolveCaptureImagePath(root, prefix, metadata, "JournalPath", "_Journal.png");
+            string? minimapPath = ResolveCaptureImagePath(root, prefix, metadata, "MinimapPath", "_Minimap.png");
+            if (string.IsNullOrWhiteSpace(journalPath) && string.IsNullOrWhiteSpace(minimapPath))
+            {
+                GoblinReplayCaptureFolderLoadResult noFrames = EmptyCaptureLoad(
+                    stepName,
+                    prefix,
+                    "NoJournalOrMinimapFrame",
+                    captureStep.AreaKeyOverride,
+                    captureStep.TimestampUtcOverride,
+                    metadata);
+                emit(
+                    "GoblinReplayCapturePrefixSkipped",
+                    $"step={LogField(stepName)}; prefix={LogField(prefix)}; metadataPath={LogField(metadataPath)}; reason={noFrames.Reason}");
+                return noFrames;
+            }
+
+            string areaKey = ResolveCaptureAreaKey(captureStep.AreaKeyOverride, metadata);
+            DateTime timestampUtc = captureStep.TimestampUtcOverride ??
+                ResolveCaptureTimestampUtc(metadata, metadataPath, journalPath, minimapPath);
+            string fixtureName = Path.GetFileName(prefix);
+            GoblinReplayCaptureFolderLoadResult loaded = new(
+                stepName,
+                prefix,
+                true,
+                "Loaded",
+                fixtureName,
+                journalPath,
+                minimapPath,
+                areaKey,
+                timestampUtc,
+                metadata);
+            emit(
+                "GoblinReplayCapturePrefixLoaded",
+                $"step={LogField(stepName)}; prefix={LogField(prefix)}; fixture={LogField(fixtureName)}; areaKey={LogField(areaKey)}; timestampUtc={timestampUtc:O}; journalPath={LogField(journalPath)}; minimapPath={LogField(minimapPath)}; metadataPath={LogField(metadataPath)}");
+            return loaded;
+        }
+
+        private static GoblinReplayCaptureFolderLoadResult LoadExplicitDecisionBundleForHarness(
+            GoblinReplayCaptureInputStep captureStep,
+            Action<string, string> emit)
+        {
+            string stepName = string.IsNullOrWhiteSpace(captureStep.Name)
+                ? "Unnamed decision bundle step"
+                : captureStep.Name.Trim();
+            string bundlePath = captureStep.InputPath ?? "";
+            if (string.IsNullOrWhiteSpace(bundlePath) || !Directory.Exists(bundlePath))
+            {
+                GoblinReplayCaptureFolderLoadResult missing = EmptyCaptureLoad(
+                    stepName,
+                    bundlePath,
+                    "DecisionBundleMissing",
+                    captureStep.AreaKeyOverride,
+                    captureStep.TimestampUtcOverride);
+                emit(
+                    "GoblinReplayDecisionBundleSkipped",
+                    $"step={LogField(stepName)}; bundlePath={LogField(bundlePath)}; reason={missing.Reason}");
+                return missing;
+            }
+
+            string root = Path.GetFullPath(bundlePath);
+            Dictionary<string, string> metadata = ReadDecisionBundleMetadata(root);
+            string? tracePath = DecisionBundleTracePath(root);
+            string? evidencePath = DecisionBundleEvidencePath(root);
+            metadata["DecisionBundlePath"] = root;
+            if (!string.IsNullOrWhiteSpace(tracePath))
+            {
+                metadata["DecisionTracePath"] = tracePath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(evidencePath))
+            {
+                metadata["EvidencePath"] = evidencePath;
+            }
+
+            string? replayPrefix = ResolveDecisionBundleReplayPrefix(root, metadata);
+            if (!string.IsNullOrWhiteSpace(replayPrefix))
+            {
+                GoblinReplayCaptureFolderLoadResult replayLoaded = LoadExplicitCapturePrefixForHarness(
+                    captureStep with { InputPath = replayPrefix, Kind = GoblinReplayCaptureInputKind.CapturePrefix },
+                    emit);
+                if (replayLoaded.Loaded)
+                {
+                    emit(
+                        "GoblinReplayDecisionBundleLoaded",
+                        $"step={LogField(stepName)}; bundlePath={LogField(root)}; replayPrefix={LogField(replayPrefix)}; reason=ResolvedReplayCapturePrefix");
+                    return replayLoaded with
+                    {
+                        CaptureFolderPath = root,
+                        Reason = "LoadedFromDecisionBundle",
+                    };
+                }
+            }
+
+            GoblinReplayCaptureFolderLoadResult notReplayable = EmptyCaptureLoad(
+                stepName,
+                root,
+                "DecisionBundleMissingReplayFrames",
+                captureStep.AreaKeyOverride ?? MetadataValue(metadata, "areaKey", "AreaKey"),
+                captureStep.TimestampUtcOverride,
+                metadata);
+            emit(
+                "GoblinReplayDecisionBundleSkipped",
+                $"step={LogField(stepName)}; bundlePath={LogField(root)}; reason={notReplayable.Reason}; tracePath={LogField(tracePath)}; evidencePath={LogField(evidencePath)}; availableFiles={LogField(string.Join(",", Directory.EnumerateFiles(root).Select(Path.GetFileName)))}; explanation={LogField("Decision bundles usually contain decision-trace.txt and fullscreen evidence.png. Replay needs Journal/Minimap crop frames or a capture prefix with *_Metadata.txt, *_Journal.png, and/or *_Minimap.png.")}");
+            return notReplayable;
         }
 
         private static GoblinReplayFixtureCandidate ToFixtureCandidate(GoblinEvidenceReplayCandidate replayCandidate)
@@ -706,6 +1038,17 @@ namespace GoblinFarmer
                 return metadata;
             }
 
+            return ReadCaptureMetadataFile(metadataPath);
+        }
+
+        private static Dictionary<string, string> ReadCaptureMetadataFile(string metadataPath)
+        {
+            Dictionary<string, string> metadata = new(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(metadataPath) || !File.Exists(metadataPath))
+            {
+                return metadata;
+            }
+
             foreach (string line in File.ReadLines(metadataPath))
             {
                 int separator = line.IndexOf('=');
@@ -719,6 +1062,55 @@ namespace GoblinFarmer
                 if (!string.IsNullOrWhiteSpace(key))
                 {
                     metadata[key] = value;
+                }
+            }
+
+            return metadata;
+        }
+
+        private static Dictionary<string, string> ReadDecisionBundleMetadata(string bundlePath)
+        {
+            Dictionary<string, string> metadata = new(StringComparer.OrdinalIgnoreCase);
+            string? tracePath = DecisionBundleTracePath(bundlePath);
+            if (string.IsNullOrWhiteSpace(tracePath) || !File.Exists(tracePath))
+            {
+                return metadata;
+            }
+
+            foreach (string line in File.ReadLines(tracePath))
+            {
+                if (line.StartsWith("GoblinDecisionTrace:", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (string part in line["GoblinDecisionTrace:".Length..].Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        int separator = part.IndexOf('=');
+                        if (separator <= 0)
+                        {
+                            continue;
+                        }
+
+                        string key = part[..separator].Trim();
+                        string value = part[(separator + 1)..].Trim();
+                        if (!string.IsNullOrWhiteSpace(key))
+                        {
+                            metadata[key] = value;
+                        }
+                    }
+
+                    continue;
+                }
+
+                int normalSeparator = line.IndexOf('=');
+                if (normalSeparator <= 0)
+                {
+                    continue;
+                }
+
+                string normalKey = line[..normalSeparator].Trim();
+                string normalValue = line[(normalSeparator + 1)..].Trim();
+                if (!string.IsNullOrWhiteSpace(normalKey))
+                {
+                    metadata[normalKey] = normalValue;
                 }
             }
 
@@ -747,6 +1139,74 @@ namespace GoblinFarmer
                     ? path[..^"_Journal.png".Length]
                     : path[..^"_Minimap.png".Length])
                 .FirstOrDefault();
+        }
+
+        private static string PrefixFromMetadataPath(string metadataPath)
+        {
+            string fullPath = Path.GetFullPath(metadataPath);
+            return fullPath.EndsWith("_Metadata.txt", StringComparison.OrdinalIgnoreCase)
+                ? fullPath[..^"_Metadata.txt".Length]
+                : Path.Combine(Path.GetDirectoryName(fullPath) ?? "", Path.GetFileNameWithoutExtension(fullPath));
+        }
+
+        private static string? DecisionBundleTracePath(string bundlePath)
+        {
+            string candidate = Path.Combine(bundlePath, "decision-trace.txt");
+            return File.Exists(candidate)
+                ? candidate
+                : Directory.EnumerateFiles(bundlePath, "*trace*.txt", SearchOption.TopDirectoryOnly)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .ThenByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+        }
+
+        private static string? DecisionBundleEvidencePath(string bundlePath)
+        {
+            string candidate = Path.Combine(bundlePath, "evidence.png");
+            return File.Exists(candidate)
+                ? candidate
+                : Directory.EnumerateFiles(bundlePath, "evidence.*", SearchOption.TopDirectoryOnly)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .ThenByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+        }
+
+        private static string? ResolveDecisionBundleReplayPrefix(string bundlePath, IReadOnlyDictionary<string, string> metadata)
+        {
+            string? localPrefix = Directory
+                .EnumerateFiles(bundlePath, "*_Metadata.txt", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ThenByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .Select(PrefixFromMetadataPath)
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(localPrefix))
+            {
+                return localPrefix;
+            }
+
+            string sourceImagePath = MetadataValue(metadata, "sourceImagePath", "imagePath");
+            if (string.IsNullOrWhiteSpace(sourceImagePath))
+            {
+                return null;
+            }
+
+            string resolvedSourceImagePath = ResolveCaptureMetadataPath(bundlePath, sourceImagePath);
+            if (!File.Exists(resolvedSourceImagePath))
+            {
+                return null;
+            }
+
+            if (resolvedSourceImagePath.EndsWith("_Journal.png", StringComparison.OrdinalIgnoreCase))
+            {
+                return resolvedSourceImagePath[..^"_Journal.png".Length];
+            }
+
+            if (resolvedSourceImagePath.EndsWith("_Minimap.png", StringComparison.OrdinalIgnoreCase))
+            {
+                return resolvedSourceImagePath[..^"_Minimap.png".Length];
+            }
+
+            return null;
         }
 
         private static string? ResolveCaptureImagePath(

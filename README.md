@@ -102,13 +102,16 @@ Journal matches validate the goblin-name portion of the template, ignore upper/h
 
 Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, and manual recognition-capture paths.
 
-Goblin Replay is an explicit developer/test harness for feeding saved Journal/Minimap PNG fixtures, including real-style encounter/manual capture folders, through the shared Goblin Evidence matcher and stale-location policy without Diablo running. It is on-demand only and is not part of normal app startup, VS Debug startup, live scanning, combat, route, town, or debug package workflows. Real capture folders can be replayed from the repository root with:
+Goblin Replay is an explicit developer/test harness for feeding saved Journal/Minimap PNG fixtures, including real-style encounter/manual capture folders, through the shared Goblin Evidence matcher and stale-location policy without Diablo running. It is on-demand only and is not part of normal app startup, VS Debug startup, live scanning, combat, route, town, or debug package workflows. Real capture evidence can be replayed from the repository root with:
 
 ```powershell
 dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-captures --templates ".\Images\Goblin Evidence" "D:\Path\To\CaptureFolder1" "D:\Path\To\CaptureFolder2"
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-metadata --templates ".\Images\Goblin Evidence" "D:\Path\To\Capture_Metadata.txt"
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-prefix --templates ".\Images\Goblin Evidence" "D:\Path\To\CapturePrefix"
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-decision-bundle --templates ".\Images\Goblin Evidence" "D:\Path\To\DecisionBundles\gdt-xxxxxxxx"
 ```
 
-Capture folders should contain `_Metadata.txt`, `_Journal.png`, and/or `_Minimap.png` files. The command prints load results, replay decisions, and a summary, and it does not create persistent debug files by default.
+Capture folders should contain `_Metadata.txt`, `_Journal.png`, and/or `_Minimap.png` files. Metadata and prefix commands target one specific older capture inside a shared `EncounterCaptures` or `ManualCaptures` folder without copying files. DecisionBundle replay runs when the bundle contains or points to replay-ready Journal/Minimap capture frames; if it only has `decision-trace.txt` plus fullscreen `evidence.png`, the harness reports the available evidence and explains that crop-accurate replay is not possible from that bundle alone. The commands print load results, replay decisions, and a summary, and they do not create persistent debug files by default.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
@@ -205,7 +208,7 @@ Debug tooling includes:
 - Root debug package analysis, Goblin Tracker timeline, Goblin Evidence health report, Goblin Tracker review index and summary, encounter captures, decision bundles, and observation diagnostics collected by the package batch when GoblinEvidence is available.
 - Structured Goblin Tracker JSONL events under `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` during VS Debug, Debug Mode, or decision-trace sessions, alongside human-readable logs.
 - Goblin Evidence scan-stage timing summaries for spotting slow template, crop, or candidate stages without adding one-off stopwatch logs.
-- Explicit/on-demand Goblin Replay fixture runner support for saved Journal/Minimap PNG detection tests and targeted multi-step stale-evidence fixtures; replay is not wired into startup, live automation, or debug package creation.
+- Explicit/on-demand Goblin Replay fixture runner support for saved Journal/Minimap PNG detection tests, targeted multi-step stale-evidence fixtures, real capture folders, specific metadata files, capture prefixes, and replay-ready DecisionBundle references; replay is not wired into startup, live automation, or debug package creation.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is a separate opt-in gate and defaults off.
 - Age-based debug artifact retention: 7 days for VS Debug troubleshooting folders and release/debug-mode artifacts, plus count-based GoblinEvidence retention under `Debug\GoblinEvidence` defaulting to the newest 250 files and bounded ObservationDiagnostics crop samples in debug packages.
