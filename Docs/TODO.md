@@ -164,17 +164,17 @@
 * [x] Review `GoblinFarmer_Debug_20260607_074714.zip`; confirmed Reset Stats cleared duplicate guard, auto-count evidence state, evidence observation state, and Last Observation.
 * [x] Remove VS Debug Goblin Tracker scenario text input fields; the `Next Tests` checkbox state now saves when the checklist initializes or changes without prompting.
 * [x] Consolidate VS Debug and Release troubleshooting around the single `Scripts\Create Debug Package.bat` ZIP export path.
-* [x] Include Goblin Replay in the current `Scripts\Create Debug Package.bat` workflow so one ZIP contains both live debug evidence and freshly generated replay results while automatic counting is still being perfected.
+* [x] Remove the retired evidence-reprocessing path from `Scripts\Create Debug Package.bat`; the debug ZIP now contains live debug evidence only.
 * [x] Save `Debug\GoblinTrackerNextTests.txt` when the VS Debug `Next Tests` checklist initializes or changes so checked/unchecked test scenarios are packaged by the batch workflow.
 * [x] Remove the VS Debug `Review Files` button and `Review rule` checkbox so troubleshooting evidence is exported only through the batch package workflow.
 * [x] Save VS Debug accepted-count encounter captures for manual and automatic goblin counts: fullscreen, minimap crop, and journal crop under `Debug\GoblinEvidence\EncounterCaptures`, with bounded package inclusion handled by the batch script.
 * [x] Change VS Debug generated-artifact age retention from 24 hours to 7 days.
 * [x] Make the combat hotkey cancel `Waiting For Location Confirmation` and start combat from the same hotkey press after the cancelled teleport workflow unwinds.
-* [x] Replace broad same-goblin-type journal replay suppression with exact evidence-row suppression, so stale visible rows cannot replay across areas but fresh same-type goblins in separate levels can count.
+* [x] Replace broad same-goblin-type journal reuse suppression with exact evidence-row suppression, so stale visible rows cannot carry across areas but fresh same-type goblins in separate levels can count.
 * [x] Make Engaged/combined journal rows area-strict so a row first seen in Cave Of The Moon Clan Level 1 suppresses with `JournalEngagedIgnoredAreaChanged` if detected again on Level 2.
 * [x] Preserve the displayed Last Observation when incoming scanner updates are suppressed as stale, already counted, duplicate, or area-limit reached.
 * [x] Reduce the observation scanner interval to 750ms to improve count-notification responsiveness without lowering confidence thresholds.
-* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, then click `Scripts\Create Debug Package.bat` so the newest ZIP in `DebugPackages` contains the run evidence plus Goblin Replay results.
+* [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, then click `Scripts\Create Debug Package.bat` so the newest ZIP in `DebugPackages` contains the live run evidence.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
@@ -849,10 +849,10 @@ These are future enhancements and nice-to-haves, not active blockers.
 
 These are future enhancements and nice-to-haves, not active blockers.
 
-### Route Replay
+### Route Decision Review
 
 * [ ] Save route decisions from a session.
-* [ ] Replay route decision logs after the fact.
+* [ ] Review route decision logs after the fact.
 * [ ] Help debug route logic without needing a live farming run.
 
 ### Visual Route Viewer
