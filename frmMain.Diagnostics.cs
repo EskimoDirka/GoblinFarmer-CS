@@ -21,9 +21,10 @@ namespace GoblinFarmer
         {
             bool showOverlay = DebugManager.ShouldShowDiagnosticOverlay();
             bool showInspector = DebugManager.ShouldShowRouteInspector();
-            if (!showOverlay && !showInspector)
+            bool showNextTests = AppSettings.IsVsDebugProfile;
+            if (!showOverlay && !showInspector && !showNextTests)
             {
-                AppLogger.Info("Diagnostic UI hidden by config: ShowDiagnosticOverlay=False; ShowRouteInspector=False");
+                AppLogger.Info("Diagnostic UI hidden by config: ShowDiagnosticOverlay=False; ShowRouteInspector=False; ShowNextTests=False");
                 return;
             }
 
@@ -60,11 +61,19 @@ namespace GoblinFarmer
                 UseVisualStyleBackColor = true,
             };
 
+            TabPage nextTestsTab = new()
+            {
+                Name = "tabNextTestSteps",
+                Text = "Next Tests",
+                UseVisualStyleBackColor = true,
+            };
+
             TableLayoutPanel table = PortCreateDiagnosticTable(labelWidth: 155F);
             TableLayoutPanel inspectorTable = PortCreateDiagnosticTable(labelWidth: 170F);
 
             compactTab.Controls.Add(table);
             inspectorTab.Controls.Add(inspectorTable);
+            nextTestsTab.Controls.Add(PortCreateNextTestStepsBox());
             if (showOverlay)
             {
                 tabs.TabPages.Add(compactTab);
@@ -73,6 +82,11 @@ namespace GoblinFarmer
             if (showInspector)
             {
                 tabs.TabPages.Add(inspectorTab);
+            }
+
+            if (showNextTests)
+            {
+                tabs.TabPages.Add(nextTestsTab);
             }
 
             Controls.Add(tabs);
@@ -127,6 +141,41 @@ namespace GoblinFarmer
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Active Workflow", "ActiveWorkflow", 42);
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Diablo Running Status", "DiabloRunningStatus");
             PortAddDiagnosticRow(inspectorTable, portRouteInspectorLabels, "Diablo Active Status", "DiabloActiveStatus");
+        }
+
+        private TextBox PortCreateNextTestStepsBox()
+        {
+            return new TextBox
+            {
+                BorderStyle = BorderStyle.None,
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                Text = PortNextTestStepsText(),
+                WordWrap = true,
+            };
+        }
+
+        private static string PortNextTestStepsText()
+        {
+            return string.Join(Environment.NewLine,
+            [
+                "Goblin Tracker Next Test Steps",
+                "",
+                "1. Turn Test Count Override off before real auto-count validation.",
+                "2. Eastern Channel Level 2: find a fresh goblin, preferably Blood Thief; expect one auto-count, notification, and Last Observation.",
+                "3. Cave Of The Moon Clan Level 2: find a fresh goblin after Level 1; expect Level 2 to count independently.",
+                "4. Battlefields: find Treasure Goblin; expect one auto-count and notification.",
+                "5. PF1/PF2/Stinging Winds: live goblins should still allow exactly two counts, then suppress the third.",
+                "6. Reset Stats: clear counts/observation state, then confirm fresh evidence can count again.",
+                "7. New Game: confirm duplicate/evidence state clears at game start.",
+                "8. Gilded Baron and Malevolent Tormentor: confirm classification stays correct.",
+                "9. Last Observation: confirm it remains readable after a real count and clears/replaces on area change or new evidence.",
+                "10. Stale journal display: move areas after a count and confirm old evidence does not look current or count again.",
+                "11. Blocked areas: New Tristram and Caldeum blocked areas should notify and never consume area slots.",
+                "12. After any miss or confusing display, click Create Debug Package and review the newest ZIP.",
+            ]);
         }
 
         private TableLayoutPanel PortCreateDiagnosticTable(float labelWidth)

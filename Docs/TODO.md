@@ -155,6 +155,9 @@
 * [x] Remove the accepted route-button `Teleport queued` overlay during Goblin Tracker validation while preserving route-button receipt/queue/execution diagnostics.
 * [x] Add a VS Debug-only `Test Count Override` checkbox that lets manual `X` simulate fresh evidence while preserving block-list, duplicate, and PF1/PF2/Stinging Winds area-limit behavior.
 * [x] Widen/reposition the VS Debug `Create Debug Package` button in Settings for easier live-test package creation.
+* [x] Restore the VS Debug `Create Debug Package` button to the same width/alignment as the `Change...` and `Verify Paths` Settings buttons.
+* [x] Add a VS Debug `Next Tests` diagnostics tab beside `Overlay` and `Route State` with the current in-game Goblin Tracker validation checklist.
+* [x] Review `GoblinFarmer_Debug_20260607_071907.zip`; confirmed PF1/PF2/Stinging Winds synthetic two-count rules, Southern Highlands default duplicate suppression, New Tristram blocked suppression, and Southern Highlands Gem Hoarder auto-count.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
@@ -169,8 +172,8 @@
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
 * [x] Press Teleport Next when no queued/next route target exists and confirm the no-route notification appears.
 * [ ] Live-validate enabled automatic counting suppresses blocked areas, stale journal evidence, duplicate default areas, and third-and-later PF1/PF2/Stinging Winds observations.
-* [ ] Use VS Debug `Test Count Override` for synthetic limit checks: with the override on, press manual `X` three times in PF1, PF2, and Stinging Winds and confirm counts 1 and 2 are accepted while count 3 suppresses with `AreaLimitReached`; then turn the override off before real auto-count testing.
-* [ ] Use VS Debug `Test Count Override` for a default-area synthetic check: press manual `X` twice in a normal allowed area and confirm the second press suppresses with `AreaAlreadyCounted`.
+* [x] Use VS Debug `Test Count Override` for synthetic limit checks: with the override on, press manual `X` three times in PF1, PF2, and Stinging Winds and confirm counts 1 and 2 are accepted while count 3 suppresses with `AreaLimitReached`; then turn the override off before real auto-count testing.
+* [x] Use VS Debug `Test Count Override` for a default-area synthetic check: press manual `X` twice in a normal allowed area and confirm the second press suppresses with `AreaAlreadyCounted`.
 * [x] Live-validate a Treasure Goblin that previously matched `Odious Collector Minimap.png` now displays/counts as Treasure Goblin.
 * [x] Live-validate a real Odious Collector still displays/counts as Odious Collector after the color disambiguation pass.
 * [ ] Live-validate a real Gilded Baron does not auto-count as Malevolent Tormentor from an early weak minimap match; confirm the accepted count, notification, and Last Observation use Gilded Baron.

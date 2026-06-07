@@ -1205,12 +1205,70 @@ namespace GoblinFarmer
 
         private GoblinReplayDebugPackageResult PortCreateDebugPackageForReview()
         {
-            return PortCreateDebugPackage("Button", "", "");
+            GoblinReplaySummary? replaySummary = PortRunGoblinReplayForReview();
+            return PortCreateDebugPackage(
+                "Button",
+                replaySummary?.LogPath ?? "",
+                replaySummary?.HtmlReportPath ?? "");
         }
 
         private GoblinReplayDebugPackageResult PortCreateDebugPackageAfterGoblinReplay(GoblinReplaySummary summary)
         {
             return PortCreateDebugPackage("Replay", summary.LogPath, summary.HtmlReportPath);
+        }
+
+        private GoblinReplaySummary? PortRunGoblinReplayForReview()
+        {
+            if (!AppSettings.IsVsDebugProfile)
+            {
+                AppLogger.Info("ReviewGoblinReplaySkipped: reason=NonVsDebugProfile; source=Button");
+                return null;
+            }
+
+            string replayInputPath = PortResolveReviewGoblinReplayInputPath();
+            if (!Directory.Exists(replayInputPath))
+            {
+                AppLogger.Info(
+                    "ReviewGoblinReplaySkipped: " +
+                    "reason=InputFolderMissing; " +
+                    "source=Button; " +
+                    $"inputPath={PortLogField(replayInputPath)}; " +
+                    $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
+                    $"packageRuntimeRoot={PortLogField(PortResolveDebugPackageRuntimeRoot())}");
+                return null;
+            }
+
+            try
+            {
+                AppLogger.Info(
+                    "ReviewGoblinReplayStarted: " +
+                    "source=Button; " +
+                    $"inputPath={PortLogField(replayInputPath)}; " +
+                    $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
+                    $"packageRuntimeRoot={PortLogField(PortResolveDebugPackageRuntimeRoot())}");
+                GoblinReplaySummary summary = PortReplayGoblinEvidenceFolder(replayInputPath);
+                AppLogger.Info(
+                    "ReviewGoblinReplayComplete: " +
+                    "source=Button; " +
+                    $"totalFiles={summary.TotalFiles}; " +
+                    $"evidenceFiles={summary.EvidenceFiles}; " +
+                    $"accepted={summary.Accepted}; " +
+                    $"rejected={summary.Rejected}; " +
+                    $"unknown={summary.Unknown}; " +
+                    $"logPath={PortLogField(summary.LogPath)}; " +
+                    $"htmlReportPath={PortLogField(summary.HtmlReportPath)}");
+                return summary;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Review Goblin replay failed before debug package creation: inputPath={replayInputPath}", ex);
+                return null;
+            }
+        }
+
+        private static string PortResolveReviewGoblinReplayInputPath()
+        {
+            return DebugManager.GoblinEvidenceDirectory;
         }
 
         private GoblinReplayDebugPackageResult PortCreateDebugPackage(string requestSource, string replayLogPath, string replayHtmlPath)

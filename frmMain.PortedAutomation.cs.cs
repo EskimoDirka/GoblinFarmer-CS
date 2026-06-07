@@ -491,9 +491,9 @@ namespace GoblinFarmer
 
             btnReplayGoblinEvidenceFolder = new Button
             {
-                Location = new Point(14, 160),
+                Location = new Point(424, 160),
                 Name = "btnReplayGoblinEvidenceFolder",
-                Size = new Size(522, 28),
+                Size = new Size(112, 28),
                 TabIndex = 4,
                 Text = "Create Debug Package",
                 UseVisualStyleBackColor = true,

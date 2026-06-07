@@ -162,6 +162,8 @@
 - Accepted route button clicks do not show the intrusive `Teleport queued` notification; they log `ButtonClickQueuedFeedbackSuppressed` instead
 - Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
 - In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
+- In VS Debug, `Create Debug Package` remains the same 112x28 size/alignment as the Settings `Change...` and `Verify Paths` buttons
+- In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
 - Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template

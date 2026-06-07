@@ -32,6 +32,7 @@ Run("GoblinEvidence template discovery finds source image set", TestGoblinEviden
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
+Run("VS Debug diagnostics include next test steps tab", TestVsDebugDiagnosticsIncludeNextTestStepsTab);
 Run("Battle.net successful launch diagnostics avoid failure screenshots", TestBattleNetSuccessfulLaunchDiagnosticsAvoidFailureScreenshots);
 Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverrideWins);
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
@@ -65,7 +66,7 @@ Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCount
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
 Run("Goblin VS Debug manual test count override is safety-scoped", TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
-Run("Goblin replay tool is dry-run and review package button is one-click", TestGoblinReplayToolIsDryRunAndPackaged);
+Run("Goblin replay tool is dry-run and review package button auto-runs replay", TestGoblinReplayToolIsDryRunAndPackaged);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
@@ -2004,8 +2005,25 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableDecisionTrace = chkGoblinDecisionTrace.Checked", StringComparison.Ordinal), "Decision Trace checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("PortSetGoblinAutomaticCountingArmedState(source)", StringComparison.Ordinal), "toggling automatic counting should re-arm the freshness gate");
     AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
-    AssertTrue(automationSource.Contains("Size = new Size(522, 28)", StringComparison.Ordinal), "Create Debug Package button should be wide enough for VS Debug testing runs");
+    AssertTrue(automationSource.Contains("Size = new Size(112, 28)", StringComparison.Ordinal), "Create Debug Package button should match the Change and Verify Paths button width");
+    AssertTrue(automationSource.Contains("Location = new Point(424, 160)", StringComparison.Ordinal), "Create Debug Package button should align with the Settings action buttons");
     AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 198)", StringComparison.Ordinal), "VS Debug Settings group should expand for the added Goblin Tracker test control");
+}
+
+static void TestVsDebugDiagnosticsIncludeNextTestStepsTab()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string diagnosticsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Diagnostics.cs"));
+
+    AssertTrue(diagnosticsSource.Contains("bool showNextTests = AppSettings.IsVsDebugProfile", StringComparison.Ordinal), "Next Tests tab should be scoped to VS Debug/dev profile");
+    AssertTrue(diagnosticsSource.Contains("Name = \"tabNextTestSteps\"", StringComparison.Ordinal), "diagnostics should include a dedicated Next Tests tab");
+    AssertTrue(diagnosticsSource.Contains("Text = \"Next Tests\"", StringComparison.Ordinal), "Next Tests tab should have a readable tab title");
+    AssertTrue(diagnosticsSource.Contains("PortCreateNextTestStepsBox", StringComparison.Ordinal), "Next Tests tab should use a read-only text surface");
+    AssertTrue(diagnosticsSource.Contains("Eastern Channel Level 2", StringComparison.Ordinal), "Next Tests should list Eastern Channel Level 2 validation");
+    AssertTrue(diagnosticsSource.Contains("Cave Of The Moon Clan Level 2", StringComparison.Ordinal), "Next Tests should list Cave Level 2 validation");
+    AssertTrue(diagnosticsSource.Contains("Battlefields", StringComparison.Ordinal), "Next Tests should list Battlefields validation");
+    AssertTrue(diagnosticsSource.Contains("PF1/PF2/Stinging Winds", StringComparison.Ordinal), "Next Tests should list special two-count validation");
+    AssertTrue(diagnosticsSource.Contains("Create Debug Package", StringComparison.Ordinal), "Next Tests should remind the tester to package confusing runs");
 }
 
 static void TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped()
@@ -2136,6 +2154,8 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
     string createPackageButtonMethod = ExtractMethodBody(evidenceSource, "private void PortCreateReviewDebugPackageFromButton");
+    string createPackageForReviewMethod = ExtractMethodBody(evidenceSource, "private GoblinReplayDebugPackageResult PortCreateDebugPackageForReview");
+    string runReplayForReviewMethod = ExtractMethodBody(evidenceSource, "private GoblinReplaySummary? PortRunGoblinReplayForReview");
 
     AssertTrue(appSettingsSource.Contains("public bool EnableDecisionTrace { get; set; } = false", StringComparison.Ordinal), "Release decision trace should default off unless Debug Mode enables it");
     AssertTrue(appSettingsSource.Contains("settings.GoblinTracker.EnableDecisionTrace = true", StringComparison.Ordinal), "VS Debug/dev defaults should enable decision trace");
@@ -2148,6 +2168,13 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertFalse(createPackageButtonMethod.Contains("OpenFileDialog", StringComparison.Ordinal), "create package button should not ask for a debug package ZIP");
     AssertFalse(createPackageButtonMethod.Contains("FolderBrowserDialog", StringComparison.Ordinal), "create package button should not ask for a folder");
     AssertTrue(createPackageButtonMethod.Contains("PortCreateDebugPackageForReview", StringComparison.Ordinal), "create package button should package the active runtime immediately");
+    AssertTrue(createPackageForReviewMethod.Contains("PortRunGoblinReplayForReview()", StringComparison.Ordinal), "review package creation should run Goblin replay before packaging");
+    AssertTrue(createPackageForReviewMethod.Contains("replaySummary?.LogPath", StringComparison.Ordinal), "review package creation should pass the fresh replay log into package diagnostics");
+    AssertTrue(runReplayForReviewMethod.Contains("PortReplayGoblinEvidenceFolder(replayInputPath)", StringComparison.Ordinal), "review package button should invoke the replay engine");
+    AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplayStarted", StringComparison.Ordinal), "review replay should log startup");
+    AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplayComplete", StringComparison.Ordinal), "review replay should log completion");
+    AssertTrue(runReplayForReviewMethod.Contains("ReviewGoblinReplaySkipped", StringComparison.Ordinal), "review replay should clearly log skipped states");
+    AssertTrue(evidenceSource.Contains("return DebugManager.GoblinEvidenceDirectory", StringComparison.Ordinal), "review replay should self-discover current runtime GoblinEvidence input");
     AssertTrue(evidenceSource.Contains("PortResolveDebugPackageRuntimeRoot", StringComparison.Ordinal), "debug package creation should resolve the correct runtime root");
     AssertTrue(evidenceSource.Contains("AppSettings.IsVsDebugProfile && PortTryResolveConfigRoot", StringComparison.Ordinal), "VS Debug packaging should use the project-root config parent");
     AssertTrue(evidenceSource.Contains("Path.Combine(packageRuntimeRoot, \"DebugPackages\")", StringComparison.Ordinal), "debug package creation should log/discover the package folder from the resolved runtime root");
