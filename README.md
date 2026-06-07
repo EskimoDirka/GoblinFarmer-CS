@@ -100,7 +100,7 @@ The physical `X` Goblin Tracker hotkey has been retired. In VS Debug, the `Captu
 
 Journal matches validate the goblin-name portion of the template, ignore upper/history rows, and briefly suppress Journal candidates after physical Enter/journal-history input so old history rows do not replay into a new area. Automatic counts require fresh eligible evidence first seen after automatic counting was armed, scope evidence by resolved area, suppress already-used evidence signatures, suppress same-encounter source variants, and prevent counted Journal evidence from being reused in another area. Last Observation stays on the last real goblin until a new observation/count, reset/new-game cleanup, or confirmed current-area change replaces it.
 
-Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, structured `GoblinDecisionTrace` lines, route-button cancellation/start diagnostics, encounter-capture paths, and manual recognition-capture paths.
+Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, and manual recognition-capture paths.
 
 Journal evidence treats both killed and escaped goblin lines as encounters. `Gelatinous Spawn` journal kills are normalized to `Gelatinous Sire`.
 
@@ -195,6 +195,8 @@ Debug tooling includes:
 - Missing-template diagnostics and optional capture prompts.
 - Route and workflow summaries in generated debug packages.
 - Root debug package analysis, Goblin Tracker timeline, Goblin Evidence health report, Goblin Tracker review index and summary, encounter captures, decision bundles, and observation diagnostics collected by the package batch when GoblinEvidence is available.
+- Structured Goblin Tracker JSONL events under `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` during VS Debug, Debug Mode, or decision-trace sessions, alongside human-readable logs.
+- Goblin Evidence scan-stage timing summaries for spotting slow template, crop, or candidate stages without adding one-off stopwatch logs.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is a separate opt-in gate and defaults off.
 - Age-based debug artifact retention: 7 days for VS Debug troubleshooting folders and release/debug-mode artifacts, plus count-based GoblinEvidence retention under `Debug\GoblinEvidence` defaulting to the newest 250 files and bounded ObservationDiagnostics crop samples in debug packages.

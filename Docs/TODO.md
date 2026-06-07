@@ -12,6 +12,8 @@ This file contains only open work and remaining test/verifications. Historical c
   - `JournalCandidateIgnoredHistoryRow`
   - `GoblinJournalHistorySuppressionArmed`
   - `JournalCandidateIgnoredHistoryInput`
+- [ ] Confirm `GoblinEvidenceTimingSummary` appears during normal VS Debug scans and shows useful scan-stage timing.
+- [ ] Confirm `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` records observation, suppression, and automatic-count events alongside human logs.
 - [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence from any goblin type.
 - [ ] Live-validate Eastern Channel Level 2 fresh evidence from any goblin type auto-counts once and does not inherit stale evidence from another area.
 - [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the second level has evidence first seen after Level 2 is detected.
@@ -26,7 +28,7 @@ This file contains only open work and remaining test/verifications. Historical c
 
 - [ ] Click `Capture` only when diagnosing image recognition; confirm it writes files under `Debug\GoblinEvidence\ManualCaptures`.
 - [ ] Confirm automatic count workflows still create decision bundles and encounter captures without using the Capture button.
-- [ ] If private VS Debug paths/toggles are needed, create/use ignored `Config\AppSettings.local.json` and keep tracked `Config\AppSettings.json` sanitized.
+- [ ] Keep ignored `Config\AppSettings.local.json` for private VS Debug paths/toggles and keep tracked `Config\AppSettings.json` sanitized.
 
 ## Debug Package Workflow
 

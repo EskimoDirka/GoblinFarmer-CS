@@ -35,6 +35,9 @@ This file is the current source of truth for the active release, stable behavior
 - Minimap scan region: `2108,66,421,423`.
 - Automatic counting requires Observation Mode and Auto Goblin Count to both be enabled.
 - Automatic counting uses existing area resolution, block list, duplicate guard, stale journal protection, and area-limit logic.
+- Goblin Evidence scanning caches discovered template metadata and loaded OpenCV template mats, captures each source scan region once per pass, and scans Minimap before Journal while preserving Journal as the primary confirmation if both match.
+- Goblin Evidence timing summaries log stage histograms through `GoblinEvidenceTimingSummary`.
+- VS Debug/debug/decision-trace sessions write structured Goblin Tracker JSONL events to `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` alongside human-readable logs.
 - Default area limit: 1 count per resolved area per game.
 - Two-count exceptions: Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds.
 - Blocked count areas include New Tristram, WhimsyDale, City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
@@ -59,7 +62,7 @@ This file is the current source of truth for the active release, stable behavior
 
 ## Next Development Plans
 
-- Validate the latest journal-history suppression and name-validation fix during normal VS Debug use.
+- Validate the latest journal-history suppression, name-validation fix, scan timing summaries, and JSONL event output during normal VS Debug use.
 - Continue using automatic counting in real runs instead of focused specific-goblin hunts.
 - Use the `Capture` button only when an image-recognition issue is visible and extra minimap/journal/fullscreen evidence would help.
 - Keep `Docs/TODO.md` synchronized with remaining work and next test steps.

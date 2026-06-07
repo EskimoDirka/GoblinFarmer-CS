@@ -1918,7 +1918,7 @@ try {
     $goblinEvidenceCandidates = foreach ($folder in $goblinEvidenceFolders) {
         if (Test-Path -LiteralPath $folder -PathType Container) {
             Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt)$' }
+                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt|jsonl)$' }
         }
     }
     $goblinEvidenceScreenshots = @($goblinEvidenceCandidates |

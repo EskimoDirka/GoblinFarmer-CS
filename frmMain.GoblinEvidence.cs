@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO.Compression;
 
@@ -32,6 +33,10 @@ namespace GoblinFarmer
         private readonly Dictionary<string, GoblinJournalEngagedState> portRecentJournalEngagedByGoblinType = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, GoblinJournalStaleSuppressedState> portStaleSuppressedJournalEvidenceByKey = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, GoblinJournalKilledState> portJournalKilledEvidenceSeenBySignature = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, GoblinEvidenceCachedTemplate> portGoblinEvidenceTemplateMatCache = new(StringComparer.OrdinalIgnoreCase);
+        private GoblinEvidenceTemplateCatalog? portCachedGoblinEvidenceTemplateCatalog;
+        private string portCachedGoblinEvidenceTemplateCatalogDirectory = "";
+        private DateTime portCachedGoblinEvidenceTemplateCatalogWriteUtc;
         private CancellationTokenSource? portGoblinEvidenceObservationCts;
         private Task? portGoblinEvidenceScannerTask;
         private int portGoblinEvidenceCalibrationCaptureActive;
@@ -194,20 +199,25 @@ namespace GoblinFarmer
 
         private void PortScanGoblinEvidence()
         {
+            Stopwatch totalStopwatch = Stopwatch.StartNew();
             DateTime scanTime = DateTime.Now;
             string journalCropPath = "";
             string minimapCropPath = "";
             if (PortShouldCaptureGoblinEvidenceDiagnosticCrops(scanTime))
             {
+                Stopwatch cropStopwatch = Stopwatch.StartNew();
                 journalCropPath = PortCaptureGoblinEvidenceDiagnosticCrop("Journal", PortGoblinEvidenceJournalRegion(), scanTime);
                 minimapCropPath = PortCaptureGoblinEvidenceDiagnosticCrop("Minimap", PortGoblinEvidenceMinimapRegion(), scanTime);
+                PortRecordGoblinEvidenceTiming("DiagnosticCrops", cropStopwatch.Elapsed);
             }
 
             PortLogGoblinEvidenceScanDiagnostic(
                 "ObservationScanAttempted",
-                $"Eligible; journalCropPath={PortLogField(PortDisplayLocation(journalCropPath))}; minimapCropPath={PortLogField(PortDisplayLocation(minimapCropPath))}");
+                $"Eligible; scanOrder=MinimapThenJournal; journalPrimary=True; journalCropPath={PortLogField(PortDisplayLocation(journalCropPath))}; minimapCropPath={PortLogField(PortDisplayLocation(minimapCropPath))}");
 
+            Stopwatch catalogStopwatch = Stopwatch.StartNew();
             GoblinEvidenceTemplateCatalog templateCatalog = PortGoblinEvidenceTemplateCatalog();
+            PortRecordGoblinEvidenceTiming("TemplateCatalog", catalogStopwatch.Elapsed);
             if (!templateCatalog.HasUsableTemplates)
             {
                 PortLogGoblinEvidenceTemplateSetupMissing("ScannerScan", templateCatalog, notifyIfMissing: true);
@@ -219,11 +229,15 @@ namespace GoblinFarmer
 
             PortLogGoblinEvidenceTemplateSetupWarning("ScannerScan", templateCatalog);
             int candidateCount = 0;
+            Stopwatch detectStopwatch = Stopwatch.StartNew();
             foreach (GoblinEvidenceCandidate candidate in PortDetectGoblinEvidenceCandidates(templateCatalog))
             {
                 candidateCount++;
+                Stopwatch recordStopwatch = Stopwatch.StartNew();
                 PortRecordGoblinEvidence(candidate, forceObservation: true);
+                PortRecordGoblinEvidenceTiming("RecordCandidate", recordStopwatch.Elapsed);
             }
+            PortRecordGoblinEvidenceTiming("DetectCandidates", detectStopwatch.Elapsed);
 
             if (candidateCount == 0)
             {
@@ -238,13 +252,14 @@ namespace GoblinFarmer
             }
 
             PortCleanupOldGoblinEvidenceObservationDiagnostics();
+            PortRecordGoblinEvidenceTiming("TotalScan", totalStopwatch.Elapsed);
         }
 
         private IEnumerable<GoblinEvidenceCandidate> PortDetectGoblinEvidenceCandidates(GoblinEvidenceTemplateCatalog templateCatalog)
         {
             List<IGrouping<string, GoblinEvidenceTemplateRequirement>> sourceGroups = templateCatalog.Templates
                 .GroupBy(template => template.Source, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(group => string.Equals(group.Key, "JournalCandidate", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .OrderBy(group => string.Equals(group.Key, "MinimapCandidate", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
                 .ToList();
 
             GoblinEvidenceCandidate? primaryJournalCandidate = null;
@@ -294,6 +309,14 @@ namespace GoblinFarmer
             IReadOnlyList<GoblinEvidenceTemplateRequirement> templates,
             Rectangle referenceRegion)
         {
+            Stopwatch sourceStopwatch = Stopwatch.StartNew();
+            using GoblinEvidenceScanContext? scanContext = PortCreateGoblinEvidenceScanContext(referenceRegion, "GoblinEvidenceTemplateMatch");
+            if (scanContext == null)
+            {
+                PortRecordGoblinEvidenceTiming("ScanContextUnavailable", sourceStopwatch.Elapsed);
+                return new GoblinEvidenceDetectionResult(null, null, "", new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, Size.Empty), []);
+            }
+
             GoblinEvidenceTemplateRequirement? bestTemplate = null;
             string bestImagePath = "";
             GoblinEvidenceTemplateMatch bestMatch = new(0, Point.Empty, Point.Empty, Size.Empty);
@@ -305,7 +328,9 @@ namespace GoblinFarmer
                     continue;
                 }
 
-                GoblinEvidenceTemplateMatch match = PortBestGoblinEvidenceTemplateMatchInDiabloRegion(imagePath, referenceRegion);
+                Stopwatch templateStopwatch = Stopwatch.StartNew();
+                GoblinEvidenceTemplateMatch match = PortBestGoblinEvidenceTemplateMatch(scanContext, imagePath);
+                PortRecordGoblinEvidenceTiming($"TemplateMatch:{PortNormalizeGoblinObservationSource(template.Source)}", templateStopwatch.Elapsed);
                 if (bestTemplate == null || match.Confidence > bestMatch.Confidence)
                 {
                     bestTemplate = template;
@@ -336,7 +361,7 @@ namespace GoblinFarmer
             if (!PortTryValidateGoblinJournalNameMatch(
                 bestTemplate,
                 bestImagePath,
-                referenceRegion,
+                scanContext,
                 bestMatch,
                 out double journalNameConfidence,
                 out Point journalNameMatchPoint,
@@ -385,6 +410,7 @@ namespace GoblinFarmer
                 bestTemplate.Source,
                 $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}{journalNameValidationNotes}{PortMinimapColorNotes(bestTemplate, bestMatch)}",
                 goblinType);
+            PortRecordGoblinEvidenceTiming($"DetectBest:{PortNormalizeGoblinObservationSource(bestTemplate.Source)}", sourceStopwatch.Elapsed);
             return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch, []);
         }
 
@@ -809,50 +835,108 @@ namespace GoblinFarmer
             }
         }
 
-        private GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatchInDiabloRegion(string imagePath, Rectangle referenceRegion)
+        private GoblinEvidenceScanContext? PortCreateGoblinEvidenceScanContext(Rectangle referenceRegion, string reason)
         {
-            if (!File.Exists(imagePath) || !PortTryGetDiabloRect(out RECT rect))
+            if (!PortTryGetDiabloRect(out RECT rect))
             {
-                return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, Size.Empty);
+                return null;
             }
 
             Rectangle screenRegion = PortScaleReferenceRectangle(referenceRegion, rect);
             screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
             if (screenRegion.Width <= 0 || screenRegion.Height <= 0)
             {
-                return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, Size.Empty);
+                return null;
             }
 
-            using Bitmap screenshot = new(screenRegion.Width, screenRegion.Height);
+            Bitmap screenshot = new(screenRegion.Width, screenRegion.Height);
             using (Graphics graphics = Graphics.FromImage(screenshot))
             {
                 graphics.CopyFromScreen(screenRegion.Left, screenRegion.Top, 0, 0, screenshot.Size);
             }
 
-            using OpenCvSharp.Mat rawScreenMat = OpenCvSharp.Extensions.BitmapConverter.ToMat(screenshot);
-            using OpenCvSharp.Mat screenMat = new();
+            OpenCvSharp.Mat rawScreenMat = OpenCvSharp.Extensions.BitmapConverter.ToMat(screenshot);
+            OpenCvSharp.Mat screenMat = new();
             OpenCvSharp.Cv2.CvtColor(rawScreenMat, screenMat, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
+            rawScreenMat.Dispose();
+            return new GoblinEvidenceScanContext(referenceRegion, screenRegion, screenshot, screenMat, reason);
+        }
 
-            using OpenCvSharp.Mat templateMat = OpenCvSharp.Cv2.ImRead(imagePath, OpenCvSharp.ImreadModes.Color);
-            if (templateMat.Empty() || templateMat.Width > screenMat.Width || templateMat.Height > screenMat.Height)
+        private GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatch(GoblinEvidenceScanContext scanContext, string imagePath)
+        {
+            if (!File.Exists(imagePath))
+            {
+                return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, Size.Empty);
+            }
+
+            using OpenCvSharp.Mat templateMat = PortGetGoblinEvidenceTemplateMat(imagePath);
+            if (templateMat.Empty() || templateMat.Width > scanContext.ScreenMat.Width || templateMat.Height > scanContext.ScreenMat.Height)
             {
                 return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, new Size(templateMat.Width, templateMat.Height));
             }
 
             using OpenCvSharp.Mat result = new();
-            OpenCvSharp.Cv2.MatchTemplate(screenMat, templateMat, result, OpenCvSharp.TemplateMatchModes.CCoeffNormed);
+            OpenCvSharp.Cv2.MatchTemplate(scanContext.ScreenMat, templateMat, result, OpenCvSharp.TemplateMatchModes.CCoeffNormed);
             OpenCvSharp.Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out OpenCvSharp.Point maxLoc);
             Point matchPoint = new(maxLoc.X, maxLoc.Y);
-            Point screenMatchPoint = new(screenRegion.Left + maxLoc.X, screenRegion.Top + maxLoc.Y);
+            Point screenMatchPoint = new(scanContext.ScreenRegion.Left + maxLoc.X, scanContext.ScreenRegion.Top + maxLoc.Y);
             Size templateSize = new(templateMat.Width, templateMat.Height);
-            GoblinMinimapColorClassification minimapColor = PortClassifyGoblinMinimapColor(screenshot, matchPoint, templateSize);
+            GoblinMinimapColorClassification minimapColor = PortClassifyGoblinMinimapColor(scanContext.Screenshot, matchPoint, templateSize);
             return new GoblinEvidenceTemplateMatch(maxVal, matchPoint, screenMatchPoint, templateSize, minimapColor);
+        }
+
+        private OpenCvSharp.Mat PortGetGoblinEvidenceTemplateMat(string imagePath)
+        {
+            try
+            {
+                FileInfo fileInfo = new(imagePath);
+                if (!fileInfo.Exists)
+                {
+                    return new OpenCvSharp.Mat();
+                }
+
+                lock (portGoblinEvidenceLock)
+                {
+                    if (portGoblinEvidenceTemplateMatCache.TryGetValue(imagePath, out GoblinEvidenceCachedTemplate? cached) &&
+                        cached.LastWriteUtc == fileInfo.LastWriteTimeUtc &&
+                        cached.Length == fileInfo.Length)
+                    {
+                        return cached.TemplateMat.Clone();
+                    }
+                }
+
+                using OpenCvSharp.Mat loaded = OpenCvSharp.Cv2.ImRead(imagePath, OpenCvSharp.ImreadModes.Color);
+                if (loaded.Empty())
+                {
+                    return new OpenCvSharp.Mat();
+                }
+
+                OpenCvSharp.Mat cachedMat = loaded.Clone();
+                lock (portGoblinEvidenceLock)
+                {
+                    if (portGoblinEvidenceTemplateMatCache.TryGetValue(imagePath, out GoblinEvidenceCachedTemplate? old))
+                    {
+                        old.TemplateMat.Dispose();
+                    }
+
+                    portGoblinEvidenceTemplateMatCache[imagePath] = new GoblinEvidenceCachedTemplate(
+                        cachedMat,
+                        fileInfo.LastWriteTimeUtc,
+                        fileInfo.Length);
+                    return cachedMat.Clone();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error($"Goblin evidence template cache load failed: {imagePath}", ex);
+                return new OpenCvSharp.Mat();
+            }
         }
 
         private bool PortTryValidateGoblinJournalNameMatch(
             GoblinEvidenceTemplateRequirement template,
             string imagePath,
-            Rectangle referenceRegion,
+            GoblinEvidenceScanContext scanContext,
             GoblinEvidenceTemplateMatch lineMatch,
             out double nameConfidence,
             out Point nameMatchPoint,
@@ -867,31 +951,13 @@ namespace GoblinFarmer
                 return true;
             }
 
-            if (!File.Exists(imagePath) || !PortTryGetDiabloRect(out RECT rect))
+            if (!File.Exists(imagePath))
             {
                 reason = "JournalNameValidationUnavailable";
                 return false;
             }
 
-            Rectangle screenRegion = PortScaleReferenceRectangle(referenceRegion, rect);
-            screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
-            if (screenRegion.Width <= 0 || screenRegion.Height <= 0)
-            {
-                reason = "JournalNameValidationInvalidScreenRegion";
-                return false;
-            }
-
-            using Bitmap screenshot = new(screenRegion.Width, screenRegion.Height);
-            using (Graphics graphics = Graphics.FromImage(screenshot))
-            {
-                graphics.CopyFromScreen(screenRegion.Left, screenRegion.Top, 0, 0, screenshot.Size);
-            }
-
-            using OpenCvSharp.Mat rawScreenMat = OpenCvSharp.Extensions.BitmapConverter.ToMat(screenshot);
-            using OpenCvSharp.Mat screenMat = new();
-            OpenCvSharp.Cv2.CvtColor(rawScreenMat, screenMat, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
-
-            using OpenCvSharp.Mat templateMat = OpenCvSharp.Cv2.ImRead(imagePath, OpenCvSharp.ImreadModes.Color);
+            using OpenCvSharp.Mat templateMat = PortGetGoblinEvidenceTemplateMat(imagePath);
             if (templateMat.Empty() || templateMat.Width <= 0 || templateMat.Height <= 0)
             {
                 reason = "JournalNameValidationTemplateUnreadable";
@@ -910,7 +976,7 @@ namespace GoblinFarmer
                 Math.Max(0, lineMatch.MatchPoint.Y - 6),
                 nameTemplateRect.Width + 24,
                 nameTemplateRect.Height + 12);
-            searchRect = Rectangle.Intersect(new Rectangle(Point.Empty, new Size(screenMat.Width, screenMat.Height)), searchRect);
+            searchRect = Rectangle.Intersect(new Rectangle(Point.Empty, new Size(scanContext.ScreenMat.Width, scanContext.ScreenMat.Height)), searchRect);
             if (searchRect.Width < nameTemplateRect.Width || searchRect.Height < nameTemplateRect.Height)
             {
                 reason = "JournalNameValidationSearchTooSmall";
@@ -925,7 +991,7 @@ namespace GoblinFarmer
                     nameTemplateRect.Width,
                     nameTemplateRect.Height));
             using OpenCvSharp.Mat nameSearchMat = new(
-                screenMat,
+                scanContext.ScreenMat,
                 new OpenCvSharp.Rect(
                     searchRect.X,
                     searchRect.Y,
@@ -989,7 +1055,54 @@ namespace GoblinFarmer
 
         private GoblinEvidenceTemplateCatalog PortGoblinEvidenceTemplateCatalog()
         {
-            return GoblinEvidenceTemplateRequirements.DiscoverTemplates(PortGoblinEvidenceTemplateDirectory());
+            string directory = PortGoblinEvidenceTemplateDirectory();
+            DateTime directoryWriteUtc = PortGoblinEvidenceTemplateDirectoryWriteUtc(directory);
+            lock (portGoblinEvidenceLock)
+            {
+                if (portCachedGoblinEvidenceTemplateCatalog != null &&
+                    string.Equals(portCachedGoblinEvidenceTemplateCatalogDirectory, directory, StringComparison.OrdinalIgnoreCase) &&
+                    portCachedGoblinEvidenceTemplateCatalogWriteUtc == directoryWriteUtc)
+                {
+                    return portCachedGoblinEvidenceTemplateCatalog;
+                }
+            }
+
+            GoblinEvidenceTemplateCatalog catalog = GoblinEvidenceTemplateRequirements.DiscoverTemplates(directory);
+            lock (portGoblinEvidenceLock)
+            {
+                portCachedGoblinEvidenceTemplateCatalog = catalog;
+                portCachedGoblinEvidenceTemplateCatalogDirectory = directory;
+                portCachedGoblinEvidenceTemplateCatalogWriteUtc = directoryWriteUtc;
+            }
+
+            return catalog;
+        }
+
+        private static DateTime PortGoblinEvidenceTemplateDirectoryWriteUtc(string directory)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                {
+                    return DateTime.MinValue;
+                }
+
+                DateTime latest = Directory.GetLastWriteTimeUtc(directory);
+                foreach (string file in Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly))
+                {
+                    DateTime writeUtc = File.GetLastWriteTimeUtc(file);
+                    if (writeUtc > latest)
+                    {
+                        latest = writeUtc;
+                    }
+                }
+
+                return latest;
+            }
+            catch
+            {
+                return DateTime.MinValue;
+            }
         }
 
         private string PortGoblinEvidenceTemplateDirectory()
@@ -1758,417 +1871,32 @@ namespace GoblinFarmer
             AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(reason)} previousDisplayed={hadDisplayedObservation}");
         }
 
-        private string PortCaptureGoblinEvidenceScreenshot(GoblinEvidenceType type, DateTime timestamp)
-        {
-            try
-            {
-                string directory = DebugManager.GoblinEvidenceDirectory;
-                Directory.CreateDirectory(directory);
-
-                string safeType = PortSafeScreenshotName(type.ToString(), "Unknown");
-                string path = Path.Combine(directory, $"GoblinEvidence_{timestamp:yyyyMMdd_HHmmss}_{safeType}.png");
-                string savedPath = PortCaptureDiabloScreenshotToFile(path, $"GoblinEvidence:{type}");
-                if (!string.IsNullOrWhiteSpace(savedPath))
-                {
-                    DebugManager.RecordDebugScreenshotPath(savedPath);
-                }
-
-                // TODO: Save cropped evidence-region screenshots after journal/minimap regions are calibrated.
-                return savedPath;
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error($"Goblin evidence screenshot capture failed: type={type}", ex);
-                return "";
-            }
-        }
-
-        private void PortQueueGoblinRecognitionDebugCapture(string source)
-        {
-            if (!AppSettings.IsVsDebugProfile)
-            {
-                AppLogger.Info($"GoblinRecognitionCaptureSkipped: reason=NotVsDebugProfile; source={PortLogField(source)}");
-                return;
-            }
-
-            string normalizedSource = string.IsNullOrWhiteSpace(source) ? "VsDebugCaptureButton" : source.Trim();
-            AppLogger.Info(
-                "GoblinRecognitionCaptureQueued: " +
-                $"source={PortLogField(normalizedSource)}; " +
-                $"currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; " +
-                $"diabloRunning={IsDiabloRunning()}; " +
-                $"diabloActive={PortDiabloIsActive()}");
-            _ = Task.Run(() => PortSaveGoblinRecognitionDebugCapture(normalizedSource));
-        }
-
-        private void PortSaveGoblinRecognitionDebugCapture(string source)
-        {
-            string savedFullscreenPath = "";
-            string savedMinimapPath = "";
-            string savedJournalPath = "";
-            string metadataPath = "";
-            try
-            {
-                DateTime timestamp = DateTime.Now;
-                string directory = Path.Combine(DebugManager.GoblinEvidenceDirectory, "ManualCaptures");
-                Directory.CreateDirectory(directory);
-
-                string safeSource = PortSafeScreenshotName(source, "Capture");
-                string currentArea = PortDisplayLocation(portLastConfirmedLocation);
-                string safeArea = PortSafeScreenshotName(currentArea, "UnknownArea");
-                string prefix = $"GoblinCapture_{timestamp:yyyyMMdd_HHmmss_fff}_{safeSource}_{safeArea}";
-
-                string fullscreenPath = Path.Combine(directory, $"{prefix}_Fullscreen.png");
-                string minimapPath = Path.Combine(directory, $"{prefix}_Minimap.png");
-                string journalPath = Path.Combine(directory, $"{prefix}_Journal.png");
-                metadataPath = Path.Combine(directory, $"{prefix}_Metadata.txt");
-
-                savedFullscreenPath = PortCaptureDiabloScreenshotToFile(fullscreenPath, $"GoblinRecognitionCapture:{source}:Fullscreen");
-                if (!string.IsNullOrWhiteSpace(savedFullscreenPath))
-                {
-                    DebugManager.RecordDebugScreenshotPath(savedFullscreenPath);
-                }
-
-                savedMinimapPath = PortCaptureGoblinEncounterRegionCrop("ManualCaptureMinimap", PortGoblinEvidenceMinimapRegion(), minimapPath, timestamp);
-                savedJournalPath = PortCaptureGoblinEncounterRegionCrop("ManualCaptureJournal", PortGoblinEvidenceJournalRegion(), journalPath, timestamp);
-
-                GoblinObservationRecord? displayedObservation;
-                string displayedObservationStatus;
-                lock (portGoblinTrackerLock)
-                {
-                    displayedObservation = portDisplayedGoblinObservation;
-                    displayedObservationStatus = portDisplayedGoblinObservationStatus;
-                }
-
-                List<string> metadata =
-                [
-                    "Goblin Recognition Manual Capture",
-                    "Purpose=Manual image-recognition troubleshooting only",
-                    $"CreatedLocal={timestamp:O}",
-                    $"CreatedUtc={timestamp.ToUniversalTime():O}",
-                    $"Source={source}",
-                    $"CurrentArea={currentArea}",
-                    $"CombatActive={portCombatRunning}",
-                    $"CombatStopping={portCombatStopping}",
-                    $"AutomationRunning={isAutomationRunning}",
-                    $"DiabloRunning={IsDiabloRunning()}",
-                    $"DiabloActive={PortDiabloIsActive()}",
-                    $"FullscreenPath={savedFullscreenPath}",
-                    $"MinimapPath={savedMinimapPath}",
-                    $"JournalPath={savedJournalPath}",
-                    $"MinimapReferenceRegion={FormatRectangle(PortGoblinEvidenceMinimapRegion())}",
-                    $"JournalReferenceRegion={FormatRectangle(PortGoblinEvidenceJournalRegion())}",
-                    $"LastObservationStatus={displayedObservationStatus}",
-                ];
-
-                if (displayedObservation != null)
-                {
-                    metadata.Add($"LastObservationSource={displayedObservation.Source}");
-                    metadata.Add($"LastObservationType={displayedObservation.GoblinType}");
-                    metadata.Add($"LastObservationArea={PortDisplayLocation(displayedObservation.AreaKey)}");
-                    metadata.Add($"LastObservationReason={displayedObservation.Reason}");
-                    metadata.Add($"LastObservationDuplicateState={displayedObservation.DuplicateState}");
-                    metadata.Add($"LastObservationTimestampUtc={displayedObservation.TimestampUtc:O}");
-                }
-
-                File.WriteAllLines(metadataPath, metadata);
-
-                AppLogger.Info(
-                    "GoblinRecognitionCaptureSaved: " +
-                    $"source={PortLogField(source)}; " +
-                    $"currentArea={PortLogField(currentArea)}; " +
-                    $"fullscreenPath={PortLogField(savedFullscreenPath)}; " +
-                    $"minimapPath={PortLogField(savedMinimapPath)}; " +
-                    $"journalPath={PortLogField(savedJournalPath)}; " +
-                    $"metadataPath={PortLogField(metadataPath)}; " +
-                    "createdOnlyByButton=True; " +
-                    "counterWorkflowCapturesRemainAutomatic=True");
-
-                if (InvokeRequired)
-                {
-                    BeginInvoke(new Action(() => PortShowSplash("Goblin capture saved", 2000)));
-                }
-                else
-                {
-                    PortShowSplash("Goblin capture saved", 2000);
-                }
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error($"Goblin recognition capture failed: source={source}; metadataPath={metadataPath}", ex);
-                if (InvokeRequired)
-                {
-                    BeginInvoke(new Action(() => PortShowSplash("Goblin capture failed", 2500)));
-                }
-                else
-                {
-                    PortShowSplash("Goblin capture failed", 2500);
-                }
-            }
-        }
-
-        private void PortQueueGoblinEncounterDebugCapture(
-            string countSource,
-            string evidenceSource,
-            string goblinType,
-            string areaKey,
-            string displayLocation,
-            int total)
-        {
-            if (!AppSettings.IsVsDebugProfile)
-            {
-                return;
-            }
-
-            string normalizedType = GoblinTypeNormalizer.Normalize(goblinType);
-            string normalizedCountSource = string.IsNullOrWhiteSpace(countSource) ? "Unknown" : countSource.Trim();
-            string normalizedEvidenceSource = string.IsNullOrWhiteSpace(evidenceSource) ? "Unknown" : evidenceSource.Trim();
-            string normalizedAreaKey = PortDisplayLocation(areaKey);
-            string normalizedDisplayLocation = PortDisplayLocation(displayLocation);
-            _ = Task.Run(() => PortSaveGoblinEncounterDebugCapture(
-                normalizedCountSource,
-                normalizedEvidenceSource,
-                normalizedType,
-                normalizedAreaKey,
-                normalizedDisplayLocation,
-                total));
-        }
-
-        private void PortSaveGoblinEncounterDebugCapture(
-            string countSource,
-            string evidenceSource,
-            string goblinType,
-            string areaKey,
-            string displayLocation,
-            int total)
-        {
-            try
-            {
-                DateTime timestamp = DateTime.Now;
-                string directory = Path.Combine(DebugManager.GoblinEvidenceDirectory, "EncounterCaptures");
-                Directory.CreateDirectory(directory);
-
-                string safeSource = PortSafeScreenshotName(countSource, "Count");
-                string safeEvidenceSource = PortSafeScreenshotName(evidenceSource, "Evidence");
-                string safeType = PortSafeScreenshotName(goblinType, "UnknownGoblin");
-                string safeArea = PortSafeScreenshotName(areaKey, "UnknownArea");
-                string prefix = $"GoblinEncounter_{timestamp:yyyyMMdd_HHmmss_fff}_{safeSource}_{safeEvidenceSource}_{safeType}_{safeArea}";
-
-                string fullscreenPath = Path.Combine(directory, $"{prefix}_Fullscreen.png");
-                string minimapPath = Path.Combine(directory, $"{prefix}_Minimap.png");
-                string journalPath = Path.Combine(directory, $"{prefix}_Journal.png");
-                string metadataPath = Path.Combine(directory, $"{prefix}_Metadata.txt");
-
-                string savedFullscreenPath = PortCaptureDiabloScreenshotToFile(fullscreenPath, $"GoblinEncounter:{countSource}:Fullscreen");
-                if (!string.IsNullOrWhiteSpace(savedFullscreenPath))
-                {
-                    DebugManager.RecordDebugScreenshotPath(savedFullscreenPath);
-                }
-
-                string savedMinimapPath = PortCaptureGoblinEncounterRegionCrop("Minimap", PortGoblinEvidenceMinimapRegion(), minimapPath, timestamp);
-                string savedJournalPath = PortCaptureGoblinEncounterRegionCrop("Journal", PortGoblinEvidenceJournalRegion(), journalPath, timestamp);
-                File.WriteAllLines(metadataPath,
-                [
-                    "Goblin Encounter Debug Capture",
-                    $"CreatedLocal={timestamp:O}",
-                    $"CreatedUtc={timestamp.ToUniversalTime():O}",
-                    $"CountSource={countSource}",
-                    $"EvidenceSource={evidenceSource}",
-                    $"GoblinType={goblinType}",
-                    $"AreaKey={areaKey}",
-                    $"DisplayLocation={displayLocation}",
-                    $"Total={total}",
-                    $"FullscreenPath={savedFullscreenPath}",
-                    $"MinimapPath={savedMinimapPath}",
-                    $"JournalPath={savedJournalPath}",
-                    $"MinimapReferenceRegion={FormatRectangle(PortGoblinEvidenceMinimapRegion())}",
-                    $"JournalReferenceRegion={FormatRectangle(PortGoblinEvidenceJournalRegion())}",
-                ]);
-
-                AppLogger.Info(
-                    "GoblinEncounterCaptureSaved: " +
-                    $"countSource={PortLogField(countSource)}; " +
-                    $"evidenceSource={PortLogField(evidenceSource)}; " +
-                    $"goblinType={PortLogField(goblinType)}; " +
-                    $"areaKey={PortLogField(areaKey)}; " +
-                    $"displayLocation={PortLogField(displayLocation)}; " +
-                    $"total={total}; " +
-                    $"fullscreenPath={PortLogField(savedFullscreenPath)}; " +
-                    $"minimapPath={PortLogField(savedMinimapPath)}; " +
-                    $"journalPath={PortLogField(savedJournalPath)}; " +
-                    $"metadataPath={PortLogField(metadataPath)}; " +
-                    "reviewIncludes=MinimapAndJournalOnly");
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error($"Goblin encounter debug capture failed: source={countSource}; type={goblinType}; area={areaKey}", ex);
-            }
-        }
-
-        private string PortCaptureGoblinEncounterRegionCrop(string label, Rectangle referenceRegion, string path, DateTime timestamp)
-        {
-            try
-            {
-                if (!PortTryGetDiabloRect(out RECT diabloRect))
-                {
-                    AppLogger.Info($"GoblinEncounterCaptureCropSkipped: label={label}; reason=DiabloRectUnavailable; scanRegion={FormatRectangle(referenceRegion)}");
-                    return "";
-                }
-
-                Rectangle screenRegion = PortScaleReferenceRectangle(referenceRegion, diabloRect);
-                screenRegion = Rectangle.Intersect(SystemInformation.VirtualScreen, screenRegion);
-                if (screenRegion.Width <= 0 || screenRegion.Height <= 0)
-                {
-                    AppLogger.Info($"GoblinEncounterCaptureCropSkipped: label={label}; reason=InvalidScreenRegion; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
-                    return "";
-                }
-
-                RECT captureRect = new()
-                {
-                    Left = screenRegion.Left,
-                    Top = screenRegion.Top,
-                    Right = screenRegion.Right,
-                    Bottom = screenRegion.Bottom,
-                };
-                string savedPath = PortCaptureScreenRectangleToFile(captureRect, path, $"GoblinEncounter:{label}");
-                if (!string.IsNullOrWhiteSpace(savedPath))
-                {
-                    DebugManager.RecordDebugScreenshotPath(savedPath);
-                }
-
-                AppLogger.Info($"GoblinEncounterCaptureCropSaved: label={label}; timestamp={timestamp:O}; path={PortLogField(savedPath)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={FormatRectangle(screenRegion)}");
-                return savedPath;
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error($"Goblin encounter capture crop failed: label={label}", ex);
-                return "";
-            }
-        }
-
-        private void PortCaptureGoblinEvidenceCalibrationSnapshot()
-        {
-            if (Interlocked.Exchange(ref portGoblinEvidenceCalibrationCaptureActive, 1) == 1)
-            {
-                AppLogger.Info("GoblinCalibration: Snapshot skipped; capture already active");
-                return;
-            }
-
-            Task.Run(() =>
-            {
-                try
-                {
-                    PortSaveGoblinEvidenceCalibrationSnapshot();
-                }
-                catch (Exception ex)
-                {
-                    AppLogger.Error("GoblinCalibration: Snapshot failed.", ex);
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref portGoblinEvidenceCalibrationCaptureActive, 0);
-                    DebugManager.CleanupOldGoblinEvidence(AppSettings.Debug.GoblinEvidenceRetentionCount);
-                }
-            });
-        }
-
-        private void PortSaveGoblinEvidenceCalibrationSnapshot()
-        {
-            DateTime timestamp = DateTime.Now;
-            string directory = Path.Combine(DebugManager.GoblinEvidenceDirectory, "Calibration");
-            Directory.CreateDirectory(directory);
-
-            string prefix = $"GoblinCalibration_{timestamp:yyyyMMdd_HHmmss}";
-            string fullPath = Path.Combine(directory, $"{prefix}_Full.png");
-            string minimapPath = Path.Combine(directory, $"{prefix}_Minimap.png");
-            string journalPath = Path.Combine(directory, $"{prefix}_Journal.png");
-            string metadataPath = Path.Combine(directory, $"{prefix}_Metadata.txt");
-
-            string savedFullPath = PortCaptureDiabloScreenshotToFile(fullPath, "GoblinCalibration");
-            if (string.IsNullOrWhiteSpace(savedFullPath) || !File.Exists(savedFullPath))
-            {
-                AppLogger.Info("GoblinCalibration: Snapshot failed; reason=source screenshot unavailable");
-                return;
-            }
-
-            using (Bitmap screenshot = new(savedFullPath))
-            {
-                // TODO: These are calibration starter regions for 2560x1440 and may need tuning per resolution/UI scale.
-                Rectangle minimapRegion = PortScaleAndClampGoblinCalibrationRegion(
-                    GoblinEvidenceCalibrationMinimapReferenceRegion,
-                    screenshot.Size);
-                Rectangle journalRegion = PortScaleAndClampGoblinCalibrationRegion(
-                    GoblinEvidenceCalibrationJournalReferenceRegion,
-                    screenshot.Size);
-
-                string savedMinimapPath = PortSaveGoblinCalibrationCrop(screenshot, minimapRegion, minimapPath, "Minimap");
-                string savedJournalPath = PortSaveGoblinCalibrationCrop(screenshot, journalRegion, journalPath, "Journal");
-
-                string currentLocation = PortDisplayLocation(portLastConfirmedLocation);
-                File.WriteAllLines(metadataPath,
-                [
-                    $"Timestamp: {timestamp:yyyy-MM-dd HH:mm:ss}",
-                    $"Screenshot: {screenshot.Width}x{screenshot.Height}",
-                    $"Combat Active: {portCombatRunning}",
-                    $"Combat Profile: {PortGoblinEvidenceCombatProfileDisplayName()}",
-                    $"Current Location: {currentLocation}",
-                    $"Full Screenshot Path: {savedFullPath}",
-                    $"Minimap Crop Path: {savedMinimapPath}",
-                    $"Journal Crop Path: {savedJournalPath}",
-                    $"Minimap Region: {PortFormatGoblinCalibrationRegion(minimapRegion)}",
-                    $"Journal Region: {PortFormatGoblinCalibrationRegion(journalRegion)}",
-                ]);
-
-                DebugManager.RecordDebugScreenshotPath(savedFullPath);
-                AppLogger.Info("GoblinCalibration: Snapshot saved");
-                AppLogger.Info($"GoblinCalibration: Full={PortLogField(savedFullPath)}");
-                AppLogger.Info($"GoblinCalibration: Minimap={PortLogField(PortDisplayLocation(savedMinimapPath))}; Region={PortFormatGoblinCalibrationRegion(minimapRegion)}");
-                AppLogger.Info($"GoblinCalibration: Journal={PortLogField(PortDisplayLocation(savedJournalPath))}; Region={PortFormatGoblinCalibrationRegion(journalRegion)}");
-                AppLogger.Info($"GoblinCalibration: Metadata={PortLogField(metadataPath)}");
-            }
-        }
-
-        private static Rectangle PortScaleAndClampGoblinCalibrationRegion(Rectangle referenceRegion, Size screenshotSize)
-        {
-            Rectangle scaled = new(
-                (int)Math.Round(referenceRegion.X * screenshotSize.Width / (double)PortReferenceWidth),
-                (int)Math.Round(referenceRegion.Y * screenshotSize.Height / (double)PortReferenceHeight),
-                (int)Math.Round(referenceRegion.Width * screenshotSize.Width / (double)PortReferenceWidth),
-                (int)Math.Round(referenceRegion.Height * screenshotSize.Height / (double)PortReferenceHeight));
-
-            return Rectangle.Intersect(new Rectangle(Point.Empty, screenshotSize), scaled);
-        }
-
-        private static string PortSaveGoblinCalibrationCrop(Bitmap source, Rectangle cropRegion, string path, string label)
-        {
-            if (cropRegion.Width <= 0 || cropRegion.Height <= 0)
-            {
-                AppLogger.Info($"GoblinCalibration: {label} crop skipped; reason=empty crop after clamp; region={PortFormatGoblinCalibrationRegion(cropRegion)}");
-                return "";
-            }
-
-            using Bitmap crop = source.Clone(cropRegion, source.PixelFormat);
-            crop.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            return path;
-        }
-
-        private string PortGoblinEvidenceCombatProfileDisplayName()
-        {
-            return portCombatClass switch
-            {
-                "monk" => "Monk",
-                "witch_doctor" => "Witch Doctor",
-                "demon_hunter" => "Demon Hunter",
-                "" => "None",
-                _ => portCombatClass,
-            };
-        }
-
-        private static string PortFormatGoblinCalibrationRegion(Rectangle region)
-        {
-            return $"X={region.X} Y={region.Y} W={region.Width} H={region.Height}";
-        }
 
         private sealed record GoblinJournalStaleSuppressedState(DateTime FirstSuppressedUtc, DateTime LastSeenUtc);
+
+        private sealed record GoblinEvidenceCachedTemplate(
+            OpenCvSharp.Mat TemplateMat,
+            DateTime LastWriteUtc,
+            long Length);
+
+        private sealed class GoblinEvidenceScanContext(
+            Rectangle referenceRegion,
+            Rectangle screenRegion,
+            Bitmap screenshot,
+            OpenCvSharp.Mat screenMat,
+            string reason) : IDisposable
+        {
+            public Rectangle ReferenceRegion { get; } = referenceRegion;
+            public Rectangle ScreenRegion { get; } = screenRegion;
+            public Bitmap Screenshot { get; } = screenshot;
+            public OpenCvSharp.Mat ScreenMat { get; } = screenMat;
+            public string Reason { get; } = reason;
+
+            public void Dispose()
+            {
+                ScreenMat.Dispose();
+                Screenshot.Dispose();
+            }
+        }
     }
 }

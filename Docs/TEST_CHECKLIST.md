@@ -17,6 +17,8 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Automatic counts still create decision bundles and encounter captures automatically.
 - The Capture button creates manual recognition files only when clicked.
 - VS Debug can use ignored `Config\AppSettings.local.json` for private local paths/toggles while tracked `Config\AppSettings.json` stays sanitized.
+- VS Debug/debug sessions write `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` when observations or automatic-count decisions occur.
+- Logs include throttled `GoblinEvidenceTimingSummary` scan-stage timing output during active Goblin Evidence scanning.
 - Default areas count once per game.
 - PF1, PF2, and Stinging Winds allow two counts per game and suppress the third.
 - Blocked count areas suppress with `BlockedArea` and do not consume area slots.
@@ -41,5 +43,6 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 ## Debug Artifacts
 
 - Debug package includes latest logs, manifests, session info, route summaries, Goblin Tracker summary, Goblin Evidence, decision bundles, encounter captures, and observation diagnostics.
+- Debug package/log review can use `GoblinTrackerEvents.jsonl` plus timing summaries to correlate observation, suppression, and count latency.
 - Encounter captures save fullscreen, minimap, journal, and metadata for accepted Goblin Tracker counts in VS Debug.
 - Manual recognition captures save fullscreen, minimap, journal, and metadata only when `Capture` is clicked.

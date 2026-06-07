@@ -881,14 +881,16 @@ static void TestGoblinAutomaticMinimapCountsRequireStrongConfidence()
 {
     string repoRoot = FindRepositoryRootForTests();
     string sessionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
     string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+    string autoCountCombinedSource = sessionSource + autoCountSource;
 
     AssertTrue(evidenceModelSource.Contains("EvidenceConfidence", StringComparison.Ordinal), "observation records should carry evidence confidence into auto-count decisions");
     AssertTrue(sessionSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidence = 0.85", StringComparison.Ordinal), "normal automatic minimap counts should accept strong evidence below the ambiguity-pair gate");
     AssertTrue(sessionSource.Contains("PortAutomaticGoblinAmbiguousMinimapCountMinimumConfidence = 0.90", StringComparison.Ordinal), "Gilded/Malevolent automatic minimap counts should keep the stricter ambiguity-pair gate");
-    AssertTrue(sessionSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidenceFor", StringComparison.Ordinal), "automatic minimap counts should use a goblin-type-specific confidence gate");
-    AssertTrue(sessionSource.Contains("MinimapConfidencePendingJournal", StringComparison.Ordinal), "low-confidence minimap auto-count attempts should suppress and wait for stronger evidence");
-    AssertTrue(sessionSource.Contains("minimapAutoCountMinConfidence", StringComparison.Ordinal), "auto-count diagnostics should report the minimap confidence gate");
+    AssertTrue(autoCountCombinedSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidenceFor", StringComparison.Ordinal), "automatic minimap counts should use a goblin-type-specific confidence gate");
+    AssertTrue(autoCountSource.Contains("MinimapConfidencePendingJournal", StringComparison.Ordinal), "low-confidence minimap auto-count attempts should suppress and wait for stronger evidence");
+    AssertTrue(autoCountSource.Contains("minimapAutoCountMinConfidence", StringComparison.Ordinal), "auto-count diagnostics should report the minimap confidence gate");
 }
 
 static void TestGoblinJournalFreshnessStaysAreaStrictAcrossCavernsLevels()
@@ -2184,10 +2186,11 @@ static void TestGoblinAutomaticCountingGateDefaultsDisabled()
     string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
     string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
     string automaticEnabledMethod = ExtractMethodBody(evidenceSource, "private static bool PortGoblinAutomaticCountingEnabled");
     string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
-    string autoCountMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordAutomaticGoblinCount");
+    string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
 
     AssertTrue(appSettingsSource.Contains("public bool EnableAutomaticCounting { get; set; } = false", StringComparison.Ordinal), "automatic goblin counting should default off");
     AssertTrue(configSource.Contains("\"EnableAutomaticCounting\"", StringComparison.Ordinal), "config should expose the automatic counting setting even when a local VS Debug run toggles it");
@@ -2255,23 +2258,23 @@ static void TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly()
     string repoRoot = FindRepositoryRootForTests();
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string hotkeysSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Hotkeys.cs"));
-    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
-    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string evidenceCaptureSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.Captures.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
 
     AssertFalse(hotkeysSource.Contains("PortVkX", StringComparison.Ordinal), "physical X should no longer be a Goblin Tracker count hotkey");
     AssertFalse(hotkeysSource.Contains("PortIncrementGoblinCount", StringComparison.Ordinal), "keyboard hook should not invoke the manual count path");
     AssertTrue(automationSource.Contains("btnGoblinRecognitionCapture", StringComparison.Ordinal), "VS Debug should expose the recognition Capture button");
     AssertTrue(automationSource.Contains("Text = \"Capture\"", StringComparison.Ordinal), "recognition capture button should be labeled Capture");
     AssertTrue(automationSource.Contains("PortQueueGoblinRecognitionDebugCapture(\"VsDebugCaptureButton\")", StringComparison.Ordinal), "Capture button should create files only from an explicit click");
-    AssertTrue(evidenceSource.Contains("ManualCaptures", StringComparison.Ordinal), "manual recognition captures should go to a separate ManualCaptures folder");
-    AssertTrue(evidenceSource.Contains("GoblinRecognitionCaptureQueued", StringComparison.Ordinal), "manual recognition capture should log when it is queued");
-    AssertTrue(evidenceSource.Contains("GoblinRecognitionCaptureSaved", StringComparison.Ordinal), "manual recognition capture should log saved paths");
-    AssertTrue(evidenceSource.Contains("createdOnlyByButton=True", StringComparison.Ordinal), "manual recognition capture logs should make click-only creation explicit");
-    AssertTrue(evidenceSource.Contains("counterWorkflowCapturesRemainAutomatic=True", StringComparison.Ordinal), "manual capture logs should state that counter-workflow captures remain automatic");
-    AssertTrue(evidenceSource.Contains("_Fullscreen.png", StringComparison.Ordinal), "manual recognition capture should save a fullscreen image");
-    AssertTrue(evidenceSource.Contains("_Minimap.png", StringComparison.Ordinal), "manual recognition capture should save a minimap crop");
-    AssertTrue(evidenceSource.Contains("_Journal.png", StringComparison.Ordinal), "manual recognition capture should save a journal crop");
-    AssertTrue(sessionStatsSource.Contains("PortQueueGoblinEncounterDebugCapture(source, observation.Source", StringComparison.Ordinal), "automatic accepted counts should continue creating encounter captures automatically");
+    AssertTrue(evidenceCaptureSource.Contains("ManualCaptures", StringComparison.Ordinal), "manual recognition captures should go to a separate ManualCaptures folder");
+    AssertTrue(evidenceCaptureSource.Contains("GoblinRecognitionCaptureQueued", StringComparison.Ordinal), "manual recognition capture should log when it is queued");
+    AssertTrue(evidenceCaptureSource.Contains("GoblinRecognitionCaptureSaved", StringComparison.Ordinal), "manual recognition capture should log saved paths");
+    AssertTrue(evidenceCaptureSource.Contains("createdOnlyByButton=True", StringComparison.Ordinal), "manual recognition capture logs should make click-only creation explicit");
+    AssertTrue(evidenceCaptureSource.Contains("counterWorkflowCapturesRemainAutomatic=True", StringComparison.Ordinal), "manual capture logs should state that counter-workflow captures remain automatic");
+    AssertTrue(evidenceCaptureSource.Contains("_Fullscreen.png", StringComparison.Ordinal), "manual recognition capture should save a fullscreen image");
+    AssertTrue(evidenceCaptureSource.Contains("_Minimap.png", StringComparison.Ordinal), "manual recognition capture should save a minimap crop");
+    AssertTrue(evidenceCaptureSource.Contains("_Journal.png", StringComparison.Ordinal), "manual recognition capture should save a journal crop");
+    AssertTrue(autoCountSource.Contains("PortQueueGoblinEncounterDebugCapture(source, observation.Source", StringComparison.Ordinal), "automatic accepted counts should continue creating encounter captures automatically");
 }
 
 static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()
@@ -2374,11 +2377,15 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
 {
     string repoRoot = FindRepositoryRootForTests();
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string evidenceCaptureSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.Captures.cs"));
+    string evidenceTimingSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.Timing.cs"));
+    string goblinTrackerEventsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinTrackerEvents.cs"));
     string diagnosticsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Diagnostics.cs"));
     string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
     string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
     string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
     string debugManagerSource = File.ReadAllText(Path.Combine(repoRoot, "DebugManager.cs"));
@@ -2429,9 +2436,9 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertFalse(evidenceSource.Contains("GoblinTrackerNextTestsSaveSkipped", StringComparison.Ordinal), "retired Next Tests close-time logs should be removed");
     AssertFalse(evidenceSource.Contains("PortWriteGoblinTrackerReviewScenarioMetadata", StringComparison.Ordinal), "legacy scenario metadata writer should be removed");
     AssertFalse(debugManagerSource.Contains(retiredEvidenceToken + "Review", StringComparison.Ordinal), "DebugManager should not advertise retired derived-evidence review folders");
-    AssertTrue(evidenceSource.Contains("_Fullscreen", StringComparison.Ordinal), "VS Debug encounter capture should save fullscreen evidence locally");
-    AssertTrue(evidenceSource.Contains("_Minimap", StringComparison.Ordinal), "VS Debug encounter capture should save minimap evidence");
-    AssertTrue(evidenceSource.Contains("_Journal", StringComparison.Ordinal), "VS Debug encounter capture should save journal evidence");
+    AssertTrue(evidenceCaptureSource.Contains("_Fullscreen", StringComparison.Ordinal), "VS Debug encounter capture should save fullscreen evidence locally");
+    AssertTrue(evidenceCaptureSource.Contains("_Minimap", StringComparison.Ordinal), "VS Debug encounter capture should save minimap evidence");
+    AssertTrue(evidenceCaptureSource.Contains("_Journal", StringComparison.Ordinal), "VS Debug encounter capture should save journal evidence");
     AssertTrue(programSource.Contains("static void Main()", StringComparison.Ordinal), "app startup should stay on the normal UI path");
     AssertFalse(programSource.Contains(retiredEvidenceSwitch, StringComparison.Ordinal), "app should not expose a retired derived-evidence CLI");
     AssertFalse(programSource.Contains("TryHandleCommandLine", StringComparison.Ordinal), "app startup should not branch into debug command handling");
@@ -2441,8 +2448,19 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertFalse(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "app code should not carry a duplicate in-app ZIP package creation flow");
     AssertFalse(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "app code should not parse package script output when ZIP export is script-only");
     AssertFalse(evidenceSource.Contains("PortCreateDebugPackage(", StringComparison.Ordinal), "app code should not spawn the ZIP package script from VS Debug review flow");
-    AssertTrue(sessionStatsSource.Contains("PortWriteGoblinDecisionBundle(trace)", StringComparison.Ordinal), "live decision traces should write evidence bundles");
-    AssertTrue(sessionStatsSource.Contains("GoblinDecisionBundleSaved", StringComparison.Ordinal), "live decision bundles should log their saved folder");
+    AssertTrue(autoCountSource.Contains("PortWriteGoblinDecisionBundle(trace)", StringComparison.Ordinal), "live decision traces should write evidence bundles");
+    AssertTrue(autoCountSource.Contains("GoblinDecisionBundleSaved", StringComparison.Ordinal), "live decision bundles should log their saved folder");
+    AssertTrue(File.Exists(Path.Combine(repoRoot, "frmMain.GoblinEvidence.Captures.cs")), "Goblin Evidence capture helpers should be split into a dedicated partial file");
+    AssertTrue(File.Exists(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs")), "automatic count helpers should be split into a dedicated partial file");
+    AssertTrue(evidenceCaptureSource.Contains("PortQueueGoblinRecognitionDebugCapture", StringComparison.Ordinal), "manual recognition capture should live in the capture partial");
+    AssertTrue(autoCountSource.Contains("PortTryRecordAutomaticGoblinCount", StringComparison.Ordinal), "automatic counting should live in the auto-count partial");
+    AssertTrue(evidenceSource.Contains("portGoblinEvidenceTemplateMatCache", StringComparison.Ordinal), "Goblin evidence scans should cache template mats instead of re-reading images every template check");
+    AssertTrue(evidenceSource.Contains("PortCreateGoblinEvidenceScanContext", StringComparison.Ordinal), "Goblin evidence scans should capture each scan region once per source pass");
+    AssertTrue(evidenceSource.Contains("MinimapCandidate", StringComparison.Ordinal) && evidenceSource.Contains("journalPrimary=True", StringComparison.Ordinal), "normal scans should use minimap-first evidence while preserving journal as the primary confirmation when found");
+    AssertTrue(evidenceTimingSource.Contains("GoblinEvidenceTimingSummary", StringComparison.Ordinal), "Goblin Evidence should log scan-stage timing histograms");
+    AssertTrue(goblinTrackerEventsSource.Contains("GoblinTrackerEvents.jsonl", StringComparison.Ordinal), "Goblin Tracker structured JSONL events should be written beside Goblin Evidence diagnostics");
+    AssertTrue(sessionStatsSource.Contains("PortWriteGoblinTrackerJsonEvent", StringComparison.Ordinal), "observation decisions should mirror to structured JSONL events");
+    AssertTrue(autoCountSource.Contains("PortWriteGoblinTrackerJsonEvent", StringComparison.Ordinal), "automatic count decisions should mirror to structured JSONL events");
     AssertTrue(packageScript.Contains("single intentional review package workflow", StringComparison.Ordinal), "debug package script should identify itself as the one review package path");
     AssertTrue(packageScript.Contains("Review export path: single batch/PowerShell ZIP package for VS Debug and Release", StringComparison.Ordinal), "debug package manifest should identify the active review export path");
     AssertTrue(packageScript.Contains("App shutdown artifact creation: skipped by design", StringComparison.Ordinal), "debug package manifest should document quiet app shutdown");
@@ -2469,7 +2487,7 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageScript.Contains("goblin-tracker-summary.txt", StringComparison.Ordinal), "debug packages should include a root Goblin Tracker review summary");
     AssertTrue(packageScript.Contains("goblin-tracker-review.html", StringComparison.Ordinal), "debug packages should include a root review index");
     AssertTrue(packageScript.Contains("Debug\\GoblinEvidence", StringComparison.Ordinal), "debug packages should include current GoblinEvidence diagnostic files");
-    AssertTrue(packageScript.Contains("png|jpg|jpeg|bmp|txt", StringComparison.Ordinal), "debug packages should include image and text evidence from GoblinEvidence folders");
+    AssertTrue(packageScript.Contains("png|jpg|jpeg|bmp|txt|jsonl", StringComparison.Ordinal), "debug packages should include image, text, and structured JSONL evidence from GoblinEvidence folders");
     AssertTrue(packageScript.Contains("Live evidence artifacts:", StringComparison.Ordinal), "debug package summary should report live evidence rather than derived output");
     AssertTrue(packageScript.Contains("DecisionBundles", StringComparison.Ordinal), "debug packages should include live decision bundles");
     AssertTrue(packageScript.Contains("EncounterCaptures", StringComparison.Ordinal), "debug packages should include live encounter captures");
@@ -2496,18 +2514,19 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
 {
     string repoRoot = FindRepositoryRootForTests();
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
-    string autoCountMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordAutomaticGoblinCount");
+    string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
 
     AssertTrue(automationSource.Contains("portGoblinAutoCountEvidenceBySignature", StringComparison.Ordinal), "automatic counting should remember evidence signatures");
     AssertTrue(evidenceSource.Contains("PortGoblinEvidenceSignature(candidate)", StringComparison.Ordinal), "journal/minimap candidates should carry a stable evidence signature");
     AssertTrue(evidenceSource.Contains("PortGoblinEvidenceNoteValue(candidate.Notes, \"Template\")", StringComparison.Ordinal), "evidence signatures should include the template name");
     AssertTrue(evidenceSource.Contains("PortGoblinEvidenceNoteValue(candidate.Notes, \"Kind\")", StringComparison.Ordinal), "evidence signatures should include the evidence kind");
     AssertTrue(evidenceSource.Contains("PortGoblinEvidenceJournalLineBucket(candidate.Notes)", StringComparison.Ordinal), "journal evidence signatures should include a stable journal-row bucket");
-    AssertTrue(sessionStatsSource.Contains("GoblinAreaResolver.NormalizedKey(observation.AreaKey)", StringComparison.Ordinal), "automatic evidence signatures should be scoped by resolved area key");
-    AssertTrue(sessionStatsSource.Contains("PortGoblinAutoCountGlobalEvidenceKey", StringComparison.Ordinal), "automatic counting should also track the underlying journal row independent of current area");
+    AssertTrue(autoCountSource.Contains("GoblinAreaResolver.NormalizedKey(observation.AreaKey)", StringComparison.Ordinal), "automatic evidence signatures should be scoped by resolved area key");
+    AssertTrue(autoCountSource.Contains("PortGoblinAutoCountGlobalEvidenceKey", StringComparison.Ordinal), "automatic counting should also track the underlying journal row independent of current area");
     AssertFalse(ExtractMethodBody(evidenceSource, "private static string PortGoblinEvidenceSignature").Contains("MatchPoint", StringComparison.Ordinal), "evidence signatures should not include volatile match points");
     AssertFalse(ExtractMethodBody(evidenceSource, "private static string PortGoblinEvidenceSignature").Contains("candidate.Notes.Trim()", StringComparison.Ordinal), "evidence signatures should not include the whole diagnostic note string");
     AssertTrue(autoCountMethod.IndexOf("portGoblinAutoCountEvidenceBySignature[autoEvidenceKey] = evidenceState", StringComparison.Ordinal) < autoCountMethod.IndexOf("AutomaticCountingDisabled", StringComparison.Ordinal), "auto-count evidence should be remembered before the disabled gate returns");
@@ -2521,10 +2540,10 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(observeMethod.Contains("PortShouldPreserveDisplayedObservationAgainstIncoming", StringComparison.Ordinal), "suppressed old journal repeats should not replace the Last Observation display");
     AssertTrue(automationSource.Contains("portGoblinAutoCountEncounterByGoblinType", StringComparison.Ordinal), "automatic counting should remember recently counted goblin types across source/template variants");
     AssertTrue(automationSource.Contains("PortAutomaticGoblinJournalEncounterSuppressWindow", StringComparison.Ordinal), "cross-area journal suppression should use an explicit bounded window");
-    AssertTrue(sessionStatsSource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
-    AssertTrue(sessionStatsSource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
-    AssertTrue(sessionStatsSource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
-    AssertTrue(sessionStatsSource.Contains("PortGoblinEvidenceHash", StringComparison.Ordinal), "accepted and suppressed auto-count logs should include a compact evidence hash");
+    AssertTrue(autoCountSource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
+    AssertTrue(autoCountSource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
+    AssertTrue(autoCountSource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
+    AssertTrue(autoCountSource.Contains("PortGoblinEvidenceHash", StringComparison.Ordinal), "accepted and suppressed auto-count logs should include a compact evidence hash");
     AssertTrue(autoCountMethod.Contains("encounterMatch=", StringComparison.Ordinal), "auto-count logs should include the duplicate encounter match reason");
     AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");
     AssertTrue(autoCountMethod.Contains("PortShowSplash($\"Goblin auto-counted", StringComparison.Ordinal), "automatic counting should show a visible notification when it increments");

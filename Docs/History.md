@@ -26,6 +26,8 @@ This file keeps backlog and historical context that no longer belongs in the sho
 - Form close was kept quiet and does not generate packages or loose review files.
 - Tracked root/GitHub-upload EXE copies and retired local GitHub Sync / Exe Updater helper files were removed from the active workflow. Release artifacts now belong under generated `artifacts\` output and GitHub Releases, not source control.
 - Tracked `Config\AppSettings.json` was returned to sanitized defaults; private VS Debug paths/toggles can live in ignored `Config\AppSettings.local.json`.
+- `frmMain.GoblinEvidence.cs` capture helpers and `frmMain.SessionStats.cs` automatic-count helpers were split into dedicated partial files to keep active Goblin Tracker development safer.
+- Goblin Evidence scanning added cached template catalogs, cached OpenCV template mats, one captured scan context per source pass, minimap-first scanning with Journal still preferred as the primary confirmation, throttled `GoblinEvidenceTimingSummary` stage histograms, and structured `GoblinTrackerEvents.jsonl` output.
 - Debug package analysis helpers were added at the ZIP root:
   - `debug-package-analysis.txt`
   - `goblin-tracker-timeline.md`
