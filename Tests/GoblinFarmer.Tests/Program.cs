@@ -64,7 +64,7 @@ Run("Goblin observation mode is enabled by default in Release", TestGoblinObserv
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
-Run("Goblin replay tool is dry-run and packaged", TestGoblinReplayToolIsDryRunAndPackaged);
+Run("Goblin replay tool is dry-run and review package button is one-click", TestGoblinReplayToolIsDryRunAndPackaged);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
@@ -2106,12 +2106,24 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
     string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
+    string createPackageButtonMethod = ExtractMethodBody(evidenceSource, "private void PortCreateReviewDebugPackageFromButton");
 
     AssertTrue(appSettingsSource.Contains("public bool EnableDecisionTrace { get; set; } = false", StringComparison.Ordinal), "Release decision trace should default off unless Debug Mode enables it");
     AssertTrue(appSettingsSource.Contains("settings.GoblinTracker.EnableDecisionTrace = true", StringComparison.Ordinal), "VS Debug/dev defaults should enable decision trace");
     AssertTrue(configSource.Contains("\"EnableDecisionTrace\": true", StringComparison.Ordinal), "project VS Debug config should explicitly expose decision trace");
     AssertTrue(evidenceSource.Contains("PortReplayGoblinEvidenceFolder", StringComparison.Ordinal), "replay folder runner should exist");
-    AssertTrue(evidenceSource.Contains("OpenFileDialog zipDialog", StringComparison.Ordinal), "VS Debug replay should allow selecting a debug package ZIP directly");
+    AssertTrue(automationSource.Contains("Text = \"Create Debug Package\"", StringComparison.Ordinal), "VS Debug button should clearly create a debug package");
+    AssertTrue(automationSource.Contains("PortCreateReviewDebugPackageFromButton()", StringComparison.Ordinal), "VS Debug button should create a package without prompting for replay input");
+    AssertFalse(releaseSource.Contains("PortCreateReviewDebugPackageFromButton", StringComparison.Ordinal), "Release form should not wire the one-click package button unless explicitly requested");
+    AssertFalse(releaseSource.Contains("Create Package", StringComparison.Ordinal), "Release form package UI should remain unchanged unless explicitly requested");
+    AssertFalse(createPackageButtonMethod.Contains("OpenFileDialog", StringComparison.Ordinal), "create package button should not ask for a debug package ZIP");
+    AssertFalse(createPackageButtonMethod.Contains("FolderBrowserDialog", StringComparison.Ordinal), "create package button should not ask for a folder");
+    AssertTrue(createPackageButtonMethod.Contains("PortCreateDebugPackageForReview", StringComparison.Ordinal), "create package button should package the active runtime immediately");
+    AssertTrue(evidenceSource.Contains("PortResolveDebugPackageRuntimeRoot", StringComparison.Ordinal), "debug package creation should resolve the correct runtime root");
+    AssertTrue(evidenceSource.Contains("AppSettings.IsVsDebugProfile && PortTryResolveConfigRoot", StringComparison.Ordinal), "VS Debug packaging should use the project-root config parent");
+    AssertTrue(evidenceSource.Contains("Path.Combine(packageRuntimeRoot, \"DebugPackages\")", StringComparison.Ordinal), "debug package creation should log/discover the package folder from the resolved runtime root");
     AssertTrue(evidenceSource.Contains("SearchOption.AllDirectories", StringComparison.Ordinal), "replay should recursively scan debug package folders");
     AssertTrue(evidenceSource.Contains("PortExtractGoblinReplayZip", StringComparison.Ordinal), "replay should scan ZIP debug packages");
     AssertTrue(evidenceSource.Contains("ZipFile.ExtractToDirectory", StringComparison.Ordinal), "replay ZIP support should extract packages into a bounded temporary workspace");
@@ -2122,10 +2134,9 @@ static void TestGoblinReplayToolIsDryRunAndPackaged()
     AssertTrue(evidenceSource.Contains("GoblinReplayCandidateRanking", StringComparison.Ordinal), "replay should log ranked candidate matches");
     AssertTrue(evidenceSource.Contains("GoblinReplayAreaInference", StringComparison.Ordinal), "replay should log area inference decisions");
     AssertTrue(evidenceSource.Contains("replayComparison", StringComparison.Ordinal), "replay should compare decisions to the previous replay log");
-    AssertTrue(evidenceSource.Contains("PortCreateDebugPackageAfterGoblinReplay(summary)", StringComparison.Ordinal), "replay completion should automatically create a debug package");
     AssertTrue(evidenceSource.Contains("create-debug-package.ps1", StringComparison.Ordinal), "automatic replay packaging should call the tracked debug package script");
     AssertTrue(evidenceSource.Contains("process.StartInfo.ArgumentList.Add(\"-RuntimeRoot\")", StringComparison.Ordinal), "automatic replay packaging should pass the active runtime root");
-    AssertTrue(evidenceSource.Contains("GoblinReplayDebugPackageComplete", StringComparison.Ordinal), "automatic replay packaging should log the package result");
+    AssertTrue(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "automatic package creation should log the package result");
     AssertTrue(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "automatic replay packaging should parse the generated package path");
     AssertTrue(evidenceSource.Contains("GoblinDecisionTracePolicy.ToLogLine(trace)", StringComparison.Ordinal), "replay should write structured decision trace lines");
     AssertFalse(ExtractMethodBody(evidenceSource, "private GoblinReplaySummary PortReplayGoblinEvidenceFolder").Contains("RecordGoblinFound(", StringComparison.Ordinal), "replay dry-run should not increment live GoblinCount");

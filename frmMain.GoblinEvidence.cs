@@ -1170,73 +1170,60 @@ namespace GoblinFarmer
             PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence, screenshotPath);
         }
 
-        private void PortPromptReplayGoblinEvidenceFolder()
+        private void PortCreateReviewDebugPackageFromButton()
         {
-            string selectedPath = "";
-            using OpenFileDialog zipDialog = new()
-            {
-                Title = "Select a GoblinFarmer debug package ZIP, or Cancel to choose a folder",
-                Filter = "GoblinFarmer debug package (*.zip)|*.zip|All files (*.*)|*.*",
-                CheckFileExists = true,
-                Multiselect = false,
-            };
+            string packageRuntimeRoot = PortResolveDebugPackageRuntimeRoot();
+            string packageDirectory = Path.Combine(packageRuntimeRoot, "DebugPackages");
+            AppLogger.Info(
+                "ReviewDebugPackageRequested: " +
+                "source=Button; " +
+                $"vsDebugProfile={AppSettings.IsVsDebugProfile}; " +
+                $"vsDebugProjectRootConfigUsed={AppSettings.VsDebugProjectRootConfigUsed}; " +
+                $"configPath={PortLogField(AppSettings.ConfigPath)}; " +
+                $"packageRuntimeRoot={PortLogField(packageRuntimeRoot)}; " +
+                $"packageDirectory={PortLogField(packageDirectory)}");
+            PortShowSplash("Creating debug package...", 2500);
 
-            if (zipDialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(zipDialog.FileName))
-            {
-                selectedPath = zipDialog.FileName;
-            }
-
-            if (string.IsNullOrWhiteSpace(selectedPath))
-            {
-                using FolderBrowserDialog dialog = new()
-                {
-                    Description = "Select a debug package folder or folder containing Goblin Tracker Journal/Minimap evidence",
-                    UseDescriptionForTitle = true,
-                    ShowNewFolderButton = false,
-                };
-
-                if (dialog.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
-                {
-                    return;
-                }
-
-                selectedPath = dialog.SelectedPath;
-            }
-
-            AppLogger.Info($"GoblinReplay: Replay requested inputPath={PortLogField(selectedPath)} dryRun=True");
-            _ = Task.Run(() => PortReplayGoblinEvidenceFolder(selectedPath))
+            _ = Task.Run(PortCreateDebugPackageForReview)
                 .ContinueWith(task =>
                 {
                     if (task.IsFaulted)
                     {
-                        AppLogger.Error($"GoblinReplay: Replay failed inputPath={selectedPath}", task.Exception!);
-                        BeginInvoke(new Action(() => PortShowSplash("Goblin evidence replay failed", 3000)));
+                        AppLogger.Error("Review debug package creation failed.", task.Exception!);
+                        BeginInvoke(new Action(() => PortShowSplash("Debug package creation failed", 3000)));
                         return;
                     }
 
-                    GoblinReplaySummary summary = task.Result;
-                    BeginInvoke(new Action(() => PortShowSplash(
-                        $"Goblin replay complete\r\nEvidence: {summary.EvidenceFiles}\r\nCount: {summary.Accepted}; Reject: {summary.Rejected}; Unknown: {summary.Unknown}\r\nCreating debug package...",
-                        6000)));
-                    GoblinReplayDebugPackageResult packageResult = PortCreateDebugPackageAfterGoblinReplay(summary);
+                    GoblinReplayDebugPackageResult packageResult = task.Result;
                     BeginInvoke(new Action(() => PortShowSplash(
                         packageResult.Success
-                            ? $"Goblin replay package ready\r\n{Path.GetFileName(packageResult.PackagePath)}"
-                            : "Goblin replay complete\r\nDebug package creation failed",
+                            ? $"Debug package ready\r\n{Path.GetFileName(packageResult.PackagePath)}"
+                            : "Debug package creation failed",
                         6000)));
                 });
         }
 
+        private GoblinReplayDebugPackageResult PortCreateDebugPackageForReview()
+        {
+            return PortCreateDebugPackage("Button", "", "");
+        }
+
         private GoblinReplayDebugPackageResult PortCreateDebugPackageAfterGoblinReplay(GoblinReplaySummary summary)
+        {
+            return PortCreateDebugPackage("Replay", summary.LogPath, summary.HtmlReportPath);
+        }
+
+        private GoblinReplayDebugPackageResult PortCreateDebugPackage(string requestSource, string replayLogPath, string replayHtmlPath)
         {
             try
             {
                 if (!PortTryResolveDebugPackageScriptPath(out string scriptPath, out string sourceRoot))
                 {
-                    AppLogger.Info($"GoblinReplayDebugPackageSkipped: reason=ScriptMissing; replayLogPath={PortLogField(summary.LogPath)}; runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}");
+                    AppLogger.Info($"ReviewDebugPackageSkipped: reason=ScriptMissing; requestSource={PortLogField(requestSource)}; replayLogPath={PortLogField(replayLogPath)}; runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}");
                     return new GoblinReplayDebugPackageResult(false, "", "ScriptMissing");
                 }
 
+                string packageRuntimeRoot = PortResolveDebugPackageRuntimeRoot();
                 using System.Diagnostics.Process process = new();
                 process.StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
@@ -1253,7 +1240,7 @@ namespace GoblinFarmer
                 process.StartInfo.ArgumentList.Add("-File");
                 process.StartInfo.ArgumentList.Add(scriptPath);
                 process.StartInfo.ArgumentList.Add("-RuntimeRoot");
-                process.StartInfo.ArgumentList.Add(AppDomain.CurrentDomain.BaseDirectory);
+                process.StartInfo.ArgumentList.Add(packageRuntimeRoot);
 
                 DateTime started = DateTime.Now;
                 process.Start();
@@ -1263,41 +1250,55 @@ namespace GoblinFarmer
                 string packagePath = PortExtractDebugPackagePathFromOutput(output);
                 bool success = process.ExitCode == 0 && !string.IsNullOrWhiteSpace(packagePath) && File.Exists(packagePath);
                 AppLogger.Info(
-                    "GoblinReplayDebugPackageComplete: " +
+                    "ReviewDebugPackageComplete: " +
                     $"success={success}; " +
+                    $"requestSource={PortLogField(requestSource)}; " +
                     $"exitCode={process.ExitCode}; " +
                     $"durationMs={(DateTime.Now - started).TotalMilliseconds:0}; " +
                     $"scriptPath={PortLogField(scriptPath)}; " +
                     $"sourceRoot={PortLogField(sourceRoot)}; " +
                     $"runtimeRoot={PortLogField(AppDomain.CurrentDomain.BaseDirectory)}; " +
-                    $"replayLogPath={PortLogField(summary.LogPath)}; " +
-                    $"replayHtmlPath={PortLogField(summary.HtmlReportPath)}; " +
+                    $"packageRuntimeRoot={PortLogField(packageRuntimeRoot)}; " +
+                    $"packageDirectory={PortLogField(Path.Combine(packageRuntimeRoot, "DebugPackages"))}; " +
+                    $"vsDebugProfile={AppSettings.IsVsDebugProfile}; " +
+                    $"vsDebugProjectRootConfigUsed={AppSettings.VsDebugProjectRootConfigUsed}; " +
+                    $"configPath={PortLogField(AppSettings.ConfigPath)}; " +
+                    $"replayLogPath={PortLogField(replayLogPath)}; " +
+                    $"replayHtmlPath={PortLogField(replayHtmlPath)}; " +
                     $"packagePath={PortLogField(packagePath)}; " +
                     $"stdoutLength={output.Length}; " +
                     $"stderrLength={error.Length}");
                 if (!string.IsNullOrWhiteSpace(error))
                 {
-                    AppLogger.Info($"GoblinReplayDebugPackageStderr: {PortLogField(error)}");
+                    AppLogger.Info($"ReviewDebugPackageStderr: {PortLogField(error)}");
                 }
 
                 return new GoblinReplayDebugPackageResult(success, packagePath, success ? "Created" : "Failed");
             }
             catch (Exception ex)
             {
-                AppLogger.Error($"Goblin replay debug package creation failed: replayLogPath={summary.LogPath}", ex);
+                AppLogger.Error($"Review debug package creation failed: requestSource={requestSource}; replayLogPath={replayLogPath}", ex);
                 return new GoblinReplayDebugPackageResult(false, "", "Exception");
             }
+        }
+
+        private static string PortResolveDebugPackageRuntimeRoot()
+        {
+            if (AppSettings.IsVsDebugProfile && PortTryResolveConfigRoot(out string configRoot))
+            {
+                return configRoot;
+            }
+
+            return AppDomain.CurrentDomain.BaseDirectory;
         }
 
         private static bool PortTryResolveDebugPackageScriptPath(out string scriptPath, out string sourceRoot)
         {
             string runtimeRoot = AppDomain.CurrentDomain.BaseDirectory;
             string configRoot = "";
-            string? configDirectory = Path.GetDirectoryName(AppSettings.ConfigPath);
-            if (!string.IsNullOrWhiteSpace(configDirectory) &&
-                string.Equals(Path.GetFileName(configDirectory), "Config", StringComparison.OrdinalIgnoreCase))
+            if (PortTryResolveConfigRoot(out string resolvedConfigRoot))
             {
-                configRoot = Directory.GetParent(configDirectory)?.FullName ?? "";
+                configRoot = resolvedConfigRoot;
             }
 
             foreach (string root in new[] { configRoot, runtimeRoot }.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -1313,6 +1314,24 @@ namespace GoblinFarmer
 
             scriptPath = "";
             sourceRoot = "";
+            return false;
+        }
+
+        private static bool PortTryResolveConfigRoot(out string configRoot)
+        {
+            string? configDirectory = Path.GetDirectoryName(AppSettings.ConfigPath);
+            if (!string.IsNullOrWhiteSpace(configDirectory) &&
+                string.Equals(Path.GetFileName(configDirectory), "Config", StringComparison.OrdinalIgnoreCase))
+            {
+                DirectoryInfo? root = Directory.GetParent(configDirectory);
+                if (root != null)
+                {
+                    configRoot = root.FullName;
+                    return true;
+                }
+            }
+
+            configRoot = "";
             return false;
         }
 

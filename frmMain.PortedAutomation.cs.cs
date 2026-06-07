@@ -482,14 +482,14 @@ namespace GoblinFarmer
                 Name = "btnReplayGoblinEvidenceFolder",
                 Size = new Size(244, 28),
                 TabIndex = 3,
-                Text = "Replay Goblin Evidence Folder",
+                Text = "Create Debug Package",
                 UseVisualStyleBackColor = true,
             };
 
             chkGoblinObservationMode.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ObservationModeCheckbox");
             chkGoblinAutomaticCounting.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("AutomaticCountingCheckbox");
             chkGoblinDecisionTrace.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("DecisionTraceCheckbox");
-            btnReplayGoblinEvidenceFolder.Click += (_, _) => PortPromptReplayGoblinEvidenceFolder();
+            btnReplayGoblinEvidenceFolder.Click += (_, _) => PortCreateReviewDebugPackageFromButton();
             portSettingsGroup.Controls.Add(chkGoblinObservationMode);
             portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting);
             portSettingsGroup.Controls.Add(chkGoblinDecisionTrace);

@@ -33,7 +33,7 @@
 - Before adding or keeping workflow guidance in `AGENTS.md`, check `Docs/Worflow blocklist.md`.
 - Remove workflow guidance from `AGENTS.md` when it is listed in `Docs/Worflow blocklist.md`, and do not re-add blocked workflows unless the user explicitly removes them from that blocklist.
 - For latest-debug-package review prompts, treat the named/latest debug package and live-test notes as evidence before changing code. Inspect package manifests, session summaries, logs, route summaries, Goblin Tracker metadata, and runtime artifacts first; use GitHub only as repository reference unless the user explicitly says otherwise.
-- For Goblin Tracker evidence issues, prefer the VS Debug `Replay Goblin Evidence Folder` tool against the named debug package ZIP, `DebugPackages` folder, or saved evidence folder before requesting another live Diablo run; the replay button auto-generates a fresh debug package afterward, so review the newest package and compare the generated `Logs\GoblinReplay_*.log` and `.html` decision traces with the live notes.
+- For Goblin Tracker evidence issues, ask the user to click the VS Debug `Create Debug Package` button when fresh runtime evidence is needed; it self-discovers the active runtime/package folder and creates a new ZIP without prompting. Review the newest package and compare any generated `Logs\GoblinReplay_*.log` and `.html` decision traces with the live notes.
 
 ## Coding Rules
 
