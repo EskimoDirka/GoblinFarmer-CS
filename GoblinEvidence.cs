@@ -507,6 +507,32 @@ namespace GoblinFarmer
         int CurrentAreaCount,
         double EvidenceConfidence = 0);
 
+    internal sealed record GoblinDecisionTraceRecord(
+        DateTime TimestampUtc,
+        string Mode,
+        string Source,
+        string ImageFile,
+        string ImagePath,
+        string AreaRaw,
+        string AreaKey,
+        string GoblinType,
+        string EvidenceSignature,
+        double EvidenceAgeSeconds,
+        double EvidenceFirstSeenAgeSeconds,
+        bool AutoCountEnabled,
+        bool ObservationModeEnabled,
+        bool EvidencePredatesAutoCount,
+        bool Fresh,
+        bool AllowedArea,
+        string BlockedReason,
+        string DuplicateKey,
+        int AreaCountBefore,
+        int AreaLimit,
+        int TotalGoblinCountBefore,
+        string Decision,
+        string Reason,
+        bool NotificationShown);
+
     internal sealed record GoblinJournalEngagedState(
         string GoblinType,
         string AreaKey,
@@ -536,6 +562,47 @@ namespace GoblinFarmer
 
     internal static class GoblinAreaResolver
     {
+        public static IReadOnlyList<string> KnownAreas { get; } =
+        [
+            "Ancient Waterway",
+            "Battlefields",
+            "Black Canyon Mines",
+            "Caldeum Bazaar",
+            "Cathedral",
+            "Cathedral Level 1",
+            "Cathedral Level 2",
+            "Cathedral Level 3",
+            "Cave Of The Moon Clan Level 1",
+            "Cave Of The Moon Clan Level 2",
+            "Caverns of Frost Level 1",
+            "Caverns of Frost Level 2",
+            "City of Caldeum",
+            "Eastern Channel Level 1",
+            "Eastern Channel Level 2",
+            "Fields of Slaughter",
+            "Flooded Causeway",
+            "Gates of Caldeum",
+            "Hidden Camp",
+            "Highlands Cave",
+            "Leoric's Hunting Grounds",
+            "Leoric's Passage",
+            "New Tristram",
+            "Northern Highlands",
+            "Pandemonium Fortress Level 1",
+            "Pandemonium Fortress Level 2",
+            "Rakkis Crossing",
+            "Royal Crypts",
+            "Ruined Cistern",
+            "Sewers of Caldeum",
+            "Southern Highlands",
+            "Stinging Winds",
+            "The Bridge Of Korsikk",
+            "The Festering Woods",
+            "The Weeping Hollow",
+            "Western Channel Level 1",
+            "Western Channel Level 2",
+            "WhimsyDale",
+        ];
         private static readonly Dictionary<string, string> CanonicalAreas = BuildCanonicalAreas();
 
         public static GoblinAreaResolution Resolve(string rawLocation)
@@ -562,50 +629,8 @@ namespace GoblinFarmer
 
         private static Dictionary<string, string> BuildCanonicalAreas()
         {
-            string[] canonicalNames =
-            [
-                "Ancient Waterway",
-                "Battlefields",
-                "Black Canyon Mines",
-                "Caldeum Bazaar",
-                "Cathedral",
-                "Cathedral Level 1",
-                "Cathedral Level 2",
-                "Cathedral Level 3",
-                "Cave Of The Moon Clan Level 1",
-                "Cave Of The Moon Clan Level 2",
-                "Caverns of Frost Level 1",
-                "Caverns of Frost Level 2",
-                "City of Caldeum",
-                "Eastern Channel Level 1",
-                "Eastern Channel Level 2",
-                "Fields of Slaughter",
-                "Flooded Causeway",
-                "Gates of Caldeum",
-                "Hidden Camp",
-                "Highlands Cave",
-                "Leoric's Hunting Grounds",
-                "Leoric's Passage",
-                "New Tristram",
-                "Northern Highlands",
-                "Pandemonium Fortress Level 1",
-                "Pandemonium Fortress Level 2",
-                "Rakkis Crossing",
-                "Royal Crypts",
-                "Ruined Cistern",
-                "Sewers of Caldeum",
-                "Southern Highlands",
-                "Stinging Winds",
-                "The Bridge Of Korsikk",
-                "The Festering Woods",
-                "The Weeping Hollow",
-                "Western Channel Level 1",
-                "Western Channel Level 2",
-                "WhimsyDale",
-            ];
-
             Dictionary<string, string> areas = new(StringComparer.OrdinalIgnoreCase);
-            foreach (string name in canonicalNames)
+            foreach (string name in KnownAreas)
             {
                 areas[NormalizedKey(name)] = name;
             }
@@ -1095,6 +1120,118 @@ namespace GoblinFarmer
         bool Accepted,
         int AreaCount,
         int AreaLimit);
+
+    internal static class GoblinDecisionTracePolicy
+    {
+        public static string DecisionForReason(string reason, bool counted)
+        {
+            if (counted)
+            {
+                return "Count";
+            }
+
+            return reason switch
+            {
+                "EvidenceSeenBeforeAutoCountEnabled" or "StaleEvidence" => "Stale",
+                "BlockedArea" or "AreaUnresolved" or "AmbiguousAreaDetection" => "Block",
+                "AreaAlreadyCounted" or "AreaLimitReached" or "EvidenceAlreadyAutoCounted" or "EncounterAlreadyAutoCounted" => "Duplicate",
+                "AutomaticCountingDisabled" => "ObserveOnly",
+                _ => "Suppress",
+            };
+        }
+
+        public static GoblinDecisionTraceRecord Create(
+            DateTime timestampUtc,
+            string mode,
+            string source,
+            string imageFile,
+            string imagePath,
+            string areaRaw,
+            string areaKey,
+            string goblinType,
+            string evidenceSignature,
+            double evidenceAgeSeconds,
+            double evidenceFirstSeenAgeSeconds,
+            bool autoCountEnabled,
+            bool observationModeEnabled,
+            string suppressionReason,
+            bool counted,
+            int areaCountBefore,
+            int areaLimit,
+            int totalGoblinCountBefore)
+        {
+            string reason = counted
+                ? "Eligible"
+                : string.IsNullOrWhiteSpace(suppressionReason) ? "Suppressed" : suppressionReason;
+            bool evidencePredatesAutoCount = reason.Equals("EvidenceSeenBeforeAutoCountEnabled", StringComparison.OrdinalIgnoreCase);
+            bool fresh = !reason.Equals("StaleEvidence", StringComparison.OrdinalIgnoreCase) && !evidencePredatesAutoCount;
+            bool allowedArea = !reason.Equals("BlockedArea", StringComparison.OrdinalIgnoreCase) &&
+                !reason.Equals("AreaUnresolved", StringComparison.OrdinalIgnoreCase) &&
+                !reason.Equals("AmbiguousAreaDetection", StringComparison.OrdinalIgnoreCase);
+            string blockedReason = allowedArea ? "" : reason;
+
+            return new GoblinDecisionTraceRecord(
+                timestampUtc,
+                string.IsNullOrWhiteSpace(mode) ? "Live" : mode.Trim(),
+                string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim(),
+                Path.GetFileName(imageFile ?? ""),
+                imagePath ?? "",
+                areaRaw ?? "",
+                areaKey ?? "",
+                GoblinTypeNormalizer.Normalize(goblinType),
+                evidenceSignature ?? "",
+                Math.Max(0, evidenceAgeSeconds),
+                Math.Max(0, evidenceFirstSeenAgeSeconds),
+                autoCountEnabled,
+                observationModeEnabled,
+                evidencePredatesAutoCount,
+                fresh,
+                allowedArea,
+                blockedReason,
+                string.IsNullOrWhiteSpace(areaKey) ? "Unknown" : GoblinAreaResolver.NormalizedKey(areaKey),
+                Math.Max(0, areaCountBefore),
+                Math.Max(0, areaLimit),
+                Math.Max(0, totalGoblinCountBefore),
+                DecisionForReason(reason, counted),
+                reason,
+                counted);
+        }
+
+        public static string ToLogLine(GoblinDecisionTraceRecord trace)
+        {
+            return "GoblinDecisionTrace: " +
+                $"mode={LogValue(trace.Mode)}; " +
+                $"source={LogValue(trace.Source)}; " +
+                $"imageFile={LogValue(trace.ImageFile)}; " +
+                $"imagePath={LogValue(trace.ImagePath)}; " +
+                $"areaRaw={LogValue(trace.AreaRaw)}; " +
+                $"areaKey={LogValue(trace.AreaKey)}; " +
+                $"goblinType={LogValue(trace.GoblinType)}; " +
+                $"evidenceSignature={LogValue(trace.EvidenceSignature)}; " +
+                $"evidenceAgeSeconds={trace.EvidenceAgeSeconds:0.0}; " +
+                $"evidenceFirstSeenAgeSeconds={trace.EvidenceFirstSeenAgeSeconds:0.0}; " +
+                $"autoCountEnabled={trace.AutoCountEnabled}; " +
+                $"observationModeEnabled={trace.ObservationModeEnabled}; " +
+                $"evidencePredatesAutoCount={trace.EvidencePredatesAutoCount}; " +
+                $"fresh={trace.Fresh}; " +
+                $"allowedArea={trace.AllowedArea}; " +
+                $"blockedReason={LogValue(trace.BlockedReason)}; " +
+                $"duplicateKey={LogValue(trace.DuplicateKey)}; " +
+                $"areaCountBefore={trace.AreaCountBefore}; " +
+                $"areaLimit={trace.AreaLimit}; " +
+                $"totalGoblinCountBefore={trace.TotalGoblinCountBefore}; " +
+                $"decision={trace.Decision}; " +
+                $"reason={LogValue(trace.Reason)}; " +
+                $"notificationShown={trace.NotificationShown}";
+        }
+
+        private static string LogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? "Unknown"
+                : value.Replace(";", ",").Replace(Environment.NewLine, " ").Trim();
+        }
+    }
 
     internal sealed class GoblinAreaDuplicateGuard
     {

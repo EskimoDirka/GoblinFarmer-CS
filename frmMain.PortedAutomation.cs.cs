@@ -66,6 +66,8 @@ namespace GoblinFarmer
         private bool portGoblinTrackerDebugPreferenceControlsInitialized;
         private CheckBox? chkGoblinObservationMode;
         private CheckBox? chkGoblinAutomaticCounting;
+        private CheckBox? chkGoblinDecisionTrace;
+        private Button? btnReplayGoblinEvidenceFolder;
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
@@ -436,6 +438,7 @@ namespace GoblinFarmer
             }
 
             portGoblinTrackerDebugPreferenceControlsInitialized = true;
+            portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 166);
 
             chkGoblinObservationMode = new CheckBox
             {
@@ -461,20 +464,47 @@ namespace GoblinFarmer
                 Checked = AppSettings.GoblinTracker.EnableAutomaticCounting,
             };
 
+            chkGoblinDecisionTrace = new CheckBox
+            {
+                AutoSize = false,
+                Location = new Point(14, 134),
+                Name = "chkGoblinDecisionTrace",
+                Size = new Size(190, 20),
+                TabIndex = 2,
+                Text = "Enable Goblin Decision Trace",
+                UseVisualStyleBackColor = true,
+                Checked = AppSettings.GoblinTracker.EnableDecisionTrace,
+            };
+
+            btnReplayGoblinEvidenceFolder = new Button
+            {
+                Location = new Point(292, 128),
+                Name = "btnReplayGoblinEvidenceFolder",
+                Size = new Size(244, 28),
+                TabIndex = 3,
+                Text = "Replay Goblin Evidence Folder",
+                UseVisualStyleBackColor = true,
+            };
+
             chkGoblinObservationMode.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ObservationModeCheckbox");
             chkGoblinAutomaticCounting.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("AutomaticCountingCheckbox");
+            chkGoblinDecisionTrace.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("DecisionTraceCheckbox");
+            btnReplayGoblinEvidenceFolder.Click += (_, _) => PortPromptReplayGoblinEvidenceFolder();
             portSettingsGroup.Controls.Add(chkGoblinObservationMode);
             portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting);
+            portSettingsGroup.Controls.Add(chkGoblinDecisionTrace);
+            portSettingsGroup.Controls.Add(btnReplayGoblinEvidenceFolder);
             AppLogger.Info(
                 "Goblin Tracker VS Debug preference controls initialized: " +
                 $"enableObservationMode={chkGoblinObservationMode.Checked}; " +
                 $"enableAutomaticCounting={chkGoblinAutomaticCounting.Checked}; " +
+                $"enableDecisionTrace={chkGoblinDecisionTrace.Checked}; " +
                 $"configPath={PortLogField(AppSettings.ConfigPath)}");
         }
 
         private void PortSaveGoblinTrackerDebugPreferenceControls(string source)
         {
-            if (chkGoblinObservationMode == null || chkGoblinAutomaticCounting == null)
+            if (chkGoblinObservationMode == null || chkGoblinAutomaticCounting == null || chkGoblinDecisionTrace == null)
             {
                 return;
             }
@@ -482,6 +512,7 @@ namespace GoblinFarmer
             bool previousEffectiveAutomaticCounting = PortGoblinAutomaticCountingEnabled();
             AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked;
             AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked;
+            AppSettings.GoblinTracker.EnableDecisionTrace = chkGoblinDecisionTrace.Checked;
             AppSettings.Save();
             bool currentEffectiveAutomaticCounting = PortGoblinAutomaticCountingEnabled();
             if (previousEffectiveAutomaticCounting != currentEffectiveAutomaticCounting)
@@ -499,6 +530,7 @@ namespace GoblinFarmer
                 $"source={PortLogField(source)}; " +
                 $"enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode}; " +
                 $"enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}; " +
+                $"enableDecisionTrace={AppSettings.GoblinTracker.EnableDecisionTrace}; " +
                 $"automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; " +
                 $"manualHotkeyOnlyCountPath={!PortGoblinAutomaticCountingEnabled()}");
         }

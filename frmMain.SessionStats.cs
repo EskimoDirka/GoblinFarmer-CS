@@ -464,6 +464,7 @@ namespace GoblinFarmer
             double autoArmedAgeSeconds = portGoblinAutomaticCountingArmedAtUtc == DateTime.MinValue
                 ? -1
                 : Math.Max(0, (nowUtc - portGoblinAutomaticCountingArmedAtUtc).TotalSeconds);
+            int totalGoblinCountBefore = DebugManager.Session.Snapshot(DateTime.Now).GoblinCount;
 
             lock (portGoblinTrackerLock)
             {
@@ -593,6 +594,31 @@ namespace GoblinFarmer
                 }
             }
 
+            bool counted = string.IsNullOrWhiteSpace(suppressionReason);
+            int areaCountBefore = counted ? Math.Max(0, guardResult.AreaCount - 1) : guardResult.AreaCount;
+            if (PortGoblinDecisionTraceEnabled())
+            {
+                PortLogGoblinDecisionTrace(GoblinDecisionTracePolicy.Create(
+                    nowUtc,
+                    "Live",
+                    observation.Source,
+                    "",
+                    "",
+                    area.RawLocation,
+                    area.AreaKey,
+                    observation.GoblinType,
+                    PortShortEvidenceSignature(autoEvidenceKey),
+                    evidenceAgeSeconds,
+                    evidenceFirstSeenAgeSeconds,
+                    autoCountingEnabled,
+                    AppSettings.GoblinTracker.EnableObservationMode,
+                    suppressionReason,
+                    counted,
+                    areaCountBefore,
+                    guardResult.AreaLimit,
+                    totalGoblinCountBefore));
+            }
+
             if (!string.IsNullOrWhiteSpace(suppressionReason))
             {
                 string eventName = autoCountingEnabled
@@ -608,6 +634,11 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;
+        }
+
+        private void PortLogGoblinDecisionTrace(GoblinDecisionTraceRecord trace)
+        {
+            AppLogger.Info(GoblinDecisionTracePolicy.ToLogLine(trace));
         }
 
         private bool PortShouldSuppressJournalEncounterAlreadyAutoCounted(

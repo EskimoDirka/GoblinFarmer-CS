@@ -1595,6 +1595,19 @@ try {
     Write-Host "Selected log folder: $selectedLogFolder"
     Write-Host "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })"
 
+    $replayLogs = @(Get-LatestFilesFromFolders $logFolders @("GoblinReplay_*.log") 10)
+    if ($replayLogs.Count -gt 0) {
+        $replayLogDestinationDirectory = Join-Path $stagingRoot "Logs\GoblinReplay"
+        New-Item -ItemType Directory -Path $replayLogDestinationDirectory -Force | Out-Null
+        foreach ($replayLog in $replayLogs) {
+            Copy-Item -LiteralPath $replayLog.FullName -Destination (Join-Path $replayLogDestinationDirectory $replayLog.Name) -Force
+        }
+        Write-Host "Included Goblin replay logs: $($replayLogs.Count)"
+    }
+    else {
+        Write-Host "Included Goblin replay logs: 0"
+    }
+
     $debugSkipInfo = Get-DebugScreenshotSkipInfo $latestLog
     Write-Host "Debug screenshots setting from log: $($debugSkipInfo.AppSettingsDebugScreenshots)"
     Write-Host "Keep debug screenshots setting from log: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"
@@ -1990,6 +2003,7 @@ try {
             ($logFolders | ForEach-Object { "- $_" }),
             "Selected log folder: $selectedLogFolder",
             "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
+            "Goblin replay logs included: $($replayLogs.Count)",
             "Selected screenshot folder: $selectedScreenshotFolder",
             "Selected debug screenshot folder: $selectedDebugScreenshotFolder",
             "Runtime session-info included: $runtimeSessionInfoIncluded",
@@ -2007,6 +2021,7 @@ try {
             "- route-failure-summary.txt",
             "- debug-screenshot-manifest.txt",
             "- Latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
+            "- Goblin replay logs included: $($replayLogs.Count)",
             "- Total screenshots included: $totalScreenshotCount",
             "- Failure screenshots included: $($failureScreenshots.Count)",
             "- Failure screenshots excluded: $excludedFailureScreenshots",

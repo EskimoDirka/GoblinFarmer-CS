@@ -63,6 +63,8 @@ Run("Goblin observation UI state logs update and clear", TestGoblinObservationUi
 Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
+Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
+Run("Goblin replay tool is dry-run and packaged", TestGoblinReplayToolIsDryRunAndPackaged);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
@@ -1985,14 +1987,135 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
 
     AssertTrue(automationSource.Contains("chkGoblinObservationMode", StringComparison.Ordinal), "VS Debug form should expose an Observation Mode checkbox");
     AssertTrue(automationSource.Contains("chkGoblinAutomaticCounting", StringComparison.Ordinal), "VS Debug form should expose an Automatic Counting checkbox");
+    AssertTrue(automationSource.Contains("chkGoblinDecisionTrace", StringComparison.Ordinal), "VS Debug form should expose a Decision Trace checkbox");
+    AssertTrue(automationSource.Contains("btnReplayGoblinEvidenceFolder", StringComparison.Ordinal), "VS Debug form should expose a replay button");
     AssertTrue(releaseSource.Contains("PortInitializeGoblinTrackerDebugPreferenceControls();", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should initialize before runtime validation can stop startup");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinObservationMode)", StringComparison.Ordinal), "Observation Mode checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting)", StringComparison.Ordinal), "Automatic Counting checkbox should be placed inside the visible Settings group");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinDecisionTrace)", StringComparison.Ordinal), "Decision Trace checkbox should be placed inside the visible Settings group");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(btnReplayGoblinEvidenceFolder)", StringComparison.Ordinal), "replay button should be placed inside the visible Settings group");
     AssertFalse(automationSource.Contains("Controls.Add(grpGoblinTrackerDebugSettings)", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should not be added as a layered top-level overlay");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked", StringComparison.Ordinal), "Observation Mode checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked", StringComparison.Ordinal), "Automatic Counting checkbox changes should persist to AppSettings");
+    AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableDecisionTrace = chkGoblinDecisionTrace.Checked", StringComparison.Ordinal), "Decision Trace checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("PortSetGoblinAutomaticCountingArmedState(source)", StringComparison.Ordinal), "toggling automatic counting should re-arm the freshness gate");
     AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
+}
+
+static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()
+{
+    GoblinDecisionTraceRecord count = GoblinDecisionTracePolicy.Create(
+        DateTime.UtcNow,
+        "Live",
+        "Journal",
+        "",
+        "",
+        "Pandemonium Fortress Level 1",
+        "Pandemonium Fortress Level 1",
+        "Treasure Goblin",
+        "sig",
+        1,
+        1,
+        true,
+        true,
+        "",
+        true,
+        0,
+        2,
+        0);
+    AssertEqual("Count", count.Decision, "fresh eligible evidence should trace Count");
+    AssertEqual(2, count.AreaLimit, "PF1 traces should report areaLimit=2");
+    AssertTrue(GoblinDecisionTracePolicy.ToLogLine(count).Contains("decision=Count", StringComparison.Ordinal), "trace log should include the Count decision");
+
+    GoblinDecisionTraceRecord stale = GoblinDecisionTracePolicy.Create(
+        DateTime.UtcNow,
+        "Live",
+        "Journal",
+        "",
+        "",
+        "Caverns of Frost Level 2",
+        "Caverns of Frost Level 2",
+        "Gem Hoarder",
+        "sig",
+        50,
+        50,
+        true,
+        true,
+        "EvidenceSeenBeforeAutoCountEnabled",
+        false,
+        0,
+        1,
+        0);
+    AssertEqual("Stale", stale.Decision, "evidence predating auto-count should trace Stale");
+    AssertTrue(stale.EvidencePredatesAutoCount, "trace should flag evidencePredatesAutoCount");
+    AssertEqual("EvidenceSeenBeforeAutoCountEnabled", stale.Reason, "stale pre-arm trace should keep the exact reason");
+
+    GoblinDecisionTraceRecord block = GoblinDecisionTracePolicy.Create(
+        DateTime.UtcNow,
+        "Replay",
+        "Minimap",
+        "New Tristram Minimap.png",
+        "Debug\\GoblinEvidence\\New Tristram Minimap.png",
+        "New Tristram",
+        "New Tristram",
+        "Treasure Goblin",
+        "sig",
+        1,
+        1,
+        true,
+        true,
+        "BlockedArea",
+        false,
+        0,
+        0,
+        0);
+    AssertEqual("Block", block.Decision, "blocked areas should trace Block");
+    AssertFalse(block.AllowedArea, "blocked areas should not trace as allowed");
+    AssertEqual("BlockedArea", block.BlockedReason, "blocked trace should keep the block reason");
+
+    GoblinDecisionTraceRecord duplicate = GoblinDecisionTracePolicy.Create(
+        DateTime.UtcNow,
+        "Live",
+        "Journal",
+        "",
+        "",
+        "Pandemonium Fortress Level 2",
+        "Pandemonium Fortress Level 2",
+        "Blood Thief",
+        "sig",
+        1,
+        1,
+        true,
+        true,
+        "AreaLimitReached",
+        false,
+        2,
+        2,
+        2);
+    AssertEqual("Duplicate", duplicate.Decision, "area limit suppressions should trace Duplicate");
+    AssertEqual(2, duplicate.AreaLimit, "PF2 duplicate trace should report areaLimit=2");
+}
+
+static void TestGoblinReplayToolIsDryRunAndPackaged()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
+    string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+
+    AssertTrue(appSettingsSource.Contains("public bool EnableDecisionTrace { get; set; } = false", StringComparison.Ordinal), "Release decision trace should default off unless Debug Mode enables it");
+    AssertTrue(appSettingsSource.Contains("settings.GoblinTracker.EnableDecisionTrace = true", StringComparison.Ordinal), "VS Debug/dev defaults should enable decision trace");
+    AssertTrue(configSource.Contains("\"EnableDecisionTrace\": true", StringComparison.Ordinal), "project VS Debug config should explicitly expose decision trace");
+    AssertTrue(evidenceSource.Contains("PortReplayGoblinEvidenceFolder", StringComparison.Ordinal), "replay folder runner should exist");
+    AssertTrue(evidenceSource.Contains("SearchOption.AllDirectories", StringComparison.Ordinal), "replay should recursively scan debug package folders");
+    AssertTrue(evidenceSource.Contains("PortDetectBestGoblinEvidenceTemplateInImageFile", StringComparison.Ordinal), "replay should run template detection against saved images without Diablo");
+    AssertTrue(evidenceSource.Contains("dryRun=True", StringComparison.Ordinal), "replay should be logged as a dry run");
+    AssertTrue(evidenceSource.Contains("GoblinReplay_", StringComparison.Ordinal), "replay should write deterministic GoblinReplay logs");
+    AssertTrue(evidenceSource.Contains("GoblinDecisionTracePolicy.ToLogLine(trace)", StringComparison.Ordinal), "replay should write structured decision trace lines");
+    AssertFalse(ExtractMethodBody(evidenceSource, "private GoblinReplaySummary PortReplayGoblinEvidenceFolder").Contains("RecordGoblinFound(", StringComparison.Ordinal), "replay dry-run should not increment live GoblinCount");
+    AssertTrue(packageScript.Contains("GoblinReplay_*.log", StringComparison.Ordinal), "debug packages should include replay logs");
+    AssertTrue(packageScript.Contains("Logs\\GoblinReplay", StringComparison.Ordinal), "replay logs should have a stable package destination");
 }
 
 static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
