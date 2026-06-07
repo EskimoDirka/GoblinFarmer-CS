@@ -1174,7 +1174,7 @@ namespace GoblinFarmer
         {
             string packageRuntimeRoot = PortResolveDebugPackageRuntimeRoot();
             string packageDirectory = Path.Combine(packageRuntimeRoot, "DebugPackages");
-            string scenarioPath = PortWriteGoblinTrackerReviewScenarioMetadata();
+            string nextTestsPath = PortWriteGoblinTrackerNextTestMetadata();
             AppLogger.Info(
                 "ReviewDebugPackageRequested: " +
                 "source=Button; " +
@@ -1183,7 +1183,7 @@ namespace GoblinFarmer
                 $"configPath={PortLogField(AppSettings.ConfigPath)}; " +
                 $"packageRuntimeRoot={PortLogField(packageRuntimeRoot)}; " +
                 $"packageDirectory={PortLogField(packageDirectory)}; " +
-                $"scenarioPath={PortLogField(scenarioPath)}");
+                $"nextTestsPath={PortLogField(nextTestsPath)}");
             PortShowSplash("Creating debug package...", 2500);
 
             _ = Task.Run(PortCreateDebugPackageForReview)
@@ -1219,39 +1219,35 @@ namespace GoblinFarmer
             return PortCreateDebugPackage("Replay", summary.LogPath, summary.HtmlReportPath);
         }
 
-        private string PortWriteGoblinTrackerReviewScenarioMetadata()
+        private string PortWriteGoblinTrackerNextTestMetadata()
         {
             if (!AppSettings.IsVsDebugProfile)
             {
                 return "";
             }
 
-            string area = txtGoblinScenarioArea?.Text.Trim() ?? "";
-            string goblin = txtGoblinScenarioGoblin?.Text.Trim() ?? "";
-            string expected = txtGoblinScenarioExpected?.Text.Trim() ?? "";
             string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Debug");
-            string path = Path.Combine(directory, "GoblinTrackerScenario.txt");
+            string path = Path.Combine(directory, "GoblinTrackerNextTests.txt");
+            string legacyScenarioPath = Path.Combine(directory, "GoblinTrackerScenario.txt");
             Directory.CreateDirectory(directory);
-            List<string> lines =
-            [
-                "Goblin Tracker Review Scenario",
-                $"CreatedLocal={DateTime.Now:O}",
-                $"CreatedUtc={DateTime.UtcNow:O}",
-                $"ScenarioArea={area}",
-                $"ExpectedGoblin={goblin}",
-                $"ExpectedOutcome={expected}",
-                $"VsDebugProfile={AppSettings.IsVsDebugProfile}",
-                $"ConfigPath={AppSettings.ConfigPath}",
-                $"RuntimeRoot={AppDomain.CurrentDomain.BaseDirectory}",
-                $"PackageRuntimeRoot={PortResolveDebugPackageRuntimeRoot()}",
-            ];
+            bool legacyScenarioDeleted = false;
+            if (File.Exists(legacyScenarioPath))
+            {
+                File.Delete(legacyScenarioPath);
+                legacyScenarioDeleted = true;
+            }
+
+            List<string> lines = PortNextTestStepMetadataLines();
             File.WriteAllLines(path, lines);
+            int checkedCount = portNextTestStepCheckboxes.Count(checkBox => checkBox.Checked);
+            int uncheckedCount = portNextTestStepCheckboxes.Count - checkedCount;
             AppLogger.Info(
-                "GoblinTrackerReviewScenarioSaved: " +
+                "GoblinTrackerNextTestsSaved: " +
                 $"path={PortLogField(path)}; " +
-                $"area={PortLogField(area)}; " +
-                $"expectedGoblin={PortLogField(goblin)}; " +
-                $"expectedOutcome={PortLogField(expected)}");
+                $"testCount={portNextTestStepCheckboxes.Count}; " +
+                $"checkedCount={checkedCount}; " +
+                $"uncheckedCount={uncheckedCount}; " +
+                $"legacyScenarioDeleted={legacyScenarioDeleted}");
             return path;
         }
 

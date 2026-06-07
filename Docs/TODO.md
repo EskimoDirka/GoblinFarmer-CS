@@ -160,12 +160,17 @@
 * [x] Review `GoblinFarmer_Debug_20260607_071907.zip`; confirmed PF1/PF2/Stinging Winds synthetic two-count rules, Southern Highlands default duplicate suppression, New Tristram blocked suppression, and Southern Highlands Gem Hoarder auto-count.
 * [x] Update the VS Debug `Next Tests` tab to an automatic-count readiness checklist covering setup, must-pass live encounters, stale/display safety checks, classification, reset/new-game cleanup, latency notes, and debug-package follow-up.
 * [x] Update VS Debug `Next Tests` to route-ordered checkboxes so checked means tested and unchecked means not tested yet.
-* [x] Review `GoblinFarmer_Debug_20260607_074714.zip`; confirmed Reset Stats cleared duplicate guard, auto-count evidence state, evidence observation state, and Last Observation, and confirmed blank scenario fields correctly produce no scenario metadata.
+* [x] Review `GoblinFarmer_Debug_20260607_074714.zip`; confirmed Reset Stats cleared duplicate guard, auto-count evidence state, evidence observation state, and Last Observation.
+* [x] Remove VS Debug Goblin Tracker scenario text input fields; `Create Debug Package` now captures `Next Tests` checkbox state automatically without prompting.
+* [x] Package `Debug\GoblinTrackerNextTests.txt` and root `goblin-tracker-next-tests.txt` so checked/unchecked test scenarios are reviewable from the generated ZIP.
+* [x] Replace broad same-goblin-type journal replay suppression with exact evidence-row suppression, so stale visible rows cannot replay across areas but fresh same-type goblins in separate levels can count.
+* [x] Preserve the displayed Last Observation when incoming scanner updates are suppressed as stale, already counted, duplicate, or area-limit reached.
 * [ ] Run the updated route-ordered VS Debug checkbox checklist with Observation Mode and Auto Goblin Count on, `Test Count Override` off, and create a debug package after the first miss, wrong type, stale display, or slow notification.
 * [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the Level 2 evidence is first seen after Level 2 is detected, not from stale Level 1 journal text, across one more run.
 * [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence.
 * [ ] Live-validate Eastern Channel Level 2 fresh Blood Thief evidence auto-counts once and does not inherit stale Blood Thief evidence from a previous area.
+* [x] Live-validate Battlefields can auto-count a fresh allowed goblin; Odious Collector was confirmed from live notes.
 * [ ] Live-validate Battlefields fresh Treasure Goblin evidence auto-counts once even if an older Treasure Goblin journal template was seen earlier in the run.
 * [ ] Live-validate teleporting from Cathedral/Royal Crypts/Battlefields-style transitions clears previous-area Last Observation instead of showing stale goblin text.
 * [ ] Live-validate repeated Malevolent Tormentor journal evidence after moving between Battlefields and Rakkis Crossing does not overwrite the accepted Battlefields Last Observation or create stale display spam.
@@ -183,8 +188,8 @@
 * [ ] Live-validate a real Gilded Baron does not auto-count as Malevolent Tormentor from an early weak minimap match; confirm the accepted count, notification, and Last Observation use Gilded Baron.
 * [ ] Live-validate a real Malevolent Tormentor still auto-counts once with the correct type from strong minimap evidence or Journal evidence.
 * [ ] Live-validate a fresh Killed-only Gilded Baron journal match auto-counts promptly with `JournalKilledAcceptedFreshObservation` instead of waiting for a later Engaged line.
-* [x] Add encounter-level automatic-count protection so recently counted same-type Journal evidence in a different area suppresses with `EncounterAlreadyAutoCounted`.
-* [ ] Live-validate stale Treasure Goblin and other same-type journal lines stay ignored with `EncounterAlreadyAutoCounted` and do not auto-count after moving areas.
+* [x] Add exact journal-row automatic-count protection so the same counted Journal row in a different area suppresses with `EncounterAlreadyAutoCounted`.
+* [ ] Live-validate stale Treasure Goblin, Gelatinous Sire, and other same-row journal lines stay ignored with `EncounterAlreadyAutoCounted` and do not auto-count after moving areas.
 * [ ] Live-validate Last Observation remains visible after no-candidate scans and is replaced only by a new goblin observation/count or reset/new-game cleanup.
 * [ ] Live-validate manual `X` in a resolved allowed area with no fresh observation suppresses with `NoFreshObservation` and does not increment GoblinCount.
 * [ ] Live-validate manual `X` with a fresh same-area observation/candidate still counts and reuses the goblin type.

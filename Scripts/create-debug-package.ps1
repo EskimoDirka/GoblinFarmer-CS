@@ -1518,16 +1518,16 @@ function New-GoblinTrackerPackageSummary {
     $lines.Add("Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
     $lines.Add("")
 
-    $scenarioPath = Join-Path $StagingRoot "Debug\GoblinTrackerScenario.txt"
-    if (Test-Path -LiteralPath $scenarioPath -PathType Leaf) {
-        $lines.Add("Scenario:")
-        foreach ($line in Get-Content -LiteralPath $scenarioPath) {
+    $nextTestsPath = Join-Path $StagingRoot "Debug\GoblinTrackerNextTests.txt"
+    if (Test-Path -LiteralPath $nextTestsPath -PathType Leaf) {
+        $lines.Add("Next tests:")
+        foreach ($line in Get-Content -LiteralPath $nextTestsPath) {
             $lines.Add("  $line")
         }
         $lines.Add("")
     }
     else {
-        $lines.Add("Scenario: none captured")
+        $lines.Add("Next tests: none captured")
         $lines.Add("")
     }
 
@@ -1586,7 +1586,8 @@ function New-GoblinTrackerReviewIndex {
         "route-failure-summary.txt",
         "debug-screenshot-manifest.txt",
         "session-info.txt",
-        "Debug\GoblinTrackerScenario.txt"
+        "goblin-tracker-next-tests.txt",
+        "Debug\GoblinTrackerNextTests.txt"
     )) {
         $path = Join-Path $StagingRoot $relative
         if (Test-Path -LiteralPath $path -PathType Leaf) {
@@ -1714,23 +1715,23 @@ try {
     Write-Step "Collecting runtime metadata"
     $runtimeSessionInfoIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "session-info.txt" "session-info.txt"
     $runtimeAppSettingsIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "Config\AppSettings.json" "Config\AppSettings.json"
-    $goblinTrackerScenarioIncluded = $false
-    $goblinTrackerScenarioSource = "none"
+    $goblinTrackerNextTestsIncluded = $false
+    $goblinTrackerNextTestsSource = "none"
     foreach ($root in $packageRuntimeRoots) {
-        $candidate = Join-Path $root "Debug\GoblinTrackerScenario.txt"
+        $candidate = Join-Path $root "Debug\GoblinTrackerNextTests.txt"
         if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            $scenarioDebugDestination = Join-Path $stagingRoot "Debug\GoblinTrackerScenario.txt"
-            $scenarioRootDestination = Join-Path $stagingRoot "goblin-tracker-scenario.txt"
-            New-Item -ItemType Directory -Path (Split-Path -Parent $scenarioDebugDestination) -Force | Out-Null
-            Copy-Item -LiteralPath $candidate -Destination $scenarioDebugDestination -Force
-            Copy-Item -LiteralPath $candidate -Destination $scenarioRootDestination -Force
-            $goblinTrackerScenarioIncluded = $true
-            $goblinTrackerScenarioSource = $candidate
+            $nextTestsDebugDestination = Join-Path $stagingRoot "Debug\GoblinTrackerNextTests.txt"
+            $nextTestsRootDestination = Join-Path $stagingRoot "goblin-tracker-next-tests.txt"
+            New-Item -ItemType Directory -Path (Split-Path -Parent $nextTestsDebugDestination) -Force | Out-Null
+            Copy-Item -LiteralPath $candidate -Destination $nextTestsDebugDestination -Force
+            Copy-Item -LiteralPath $candidate -Destination $nextTestsRootDestination -Force
+            $goblinTrackerNextTestsIncluded = $true
+            $goblinTrackerNextTestsSource = $candidate
             break
         }
     }
-    Write-Host "Goblin Tracker scenario metadata included: $goblinTrackerScenarioIncluded"
-    Write-Host "Goblin Tracker scenario metadata source: $goblinTrackerScenarioSource"
+    Write-Host "Goblin Tracker next test metadata included: $goblinTrackerNextTestsIncluded"
+    Write-Host "Goblin Tracker next test metadata source: $goblinTrackerNextTestsSource"
 
     $logFoldersList = New-Object System.Collections.Generic.List[string]
     foreach ($root in $packageRuntimeRoots) {
@@ -2212,8 +2213,8 @@ try {
             "Goblin replay summaries included: $($replaySummaries.Count)",
             "Goblin replay changed summaries included: $($replayChangedSummaries.Count)",
             "Goblin replay decision bundle folders included: $($replayBundleDirectories.Count)",
-            "Goblin Tracker scenario metadata included: $goblinTrackerScenarioIncluded",
-            "Goblin Tracker scenario metadata source: $goblinTrackerScenarioSource",
+            "Goblin Tracker next test metadata included: $goblinTrackerNextTestsIncluded",
+            "Goblin Tracker next test metadata source: $goblinTrackerNextTestsSource",
             "Selected screenshot folder: $selectedScreenshotFolder",
             "Selected debug screenshot folder: $selectedDebugScreenshotFolder",
             "Runtime session-info included: $runtimeSessionInfoIncluded",
@@ -2231,7 +2232,7 @@ try {
             "- route-failure-summary.txt",
             "- goblin-tracker-summary.txt",
             "- goblin-tracker-review.html",
-            "- goblin-tracker-scenario.txt included: $goblinTrackerScenarioIncluded",
+            "- goblin-tracker-next-tests.txt included: $goblinTrackerNextTestsIncluded",
             "- debug-screenshot-manifest.txt",
             "- Latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
             "- Goblin replay logs included: $($replayLogs.Count)",

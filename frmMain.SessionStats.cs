@@ -343,6 +343,7 @@ namespace GoblinFarmer
             DateTime nowUtc = DateTime.UtcNow;
             string reason = "Eligible";
             string duplicateState = "Available";
+            string globalEvidenceKey = PortGoblinAutoCountGlobalEvidenceKey(evidenceSignature, observationSource, goblinType);
             bool wouldCount = true;
             GoblinAreaDuplicateGuardResult guardResult = new(true, 0, 0);
             bool displayUpdated;
@@ -383,7 +384,7 @@ namespace GoblinFarmer
                     else if (PortGoblinAutomaticCountingEnabled() &&
                         string.Equals(observationSource, "Journal", StringComparison.OrdinalIgnoreCase) &&
                         portGoblinAutoCountEncounterByGoblinType.TryGetValue(PortGoblinAutoCountEncounterKey(goblinType), out PortGoblinAutoCountEncounterState? encounterState) &&
-                        PortShouldSuppressJournalEncounterAlreadyAutoCounted(observationSource, goblinType, area.AreaKey, encounterState, nowUtc))
+                        PortShouldSuppressJournalEncounterAlreadyAutoCounted(observationSource, goblinType, area.AreaKey, globalEvidenceKey, encounterState, nowUtc))
                     {
                         wouldCount = false;
                         reason = "EncounterAlreadyAutoCounted";
@@ -468,6 +469,7 @@ namespace GoblinFarmer
                 observation.EvidenceConfidence < minimapAutoCountMinimumConfidence;
             double evidenceAgeSeconds = Math.Max(0, (nowUtc - observation.TimestampUtc).TotalSeconds);
             string autoEvidenceKey = PortGoblinAutoCountEvidenceKey(evidenceSignature, observation);
+            string globalEvidenceKey = PortGoblinAutoCountGlobalEvidenceKey(evidenceSignature, observation.Source, observation.GoblinType);
             string autoEncounterKey = PortGoblinAutoCountEncounterKey(observation);
             GoblinAreaDuplicateGuardResult guardResult = new(observation.WouldCount, observation.CurrentAreaCount, observation.AreaLimit);
             string suppressionReason = "";
@@ -545,7 +547,7 @@ namespace GoblinFarmer
                     suppressionReason = "EvidenceAlreadyAutoCounted";
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
-                    PortShouldSuppressJournalEncounterAlreadyAutoCounted(observation, area, encounterState, nowUtc))
+                    PortShouldSuppressJournalEncounterAlreadyAutoCounted(observation, area, globalEvidenceKey, encounterState, nowUtc))
                 {
                     suppressionReason = "EncounterAlreadyAutoCounted";
                 }
@@ -605,7 +607,7 @@ namespace GoblinFarmer
                             area.AreaKey,
                             observation.GoblinType,
                             observation.Source,
-                            autoEvidenceKey);
+                            globalEvidenceKey);
                     }
                 }
             }
@@ -705,6 +707,7 @@ namespace GoblinFarmer
         private bool PortShouldSuppressJournalEncounterAlreadyAutoCounted(
             GoblinObservationRecord observation,
             GoblinAreaResolution area,
+            string globalEvidenceKey,
             PortGoblinAutoCountEncounterState? encounterState,
             DateTime nowUtc)
         {
@@ -712,6 +715,7 @@ namespace GoblinFarmer
                 observation.Source,
                 observation.GoblinType,
                 area.AreaKey,
+                globalEvidenceKey,
                 encounterState,
                 nowUtc);
         }
@@ -720,11 +724,15 @@ namespace GoblinFarmer
             string source,
             string goblinType,
             string areaKey,
+            string globalEvidenceKey,
             PortGoblinAutoCountEncounterState? encounterState,
             DateTime nowUtc)
         {
             if (encounterState == null ||
                 string.IsNullOrWhiteSpace(areaKey) ||
+                string.IsNullOrWhiteSpace(globalEvidenceKey) ||
+                string.IsNullOrWhiteSpace(encounterState.EvidenceKey) ||
+                !string.Equals(encounterState.EvidenceKey, globalEvidenceKey, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(PortNormalizeGoblinObservationSource(source), "Journal", StringComparison.OrdinalIgnoreCase) ||
                 !GoblinTypeNormalizer.Normalize(encounterState.GoblinType).Equals(GoblinTypeNormalizer.Normalize(goblinType), StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(encounterState.AreaKey) ||
@@ -754,6 +762,22 @@ namespace GoblinFarmer
                 PortNormalizeGoblinObservationSource(observation.Source),
                 GoblinTypeNormalizer.Normalize(observation.GoblinType),
                 GoblinAreaResolver.NormalizedKey(observation.AreaKey),
+                normalizedSignature);
+        }
+
+        private string PortGoblinAutoCountGlobalEvidenceKey(string evidenceSignature, string source, string goblinType)
+        {
+            string normalizedSignature = string.IsNullOrWhiteSpace(evidenceSignature)
+                ? ""
+                : evidenceSignature.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedSignature))
+            {
+                return "";
+            }
+
+            return string.Join("|",
+                PortNormalizeGoblinObservationSource(source),
+                GoblinTypeNormalizer.Normalize(goblinType),
                 normalizedSignature);
         }
 
@@ -1162,8 +1186,16 @@ namespace GoblinFarmer
             GoblinObservationRecord incomingObservation,
             GoblinObservationRecord? displayedObservation)
         {
-            return displayedObservation != null &&
-                incomingObservation.Reason.Equals("EncounterAlreadyAutoCounted", StringComparison.OrdinalIgnoreCase);
+            if (displayedObservation == null || incomingObservation.WouldCount)
+            {
+                return false;
+            }
+
+            return incomingObservation.Reason.Equals("EncounterAlreadyAutoCounted", StringComparison.OrdinalIgnoreCase) ||
+                incomingObservation.Reason.Equals("AreaAlreadyCounted", StringComparison.OrdinalIgnoreCase) ||
+                incomingObservation.Reason.Equals("AreaLimitReached", StringComparison.OrdinalIgnoreCase) ||
+                incomingObservation.Reason.Equals("EvidenceAlreadyAutoCounted", StringComparison.OrdinalIgnoreCase) ||
+                incomingObservation.Reason.Equals("StaleEvidence", StringComparison.OrdinalIgnoreCase);
         }
 
         private bool PortShouldPreserveDisplayedGoblinObservation(

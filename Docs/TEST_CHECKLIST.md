@@ -163,17 +163,19 @@
 - Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
 - In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
 - In VS Debug, `Create Debug Package` remains the same 112x28 size/alignment as the Settings `Change...` and `Verify Paths` buttons
-- In VS Debug, scenario fields for area, expected goblin, and expected count/block outcome can be filled before clicking `Create Debug Package`
-- Clicking VS Debug `Create Debug Package` writes `Debug\GoblinTrackerScenario.txt` and includes that metadata in the resulting package
+- In VS Debug, `Create Debug Package` does not show or require scenario input fields; debug-package metadata is generated automatically
+- Clicking VS Debug `Create Debug Package` writes `Debug\GoblinTrackerNextTests.txt` from the current `Next Tests` checkbox state and includes that metadata in the resulting package
 - In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
-- In VS Debug, the `Next Tests` tab shows the automatic-count readiness checklist in route logic order: Observation Mode and Auto Goblin Count on, `Test Count Override` off, fresh game or Reset Stats setup, Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Stinging Winds, Battlefields Treasure Goblin, PF1/PF2 live two-count rules, blocked-area evidence, stale journal/area transition, Reset Stats/New Game cleanup, Gilded Baron/Malevolent Tormentor classification, Last Observation persistence, notification latency, and debug-package follow-up
+- In VS Debug, the `Next Tests` tab shows the automatic-count readiness checklist in route logic order: Observation Mode and Auto Goblin Count on, `Test Count Override` off, fresh game or Reset Stats setup, Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, then Stinging Winds, Battlefields fresh goblin, PF1/PF2 live two-count rules, blocked-area evidence, stale journal/area transition, Reset Stats/New Game cleanup, Gilded Baron/Malevolent Tormentor classification, Last Observation persistence, notification latency, and debug-package follow-up
 - In VS Debug, unchecked `Next Tests` boxes mean not tested yet; checked boxes mean the tester completed that scenario during the current run
+- In VS Debug, generated Next Tests package metadata reports checked and unchecked counts plus every route-ordered test row so untested scenarios remain visible in package review
 - Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
 - Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
 - Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template
 - Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`
-- Reusing a recently auto-counted goblin type through Journal evidence in a different area suppresses with `GoblinAutoCountSuppressed reason=EncounterAlreadyAutoCounted`
-- Suppressed cross-area Journal repeats report `GoblinObservationCandidate ... wouldCount=False reason=EncounterAlreadyAutoCounted` and log `LastObservationUpdateSkippedPreserved` when an older visible line tries to overwrite the displayed Last Observation
+- Reusing the same counted Journal evidence row in a different area suppresses with `GoblinAutoCountSuppressed reason=EncounterAlreadyAutoCounted`
+- A fresh same-type Journal evidence row in a different route level/subregion may still count independently when the evidence signature is new and the duplicate guard allows that area
+- Suppressed cross-area Journal row repeats report `GoblinObservationCandidate ... wouldCount=False reason=EncounterAlreadyAutoCounted` and log `LastObservationUpdateSkippedPreserved` when an older visible line tries to overwrite the displayed Last Observation
 - Evidence whose first-seen timestamp ages past the freshness window suppresses with `GoblinAutoCountSuppressed reason=StaleEvidence`
 - Accepted automatic counts show a no-activate notification with area, goblin type, and current total
 - Automatic Treasure/Odious counts use the color-disambiguated goblin type when the accepted source is Minimap
@@ -204,7 +206,8 @@
 - Debug package manifest reports Goblin observation counters and last-observation metadata from `session-info.txt`
 - Debug package manifest reports Goblin Evidence missing-template state from the latest log
 - Debug package root includes `goblin-tracker-review.html` and `goblin-tracker-summary.txt`
-- `goblin-tracker-review.html` links to the manifest, route summary, latest logs, replay HTML, changed-decision summaries, scenario metadata, and replay decision bundles when present
+- `goblin-tracker-review.html` links to the manifest, route summary, latest logs, replay HTML, changed-decision summaries, Next Tests metadata, and replay decision bundles when present
+- Debug package includes `goblin-tracker-next-tests.txt` when the VS Debug `Next Tests` tab has been initialized before package creation
 - Goblin replay package artifacts include `GoblinReplay_*_summary.txt`, `GoblinReplay_*_changed.txt`, and `GoblinReplay_*_bundles\...\decision.txt`
 - `GoblinReplay_*_summary.txt` groups replay decisions by area, goblin type, decision, and reason
 - `GoblinReplay_*_changed.txt` reports changed decisions compared with the previous replay or says none changed

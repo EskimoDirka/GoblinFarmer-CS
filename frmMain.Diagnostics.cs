@@ -16,6 +16,7 @@ namespace GoblinFarmer
         private string portLastRouteDecisionOutput = "Unknown";
         private int portDiagnosticLogCount;
         private int portDiagnosticScreenshotCount;
+        private readonly List<CheckBox> portNextTestStepCheckboxes = new();
 
         private void PortInitializeDiagnosticOverlay()
         {
@@ -162,6 +163,8 @@ namespace GoblinFarmer
             };
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
+            portNextTestStepCheckboxes.Clear();
+
             PortAddNextTestHeader(table, "Goblin Tracker Automatic Count Readiness");
             PortAddNextTestHeader(table, "Setup");
             PortAddNextTestCheck(table, "1. Observation Mode and Auto Goblin Count are on.");
@@ -172,7 +175,7 @@ namespace GoblinFarmer
             PortAddNextTestCheck(table, "4. Southern Highlands / Cave Of The Moon Clan Level 2: after Level 1, find a fresh Level 2 goblin; expect Level 2 to count independently and never reuse Level 1 evidence.", 68);
             PortAddNextTestCheck(table, "5. Eastern Channel Level 2: find a fresh goblin, preferably Blood Thief; expect exactly one auto-count, notification, and Last Observation.", 58);
             PortAddNextTestCheck(table, "6. Stinging Winds: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 48);
-            PortAddNextTestCheck(table, "7. Battlefields: find Treasure Goblin; expect one auto-count and notification, with no stale Treasure journal replay into later areas.", 58);
+            PortAddNextTestCheck(table, "7. Battlefields: find a fresh goblin; expect one auto-count and notification, with no stale journal replay into later areas.", 58);
             PortAddNextTestCheck(table, "8. Pandemonium Fortress Level 1: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 54);
             PortAddNextTestCheck(table, "9. Pandemonium Fortress Level 2: live goblins should count #1 and #2, then suppress #3 with AreaLimitReached.", 54);
 
@@ -207,7 +210,7 @@ namespace GoblinFarmer
             table.Controls.Add(label, 0, row);
         }
 
-        private static void PortAddNextTestCheck(TableLayoutPanel table, string text, int rowHeight = 38)
+        private void PortAddNextTestCheck(TableLayoutPanel table, string text, int rowHeight = 38)
         {
             int row = table.RowCount++;
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
@@ -223,6 +226,45 @@ namespace GoblinFarmer
                 UseMnemonic = false,
             };
             table.Controls.Add(checkBox, 0, row);
+            portNextTestStepCheckboxes.Add(checkBox);
+        }
+
+        private List<string> PortNextTestStepMetadataLines()
+        {
+            DateTime nowLocal = DateTime.Now;
+            DateTime nowUtc = DateTime.UtcNow;
+            int checkedCount = portNextTestStepCheckboxes.Count(checkBox => checkBox.Checked);
+            int uncheckedCount = portNextTestStepCheckboxes.Count - checkedCount;
+            List<string> lines =
+            [
+                "Goblin Tracker Next Tests",
+                $"CreatedLocal={nowLocal:O}",
+                $"CreatedUtc={nowUtc:O}",
+                $"VsDebugProfile={AppSettings.IsVsDebugProfile}",
+                $"ConfigPath={AppSettings.ConfigPath}",
+                $"RuntimeRoot={AppDomain.CurrentDomain.BaseDirectory}",
+                $"PackageRuntimeRoot={PortResolveDebugPackageRuntimeRoot()}",
+                $"TestCount={portNextTestStepCheckboxes.Count}",
+                $"CheckedCount={checkedCount}",
+                $"UncheckedCount={uncheckedCount}",
+            ];
+
+            if (portNextTestStepCheckboxes.Count == 0)
+            {
+                lines.Add("NoNextTestCheckboxes=True");
+                return lines;
+            }
+
+            for (int i = 0; i < portNextTestStepCheckboxes.Count; i++)
+            {
+                CheckBox checkBox = portNextTestStepCheckboxes[i];
+                string prefix = $"Test{i + 1:00}";
+                lines.Add($"{prefix}.Checked={checkBox.Checked}");
+                lines.Add($"{prefix}.Status={(checkBox.Checked ? "Tested" : "NotTested")}");
+                lines.Add($"{prefix}.Text={checkBox.Text}");
+            }
+
+            return lines;
         }
 
         private TableLayoutPanel PortCreateDiagnosticTable(float labelWidth)
