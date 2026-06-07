@@ -28,6 +28,7 @@ This file keeps backlog and historical context that no longer belongs in the sho
 - Tracked `Config\AppSettings.json` was returned to sanitized defaults; private VS Debug paths/toggles can live in ignored `Config\AppSettings.local.json`.
 - `frmMain.GoblinEvidence.cs` capture helpers and `frmMain.SessionStats.cs` automatic-count helpers were split into dedicated partial files to keep active Goblin Tracker development safer.
 - Goblin Evidence scanning added cached template catalogs, cached OpenCV template mats, one captured scan context per source pass, minimap-first scanning with Journal still preferred as the primary confirmation, throttled `GoblinEvidenceTimingSummary` stage histograms, and structured `GoblinTrackerEvents.jsonl` output.
+- Goblin Replay Fixture Runner Phase 2A added the internal `IGoblinEvidenceFrameSource` seam, keeping live screen capture as the default while allowing saved fixture PNGs to create the same scan context used by template matching.
 - Debug package analysis helpers were added at the ZIP root:
   - `debug-package-analysis.txt`
   - `goblin-tracker-timeline.md`

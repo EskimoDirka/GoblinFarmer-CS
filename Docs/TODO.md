@@ -4,6 +4,7 @@ This file contains only open work and remaining test/verifications. Historical c
 
 ## Current Goblin Tracker Work
 
+- [ ] Phase 2B: build a small replay fixture runner on top of the Phase 2A `IGoblinEvidenceFrameSource` seam. It should consume saved encounter/manual capture folders and produce fixture results without auto-running in normal app startup/debug.
 - [ ] Live-validate the `500ms` scanner interval improves notification latency without lowering evidence thresholds or increasing false positives.
 - [ ] Live-validate Battlefields no longer auto-counts stale/non-goblin journal history after pressing Enter or opening journal history.
 - [ ] Confirm logs show the new journal protections when applicable:

@@ -37,6 +37,7 @@ namespace GoblinFarmer
         private GoblinEvidenceTemplateCatalog? portCachedGoblinEvidenceTemplateCatalog;
         private string portCachedGoblinEvidenceTemplateCatalogDirectory = "";
         private DateTime portCachedGoblinEvidenceTemplateCatalogWriteUtc;
+        private IGoblinEvidenceFrameSource? portGoblinEvidenceFrameSource;
         private CancellationTokenSource? portGoblinEvidenceObservationCts;
         private Task? portGoblinEvidenceScannerTask;
         private int portGoblinEvidenceCalibrationCaptureActive;
@@ -310,7 +311,8 @@ namespace GoblinFarmer
             Rectangle referenceRegion)
         {
             Stopwatch sourceStopwatch = Stopwatch.StartNew();
-            using GoblinEvidenceScanContext? scanContext = PortCreateGoblinEvidenceScanContext(referenceRegion, "GoblinEvidenceTemplateMatch");
+            string source = templates.FirstOrDefault()?.Source ?? "";
+            using GoblinEvidenceScanContext? scanContext = PortCreateGoblinEvidenceScanContext(source, referenceRegion, "GoblinEvidenceTemplateMatch");
             if (scanContext == null)
             {
                 PortRecordGoblinEvidenceTiming("ScanContextUnavailable", sourceStopwatch.Elapsed);
@@ -835,7 +837,22 @@ namespace GoblinFarmer
             }
         }
 
-        private GoblinEvidenceScanContext? PortCreateGoblinEvidenceScanContext(Rectangle referenceRegion, string reason)
+        internal void PortSetGoblinEvidenceFrameSourceForReplayFixtures(IGoblinEvidenceFrameSource? frameSource)
+        {
+            portGoblinEvidenceFrameSource = frameSource;
+        }
+
+        private IGoblinEvidenceFrameSource PortGoblinEvidenceFrameSource()
+        {
+            return portGoblinEvidenceFrameSource ??= new LiveGoblinEvidenceFrameSource(PortResolveGoblinEvidenceLiveScreenRegion);
+        }
+
+        private GoblinEvidenceScanContext? PortCreateGoblinEvidenceScanContext(string source, Rectangle referenceRegion, string reason)
+        {
+            return PortGoblinEvidenceFrameSource().TryCreateScanContext(source, referenceRegion, reason);
+        }
+
+        private Rectangle? PortResolveGoblinEvidenceLiveScreenRegion(Rectangle referenceRegion)
         {
             if (!PortTryGetDiabloRect(out RECT rect))
             {
@@ -849,17 +866,7 @@ namespace GoblinFarmer
                 return null;
             }
 
-            Bitmap screenshot = new(screenRegion.Width, screenRegion.Height);
-            using (Graphics graphics = Graphics.FromImage(screenshot))
-            {
-                graphics.CopyFromScreen(screenRegion.Left, screenRegion.Top, 0, 0, screenshot.Size);
-            }
-
-            OpenCvSharp.Mat rawScreenMat = OpenCvSharp.Extensions.BitmapConverter.ToMat(screenshot);
-            OpenCvSharp.Mat screenMat = new();
-            OpenCvSharp.Cv2.CvtColor(rawScreenMat, screenMat, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
-            rawScreenMat.Dispose();
-            return new GoblinEvidenceScanContext(referenceRegion, screenRegion, screenshot, screenMat, reason);
+            return screenRegion;
         }
 
         private GoblinEvidenceTemplateMatch PortBestGoblinEvidenceTemplateMatch(GoblinEvidenceScanContext scanContext, string imagePath)
@@ -870,19 +877,10 @@ namespace GoblinFarmer
             }
 
             using OpenCvSharp.Mat templateMat = PortGetGoblinEvidenceTemplateMat(imagePath);
-            if (templateMat.Empty() || templateMat.Width > scanContext.ScreenMat.Width || templateMat.Height > scanContext.ScreenMat.Height)
-            {
-                return new GoblinEvidenceTemplateMatch(0, Point.Empty, Point.Empty, new Size(templateMat.Width, templateMat.Height));
-            }
-
-            using OpenCvSharp.Mat result = new();
-            OpenCvSharp.Cv2.MatchTemplate(scanContext.ScreenMat, templateMat, result, OpenCvSharp.TemplateMatchModes.CCoeffNormed);
-            OpenCvSharp.Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out OpenCvSharp.Point maxLoc);
-            Point matchPoint = new(maxLoc.X, maxLoc.Y);
-            Point screenMatchPoint = new(scanContext.ScreenRegion.Left + maxLoc.X, scanContext.ScreenRegion.Top + maxLoc.Y);
-            Size templateSize = new(templateMat.Width, templateMat.Height);
-            GoblinMinimapColorClassification minimapColor = PortClassifyGoblinMinimapColor(scanContext.Screenshot, matchPoint, templateSize);
-            return new GoblinEvidenceTemplateMatch(maxVal, matchPoint, screenMatchPoint, templateSize, minimapColor);
+            return GoblinEvidenceFrameTemplateMatcher.MatchTemplate(
+                scanContext,
+                templateMat,
+                PortClassifyGoblinMinimapColor);
         }
 
         private OpenCvSharp.Mat PortGetGoblinEvidenceTemplateMat(string imagePath)
@@ -1879,24 +1877,5 @@ namespace GoblinFarmer
             DateTime LastWriteUtc,
             long Length);
 
-        private sealed class GoblinEvidenceScanContext(
-            Rectangle referenceRegion,
-            Rectangle screenRegion,
-            Bitmap screenshot,
-            OpenCvSharp.Mat screenMat,
-            string reason) : IDisposable
-        {
-            public Rectangle ReferenceRegion { get; } = referenceRegion;
-            public Rectangle ScreenRegion { get; } = screenRegion;
-            public Bitmap Screenshot { get; } = screenshot;
-            public OpenCvSharp.Mat ScreenMat { get; } = screenMat;
-            public string Reason { get; } = reason;
-
-            public void Dispose()
-            {
-                ScreenMat.Dispose();
-                Screenshot.Dispose();
-            }
-        }
     }
 }

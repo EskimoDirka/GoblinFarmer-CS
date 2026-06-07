@@ -24,7 +24,7 @@
 ## Required Response And GitHub Follow-Up
 
 - After every user prompt unless otherwise specified, provide the next steps to test.
-- After every user prompt unless otherwise specified, commit and push resulting repository changes to GitHub. If no files changed, state that no commit was created.
+- Do not commit or push automatically. The user handles commits and pushes unless they explicitly request GitHub updates.
 - If the user submits a release prompt, update GitHub accordingly with a version tag and release notes after the release build artifacts are created and validated.
 
 ## Workflow Notes

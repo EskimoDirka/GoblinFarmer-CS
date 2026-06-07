@@ -32,6 +32,7 @@ Run("GoblinEvidence retention deletes only inside GoblinEvidence", TestGoblinEvi
 Run("GoblinEvidence template discovery accepts per-goblin evidence files", TestGoblinEvidenceTemplateDiscoveryAcceptsPerGoblinEvidenceFiles);
 Run("GoblinEvidence template discovery finds source image set", TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet);
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
+Run("Goblin replay fixture frame source reaches candidate detection", TestGoblinReplayFixtureFrameSourceReachesCandidateDetection);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
 Run("VS Debug diagnostics omit next test steps tab", TestVsDebugDiagnosticsOmitNextTestStepsTab);
@@ -933,6 +934,74 @@ static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()
 {
     AssertEqual(new Rectangle(64, 736, 645, 417), GoblinEvidenceScanRegions.JournalReferenceRegion, "journal observation scan region should match the calibrated GoblinEvidence journal region");
     AssertEqual(new Rectangle(2108, 66, 421, 423), GoblinEvidenceScanRegions.MinimapReferenceRegion, "minimap observation scan region should match the calibrated GoblinEvidence minimap region");
+}
+
+static void TestGoblinReplayFixtureFrameSourceReachesCandidateDetection()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerFixture_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(fixtureRoot);
+    try
+    {
+        string templatePath = Path.Combine(fixtureRoot, "Treasure Goblin Minimap.png");
+        string framePath = Path.Combine(fixtureRoot, "fixture-minimap.png");
+        using Bitmap template = CreateFixturePatternBitmap(9, 9);
+        template.Save(templatePath);
+
+        using (Bitmap frame = new(40, 40))
+        using (Graphics graphics = Graphics.FromImage(frame))
+        {
+            graphics.Clear(Color.Black);
+            graphics.DrawImageUnscaled(template, 14, 17);
+            frame.Save(framePath);
+        }
+
+        FixtureGoblinEvidenceFrameSource frameSource = FixtureGoblinEvidenceFrameSource.FromJournalAndMinimap(null, framePath);
+        GoblinEvidenceTemplateRequirement requirement = new(
+            GoblinEvidenceType.MinimapIcon,
+            "MinimapCandidate",
+            Path.GetFileName(templatePath),
+            0.95,
+            "Treasure Goblin",
+            GoblinEvidenceTemplateKind.Minimap);
+
+        GoblinEvidenceCandidate? candidate = GoblinEvidenceFrameTemplateMatcher.TryDetectSingleTemplateCandidate(
+            frameSource,
+            requirement,
+            templatePath,
+            GoblinEvidenceScanRegions.MinimapReferenceRegion,
+            out GoblinEvidenceTemplateMatch match);
+
+        AssertTrue(candidate != null, "fixture minimap PNG should produce a candidate through the shared frame/template detection path");
+        AssertEqual("Treasure Goblin", candidate!.GoblinType, "fixture candidate should preserve the template goblin type");
+        AssertEqual("MinimapCandidate", candidate.Source, "fixture candidate should preserve the evidence source");
+        AssertTrue(match.Confidence >= 0.99, $"fixture template should match the saved frame with high confidence, actual={match.Confidence:0.000}");
+        AssertEqual(new Point(14, 17), match.MatchPoint, "fixture match point should be relative to the saved fixture frame");
+        AssertEqual(match.MatchPoint, match.ScreenMatchPoint, "fixture screen match point should use fixture-local coordinates");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static Bitmap CreateFixturePatternBitmap(int width, int height)
+{
+    Bitmap bitmap = new(width, height);
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            int red = (x * 29 + y * 11) % 256;
+            int green = (x * 7 + y * 37 + 64) % 256;
+            int blue = (x * 19 + y * 5 + 128) % 256;
+            bitmap.SetPixel(x, y, Color.FromArgb(red, green, blue));
+        }
+    }
+
+    return bitmap;
 }
 
 static string TouchGoblinEvidenceFile(string path, DateTime lastWriteTimeUtc)
