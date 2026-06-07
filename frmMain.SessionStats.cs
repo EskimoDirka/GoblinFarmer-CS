@@ -10,7 +10,8 @@ namespace GoblinFarmer
         private int sessionFailures;
         private DateTime sessionStartTime;
         private readonly DateTime sessionScreenshotRetentionStartTime = DateTime.Now;
-        private const double PortAutomaticGoblinMinimapCountMinimumConfidence = 0.90;
+        private const double PortAutomaticGoblinMinimapCountMinimumConfidence = 0.85;
+        private const double PortAutomaticGoblinAmbiguousMinimapCountMinimumConfidence = 0.90;
 
         private void PortInitializeSessionStats()
         {
@@ -445,9 +446,10 @@ namespace GoblinFarmer
             string source = "AutomaticObservation";
             DateTime nowUtc = DateTime.UtcNow;
             bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled();
+            double minimapAutoCountMinimumConfidence = PortAutomaticGoblinMinimapCountMinimumConfidenceFor(observation.GoblinType);
             bool minimapAutoCountConfidencePending = string.Equals(observation.Source, "Minimap", StringComparison.OrdinalIgnoreCase) &&
                 observation.EvidenceConfidence > 0 &&
-                observation.EvidenceConfidence < PortAutomaticGoblinMinimapCountMinimumConfidence;
+                observation.EvidenceConfidence < minimapAutoCountMinimumConfidence;
             double evidenceAgeSeconds = Math.Max(0, (nowUtc - observation.TimestampUtc).TotalSeconds);
             string autoEvidenceKey = PortGoblinAutoCountEvidenceKey(evidenceSignature, observation);
             string autoEncounterKey = PortGoblinAutoCountEncounterKey(observation);
@@ -521,7 +523,8 @@ namespace GoblinFarmer
                     suppressionReason = "EvidenceSeenBeforeAutoCountEnabled";
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
-                    evidenceState!.Counted)
+                    evidenceState!.Counted &&
+                    !PortAllowsLinkedJournalAreaRepeat(observation, evidenceState.AreaKey, area.AreaKey))
                 {
                     suppressionReason = "EvidenceAlreadyAutoCounted";
                 }
@@ -596,11 +599,11 @@ namespace GoblinFarmer
                 string eventName = autoCountingEnabled
                     ? "GoblinAutoCountSuppressed"
                     : "GoblinAutoCountSkippedDisabled";
-                AppLogger.Info($"GoblinTracker: {eventName} source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterAreaKey={PortLogField(PortDisplayLocation(encounterAreaKey))} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={PortAutomaticGoblinMinimapCountMinimumConfidence:0.000} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
+                AppLogger.Info($"GoblinTracker: {eventName} source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterAreaKey={PortLogField(PortDisplayLocation(encounterAreaKey))} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
                 return false;
             }
 
-            AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} encounterAgeSeconds={encounterAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={PortAutomaticGoblinMinimapCountMinimumConfidence:0.000} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
+            AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} encounterAgeSeconds={encounterAgeSeconds:0.0} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
             AppLogger.Info($"GoblinTracker: GoblinCountAccepted areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} blockListStatus=Allowed countResult=Accepted rawLocation='{PortLogField(PortDisplayLocation(area.RawLocation))}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(observation.GoblinType)}' source='{PortLogField(source)}' evidenceSource='{PortLogField(observation.Source)}' total={total}");
             PortShowSplash($"Goblin auto-counted\r\n{displayLocation}\r\nType: {observation.GoblinType}\r\nTotal: {total}", 5000);
             PortWriteSessionMetadata(logSuccess: false);
@@ -634,7 +637,8 @@ namespace GoblinFarmer
                 !string.Equals(PortNormalizeGoblinObservationSource(source), "Journal", StringComparison.OrdinalIgnoreCase) ||
                 !GoblinTypeNormalizer.Normalize(encounterState.GoblinType).Equals(GoblinTypeNormalizer.Normalize(goblinType), StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(encounterState.AreaKey) ||
-                encounterState.AreaKey.Equals(areaKey, StringComparison.OrdinalIgnoreCase))
+                encounterState.AreaKey.Equals(areaKey, StringComparison.OrdinalIgnoreCase) ||
+                GoblinJournalFreshnessPolicy.AllowsLinkedDungeonLevelRepeat(encounterState.AreaKey, areaKey))
             {
                 return false;
             }
@@ -673,6 +677,24 @@ namespace GoblinFarmer
             return string.IsNullOrWhiteSpace(normalizedGoblinType) || normalizedGoblinType.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
                 ? ""
                 : normalizedGoblinType;
+        }
+
+        private static double PortAutomaticGoblinMinimapCountMinimumConfidenceFor(string goblinType)
+        {
+            string normalized = GoblinTypeNormalizer.Normalize(goblinType);
+            return normalized.Equals("Gilded Baron", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Equals("Malevolent Tormentor", StringComparison.OrdinalIgnoreCase)
+                ? PortAutomaticGoblinAmbiguousMinimapCountMinimumConfidence
+                : PortAutomaticGoblinMinimapCountMinimumConfidence;
+        }
+
+        private static bool PortAllowsLinkedJournalAreaRepeat(
+            GoblinObservationRecord observation,
+            string firstAreaKey,
+            string currentAreaKey)
+        {
+            return string.Equals(PortNormalizeGoblinObservationSource(observation.Source), "Journal", StringComparison.OrdinalIgnoreCase) &&
+                GoblinJournalFreshnessPolicy.AllowsLinkedDungeonLevelRepeat(firstAreaKey, currentAreaKey);
         }
 
         private static string PortShortEvidenceSignature(string evidenceSignature)

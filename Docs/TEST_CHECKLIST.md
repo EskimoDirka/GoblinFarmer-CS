@@ -26,7 +26,7 @@
 - Caverns of Frost Level 1 blocks Teleport Next
 - Caverns of Frost Level 2 allows Rakkis Crossing
 - If the player walks to the queued Rakkis Crossing destination before pressing Teleport Next, the hotkey updates route/button state and starts Pandemonium Fortress Level 1 in the same press
-- Plain Ancient Waterway allows Teleport Next to Stinging Winds when Stinging Winds is queued, while clicking the Ancient Waterway button from inside Ancient Waterway still blocks
+- Plain Ancient Waterway blocks Teleport Next to Stinging Winds when Stinging Winds is queued, while Eastern Channel Level 2 still allows Stinging Winds and clicking the Ancient Waterway button from inside Ancient Waterway still blocks
 - Each successful teleport confirmation captures paired Diablo/App success screenshots
 - Route blocks/failures capture paired Diablo/App failure screenshots
 
@@ -60,6 +60,7 @@
 - Eastern Channel Level 2 counts once and suppresses the second press as the same area
 - Caverns of Frost Level 1 counts once and suppresses the second press as the same area
 - Caverns of Frost Level 2 counts once and suppresses the second press as the same area
+- With Automatic Counting enabled, a fresh same-type Killed journal encounter can count once in Caverns of Frost Level 1 and once in Caverns of Frost Level 2, while unrelated stale same-type journal evidence from other areas still suppresses
 - Pandemonium Fortress Level 1 accepts goblin counts 1 and 2 in the same game
 - Pandemonium Fortress Level 1 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
 - Pandemonium Fortress Level 2 accepts goblin counts 1 and 2 in the same game
@@ -112,7 +113,8 @@
 - Treasure Goblin and Odious Collector minimap matches use the targeted color disambiguation pass; yellow-dominant patches report Treasure Goblin, green-dominant patches report Odious Collector, and overrides log `GoblinEvidenceMinimapColorOverride`
 - Gilded Baron and Malevolent Tormentor minimap matches include yellow-vs-orange diagnostics; clearly yellow-dominant patches report Gilded Baron, clearly orange-dominant patches report Malevolent Tormentor, and overrides log `GoblinEvidenceMinimapColorOverride`
 - Treasure/Odious/Gilded/Malevolent minimap candidate notes include `MinimapYellowPixels`, `MinimapOrangePixels`, `MinimapGreenPixels`, `MinimapPurplePixels`, and `MinimapColoredPixels`
-- With Automatic Counting enabled, a lower-confidence minimap-only observation below `0.900` does not increment GoblinCount and logs `GoblinAutoCountSuppressed reason=MinimapConfidencePendingJournal`
+- With Automatic Counting enabled, a normal minimap-only observation below `0.850` does not increment GoblinCount and logs `GoblinAutoCountSuppressed reason=MinimapConfidencePendingJournal`
+- With Automatic Counting enabled, a Gilded Baron or Malevolent Tormentor minimap-only observation below `0.900` does not increment GoblinCount and waits for stronger minimap or Journal evidence
 - A real Gilded Baron must not auto-count as Malevolent Tormentor from an early weak minimap match; the accepted count notification and Last Observation should use the eventual accepted Journal or stronger Minimap goblin type
 - `JournalEngagedAccepted` logs when a fresh Engaged journal template anchors the current encounter
 - `JournalKilledAcceptedFreshObservation` logs when a fresh same-area Killed-only journal template is accepted by continuous Observation/Auto Count before an Engaged anchor appears

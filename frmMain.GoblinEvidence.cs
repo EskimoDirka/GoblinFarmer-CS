@@ -567,7 +567,7 @@ namespace GoblinFarmer
                         template,
                         match,
                         displayArea,
-                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; linkedDungeonLevelRepeat={GoblinJournalFreshnessPolicy.AllowsLinkedDungeonLevelRepeat(killedState.AreaKey, areaKey)}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                     acceptedCandidate = candidate with
                     {
                         Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedFresh{freshnessReason}; JournalArea={displayArea}"

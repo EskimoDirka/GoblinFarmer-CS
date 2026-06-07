@@ -1245,8 +1245,24 @@ namespace GoblinFarmer
             return killedState != null &&
                 !string.IsNullOrWhiteSpace(areaKey) &&
                 !string.IsNullOrWhiteSpace(killedState.AreaKey) &&
-                string.Equals(killedState.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(killedState.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase) ||
+                    AllowsLinkedDungeonLevelRepeat(killedState.AreaKey, areaKey)) &&
                 IsFresh(killedState.FirstSeenUtc, nowUtc, freshnessWindow);
+        }
+
+        public static bool AllowsLinkedDungeonLevelRepeat(string firstAreaKey, string currentAreaKey)
+        {
+            return IsLinkedPair(firstAreaKey, currentAreaKey, "Caverns of Frost Level 1", "Caverns of Frost Level 2");
+        }
+
+        private static bool IsLinkedPair(string firstAreaKey, string currentAreaKey, string firstLevel, string secondLevel)
+        {
+            string firstKey = GoblinAreaResolver.NormalizedKey(firstAreaKey);
+            string currentKey = GoblinAreaResolver.NormalizedKey(currentAreaKey);
+            string levelOneKey = GoblinAreaResolver.NormalizedKey(firstLevel);
+            string levelTwoKey = GoblinAreaResolver.NormalizedKey(secondLevel);
+            return (firstKey == levelOneKey && currentKey == levelTwoKey) ||
+                (firstKey == levelTwoKey && currentKey == levelOneKey);
         }
     }
 }

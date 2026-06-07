@@ -409,7 +409,7 @@ namespace GoblinFarmer
                 {
                     if (targetKey == PortLocationKey("Stinging Winds"))
                     {
-                        return (false, "Ancient Waterway allows hotkey teleportation to Stinging Winds");
+                        return (true, "Ancient Waterway main area blocks hotkey teleportation to Stinging Winds; Eastern Channel Level 2 is required");
                     }
 
                     return (true, "Ancient Waterway blocks hotkey teleport routing.");

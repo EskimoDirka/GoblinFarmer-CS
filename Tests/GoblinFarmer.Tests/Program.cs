@@ -43,6 +43,7 @@ Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGe
 Run("Goblin minimap color disambiguates Treasure and Odious", TestGoblinMinimapColorDisambiguatesTreasureAndOdious);
 Run("Goblin minimap color disambiguates Gilded and Malevolent", TestGoblinMinimapColorDisambiguatesGildedAndMalevolent);
 Run("Goblin automatic minimap counts require strong confidence", TestGoblinAutomaticMinimapCountsRequireStrongConfidence);
+Run("Goblin journal freshness allows linked Caverns levels", TestGoblinJournalFreshnessAllowsLinkedCavernsLevels);
 Run("Debug package excludes success screenshots by default", TestDebugPackageExcludesSuccessScreenshotsByDefault);
 Run("Debug package limits failure and debug screenshots by default", TestDebugPackageLimitsFailureAndDebugScreenshotsByDefault);
 Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsObservationDiagnosticCrops);
@@ -762,9 +763,32 @@ static void TestGoblinAutomaticMinimapCountsRequireStrongConfidence()
     string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
 
     AssertTrue(evidenceModelSource.Contains("EvidenceConfidence", StringComparison.Ordinal), "observation records should carry evidence confidence into auto-count decisions");
-    AssertTrue(sessionSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidence = 0.90", StringComparison.Ordinal), "automatic minimap counts should require a stronger confidence than generic observation matching");
+    AssertTrue(sessionSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidence = 0.85", StringComparison.Ordinal), "normal automatic minimap counts should accept strong evidence below the ambiguity-pair gate");
+    AssertTrue(sessionSource.Contains("PortAutomaticGoblinAmbiguousMinimapCountMinimumConfidence = 0.90", StringComparison.Ordinal), "Gilded/Malevolent automatic minimap counts should keep the stricter ambiguity-pair gate");
+    AssertTrue(sessionSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidenceFor", StringComparison.Ordinal), "automatic minimap counts should use a goblin-type-specific confidence gate");
     AssertTrue(sessionSource.Contains("MinimapConfidencePendingJournal", StringComparison.Ordinal), "low-confidence minimap auto-count attempts should suppress and wait for stronger evidence");
     AssertTrue(sessionSource.Contains("minimapAutoCountMinConfidence", StringComparison.Ordinal), "auto-count diagnostics should report the minimap confidence gate");
+}
+
+static void TestGoblinJournalFreshnessAllowsLinkedCavernsLevels()
+{
+    DateTime now = DateTime.UtcNow;
+    GoblinJournalKilledState killedState = new(
+        "Menagerist",
+        "Caverns of Frost Level 1",
+        now - TimeSpan.FromSeconds(30),
+        now);
+
+    AssertTrue(
+        GoblinJournalFreshnessPolicy.KilledIsFresh(
+            killedState,
+            "Caverns of Frost Level 2",
+            now,
+            TimeSpan.FromSeconds(45)),
+        "fresh killed journal evidence from Caverns Level 1 should be reusable for a same-type linked Level 2 encounter");
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.AllowsLinkedDungeonLevelRepeat("Fields of Slaughter", "Pandemonium Fortress Level 2"),
+        "linked-level repeat exceptions should not apply to unrelated areas");
 }
 
 static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()
@@ -2151,7 +2175,7 @@ static void TestTeleportNextNoRouteStateNotifiesUser()
     AssertTrue(hotkeysSource.Contains("Teleport Next hotkey ignored: no queued/next teleport", StringComparison.Ordinal), "no-route Teleport Next state should still log the ignored hotkey");
     AssertTrue(hotkeysSource.Contains("Teleport Next skipped", StringComparison.Ordinal), "no-route Teleport Next state should show a player-visible notification");
     AssertTrue(hotkeysSource.Contains("No queued route target for current location.", StringComparison.Ordinal), "no-route Teleport Next notification should explain the route state");
-    AssertTrue(routingSource.Contains("Ancient Waterway allows hotkey teleportation to Stinging Winds", StringComparison.Ordinal), "plain Ancient Waterway should allow the queued Stinging Winds Teleport Next hop");
+    AssertTrue(routingSource.Contains("Ancient Waterway main area blocks hotkey teleportation to Stinging Winds", StringComparison.Ordinal), "plain Ancient Waterway should block the queued Stinging Winds Teleport Next hop");
     AssertTrue(routingSource.Contains("Eastern Channel Level 2 allows hotkey teleportation to Stinging Winds", StringComparison.Ordinal), "Eastern Channel Level 2 should continue to Stinging Winds");
     AssertTrue(routingSource.Contains("Western Channel Level 2 should return to Ancient Waterway, not Stinging Winds", StringComparison.Ordinal), "Western Channel Level 2 should not skip back to Stinging Winds");
     AssertTrue(routingSource.Contains("Already inside Ancient Waterway; Ancient Waterway button is blocked", StringComparison.Ordinal), "the Ancient Waterway waypoint button should still block when already inside Ancient Waterway");

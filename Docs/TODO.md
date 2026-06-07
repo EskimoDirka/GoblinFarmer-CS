@@ -11,7 +11,7 @@
 * [x] Fix Waterway button clearing next-target button color by requiring exact Ancient Waterway arrival confirmation before advancing state.
 * [x] Keep Eastern Channel Level 2 as the only channel level that allows direct hotkey routing to Stinging Winds.
 * [x] Block Ancient Waterway hotkey routing away from Ancient Waterway with explicit reason.
-* [x] Allow plain Ancient Waterway Teleport Next hotkey routing to Stinging Winds while preserving the Ancient Waterway self-click block.
+* [x] Re-block plain Ancient Waterway Teleport Next hotkey routing to Stinging Winds while preserving the Eastern Channel Level 2 child-route allowance and the Ancient Waterway self-click block.
 * [x] Fix Western Channel Level 2 corrective target to Ancient Waterway instead of direct Stinging Winds.
 * [x] Force a fresh raw current-location scan on every teleport hotkey press before choosing allowed/blocked routing.
 * [x] Use raw hotkey scan location as the primary blocking/route-decision location so aliases do not override channel sublocations.
@@ -136,8 +136,14 @@
 * [x] Review `GoblinFarmer_Debug_20260606_094955.zip` for Treasure/Odious validation, stale leave/return suppression, and delayed Gilded Baron journal observation.
 * [x] Allow continuous Observation/Auto Count to accept fresh same-area Killed-only journal evidence with `JournalKilledAcceptedFreshObservation` while preserving stale Killed suppression.
 * [x] Review `GoblinFarmer_Debug_20260606_181752.zip` for the Cathedral Level 2 Gilded Baron notification mismatch, automatic-count evidence source, duplicate/stale suppression, Last Observation persistence, and Ancient Waterway/channel route logs.
-* [x] Add a stronger automatic-count confidence gate for minimap-only observations so lower-confidence minimap evidence suppresses with `MinimapConfidencePendingJournal` instead of consuming an area count before Journal evidence appears.
+* [x] Add a stronger automatic-count confidence gate for Gilded Baron / Malevolent Tormentor minimap-only observations so lower-confidence ambiguous minimap evidence suppresses with `MinimapConfidencePendingJournal` instead of consuming an area count before Journal evidence appears.
 * [x] Extend minimap color diagnostics/overrides to the Gilded Baron / Malevolent Tormentor pair with `MinimapOrangePixels` diagnostics.
+* [x] Review `GoblinFarmer_Debug_20260606_185434.zip` for Gilded Baron notification validation, Ancient Waterway hotkey blocking, Caverns of Frost Level 1/2 same-type auto-count behavior, and PF2 missed auto-count evidence.
+* [x] Lower the non-ambiguous automatic minimap confidence gate to `0.85` while keeping Gilded Baron / Malevolent Tormentor at `0.90`.
+* [x] Add a narrow Caverns of Frost Level 1/2 linked-level journal freshness exception so same-type fresh Killed journal evidence can count once per level.
+* [ ] Live-validate plain Ancient Waterway blocks Teleport Next to Stinging Winds while Eastern Channel Level 2 still allows Stinging Winds and Western Channel Level 2 still returns to Ancient Waterway.
+* [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count the same goblin type once in the same game when the second encounter is fresh.
+* [ ] Live-validate Pandemonium Fortress Level 2 auto-counts fresh Treasure Goblin and Blood Thief evidence promptly, with Blood Thief minimap evidence around `0.895` no longer stuck below the generic gate.
 * [ ] With Automatic Counting on before a fresh encounter, confirm one fresh eligible observation auto-counts once and shows the automatic-count notification with the correct goblin type.
 * [x] Leave and return to the same area with the same visible journal/minimap evidence; confirm the same evidence does not count again.
 * [x] Press manual `X` in New Tristram and confirm `BlockedArea` notification/log appears with no count or area-slot consumption.
