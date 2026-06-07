@@ -1533,19 +1533,6 @@ function New-GoblinTrackerPackageSummary {
     $lines.Add("Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
     $lines.Add("")
 
-    $nextTestsPath = Join-Path $StagingRoot "Debug\GoblinTrackerNextTests.txt"
-    if (Test-Path -LiteralPath $nextTestsPath -PathType Leaf) {
-        $lines.Add("Next tests:")
-        foreach ($line in Get-Content -LiteralPath $nextTestsPath) {
-            $lines.Add("  $line")
-        }
-        $lines.Add("")
-    }
-    else {
-        $lines.Add("Next tests: none captured")
-        $lines.Add("")
-    }
-
     $liveDecisionBundles = @(Get-ChildItem -LiteralPath (Join-Path $StagingRoot "Debug\GoblinEvidence\DecisionBundles") -Filter "decision-trace.txt" -File -Recurse -ErrorAction SilentlyContinue)
     $encounterCaptures = @(Get-ChildItem -LiteralPath (Join-Path $StagingRoot "Debug\GoblinEvidence\EncounterCaptures") -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt)$' })
@@ -1586,9 +1573,7 @@ function New-GoblinTrackerReviewIndex {
         "debug-package-manifest.txt",
         "route-failure-summary.txt",
         "debug-screenshot-manifest.txt",
-        "session-info.txt",
-        "goblin-tracker-next-tests.txt",
-        "Debug\GoblinTrackerNextTests.txt"
+        "session-info.txt"
     )) {
         $path = Join-Path $StagingRoot $relative
         if (Test-Path -LiteralPath $path -PathType Leaf) {
@@ -1712,23 +1697,6 @@ try {
     Write-Step "Collecting runtime metadata"
     $runtimeSessionInfoIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "session-info.txt" "session-info.txt"
     $runtimeAppSettingsIncluded = Copy-PackageFile $resolvedRuntimeRoot $stagingRoot "Config\AppSettings.json" "Config\AppSettings.json"
-    $goblinTrackerNextTestsIncluded = $false
-    $goblinTrackerNextTestsSource = "none"
-    foreach ($root in $packageRuntimeRoots) {
-        $candidate = Join-Path $root "Debug\GoblinTrackerNextTests.txt"
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            $nextTestsDebugDestination = Join-Path $stagingRoot "Debug\GoblinTrackerNextTests.txt"
-            $nextTestsRootDestination = Join-Path $stagingRoot "goblin-tracker-next-tests.txt"
-            New-Item -ItemType Directory -Path (Split-Path -Parent $nextTestsDebugDestination) -Force | Out-Null
-            Copy-Item -LiteralPath $candidate -Destination $nextTestsDebugDestination -Force
-            Copy-Item -LiteralPath $candidate -Destination $nextTestsRootDestination -Force
-            $goblinTrackerNextTestsIncluded = $true
-            $goblinTrackerNextTestsSource = $candidate
-            break
-        }
-    }
-    Write-Host "Goblin Tracker next test metadata included: $goblinTrackerNextTestsIncluded"
-    Write-Host "Goblin Tracker next test metadata source: $goblinTrackerNextTestsSource"
 
     $logFoldersList = New-Object System.Collections.Generic.List[string]
     foreach ($root in $packageRuntimeRoots) {
@@ -2167,8 +2135,6 @@ try {
             ($logFolders | ForEach-Object { "- $_" }),
             "Selected log folder: $selectedLogFolder",
             "Selected latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
-            "Goblin Tracker next test metadata included: $goblinTrackerNextTestsIncluded",
-            "Goblin Tracker next test metadata source: $goblinTrackerNextTestsSource",
             "Selected screenshot folder: $selectedScreenshotFolder",
             "Selected debug screenshot folder: $selectedDebugScreenshotFolder",
             "Runtime session-info included: $runtimeSessionInfoIncluded",
@@ -2189,7 +2155,6 @@ try {
             "- goblin-evidence-health.txt included: $debugAnalysisFilesIncluded",
             "- goblin-tracker-summary.txt",
             "- goblin-tracker-review.html",
-            "- goblin-tracker-next-tests.txt included: $goblinTrackerNextTestsIncluded",
             "- debug-screenshot-manifest.txt",
             "- Latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
             "- Total screenshots included: $totalScreenshotCount",

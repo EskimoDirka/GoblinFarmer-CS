@@ -172,8 +172,8 @@ namespace GoblinFarmer
                 bool isEscape = vkCode == PortVkEscape;
                 bool isSkill1 = vkCode == PortVk1;
                 bool isSkill2 = vkCode == PortVk2;
-                bool isGoblinTrackerHotkey = vkCode == PortVkX;
                 bool isGoblinCalibrationHotkey = vkCode == PortVkG;
+                bool isEnter = vkCode == PortVkReturn;
                 bool isAutomationNumberHotkey = isSkill1 || isSkill2;
                 bool isLootReleaseKey = vkCode == PortVkAlt || vkCode == PortVkBacktick;
                 bool keyDown = message == PortWmKeyDown || message == PortWmSysKeyDown;
@@ -201,19 +201,9 @@ namespace GoblinFarmer
                     portGoblinCalibrationHotkeyHandled = false;
                 }
 
-                if (isGoblinTrackerHotkey)
+                if (isEnter && keyDown && !injected && PortDiabloIsActive())
                 {
-                    if (keyDown && !portGoblinTrackerHotkeyHandled)
-                    {
-                        portGoblinTrackerHotkeyHandled = true;
-                        BeginInvoke(new Action(PortIncrementGoblinCount));
-                    }
-                    else if (keyUp)
-                    {
-                        portGoblinTrackerHotkeyHandled = false;
-                    }
-
-                    return CallNextHookEx(portKeyboardHookHandle, nCode, wParam, lParam);
+                    PortSuppressJournalEvidenceAfterHistoryInput("EnterKey");
                 }
 
                 if (isEscape && injected && keyDown && (isAutomationRunning || portCombatRunning))

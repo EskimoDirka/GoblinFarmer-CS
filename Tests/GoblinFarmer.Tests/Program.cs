@@ -33,7 +33,7 @@ Run("GoblinEvidence template discovery finds source image set", TestGoblinEviden
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
-Run("VS Debug diagnostics include next test steps tab", TestVsDebugDiagnosticsIncludeNextTestStepsTab);
+Run("VS Debug diagnostics omit next test steps tab", TestVsDebugDiagnosticsOmitNextTestStepsTab);
 Run("Battle.net successful launch diagnostics avoid failure screenshots", TestBattleNetSuccessfulLaunchDiagnosticsAvoidFailureScreenshots);
 Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverrideWins);
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
@@ -66,7 +66,7 @@ Run("Goblin observation UI state logs update and clear", TestGoblinObservationUi
 Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
-Run("Goblin VS Debug manual test count override is safety-scoped", TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped);
+Run("Goblin VS Debug recognition Capture button is manual-only", TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
 Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLiveEvidenceOnly);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
@@ -2088,7 +2088,7 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(sessionStatsSource.Contains("displayHoldSeconds={PortAutomaticGoblinObservationDisplayHold.TotalSeconds:0}", StringComparison.Ordinal), "automatic observation update logs should include the display hold duration");
     AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should route through the Last Observation state helper");
-    AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 750", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback without loosening evidence thresholds");
+    AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 500", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback without loosening evidence thresholds");
 }
 
 static void TestGoblinObservationModeEnabledByDefaultInRelease()
@@ -2149,8 +2149,10 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
 
     AssertTrue(automationSource.Contains("chkGoblinObservationMode", StringComparison.Ordinal), "VS Debug form should expose an Observation Mode checkbox");
     AssertTrue(automationSource.Contains("chkGoblinAutomaticCounting", StringComparison.Ordinal), "VS Debug form should expose an Automatic Counting checkbox");
-    AssertTrue(automationSource.Contains("chkGoblinManualTestCountOverride", StringComparison.Ordinal), "VS Debug form should expose a manual test count override checkbox");
     AssertTrue(automationSource.Contains("chkGoblinDecisionTrace", StringComparison.Ordinal), "VS Debug form should expose a Decision Trace checkbox");
+    AssertTrue(automationSource.Contains("btnGoblinRecognitionCapture", StringComparison.Ordinal), "VS Debug form should expose a manual recognition Capture button");
+    AssertTrue(automationSource.Contains("Text = \"Capture\"", StringComparison.Ordinal), "manual recognition capture button should be labeled Capture");
+    AssertFalse(automationSource.Contains("chkGoblinManualTestCountOverride", StringComparison.Ordinal), "VS Debug form should not expose the retired manual test count override checkbox");
     AssertFalse(automationSource.Contains("btnCreateGoblinReviewFiles", StringComparison.Ordinal), "VS Debug form should not require a manual review files button");
     AssertFalse(automationSource.Contains(retiredEvidenceReviewCloseMethod, StringComparison.Ordinal), "VS Debug form close should not create loose review files or derived evidence artifacts");
     AssertTrue(automationSource.Contains("ShutdownCleanupStarted", StringComparison.Ordinal), "VS Debug form close should log the quiet shutdown cleanup path");
@@ -2158,76 +2160,53 @@ static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
     AssertTrue(releaseSource.Contains("PortInitializeGoblinTrackerDebugPreferenceControls();", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should initialize before runtime validation can stop startup");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinObservationMode)", StringComparison.Ordinal), "Observation Mode checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting)", StringComparison.Ordinal), "Automatic Counting checkbox should be placed inside the visible Settings group");
-    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinManualTestCountOverride)", StringComparison.Ordinal), "manual test count override checkbox should be placed inside the visible Settings group");
     AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(chkGoblinDecisionTrace)", StringComparison.Ordinal), "Decision Trace checkbox should be placed inside the visible Settings group");
+    AssertTrue(automationSource.Contains("portSettingsGroup.Controls.Add(btnGoblinRecognitionCapture)", StringComparison.Ordinal), "Capture button should be placed inside the visible Settings group");
     AssertFalse(automationSource.Contains("Controls.Add(grpGoblinTrackerDebugSettings)", StringComparison.Ordinal), "VS Debug Goblin Tracker checkboxes should not be added as a layered top-level overlay");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked", StringComparison.Ordinal), "Observation Mode checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked", StringComparison.Ordinal), "Automatic Counting checkbox changes should persist to AppSettings");
-    AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableManualTestCountOverride = chkGoblinManualTestCountOverride.Checked", StringComparison.Ordinal), "manual test count override checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("AppSettings.GoblinTracker.EnableDecisionTrace = chkGoblinDecisionTrace.Checked", StringComparison.Ordinal), "Decision Trace checkbox changes should persist to AppSettings");
     AssertTrue(automationSource.Contains("PortSetGoblinAutomaticCountingArmedState(source)", StringComparison.Ordinal), "toggling automatic counting should re-arm the freshness gate");
     AssertTrue(automationSource.Contains("PortStartGoblinObservationScanner(source)", StringComparison.Ordinal), "enabling Observation Mode from the form should ensure the scanner is running");
+    AssertTrue(automationSource.Contains("PortQueueGoblinRecognitionDebugCapture(\"VsDebugCaptureButton\")", StringComparison.Ordinal), "Capture button should create a manual recognition capture only when clicked");
     AssertTrue(automationSource.Contains("portSettingsGroup.Height = Math.Max(portSettingsGroup.Height, 214)", StringComparison.Ordinal), "VS Debug Settings group should still expand for the added Goblin Tracker test controls");
 }
 
-static void TestVsDebugDiagnosticsIncludeNextTestStepsTab()
+static void TestVsDebugDiagnosticsOmitNextTestStepsTab()
 {
     string repoRoot = FindRepositoryRootForTests();
     string diagnosticsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Diagnostics.cs"));
 
-    AssertTrue(diagnosticsSource.Contains("bool showNextTests = AppSettings.IsVsDebugProfile", StringComparison.Ordinal), "Next Tests tab should be scoped to VS Debug/dev profile");
-    AssertTrue(diagnosticsSource.Contains("Name = \"tabNextTestSteps\"", StringComparison.Ordinal), "diagnostics should include a dedicated Next Tests tab");
-    AssertTrue(diagnosticsSource.Contains("Text = \"Next Tests\"", StringComparison.Ordinal), "Next Tests tab should have a readable tab title");
-    AssertTrue(diagnosticsSource.Contains("PortCreateNextTestStepsPanel", StringComparison.Ordinal), "Next Tests tab should use a dedicated checklist panel");
-    AssertTrue(diagnosticsSource.Contains("CheckBox checkBox = new()", StringComparison.Ordinal), "Next Tests should render testable checkbox rows");
-    AssertTrue(diagnosticsSource.Contains("Checked = false", StringComparison.Ordinal), "Next Tests checkboxes should start unchecked so checked means tested");
-    AssertTrue(diagnosticsSource.Contains("portNextTestStepCheckboxes", StringComparison.Ordinal), "Next Tests checkbox state should be retained for automatic debug-package metadata");
-    AssertTrue(diagnosticsSource.Contains("PortNextTestStepMetadataLines", StringComparison.Ordinal), "Next Tests should export checked/unchecked state without a prompt");
-    AssertTrue(diagnosticsSource.Contains("CheckedCount", StringComparison.Ordinal), "Next Tests metadata should summarize checked items");
-    AssertTrue(diagnosticsSource.Contains("UncheckedCount", StringComparison.Ordinal), "Next Tests metadata should summarize unchecked items");
-    AssertTrue(diagnosticsSource.Contains("Goblin Tracker Auto-Count Next Pass", StringComparison.Ordinal), "Next Tests should be framed around the current automatic-count pass");
-    AssertTrue(diagnosticsSource.Contains("Auto Goblin Count", StringComparison.Ordinal), "Next Tests should remind the tester to enable automatic counting for real validation");
-    AssertTrue(diagnosticsSource.Contains("Test Count Override is off", StringComparison.Ordinal), "Next Tests should require the synthetic override off during real validation");
-    AssertTrue(diagnosticsSource.Contains("Baseline already validated", StringComparison.Ordinal), "Next Tests should define setup rows as already-validated baseline reminders");
-    AssertTrue(diagnosticsSource.Contains("Must-test route blockers", StringComparison.Ordinal), "Next Tests should call out the current must-test route blockers");
-    AssertTrue(diagnosticsSource.Contains("If encountered regressions", StringComparison.Ordinal), "Next Tests should separate opportunistic regression checks from must-test blockers");
-    AssertTrue(diagnosticsSource.Contains("Cave Of The Moon Clan Level 2", StringComparison.Ordinal), "Next Tests should list Cave Level 2 validation");
-    AssertTrue(diagnosticsSource.Contains("Eastern Channel Level 2", StringComparison.Ordinal), "Next Tests should list Eastern Channel Level 2 validation");
-    AssertTrue(diagnosticsSource.Contains("Battlefields", StringComparison.Ordinal), "Next Tests should list Battlefields validation");
-    AssertTrue(diagnosticsSource.Contains("Notification latency", StringComparison.Ordinal), "Next Tests should include post-tuning notification latency validation");
-    AssertFalse(diagnosticsSource.Contains("Stinging Winds: old journal evidence must not count", StringComparison.Ordinal), "Stinging Winds should not remain a must-test blocker after the latest live verification");
-    AssertTrue(diagnosticsSource.Contains("New Game cleanup", StringComparison.Ordinal), "Next Tests should keep New Game cleanup validation after Reset Stats was live-confirmed");
-    AssertTrue(diagnosticsSource.Contains("BlockedArea", StringComparison.Ordinal), "Next Tests should include blocked-area validation");
-    AssertTrue(diagnosticsSource.Contains("Gilded Baron and Malevolent Tormentor", StringComparison.Ordinal), "Next Tests should include classification validation");
-    AssertTrue(diagnosticsSource.Contains("Combat hotkey during Waiting For Location Confirmation", StringComparison.Ordinal), "Next Tests should include the combat-hotkey arrival wait override validation");
-    AssertTrue(diagnosticsSource.Contains("Do not rely on form close", StringComparison.Ordinal), "Next Tests should explain that form close is quiet and does not generate review artifacts");
-    AssertTrue(diagnosticsSource.Contains("Use the explicit debug package export only when review artifacts are needed", StringComparison.Ordinal), "Next Tests should point review artifact generation to the intentional export workflow");
-    AssertFalse(diagnosticsSource.Contains("Review rule", StringComparison.Ordinal), "Next Tests should not include a manual review rule section now that review files are automatic");
-    AssertFalse(diagnosticsSource.Contains("Check this only after you clicked Review Files", StringComparison.Ordinal), "Next Tests should not require manual Review Files interaction");
-    int caveIndex = diagnosticsSource.IndexOf("Cave Of The Moon Clan Level 2", StringComparison.Ordinal);
-    int easternChannelIndex = diagnosticsSource.IndexOf("Eastern Channel Level 2", StringComparison.Ordinal);
-    AssertTrue(caveIndex > 0 && easternChannelIndex > caveIndex, "route-specific Next Tests should list Cave Of The Moon Clan Level 2 before Eastern Channel Level 2");
+    AssertFalse(diagnosticsSource.Contains("showNextTests", StringComparison.Ordinal), "VS Debug diagnostics should not include the retired Next Tests gate");
+    AssertFalse(diagnosticsSource.Contains("tabNextTestSteps", StringComparison.Ordinal), "VS Debug diagnostics should not include a Next Tests tab");
+    AssertFalse(diagnosticsSource.Contains("Text = \"Next Tests\"", StringComparison.Ordinal), "Next Tests tab title should be removed");
+    AssertFalse(diagnosticsSource.Contains("PortCreateNextTestStepsPanel", StringComparison.Ordinal), "Next Tests checklist panel should be removed");
+    AssertFalse(diagnosticsSource.Contains("PortNextTestStepMetadataLines", StringComparison.Ordinal), "Next Tests metadata should no longer be generated by the app");
+    AssertFalse(diagnosticsSource.Contains("portNextTestStepCheckboxes", StringComparison.Ordinal), "Next Tests checkbox state should no longer live in the form");
 }
 
-static void TestGoblinVsDebugManualTestCountOverrideIsSafetyScoped()
+static void TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly()
 {
     string repoRoot = FindRepositoryRootForTests();
-    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
-    string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string hotkeysSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Hotkeys.cs"));
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
-    string recordMethod = ExtractMethodBody(sessionStatsSource, "private bool PortTryRecordGoblinFound");
-    string overrideMethod = ExtractMethodBody(sessionStatsSource, "private static bool PortGoblinManualTestCountOverrideEnabled");
 
-    AssertTrue(appSettingsSource.Contains("public bool EnableManualTestCountOverride { get; set; } = false", StringComparison.Ordinal), "manual test count override should default off");
-    AssertTrue(appSettingsSource.Contains("TryGetProperty(\"EnableManualTestCountOverride\"", StringComparison.Ordinal), "installed configs missing the manual test count override setting should migrate to the disabled default");
-    AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableManualTestCountOverride={GoblinTracker.EnableManualTestCountOverride}", StringComparison.Ordinal), "startup AppSettings logs should expose the manual test count override setting");
-    AssertTrue(configSource.Contains("\"EnableManualTestCountOverride\": false", StringComparison.Ordinal), "project config should expose the manual test count override disabled by default");
-    AssertTrue(overrideMethod.Contains("AppSettings.IsVsDebugProfile", StringComparison.Ordinal), "manual test count override should only be effective in VS Debug/dev profile");
-    AssertTrue(overrideMethod.Contains("AppSettings.GoblinTracker.EnableManualTestCountOverride", StringComparison.Ordinal), "manual test count override should require the explicit setting");
-    AssertTrue(sessionStatsSource.Contains("ManualTestCountOverrideFreshObservationBypass", StringComparison.Ordinal), "manual test count override should log when it bypasses the fresh-evidence gate");
-    AssertTrue(sessionStatsSource.Contains("respectsBlockListAndAreaLimits=True", StringComparison.Ordinal), "manual test count override log should make clear that normal protections still apply");
-    AssertTrue(recordMethod.IndexOf("GoblinManualCountBlockList.IsBlocked(area.AreaKey)", StringComparison.Ordinal) < recordMethod.IndexOf("ManualTestCountOverrideFreshObservationBypass", StringComparison.Ordinal), "blocked areas should still be evaluated before the manual test count override can count");
-    AssertTrue(recordMethod.IndexOf("portGoblinAreaDuplicateGuard.Peek(area.AreaKey)", StringComparison.Ordinal) < recordMethod.IndexOf("ManualTestCountOverrideFreshObservationBypass", StringComparison.Ordinal), "area-limit state should still be read before the manual test count override can count");
+    AssertFalse(hotkeysSource.Contains("PortVkX", StringComparison.Ordinal), "physical X should no longer be a Goblin Tracker count hotkey");
+    AssertFalse(hotkeysSource.Contains("PortIncrementGoblinCount", StringComparison.Ordinal), "keyboard hook should not invoke the manual count path");
+    AssertTrue(automationSource.Contains("btnGoblinRecognitionCapture", StringComparison.Ordinal), "VS Debug should expose the recognition Capture button");
+    AssertTrue(automationSource.Contains("Text = \"Capture\"", StringComparison.Ordinal), "recognition capture button should be labeled Capture");
+    AssertTrue(automationSource.Contains("PortQueueGoblinRecognitionDebugCapture(\"VsDebugCaptureButton\")", StringComparison.Ordinal), "Capture button should create files only from an explicit click");
+    AssertTrue(evidenceSource.Contains("ManualCaptures", StringComparison.Ordinal), "manual recognition captures should go to a separate ManualCaptures folder");
+    AssertTrue(evidenceSource.Contains("GoblinRecognitionCaptureQueued", StringComparison.Ordinal), "manual recognition capture should log when it is queued");
+    AssertTrue(evidenceSource.Contains("GoblinRecognitionCaptureSaved", StringComparison.Ordinal), "manual recognition capture should log saved paths");
+    AssertTrue(evidenceSource.Contains("createdOnlyByButton=True", StringComparison.Ordinal), "manual recognition capture logs should make click-only creation explicit");
+    AssertTrue(evidenceSource.Contains("counterWorkflowCapturesRemainAutomatic=True", StringComparison.Ordinal), "manual capture logs should state that counter-workflow captures remain automatic");
+    AssertTrue(evidenceSource.Contains("_Fullscreen.png", StringComparison.Ordinal), "manual recognition capture should save a fullscreen image");
+    AssertTrue(evidenceSource.Contains("_Minimap.png", StringComparison.Ordinal), "manual recognition capture should save a minimap crop");
+    AssertTrue(evidenceSource.Contains("_Journal.png", StringComparison.Ordinal), "manual recognition capture should save a journal crop");
+    AssertTrue(sessionStatsSource.Contains("PortQueueGoblinEncounterDebugCapture(source, observation.Source", StringComparison.Ordinal), "automatic accepted counts should continue creating encounter captures automatically");
 }
 
 static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()
@@ -2379,14 +2358,10 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertFalse(automationSource.Contains("InputBox", StringComparison.Ordinal), "VS Debug close should not ask for freeform debug metadata");
     AssertFalse(automationSource.Contains("PortCreateDebugPackage", StringComparison.Ordinal), "VS Debug close should not invoke ZIP package creation");
     AssertFalse(automationSource.Contains(retiredReviewRunMethod, StringComparison.Ordinal), "VS Debug close should not run derived evidence processing");
-    AssertTrue(diagnosticsSource.Contains("PortWriteGoblinTrackerNextTestMetadata(\"NextTestsPanelInitialized\")", StringComparison.Ordinal), "VS Debug should save Next Tests metadata when the checklist is initialized");
-    AssertTrue(diagnosticsSource.Contains("PortWriteGoblinTrackerNextTestMetadata(\"NextTestsCheckboxChanged\")", StringComparison.Ordinal), "VS Debug should refresh Next Tests metadata when checklist state changes");
-    AssertTrue(evidenceSource.Contains("GoblinTrackerNextTests.txt", StringComparison.Ordinal), "VS Debug should save Next Tests metadata for the debug package batch to include");
-    AssertTrue(evidenceSource.Contains("PortNextTestStepMetadataLines()", StringComparison.Ordinal), "Next Tests metadata should be generated from the in-app checklist");
-    AssertTrue(evidenceSource.Contains("GoblinTrackerNextTestsSaveSkipped", StringComparison.Ordinal), "Next Tests metadata saves should be skipped during app close");
-    AssertTrue(evidenceSource.Contains("reason=AppClosing", StringComparison.Ordinal), "Next Tests metadata skip logs should identify close-time suppression");
-    AssertTrue(diagnosticsSource.Contains("Do not rely on form close for review artifacts", StringComparison.Ordinal), "Next Tests should tell testers that form close is not the review export path");
-    AssertTrue(diagnosticsSource.Contains("Use the explicit debug package export only when review artifacts are needed", StringComparison.Ordinal), "Next Tests should point review artifact generation to the batch export path");
+    AssertFalse(diagnosticsSource.Contains("PortWriteGoblinTrackerNextTestMetadata", StringComparison.Ordinal), "VS Debug should not save retired Next Tests metadata");
+    AssertFalse(evidenceSource.Contains("GoblinTrackerNextTests.txt", StringComparison.Ordinal), "VS Debug should not write retired Next Tests metadata");
+    AssertFalse(evidenceSource.Contains("PortNextTestStepMetadataLines()", StringComparison.Ordinal), "Next Tests metadata generation should be removed");
+    AssertFalse(evidenceSource.Contains("GoblinTrackerNextTestsSaveSkipped", StringComparison.Ordinal), "retired Next Tests close-time logs should be removed");
     AssertFalse(evidenceSource.Contains("PortWriteGoblinTrackerReviewScenarioMetadata", StringComparison.Ordinal), "legacy scenario metadata writer should be removed");
     AssertFalse(debugManagerSource.Contains(retiredEvidenceToken + "Review", StringComparison.Ordinal), "DebugManager should not advertise retired derived-evidence review folders");
     AssertTrue(evidenceSource.Contains("_Fullscreen", StringComparison.Ordinal), "VS Debug encounter capture should save fullscreen evidence locally");
@@ -2423,8 +2398,8 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageScript.Contains("Config\\AppSettings.json", StringComparison.Ordinal), "debug packages should include active runtime config");
     AssertTrue(packageScript.Contains("route-failure-summary.txt", StringComparison.Ordinal), "debug packages should include route failure summaries");
     AssertTrue(packageScript.Contains("debug-screenshot-manifest.txt", StringComparison.Ordinal), "debug packages should include screenshot manifests");
-    AssertTrue(packageScript.Contains("GoblinTrackerNextTests.txt", StringComparison.Ordinal), "debug packages should include VS Debug Next Tests metadata when available");
-    AssertTrue(packageScript.Contains("goblin-tracker-next-tests.txt", StringComparison.Ordinal), "debug packages should include root Next Tests metadata for package review");
+    AssertFalse(packageScript.Contains("GoblinTrackerNextTests.txt", StringComparison.Ordinal), "debug packages should not include retired VS Debug Next Tests metadata");
+    AssertFalse(packageScript.Contains("goblin-tracker-next-tests.txt", StringComparison.Ordinal), "debug packages should not include retired root Next Tests metadata");
     AssertFalse(packageScript.Contains("goblin-tracker-scenario.txt", StringComparison.Ordinal), "debug packages should not depend on legacy scenario input metadata");
     AssertTrue(packageScript.Contains("goblin-tracker-summary.txt", StringComparison.Ordinal), "debug packages should include a root Goblin Tracker review summary");
     AssertTrue(packageScript.Contains("goblin-tracker-review.html", StringComparison.Ordinal), "debug packages should include a root review index");
@@ -2543,6 +2518,11 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     string signatureMethod = ExtractMethodBody(evidenceSource, "private string PortJournalEvidenceLineSignature");
     AssertTrue(evidenceSource.Contains("PortJournalEvidenceLineSignature", StringComparison.Ordinal), "journal freshness should use a line signature, not current area as the freshness key");
     AssertTrue(evidenceSource.Contains("JournalEngagedIgnoredAreaChanged", StringComparison.Ordinal), "Engaged journal lines first seen in another area should log an area-change suppression");
+    AssertTrue(evidenceSource.Contains("JournalCandidateIgnoredHistoryInput", StringComparison.Ordinal), "journal evidence should be suppressed briefly after the player opens journal/chat history with Enter");
+    AssertTrue(evidenceSource.Contains("JournalCandidateIgnoredHistoryRow", StringComparison.Ordinal), "journal evidence from upper/history rows should be ignored before it can become fresh evidence");
+    AssertTrue(evidenceSource.Contains("GoblinJournalActiveFeedMinimumY", StringComparison.Ordinal), "journal history suppression should use an explicit active-feed row boundary");
+    AssertTrue(evidenceSource.Contains("GoblinEvidenceJournalNameValidationFailed", StringComparison.Ordinal), "journal template matches should validate the goblin-name portion before becoming candidates");
+    AssertTrue(evidenceSource.Contains("JournalNameValidationBelowThreshold", StringComparison.Ordinal), "journal name validation failures should be diagnosable in logs");
     AssertTrue(evidenceSource.Contains("GoblinJournalFreshnessPolicy.EngagedIsFresh", StringComparison.Ordinal), "Engaged journal evidence should use area-strict freshness before being accepted");
     AssertFalse(signatureMethod.Contains("PortDisplayLocation", StringComparison.Ordinal), "journal line freshness signatures must not include current area, or old visible lines can become fresh after moving");
     AssertTrue(signatureMethod.Contains("LineBucket", StringComparison.Ordinal), "journal line freshness signatures should include a coarse row bucket so later legitimate same-template lines can be fresh");

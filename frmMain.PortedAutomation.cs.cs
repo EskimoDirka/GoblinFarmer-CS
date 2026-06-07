@@ -15,7 +15,6 @@ namespace GoblinFarmer
         private const int PortVkG = 0x47;
         private const int PortVkM = 0x4D;
         private const int PortVkQ = 0x51;
-        private const int PortVkX = 0x58;
         private const int PortVkReturn = 0x0D;
         private const int PortVkEscape = 0x1B;
         private const int PortVkUp = 0x26;
@@ -66,8 +65,8 @@ namespace GoblinFarmer
         private bool portGoblinTrackerDebugPreferenceControlsInitialized;
         private CheckBox? chkGoblinObservationMode;
         private CheckBox? chkGoblinAutomaticCounting;
-        private CheckBox? chkGoblinManualTestCountOverride;
         private CheckBox? chkGoblinDecisionTrace;
+        private Button? btnGoblinRecognitionCapture;
 
         private volatile bool portCombatRunning;
         private volatile bool portCombatStopping;
@@ -103,7 +102,6 @@ namespace GoblinFarmer
         private volatile bool portSuppressSkill2KeyUp;
         private volatile bool portSkill1TeleportHandled;
         private volatile bool portSkill2CombatHandled;
-        private volatile bool portGoblinTrackerHotkeyHandled;
         private volatile bool portLootSpamLeftClickDown;
         private volatile bool portRuntimeLeftMouseHeld;
         private volatile bool portRuntimeRightMouseHeld;
@@ -465,50 +463,48 @@ namespace GoblinFarmer
                 Checked = AppSettings.GoblinTracker.EnableAutomaticCounting,
             };
 
-            chkGoblinManualTestCountOverride = new CheckBox
-            {
-                AutoSize = false,
-                Location = new Point(360, 108),
-                Name = "chkGoblinManualTestCountOverride",
-                Size = new Size(170, 20),
-                TabIndex = 2,
-                Text = "Test Count Override",
-                UseVisualStyleBackColor = true,
-                Checked = AppSettings.GoblinTracker.EnableManualTestCountOverride,
-            };
-
             chkGoblinDecisionTrace = new CheckBox
             {
                 AutoSize = false,
                 Location = new Point(14, 134),
                 Name = "chkGoblinDecisionTrace",
                 Size = new Size(190, 20),
-                TabIndex = 3,
+                TabIndex = 2,
                 Text = "Enable Goblin Decision Trace",
                 UseVisualStyleBackColor = true,
                 Checked = AppSettings.GoblinTracker.EnableDecisionTrace,
             };
 
+            btnGoblinRecognitionCapture = new Button
+            {
+                Location = new Point(424, 94),
+                Name = "btnGoblinRecognitionCapture",
+                Size = new Size(112, 28),
+                TabIndex = 3,
+                Text = "Capture",
+                UseVisualStyleBackColor = true,
+            };
+
             chkGoblinObservationMode.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ObservationModeCheckbox");
             chkGoblinAutomaticCounting.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("AutomaticCountingCheckbox");
-            chkGoblinManualTestCountOverride.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("ManualTestCountOverrideCheckbox");
             chkGoblinDecisionTrace.CheckedChanged += (_, _) => PortSaveGoblinTrackerDebugPreferenceControls("DecisionTraceCheckbox");
+            btnGoblinRecognitionCapture.Click += (_, _) => PortQueueGoblinRecognitionDebugCapture("VsDebugCaptureButton");
             portSettingsGroup.Controls.Add(chkGoblinObservationMode);
             portSettingsGroup.Controls.Add(chkGoblinAutomaticCounting);
-            portSettingsGroup.Controls.Add(chkGoblinManualTestCountOverride);
             portSettingsGroup.Controls.Add(chkGoblinDecisionTrace);
+            portSettingsGroup.Controls.Add(btnGoblinRecognitionCapture);
             AppLogger.Info(
                 "Goblin Tracker VS Debug preference controls initialized: " +
                 $"enableObservationMode={chkGoblinObservationMode.Checked}; " +
                 $"enableAutomaticCounting={chkGoblinAutomaticCounting.Checked}; " +
-                $"enableManualTestCountOverride={chkGoblinManualTestCountOverride.Checked}; " +
                 $"enableDecisionTrace={chkGoblinDecisionTrace.Checked}; " +
+                "captureButtonVisible=True; " +
                 $"configPath={PortLogField(AppSettings.ConfigPath)}");
         }
 
         private void PortSaveGoblinTrackerDebugPreferenceControls(string source)
         {
-            if (chkGoblinObservationMode == null || chkGoblinAutomaticCounting == null || chkGoblinManualTestCountOverride == null || chkGoblinDecisionTrace == null)
+            if (chkGoblinObservationMode == null || chkGoblinAutomaticCounting == null || chkGoblinDecisionTrace == null)
             {
                 return;
             }
@@ -516,7 +512,6 @@ namespace GoblinFarmer
             bool previousEffectiveAutomaticCounting = PortGoblinAutomaticCountingEnabled();
             AppSettings.GoblinTracker.EnableObservationMode = chkGoblinObservationMode.Checked;
             AppSettings.GoblinTracker.EnableAutomaticCounting = chkGoblinAutomaticCounting.Checked;
-            AppSettings.GoblinTracker.EnableManualTestCountOverride = chkGoblinManualTestCountOverride.Checked;
             AppSettings.GoblinTracker.EnableDecisionTrace = chkGoblinDecisionTrace.Checked;
             AppSettings.Save();
             bool currentEffectiveAutomaticCounting = PortGoblinAutomaticCountingEnabled();
@@ -535,11 +530,9 @@ namespace GoblinFarmer
                 $"source={PortLogField(source)}; " +
                 $"enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode}; " +
                 $"enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}; " +
-                $"enableManualTestCountOverride={AppSettings.GoblinTracker.EnableManualTestCountOverride}; " +
-                $"manualTestCountOverrideEffective={PortGoblinManualTestCountOverrideEnabled()}; " +
                 $"enableDecisionTrace={AppSettings.GoblinTracker.EnableDecisionTrace}; " +
                 $"automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; " +
-                $"manualHotkeyOnlyCountPath={!PortGoblinAutomaticCountingEnabled()}");
+                "captureButtonCreatesFilesOnlyOnClick=True");
         }
 
         private void PortLogDebugStartupState()

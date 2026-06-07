@@ -1,259 +1,45 @@
 # GoblinFarmer Test Checklist
 
-## Make New Game
-- Battle.net launches/focuses
-- Diablo III tab selected
-- Play clicked
-- If Diablo starts after GoblinFarmer sends Play, `BattleNetManualPlaySuspected` is false; if Battle.net is briefly still visible and then closes successfully, `BattleNetStillOpenAfterDiabloLaunch` logs `screenshotCaptured=False` / `screenshotPath=None` and is not packaged as a failure screenshot
-- Paired success screenshots captured for Battle.net Play click accepted
-- Diablo launches
-- Paired success screenshots captured for Diablo process detected
-- Start Game clicked
-- Paired success screenshots captured for Start Game click accepted
-- Southern Highlands loaded
-- Paired success screenshots captured for Southern Highlands teleport confirmation
+Current active validation lives in `Docs/TODO.md`. This checklist is a compact smoke-test reference.
 
-## Teleport Route
-- Southern Highlands -> Northern Highlands
-- Northern Highlands -> Weeping Hollow
-- Weeping Hollow -> Festering Woods
-- Festering Woods -> Cathedral
-- Cathedral Level 1 blocks Royal Crypts
-- Cathedral Level 3 allows Royal Crypts
-- City of Caldeum only allows Ancient Waterway from Ruined Cistern
-- Stinging Winds blocks Battlefields
-- Black Canyon Mines allows Battlefields
-- Caverns of Frost Level 1 blocks Teleport Next
-- Caverns of Frost Level 2 allows Rakkis Crossing
-- If the player walks to the queued Rakkis Crossing destination before pressing Teleport Next, the hotkey updates route/button state and starts Pandemonium Fortress Level 1 in the same press
-- Plain Ancient Waterway blocks Teleport Next to Stinging Winds when Stinging Winds is queued, while Eastern Channel Level 2 still allows Stinging Winds and clicking the Ancient Waterway button from inside Ancient Waterway still blocks
-- Each successful teleport confirmation captures paired Diablo/App success screenshots
-- Route blocks/failures capture paired Diablo/App failure screenshots
+## Build And Packaging
 
-## Failure Recovery
-- Interrupted teleport preserves green/orange buttons
-- Retry hotkey uses same intended target
-- Failed teleport does not advance route
-- Failure screenshots include both Diablo and GoblinFarmer app evidence
+- `dotnet build GoblinFarmer.csproj` succeeds.
+- `dotnet run --project Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false` succeeds.
+- `git diff --check` has no whitespace errors.
+- `Scripts\Create Debug Package.bat` creates a ZIP when explicit review artifacts are needed.
 
 ## Goblin Tracker
-- Release and VS Debug Goblin Tracker group layouts show Goblins, GPH, Active Time, Last Evidence, Evidence Type, Evidence Confidence, Evidence Time, and the full Last Observation block without merged lines or bottom clipping
-- Toggling Release Debug Mode on/off does not shrink the Goblin Tracker group back to the overlapping layout
-- Default resolved areas allow one goblin count per area per game
-- Manual `X` logs `AreaDetectionAmbiguous` when PF and known channel/cavern, Moon Clan, or Cathedral title-template matches are extremely close
-- Manual `X` uses route context to select Western Channel Level 1/2 or Eastern Channel Level 1/2 from Ancient Waterway context instead of consuming PF slots
-- Manual `X` uses route context to select Caverns of Frost Level 1/2 from Battlefields context instead of consuming PF slots
-- Manual `X` uses route context to select Cave Of The Moon Clan Level 1 from Southern Highlands context instead of consuming PF1 slots
-- Manual `X` uses route context to select Cathedral Level 1/2 from exact Cathedral level context instead of consuming PF slots
-- Unresolved PF-leading ambiguity suppresses the count with `GoblinCountSuppressed reason=AmbiguousAreaDetection`
-- Manual `X` in WhimsyDale suppresses with `GoblinCountSuppressed areaKey=WhimsyDale reason=BlockedArea source=ManualHotkey`
-- Repeated manual `X` in WhimsyDale remains blocked
-- City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk suppress with `GoblinCountSuppressed`, `reason=BlockedArea`, and `source=ManualHotkey`
-- New Tristram suppresses with `GoblinCountSuppressed`, `reason=BlockedArea`, and a visible blocked-area notification
-- Manual-count blocked areas do not increment the counter and do not consume an area-count slot
-- Cave Of The Moon Clan Level 1 counts once and suppresses the second press as the same area
-- With Automatic Counting enabled, Cave Of The Moon Clan Level 1 and Cave Of The Moon Clan Level 2 can each count once in the same game when each level has fresh Journal or Minimap evidence
-- Cathedral Level 1 counts once and suppresses the second press as the same area
-- Cathedral Level 2 counts once and suppresses the second press as the same area
-- Western Channel Level 1 counts once and suppresses the second press as the same area
-- Western Channel Level 2 counts once and suppresses the second press as the same area
-- Eastern Channel Level 1 counts once and suppresses the second press as the same area
-- Eastern Channel Level 2 counts once and suppresses the second press as the same area
-- With Automatic Counting enabled, Eastern Channel Level 2 fresh Blood Thief evidence counts once and does not inherit stale Blood Thief evidence from a previous area
-- Caverns of Frost Level 1 counts once and suppresses the second press as the same area
-- Caverns of Frost Level 2 counts once and suppresses the second press as the same area
-- With Automatic Counting enabled, Caverns of Frost Level 1 and Level 2 can each count once, but Level 2 must use evidence first seen after Level 2 is detected, fresh minimap evidence, or another same-area candidate
-- Killed journal evidence first seen in Caverns of Frost Level 1 must not auto-count after moving to Caverns of Frost Level 2
-- Pandemonium Fortress Level 1 accepts goblin counts 1 and 2 in the same game
-- Pandemonium Fortress Level 1 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
-- Pandemonium Fortress Level 2 accepts goblin counts 1 and 2 in the same game
-- Pandemonium Fortress Level 2 suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
-- Stinging Winds accepts goblin counts 1 and 2 in the same game
-- Stinging Winds suppresses goblin count 3 with `GoblinCountSuppressed`, `areaCount=2`, `areaLimit=2`, and `reason=AreaLimitReached`
-- Sewers of Caldeum, Ruined Cistern, Channel, Cave, Cathedral, and Battlefields subregions still resolve separately where expected and remain capped at one count per area per game unless explicitly blocked from manual counts
-- With Automatic Counting enabled, Battlefields fresh Treasure Goblin evidence counts once even if an older Treasure Goblin Journal template was seen earlier in the run
-- Cathedral Level 3 remains a default one-count area; a second manual `X` in the same game should suppress as a duplicate unless the log shows a different resolved area key or unknown fallback
-- Reset Stats clears goblin count, tracker active time, GPH, per-area count state, Goblin Evidence cooldowns, and Last Observation/manual observation state
-- New Game clears per-area count state and Goblin Evidence observation/cooldown state while preserving the current session tracker statistics
-- Unknown-area manual fallback still counts through the existing fallback behavior when no area can be resolved and does not create a counted area key
-- Manual `X` in a resolved allowed area with no fresh same-area observation or manual refresh candidate suppresses with `GoblinCountSuppressed reason=NoFreshObservation source=ManualHotkey`
-- Manual `X` no-fresh suppression shows `No fresh goblin observation to count.` and does not increment GoblinCount or consume an area-count slot
-- Manual `X` with fresh same-area observation/candidate still counts, reuses the goblin type when known, and follows the duplicate guard
-- `GoblinTracker.AllowUnknownManualCount` defaults to `false`; setting it to `true` is the explicit opt-in for legacy resolved-area `Unknown` manual counts
-- Blocked manual-count areas still suppress with `BlockedArea` before the no-fresh Unknown gate, even when evidence exists
-- Accepted manual `X` counts show a no-activate notification for 5 seconds with goblin counted, area/location, goblin type or `Unknown`, and current total
-- Accepted manual `X` notifications reuse a recent same-area Observation Mode goblin type within the safe short window
-- Accepted manual `X` runs a current observation refresh before showing the notification, without automatic counting or area-slot consumption
-- Accepted manual `X` skips the evidence refresh when a recent same-area Last Observation already has a reusable goblin type
-- Accepted manual `X` counts immediately update Last Observation to the counted goblin type, area, source `ManualHotkey`, and reason `Counted`
-- No-candidate scanner clears do not erase an accepted manual count Last Observation during the 5-second count notification window
-- Journal/Minimap scanner updates during the manual-count display hold log `LastObservationUpdateSkippedDuringManualHold` and do not overwrite `ManualHotkey` / `Counted`
-- Manual `X` notification refresh checks Minimap evidence before Journal evidence to keep count notifications responsive; normal Observation Mode scans remain Journal-primary
-- Accepted manual `X` notifications remain `Unknown` when no recent same-area observation exists or the latest observation is from another area
-- Automation Observation Mode is enabled for `JournalCandidate` and `MinimapCandidate`
-- App/session startup logs `ObservationModeConfiguration enabled=True` and `ObservationScannerStarted ... enabled=True` by default in normal Release through `GoblinTracker.EnableObservationMode=true`
-- Existing AppSettings without `GoblinTracker.EnableObservationMode` migrate to the enabled default
-- Observation scanner logs `ObservationScanAttempted` while Diablo is active/focused and no automation workflow is running
-- Observation scanner startup reports `intervalMs=750` so Last Observation/count feedback is more responsive during live goblin encounters without lowering evidence thresholds
-- Normal Release Diablo-active scans do not repeatedly skip with `ObservationScanSkipped reason=ObservationModeDisabled` unless `GoblinTracker.EnableObservationMode=false` is explicitly configured
-- Observation scanner logs `ObservationScanSkipped` with a reason when Diablo/scanner conditions are not eligible
-- Observation scanner logs combat state, automation state, Diablo running/active state, current area, and cooldown state in scanner attempt/skip diagnostics
-- Evidence loop logs Journal/Minimap crop paths from `Debug\GoblinEvidence\ObservationDiagnostics`
-- If Goblin Evidence templates are missing, startup/scanner diagnostics log one clear `GoblinEvidenceTemplateSetupMissing` line and throttled `GoblinEvidenceScanResult reason=MissingTemplate` summaries
-- Missing Goblin Evidence templates do not spam `GoblinEvidenceCandidateCheck reason=MissingTemplate` on every scan
-- VS Debug missing-template notification names the needed templates without activating over Diablo
-- Goblin Evidence template discovery accepts `<Goblin Type> Engaged Journal.png`, `<Goblin Type> Killed Journal.png`, `<Goblin Type> Engaged & Killed Journal.png`, optional-suffix journal names such as `<Goblin Type> Engaged.png` and `<Goblin Type> Killed.png`, prefix journal names such as `Engaged <Goblin Type> Journal.png`, and `<Goblin Type> Minimap.png`
-- Combined `Engaged & Killed Journal` templates are accepted
-- Invalid Goblin Evidence template names log a clear setup warning without scan spam
-- All 10 tight minimap goblin-icon PNG templates under `Images\Goblin Evidence` are discovered as Minimap templates
-- Journal ObservationDiagnostics crops use the calibrated `64,736,645,417` reference region
-- Minimap ObservationDiagnostics crops use the calibrated `2108,66,421,423` reference region
-- `GoblinEvidenceScanResult source=Journal` and `source=Minimap` include `scanRegion`, `screenRegion`, template count, template name, matched goblin type, best confidence, and match point
-- `GoblinEvidenceScanResult source=Journal` includes the best template name, best confidence, threshold, match point, template size, template coverage percentage, and `journalDiagnosis` even when no candidate passes threshold
-- Evidence detector logs `GoblinEvidenceCandidateCheck` for candidate found/not found and below-threshold reasons once templates are present
-- `GoblinEvidenceCandidateCheck source=Minimap` includes template name, goblin type, calibrated scan region, best confidence, threshold, match point, screen match point, and template size
-- `GoblinEvidenceCandidateCheck source=Journal` includes template coverage percentage and `journalDiagnosis`, including full-region-template guidance when applicable
-- Journal matches remain primary when Journal and Minimap evidence both match in the same scan; Minimap is logged as supporting evidence in that case
-- Treasure Goblin and Odious Collector minimap matches use the targeted color disambiguation pass; yellow-dominant patches report Treasure Goblin, green-dominant patches report Odious Collector, and overrides log `GoblinEvidenceMinimapColorOverride`
-- Gilded Baron and Malevolent Tormentor minimap matches include yellow-vs-orange diagnostics; clearly yellow-dominant patches report Gilded Baron, clearly orange-dominant patches report Malevolent Tormentor, and overrides log `GoblinEvidenceMinimapColorOverride`
-- Treasure/Odious/Gilded/Malevolent minimap candidate notes include `MinimapYellowPixels`, `MinimapOrangePixels`, `MinimapGreenPixels`, `MinimapPurplePixels`, and `MinimapColoredPixels`
-- With Automatic Counting enabled, a normal minimap-only observation below `0.850` does not increment GoblinCount and logs `GoblinAutoCountSuppressed reason=MinimapConfidencePendingJournal`
-- With Automatic Counting enabled, a Gilded Baron or Malevolent Tormentor minimap-only observation below `0.900` does not increment GoblinCount and waits for stronger minimap or Journal evidence
-- A real Gilded Baron must not auto-count as Malevolent Tormentor from an early weak minimap match; the accepted count notification and Last Observation should use the eventual accepted Journal or stronger Minimap goblin type
-- `JournalEngagedAccepted` logs when a fresh Engaged journal template anchors the current encounter
-- `JournalKilledAcceptedFreshObservation` logs when a fresh same-area Killed-only journal template is accepted by continuous Observation/Auto Count before an Engaged anchor appears
-- `JournalKilledIgnoredNoRecentEngaged` remains available as a conservative fallback for non-opt-in Killed-only journal acceptance paths
-- `JournalKilledAcceptedAfterEngaged` logs when a Killed-only journal template is accepted after a recent same-goblin/same-area Engaged line
-- Immediate manual `X` refresh can accept fresh same-area Killed-only journal evidence and logs `JournalKilledAcceptedFreshManual`
-- Stale visible Killed journal lines suppress with `JournalKilledIgnoredStale` after the freshness window and do not satisfy manual `X`
-- Killed journal freshness state tracks first-seen timestamp and first resolved area, and Reset Stats/New Game clear it
-- `JournalEngagedIgnoredStale` logs when an old visible Engaged journal line is beyond the freshness window
-- Stale visible Engaged/Killed journal line signatures are based on evidence kind, goblin type, template file, and a coarse journal row `LineBucket`, not current area or absolute screen coordinates
-- Re-detecting the same old visible Engaged/Killed journal row after moving areas does not refresh first-seen time
-- Engaged or combined journal rows first seen in Cave Of The Moon Clan Level 1 must suppress with `JournalEngagedIgnoredAreaChanged` if the same visible row is later detected on Cave Of The Moon Clan Level 2
-- A later legitimate same-template Journal match in a different journal row can become fresh evidence when it passes the normal freshness and duplicate guards
-- Stale visible Engaged journal line signatures suppress with throttled `JournalEngagedIgnoredStale` and do not produce eligible observations
-- `JournalCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
-- `MinimapCandidate` logs `GoblinObservationCandidate` and `GoblinObservationSummary` without changing GoblinCount, GPH, tracker active time, found records, or counted-area slots
-- Observation candidates report the matched goblin type when a Journal or Minimap template passes confidence
-- Blocked observation areas such as WhimsyDale log `wouldCount=False` and `reason=BlockedArea`
-- Duplicate observation areas log `wouldCount=False` without consuming another area-count slot
-- PF1/PF2/Stinging Winds observations report eligibility against `areaLimit=2` without changing real count state
-- Observation Mode uses manual `X` route-context disambiguation and does not report PF1/PF2 when current route context is Cathedral, Channel, Caverns, or Cave Of The Moon Clan
-- Observation Mode uses route context to resolve strong PF false-positive runner-up cases such as Western Channel Level 1 in Ancient Waterway context
-- The Goblin Tracker UI shows the compact read-only Last Observation block with goblin type, area, source, and reason
-- Fresh Journal/Minimap Last Observation entries remain readable during the short display hold and no-candidate clears during that hold log `LastObservationClearSkipped preserveKind=ObservationDisplayHold`
-- Last Observation remains visible long enough to validate the goblin type, area, source, and reason after an auto-count or accepted observation; if it disappears too quickly in VS Debug, close the form after the run and review the automatically generated loose files
-- After the short hold expires, no-candidate scanner scans preserve the last real goblin observation with `LastObservationClearSkipped preserveKind=LastObservationPersistent` instead of clearing the UI
-- Last Observation updates only when a new real goblin observation/count is accepted, or clears during Reset Stats/New Game/missing-template setup cleanup; stale cross-area journal repeats should not replace the displayed goblin
-- Last Observation clears with `LastObservationCleared reason=AreaChanged` when no-candidate scans occur after the current confirmed area changes away from the displayed observation area
-- Last Observation also clears after confirmed route/current-area changes from teleport confirmation, already-at-target, already-at-queued-destination, or route-end hotkey state updates
-- Last Observation UI state changes log `LastObservationUpdated` for accepted observations and `LastObservationCleared reason=...` for reset/new-game or true cleanup states
-- `GoblinTracker.EnableObservationMode` controls scanner/diagnostic behavior only; `GoblinTracker.EnableAutomaticCounting` is the separate automatic-count gate and defaults to `false`
-- Startup logs report `EnableObservationMode`, `EnableAutomaticCounting`, effective `automaticCountingEnabled`, and `manualHotkeyOnlyCountPath`
-- With `EnableAutomaticCounting=false`, Observation Mode may update Last Observation but must not increment GoblinCount, GPH, found records, or counted-area slots
-- With `EnableAutomaticCounting=false`, Observation Mode still records automatic-count evidence first-seen signatures so old visible evidence cannot become newly eligible when Auto Count is toggled on
-- Automatic goblin counting requires both `EnableObservationMode=true` and `EnableAutomaticCounting=true`
-- In VS Debug, the Goblin Tracker Debug checkboxes for Observation Mode and Automatic Counting persist to `Config\AppSettings.json`
-- Toggling Automatic Counting on logs a new automatic-count armed timestamp
-- When explicitly enabled, automatic goblin counting must count only from fresh eligible observations and must log accepted/suppressed decisions separately from observation-only diagnostics
-- Enabled automatic counts must reuse existing area resolution, blocked-area suppression, stale journal protection, duplicate guard, and PF1/PF2/Stinging Winds area-limit logic
-- Enabled automatic counts must not count blocked areas, stale visible journal entries, duplicate default areas, or third-and-later PF1/PF2/Stinging Winds observations
-- Route button clicks log `ButtonClickReceived`, `ButtonClickQueued`, and `ButtonClickExecuting` so a briefly unresponsive manual route button can be diagnosed from the next package
-- Accepted route button clicks do not show the intrusive `Teleport queued` notification; they log `ButtonClickQueuedFeedbackSuppressed` instead
-- Button clicks that immediately short-circuit because the app is already at the target still show/log `Already here`
-- In VS Debug, `Test Count Override` may be used for synthetic manual `X` area-limit checks only; it should log `ManualTestCountOverrideFreshObservationBypass`, work only under the VS Debug/dev profile, and must not bypass blocked-area or duplicate/area-limit suppression
-- In VS Debug, there is no manual `Review Files` button or review-rule checkbox; review exports are created only by `Scripts\Create Debug Package.bat`
-- The VS Debug `Next Tests` checklist writes `Debug\GoblinTrackerNextTests.txt` when the checklist is initialized or changed, so the batch package can include it
-- Closing the VS Debug form is a quiet shutdown path and should not create review files, extra evidence-processing files, screenshots, debug packages, or session markdown exports
-- The debug package batch packages existing runtime evidence only, and the ZIP includes `goblin-tracker-review.html`, `goblin-tracker-summary.txt`, `goblin-tracker-next-tests.txt` when available, decision bundles, latest log, route summaries, screenshots, GoblinEvidence, encounter captures, observation diagnostics, and `session-info.txt` when available
-- The debug package ZIP also includes root helper reports: `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt`
-- VS Debug accepted manual and automatic goblin counts save fullscreen, minimap, and journal encounter captures under `Debug\GoblinEvidence\EncounterCaptures`
-- Debug packages include bounded GoblinEvidence and encounter-capture samples and report included/excluded counts in the manifest
-- In VS Debug, the diagnostics tab control includes `Next Tests` beside `Overlay` and `Route State`, listing the current in-game validation scenarios as checkboxes
-- In VS Debug, the `Next Tests` tab is divided into clear sections: baseline already validated, must-test route blockers, if-encountered regressions, and safety/display checks
-- In VS Debug, the must-test route blockers are listed in route logic order: Cave Of The Moon Clan Level 2 before Eastern Channel Level 2, followed by notification latency
-- In VS Debug, PF1/PF2 live two-count checks and Gilded Baron/Malevolent Tormentor classification are labeled as if-encountered regression checks instead of primary blockers
-- In VS Debug, Stinging Winds is no longer listed as a must-test blocker after live verification confirmed count/notification/Last Observation and two-count suppression behavior
-- In VS Debug, unchecked `Next Tests` boxes mean not tested yet; checked boxes mean the tester completed that scenario during the current run
-- In VS Debug, generated Next Tests review metadata reports checked and unchecked counts plus every route-ordered test row so untested scenarios remain visible in review files
-- Evidence first seen before Automatic Counting was armed suppresses with `GoblinAutoCountSuppressed reason=EvidenceSeenBeforeAutoCountEnabled`
-- Automatic-count evidence signatures are scoped by resolved area key so separate levels/subregions can each count fresh evidence while same-area evidence remains protected
-- Automatic-count evidence signatures are stable across confidence drift for the same visible Journal/Minimap template
-- Reusing the same Journal/Minimap evidence signature after one automatic count suppresses with `GoblinAutoCountSuppressed reason=EvidenceAlreadyAutoCounted`
-- Reusing the same counted Journal evidence row in a different area suppresses with `GoblinAutoCountSuppressed reason=EncounterAlreadyAutoCounted`
-- A fresh same-type Journal evidence row in a different route level/subregion may still count independently when the evidence signature is new and the duplicate guard allows that area
-- Suppressed cross-area Journal row repeats report `GoblinObservationCandidate ... wouldCount=False reason=EncounterAlreadyAutoCounted` and log `LastObservationUpdateSkippedPreserved` when an older visible line tries to overwrite the displayed Last Observation
-- Evidence whose first-seen timestamp ages past the freshness window suppresses with `GoblinAutoCountSuppressed reason=StaleEvidence`
-- Accepted automatic counts show a no-activate notification with area, goblin type, and current total
-- Automatic Treasure/Odious counts use the color-disambiguated goblin type when the accepted source is Minimap
-- Automatic fresh Killed-only journal counts can increment from `JournalKilledAcceptedFreshObservation` when Auto Count is enabled, while stale visible Killed lines still suppress
-- Reset Stats and New Game clear automatic-count evidence signature and encounter state
-- Combat hotkey cancels active arrival confirmation waits, logs `ArrivalConfirmationCancelled reason=CombatHotkey`, and starts combat from the same hotkey press after the interrupted teleport workflow unwinds
-- Physical `2` Exit Game hotkey cancels active arrival confirmation waits and logs `ArrivalConfirmationCancelled reason=ExitGameHotkey`
-- Teleport Next accepted with no queued/next route target logs `Teleport Next hotkey ignored: no queued/next teleport` and shows a no-route notification instead of appearing broken
 
-## Debug Package Evidence
-- VS Debug and Release troubleshooting use the single ZIP package workflow through `Scripts\Create Debug Package.bat`
-- The package batch auto-discovers runtime roots and existing `Debug\GoblinEvidence` folders, but does not run a separate evidence-reprocessing command before ZIP creation
-- The ZIP package should keep the package review index and manifest behavior below
-- Debug package includes latest log
-- Debug package includes `route-failure-summary.txt`
-- Debug package includes `debug-screenshot-manifest.txt`
-- Screenshot manifest pairs success/failure Diablo and App screenshots by timestamp, workflow, and action
-- Screenshot manifest includes only current-session screenshots
-- Failure screenshots are included by default
-- Failure screenshots are limited to a small recent default sample; package manifest reports included/excluded counts and included/excluded/available failure screenshot sizes
-- Debug screenshots are included according to the active debug screenshot settings
-- Current-session `debug-screenshots` files are capped by the debug package generator default
-- Success screenshots are disabled by default in normal Release, installed app, and VS Debug
-- Success screenshots are excluded from packages by default
-- Success screenshots are included in packages only with explicit `-IncludeSuccessScreenshots`
-- If `Debug.EnableSuccessScreenshots=true`, package manifest reports available success screenshot count and total size without automatically including them
-- Failure screenshots are included under `Screenshots\Failure`
-- Recent debug screenshots are included under `Screenshots\Recent`
-- Screenshots from previous sessions are excluded from the package
-- Debug package manifest reports package size, session start, session duration, total screenshots, success screenshot availability, failure screenshots, folder totals, and stale screenshot exclusions
-- Debug package manifest reports Goblin observation counters and last-observation metadata from `session-info.txt`
-- Debug package manifest reports Goblin Evidence missing-template state from the latest log
-- Debug package root includes `goblin-tracker-review.html` and `goblin-tracker-summary.txt` for release/export package review
-- Debug package root includes `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt` so package review starts with summary, timeline, and evidence-health context
-- `goblin-tracker-review.html` links to the manifest, route summary, latest logs, screenshots, GoblinEvidence images, Next Tests metadata, and live decision/encounter evidence when present
-- `goblin-tracker-review.html` links to the root analysis, timeline, and evidence-health files before lower-level evidence
-- Debug package includes `goblin-tracker-next-tests.txt` when the VS Debug `Next Tests` tab has been initialized before package creation
-- Debug package root `goblin-tracker-summary.txt` reports live evidence artifact counts for decision bundles, encounter captures, and observation diagnostics
-- `Scripts\Create Debug Package.bat` delegates to `Scripts\create-debug-package.ps1` and is the only user-facing review/export launcher for VS Debug and Release
-- Debug package includes only a small recent sample from `Debug\GoblinEvidence\ObservationDiagnostics` and reports included/excluded observation crop counts
-- GoblinEvidence Calibration full images remain excluded by default unless `-MaxGoblinEvidenceFullImages` is explicitly raised
-- Direct `Debug\GoblinEvidence\GoblinEvidence_*` event screenshots are bounded by count and size; manifest reports included, excluded, and oversized event screenshot counts
-- Screenshot retention cleanup still controls all runtime screenshots in the shared `Screenshots` folder
-- VS Debug age retention deletes known troubleshooting artifacts older than 7 days from runtime/project debug roots, including logs, screenshots, sessions, debug packages, and GoblinEvidence files
-- Release/debug-mode age retention deletes known generated artifacts older than 7 days
+- Observation Mode and Auto Goblin Count can be toggled from VS Debug Settings.
+- VS Debug Settings shows `Capture` and no longer shows `Test Count Override`.
+- Physical `X` does not increment Goblin Tracker.
+- Automatic counts still create decision bundles and encounter captures automatically.
+- The Capture button creates manual recognition files only when clicked.
+- Default areas count once per game.
+- PF1, PF2, and Stinging Winds allow two counts per game and suppress the third.
+- Blocked count areas suppress with `BlockedArea` and do not consume area slots.
+- Reset Stats clears count, GPH, active time, duplicate guard, evidence state, and Last Observation.
+- New Game clears per-game duplicate/evidence state.
+- Cave Of The Moon Clan Level 1/2, Eastern Channel Level 1/2, Western Channel Level 1/2, and Caverns of Frost Level 1/2 remain separate where expected.
+- Battlefields journal history does not replay stale/non-goblin rows into a fresh count.
+- Journal logs include name-validation/history-row/history-input suppression when those protections fire.
 
-## Debug Manager / Session Summary
-- VS Debug starts with Debug Mode, diagnostic overlay, route inspector, debug screenshots, missing-asset prompts, and verbose logging enabled in memory
-- VS Debug forced evidence settings are not saved as Release/user preferences
-- Normal Release starts quiet: Debug Mode off, diagnostics hidden, debug screenshot controls hidden
-- Release Debug Mode opt-in enables diagnostic overlay, route inspector, missing-asset prompts, and seeds Keep Debug Screenshots on
-- Turning Release Debug Mode off returns to the compact/quiet diagnostics UI
-- Session counters increase from existing events: games created, teleports attempted/confirmed/blocked/failed, Start Game failures, Battle.net launch failures, repair/salvage failures, workflow cancellations, unexpected exceptions
-- Combat active time increases only while combat is running
-- App exit writes `Sessions\Session_YYYYMMDD_HHMMSS.md`
-- Session summary includes app version/build mode, start/end/duration, latest log, latest debug package, latest screenshot/failure screenshot, latest failure type, and last known issue
-- Session summary includes observation-only counters for Goblin Observations, Journal Observations, Minimap Observations, Eligible Observations, Blocked Observations, and Duplicate Observations
-- Startup retention keeps only the newest `Debug.SessionSummaryRetentionCount` matching `Sessions\Session_*.md` files
-- Startup retention keeps only the newest `Debug.DebugPackageRetentionCount` matching `DebugPackages\GoblinFarmer_Debug_*.zip` files
-- Retention cleanup does not delete unrelated files in `Sessions\` or unrelated zip files in `DebugPackages\`
-- Age-based retention is layered on top of count retention and is scoped to known runtime/project debug artifact folders only
-- Image-recognition diagnostic logs appear only when diagnostic logging is enabled and are throttled; no extra scans occur
+## Route Logic
 
-## Town And Exit
-- Repair complete captures paired Diablo/App success screenshots
-- Salvage complete or skipped captures paired Diablo/App success screenshots
-- Salvage logs per-slot `Salvage timing` with slot click sent state, confirmation wait, confirmation scan count, next-slot scan time, slot elapsed time, and total salvage elapsed time
-- Salvage logs `Salvage timing summary` with slots clicked, total elapsed time, confirmation timeout, fast-probe attempts/delay, post-slot delay, and salvage slot-click timing
-- Salvage confirmation remains safe after the reduced confirmation wait; no confirmation prompts should be left open
-- Up Arrow Kadala logs `Kadala timing: started`, throttled `Kadala timing: active`, and `Kadala timing: stopped`
-- Up Arrow Kadala feels faster after the shorter right-click cadence and does not interfere with Diablo focus or automation safety
-- Leave Game main menu confirmation captures paired Diablo/App success screenshots
-- Exit Game complete captures paired Diablo/App success screenshots
+- Cave Of The Moon Clan Level 1 blocks Teleport Next; Level 2 can continue the Southern Highlands route.
+- Cathedral blocks Royal Crypts except Cathedral Level 3.
+- City Of Caldeum blocks Ancient Waterway except Ruined Cistern.
+- Plain Ancient Waterway blocks Teleport Next to Stinging Winds.
+- Eastern Channel Level 2 allows Stinging Winds.
+- Western Channel Level 2 returns to Ancient Waterway.
+- Stinging Winds blocks Battlefields except Black Canyon Mines.
+- Caverns of Frost Level 1 blocks Teleport Next; Level 2 allows Rakkis Crossing.
+- Walking to queued Rakkis Crossing then pressing Teleport Next advances and starts PF1 in the same press.
+
+## Debug Artifacts
+
+- Debug package includes latest logs, manifests, session info, route summaries, Goblin Tracker summary, Goblin Evidence, decision bundles, encounter captures, and observation diagnostics.
+- Debug package no longer includes Next Tests metadata files.
+- Encounter captures save fullscreen, minimap, journal, and metadata for accepted Goblin Tracker counts in VS Debug.
+- Manual recognition captures save fullscreen, minimap, journal, and metadata only when `Capture` is clicked.

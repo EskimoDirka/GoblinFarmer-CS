@@ -17,8 +17,7 @@ $script:DgaTrackerMarkers = @(
     "ObservationScanSkipped",
     "GoblinEvidenceCandidateCheck",
     "GoblinEvidenceScanResult",
-    "ManualTestCountOverrideFreshObservationBypass",
-    "GoblinTrackerNextTests"
+    "GoblinRecognitionCaptureSaved"
 )
 
 function Format-DgaByteSize {
@@ -288,8 +287,6 @@ function New-DgaGoblinEvidenceHealthContent {
     $oversizedRootEvidenceImages = @($rootEvidenceImages | Where-Object { $_.Length -gt 1MB })
     $calibrationFullImages = @($evidenceFiles | Where-Object { $_.Name.EndsWith("_Full.png", [System.StringComparison]::OrdinalIgnoreCase) })
     $latestLog = Get-DgaLatestLog $Root
-    $nextTestsRoot = Join-Path $Root "goblin-tracker-next-tests.txt"
-    $nextTestsRuntime = Join-Path $Root "Debug\GoblinTrackerNextTests.txt"
     $retiredToken = "Goblin" + "Replay"
     $retiredArtifacts = @(Get-DgaFiles $Root | Where-Object {
         $_.FullName.IndexOf($retiredToken, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
@@ -306,10 +303,6 @@ function New-DgaGoblinEvidenceHealthContent {
 
     if ($evidenceFiles.Count -eq 0) {
         $warnings.Add("WARN: No Debug/GoblinEvidence files are present in this package.")
-    }
-
-    if (-not (Test-Path -LiteralPath $nextTestsRoot -PathType Leaf) -and -not (Test-Path -LiteralPath $nextTestsRuntime -PathType Leaf)) {
-        $warnings.Add("WARN: Next Tests metadata is missing; initialize the VS Debug Next Tests tab before packaging.")
     }
 
     if ($oversizedRootEvidenceImages.Count -gt 0) {
@@ -340,7 +333,6 @@ function New-DgaGoblinEvidenceHealthContent {
     }
 
     $lines.Add("- Latest log: $(if ($null -ne $latestLog) { Get-DgaPackageRelativePath $Root $latestLog.FullName } else { 'none' })")
-    $lines.Add("- Next Tests metadata: root=$(Test-Path -LiteralPath $nextTestsRoot -PathType Leaf); runtime=$(Test-Path -LiteralPath $nextTestsRuntime -PathType Leaf)")
     $lines.Add("")
     $lines.Add("Health:")
     if ($warnings.Count -eq 0) {
