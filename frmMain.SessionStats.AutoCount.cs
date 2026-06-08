@@ -95,7 +95,10 @@ namespace GoblinFarmer
                     PortShouldSuppressEncounterAlreadyAutoCounted(observation, area, globalEvidenceKey, encounterState, nowUtc, out encounterSuppressionMatch))
                 {
                     suppressionReason = "EncounterAlreadyAutoCounted";
-                    refreshEncounterLastSeen = true;
+                    refreshEncounterLastSeen = GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+                        observation.Source,
+                        area.AreaKey,
+                        encounterState!.AreaKey);
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
                     minimapAutoCountConfidencePending)
@@ -125,6 +128,11 @@ namespace GoblinFarmer
                 else if (!portGoblinAreaDuplicateGuard.TryAccept(area.AreaKey, out guardResult))
                 {
                     suppressionReason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                    refreshEncounterLastSeen = encounterState != null &&
+                        GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterAreaAlreadyCounted(
+                            observation.Source,
+                            area.AreaKey,
+                            encounterState.AreaKey);
                 }
                 else
                 {

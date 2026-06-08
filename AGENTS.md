@@ -57,6 +57,7 @@ Do not assume GitHub reflects the user's latest local state.
 
 * Goblin Replay must remain explicit/on-demand.
 * For real-session Goblin Replay investigations, prefer the explicit test-harness inputs that target the smallest relevant evidence: `--goblin-replay-metadata` for one `*_Metadata.txt`, `--goblin-replay-prefix` for one capture prefix in a shared capture folder, `--goblin-replay-captures` for whole capture folders, and `--goblin-replay-decision-bundle` when starting from a DecisionBundle folder.
+* For small policy simulations that can be modeled from existing `Images\Goblin Evidence` templates, use `--goblin-replay-scenario` with a text scenario file containing explicit `Scan`, `Wait`, `ResetStats`, or `NewGame` steps. Use `Location=...` with `Images\Current Location` title templates when the scenario should exercise current-location image resolution instead of a manual `Area=...` override. Scenario replay must stay harness-only and must create only temporary crop frames that are deleted after the run.
 * Do not wire Goblin Replay into:
 
   * normal startup

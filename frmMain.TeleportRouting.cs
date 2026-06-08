@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace GoblinFarmer
 {
     public partial class frmMain
@@ -58,7 +56,7 @@ namespace GoblinFarmer
 
         private string PortLocationKey(string name)
         {
-            return Regex.Replace(PortNormalizeLocation(name).ToLowerInvariant(), @"[^a-z0-9]+", " ").Trim();
+            return CurrentLocationImageResolver.LocationKey(name);
         }
 
         private string PortTitleCase(string value)
@@ -934,17 +932,7 @@ namespace GoblinFarmer
 
         private string PortNormalizeLocation(string name)
         {
-            name = Regex.Replace(name.Replace("\ufeff", "").Trim(), @"\s+", " ");
-            Dictionary<string, string> aliases = new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["battelfields"] = "Battlefields",
-                ["city of caldeum"] = "City Of Caldeum",
-                ["the battlefields"] = "Battlefields",
-                ["the royal crypts"] = "Royal Crypts",
-                ["whimsydale"] = "WhimsyDale",
-            };
-
-            return aliases.TryGetValue(name, out string? alias) ? alias : name;
+            return CurrentLocationImageResolver.NormalizeLocation(name);
         }
     }
 }

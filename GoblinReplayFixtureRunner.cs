@@ -58,6 +58,33 @@ namespace GoblinFarmer
         IReadOnlyList<GoblinReplayFixtureStepResult> Steps,
         IReadOnlyList<string> LogMessages);
 
+    internal enum GoblinReplayTemplateScenarioStepKind
+    {
+        Scan,
+        Wait,
+        ResetStats,
+        NewGame,
+    }
+
+    internal sealed record GoblinReplayTemplateScenarioStep(
+        string Name,
+        GoblinReplayTemplateScenarioStepKind Kind,
+        string AreaKey = "",
+        string? LocationTemplateName = null,
+        string? JournalTemplateName = null,
+        string? MinimapTemplateName = null,
+        int JournalLineBucket = 10,
+        int AdvanceSeconds = 1,
+        DateTime? TimestampUtc = null);
+
+    internal sealed record GoblinReplayTemplateScenarioManifestLoadResult(
+        string ScenarioPath,
+        bool Loaded,
+        string Reason,
+        string ScenarioName,
+        IReadOnlyList<GoblinReplayTemplateScenarioStep> Steps,
+        IReadOnlyList<string> Errors);
+
     internal sealed record GoblinReplayCaptureFolderStep(
         string Name,
         string CaptureFolderPath,
@@ -261,6 +288,249 @@ namespace GoblinFarmer
                 $"stepCount={stepResults.Count}; countedSteps={stepResults.Count(step => step.Counted)}; suppressedSteps={stepResults.Count(step => !step.Counted)}");
 
             return new GoblinReplayFixtureScenarioResult(scenarioName, stepResults, logMessages);
+        }
+
+        public static GoblinReplayFixtureScenarioResult RunExplicitTemplateScenarioForHarness(
+            string scenarioName,
+            IReadOnlyList<GoblinReplayTemplateScenarioStep> steps,
+            string templateDirectory,
+            Action<string>? log = null,
+            Action<IGoblinEvidenceFrameSource?>? setFrameSourceForReplay = null,
+            bool writeAppLog = true,
+            DateTime? startUtc = null,
+            string? currentLocationTemplateDirectory = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(scenarioName);
+            ArgumentNullException.ThrowIfNull(steps);
+            ArgumentException.ThrowIfNullOrWhiteSpace(templateDirectory);
+
+            List<GoblinReplayFixtureStepResult> stepResults = [];
+            List<string> logMessages = [];
+            Dictionary<string, ReplayEvidenceState> evidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, ReplayEncounterState> encounterByGoblinType = new(StringComparer.OrdinalIgnoreCase);
+            List<ReplayResetCarryoverState> resetCarryoverSuppressions = [];
+            GoblinAreaDuplicateGuard duplicateGuard = new();
+            string tempRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayScenario_{Guid.NewGuid():N}");
+            DateTime cursorUtc = startUtc ?? DateTime.UtcNow;
+            string resolvedCurrentLocationTemplateDirectory = string.IsNullOrWhiteSpace(currentLocationTemplateDirectory)
+                ? Path.Combine(Path.GetDirectoryName(templateDirectory) ?? "", "Current Location")
+                : currentLocationTemplateDirectory!;
+
+            void Emit(string eventName, string details)
+            {
+                string message = $"{eventName}: mode=ExplicitOnDemand; scenario={LogField(scenarioName)}; {details}";
+                logMessages.Add(message);
+                log?.Invoke(message);
+                if (writeAppLog)
+                {
+                    AppLogger.Info(message);
+                }
+            }
+
+            Emit(
+                "GoblinReplayTemplateScenarioStarted",
+                $"stepCount={steps.Count}; templateDirectory={LogField(templateDirectory)}; tempRoot={LogField(tempRoot)}");
+
+            try
+            {
+                Directory.CreateDirectory(tempRoot);
+                for (int index = 0; index < steps.Count; index++)
+                {
+                    GoblinReplayTemplateScenarioStep step = steps[index];
+                    DateTime stepUtc = step.TimestampUtc ?? cursorUtc;
+                    string resolvedStepAreaKey = ResolveTemplateScenarioAreaKey(
+                        step,
+                        resolvedCurrentLocationTemplateDirectory,
+                        Emit);
+
+                    if (step.Kind != GoblinReplayTemplateScenarioStepKind.Scan)
+                    {
+                        int remembered = 0;
+                        int clearedEvidence = 0;
+                        int clearedEncounters = 0;
+                        int clearedAreas = 0;
+                        string reason = step.Kind.ToString();
+
+                        if (step.Kind == GoblinReplayTemplateScenarioStepKind.NewGame ||
+                            step.Kind == GoblinReplayTemplateScenarioStepKind.ResetStats)
+                        {
+                            remembered = RememberReplayResetCarryoverSuppressions(
+                                evidenceBySignature,
+                                resetCarryoverSuppressions,
+                                stepUtc,
+                                reason);
+                            clearedEvidence = evidenceBySignature.Count;
+                            clearedEncounters = encounterByGoblinType.Count;
+                            clearedAreas = duplicateGuard.Reset();
+                            evidenceBySignature.Clear();
+                            encounterByGoblinType.Clear();
+                        }
+
+                        GoblinReplayFixtureStepResult actionResult = new(
+                            scenarioName,
+                            step.Name,
+                            resolvedStepAreaKey,
+                            "ScenarioAction",
+                            false,
+                            step.Kind.ToString(),
+                            "",
+                            "Unknown",
+                            "",
+                            "Action",
+                            reason,
+                            "ScenarioAction",
+                            false);
+                        stepResults.Add(actionResult);
+                        Emit(
+                            "GoblinReplayTemplateScenarioAction",
+                            $"step={LogField(step.Name)}; action={step.Kind}; rememberedResetCarryover={remembered}; clearedEvidence={clearedEvidence}; clearedEncounters={clearedEncounters}; clearedAreaKeys={clearedAreas}");
+                        cursorUtc = stepUtc.AddSeconds(Math.Max(0, step.AdvanceSeconds));
+                        continue;
+                    }
+
+                    GoblinReplayFixture fixture = CreateTemplateScenarioFixture(
+                        step,
+                        templateDirectory,
+                        tempRoot,
+                        index,
+                        Emit);
+                    GoblinReplayFixtureRunResult fixtureResult = RunExplicitFixtureForHarness(
+                        fixture,
+                        templateDirectory,
+                        message =>
+                        {
+                            logMessages.Add(message);
+                            log?.Invoke(message);
+                        },
+                        setFrameSourceForReplay,
+                        writeAppLog);
+                    GoblinReplayFixtureCandidate? candidate = SelectScenarioCandidate(fixtureResult.Candidates);
+                    GoblinReplayFixtureStep fixtureStep = new(
+                        step.Name,
+                        fixture,
+                        resolvedStepAreaKey,
+                        stepUtc);
+                    GoblinReplayFixtureStepResult stepResult = EvaluateStep(
+                        scenarioName,
+                        fixtureStep,
+                        candidate,
+                        evidenceBySignature,
+                        encounterByGoblinType,
+                        duplicateGuard,
+                        resetCarryoverSuppressions);
+                    stepResults.Add(stepResult);
+                    Emit(
+                        "GoblinReplayTemplateScenarioStepResult",
+                        $"step={LogField(step.Name)}; frameSource={LogField(stepResult.FrameSource)}; areaKey={LogField(stepResult.AreaKey)}; candidateResult={LogField(stepResult.CandidateResult)}; source={LogField(stepResult.Source)}; goblinType={LogField(stepResult.GoblinType)}; evidenceSignature={LogField(stepResult.EvidenceSignature)}; countDecision={LogField(stepResult.CountDecision)}; reason={LogField(stepResult.Reason)}; staleFreshReason={LogField(stepResult.FreshnessReason)}; counted={stepResult.Counted}");
+                    cursorUtc = stepUtc.AddSeconds(Math.Max(0, step.AdvanceSeconds));
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, recursive: true);
+                }
+            }
+
+            Emit(
+                "GoblinReplayTemplateScenarioCompleted",
+                $"stepCount={stepResults.Count}; countedSteps={stepResults.Count(step => step.Counted)}; suppressedSteps={stepResults.Count(step => !step.Counted)}");
+
+            return new GoblinReplayFixtureScenarioResult(scenarioName, stepResults, logMessages);
+        }
+
+        public static GoblinReplayTemplateScenarioManifestLoadResult LoadExplicitTemplateScenarioManifestForHarness(string scenarioPath)
+        {
+            if (string.IsNullOrWhiteSpace(scenarioPath) || !File.Exists(scenarioPath))
+            {
+                return new GoblinReplayTemplateScenarioManifestLoadResult(
+                    scenarioPath ?? "",
+                    false,
+                    "ScenarioFileMissing",
+                    "",
+                    [],
+                    [$"Scenario file does not exist: {scenarioPath}"]);
+            }
+
+            string fullPath = Path.GetFullPath(scenarioPath);
+            string scenarioName = Path.GetFileNameWithoutExtension(fullPath);
+            List<GoblinReplayTemplateScenarioStep> steps = [];
+            List<string> errors = [];
+            int lineNumber = 0;
+            foreach (string rawLine in File.ReadLines(fullPath))
+            {
+                lineNumber++;
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                int separator = line.IndexOf('=');
+                if (separator <= 0)
+                {
+                    errors.Add($"Line {lineNumber}: expected Key=Value.");
+                    continue;
+                }
+
+                string key = line[..separator].Trim();
+                string value = line[(separator + 1)..].Trim();
+                if (key.Equals("Scenario", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        scenarioName = value;
+                    }
+
+                    continue;
+                }
+
+                if (!key.Equals("Step", StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add($"Line {lineNumber}: unsupported key '{key}'.");
+                    continue;
+                }
+
+                if (TryParseTemplateScenarioStep(value, out GoblinReplayTemplateScenarioStep? step, out string error))
+                {
+                    steps.Add(step!);
+                }
+                else
+                {
+                    errors.Add($"Line {lineNumber}: {error}");
+                }
+            }
+
+            if (errors.Count > 0)
+            {
+                return new GoblinReplayTemplateScenarioManifestLoadResult(
+                    fullPath,
+                    false,
+                    "ScenarioParseError",
+                    scenarioName,
+                    steps,
+                    errors);
+            }
+
+            if (steps.Count == 0)
+            {
+                return new GoblinReplayTemplateScenarioManifestLoadResult(
+                    fullPath,
+                    false,
+                    "ScenarioHasNoSteps",
+                    scenarioName,
+                    steps,
+                    ["Scenario contains no Step= entries."]);
+            }
+
+            return new GoblinReplayTemplateScenarioManifestLoadResult(
+                fullPath,
+                true,
+                "Loaded",
+                scenarioName,
+                steps,
+                []);
         }
 
         public static GoblinReplayCaptureFolderScenarioResult RunExplicitCaptureFoldersForHarness(
@@ -740,13 +1010,321 @@ namespace GoblinFarmer
                 replayCandidate.PassedThreshold);
         }
 
+        private static bool TryParseTemplateScenarioStep(
+            string value,
+            out GoblinReplayTemplateScenarioStep? step,
+            out string error)
+        {
+            step = null;
+            error = "";
+            string[] parts = value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length < 2)
+            {
+                error = "Step must use 'Name|Action|Key=Value'.";
+                return false;
+            }
+
+            string name = parts[0];
+            if (!Enum.TryParse(parts[1], ignoreCase: true, out GoblinReplayTemplateScenarioStepKind kind))
+            {
+                error = $"Unsupported step action '{parts[1]}'.";
+                return false;
+            }
+
+            Dictionary<string, string> options = new(StringComparer.OrdinalIgnoreCase);
+            for (int index = 2; index < parts.Length; index++)
+            {
+                int separator = parts[index].IndexOf('=');
+                if (separator <= 0)
+                {
+                    error = $"Step option '{parts[index]}' must use Key=Value.";
+                    return false;
+                }
+
+                options[parts[index][..separator].Trim()] = parts[index][(separator + 1)..].Trim();
+            }
+
+            string areaKey = MetadataValue(options, "Area", "AreaKey", "CurrentArea");
+            string locationTemplateName = MetadataValue(options, "Location", "LocationTemplate", "CurrentLocationTemplate");
+            string journalTemplateName = MetadataValue(options, "Journal", "JournalTemplate");
+            string minimapTemplateName = MetadataValue(options, "Minimap", "MinimapTemplate");
+            int journalLineBucket = ParseIntOption(options, 10, "JournalLineBucket", "LineBucket", "Bucket");
+            int advanceSeconds = ParseIntOption(options, 1, "AdvanceSeconds", "Advance", "Seconds");
+            DateTime? timestampUtc = null;
+            string timestampValue = MetadataValue(options, "TimestampUtc", "Timestamp");
+            if (!string.IsNullOrWhiteSpace(timestampValue) &&
+                DateTime.TryParse(
+                    timestampValue,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out DateTime parsedTimestamp))
+            {
+                timestampUtc = parsedTimestamp.ToUniversalTime();
+            }
+
+            if (kind == GoblinReplayTemplateScenarioStepKind.Scan &&
+                string.IsNullOrWhiteSpace(journalTemplateName) &&
+                string.IsNullOrWhiteSpace(minimapTemplateName))
+            {
+                error = "Scan steps require Journal=... and/or Minimap=....";
+                return false;
+            }
+
+            step = new GoblinReplayTemplateScenarioStep(
+                name,
+                kind,
+                areaKey,
+                string.IsNullOrWhiteSpace(locationTemplateName) ? null : locationTemplateName,
+                string.IsNullOrWhiteSpace(journalTemplateName) ? null : journalTemplateName,
+                string.IsNullOrWhiteSpace(minimapTemplateName) ? null : minimapTemplateName,
+                journalLineBucket,
+                advanceSeconds,
+                timestampUtc);
+            return true;
+        }
+
+        private static int ParseIntOption(IReadOnlyDictionary<string, string> options, int defaultValue, params string[] keys)
+        {
+            string rawValue = MetadataValue(options, keys);
+            return int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
+                ? parsed
+                : defaultValue;
+        }
+
+        private static GoblinReplayFixture CreateTemplateScenarioFixture(
+            GoblinReplayTemplateScenarioStep step,
+            string templateDirectory,
+            string tempRoot,
+            int stepIndex,
+            Action<string, string> emit)
+        {
+            string? journalFramePath = CreateTemplateScenarioSourceFrame(
+                step.JournalTemplateName,
+                "JournalCandidate",
+                templateDirectory,
+                tempRoot,
+                stepIndex,
+                step.JournalLineBucket,
+                emit);
+            string? minimapFramePath = CreateTemplateScenarioSourceFrame(
+                step.MinimapTemplateName,
+                "MinimapCandidate",
+                templateDirectory,
+                tempRoot,
+                stepIndex,
+                step.JournalLineBucket,
+                emit);
+            return new GoblinReplayFixture(step.Name, journalFramePath, minimapFramePath);
+        }
+
+        private static string ResolveTemplateScenarioAreaKey(
+            GoblinReplayTemplateScenarioStep step,
+            string currentLocationTemplateDirectory,
+            Action<string, string> emit)
+        {
+            if (!string.IsNullOrWhiteSpace(step.AreaKey) || string.IsNullOrWhiteSpace(step.LocationTemplateName))
+            {
+                return GoblinAreaResolver.Resolve(step.AreaKey).AreaKey;
+            }
+
+            string locationTemplatePath = ResolveTemplateScenarioLocationPath(
+                step.LocationTemplateName!,
+                currentLocationTemplateDirectory);
+            if (string.IsNullOrWhiteSpace(locationTemplatePath) || !File.Exists(locationTemplatePath))
+            {
+                emit(
+                    "GoblinReplayTemplateScenarioLocationMissing",
+                    $"step={LogField(step.Name)}; locationTemplate={LogField(step.LocationTemplateName)}; currentLocationTemplateDirectory={LogField(currentLocationTemplateDirectory)}");
+                return "";
+            }
+
+            Dictionary<string, string> templates = CurrentLocationImageResolver.DiscoverTemplatePaths(currentLocationTemplateDirectory);
+            using Bitmap locationFrame = new(locationTemplatePath);
+            CurrentLocationImageResolverResult result = CurrentLocationImageResolver.DetectFromBitmap(
+                locationFrame,
+                templates,
+                0.82);
+            string resolvedAreaKey = GoblinAreaResolver.Resolve(result.Detected).AreaKey;
+            emit(
+                "GoblinReplayTemplateScenarioLocationResolved",
+                $"step={LogField(step.Name)}; locationTemplate={LogField(Path.GetFileName(locationTemplatePath))}; detected={LogField(result.Detected)}; areaKey={LogField(resolvedAreaKey)}; best={LogField(result.BestName)}; bestConfidence={result.BestConfidence.ToString("0.000", CultureInfo.InvariantCulture)}; second={LogField(result.SecondName)}; secondConfidence={result.SecondConfidence.ToString("0.000", CultureInfo.InvariantCulture)}; templateCount={result.TemplateCount}");
+            return resolvedAreaKey;
+        }
+
+        private static string ResolveTemplateScenarioLocationPath(string locationTemplateName, string currentLocationTemplateDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(locationTemplateName))
+            {
+                return "";
+            }
+
+            if (Path.IsPathRooted(locationTemplateName) && File.Exists(locationTemplateName))
+            {
+                return locationTemplateName;
+            }
+
+            string fileName = Path.GetFileName(locationTemplateName);
+            string directPath = Path.Combine(currentLocationTemplateDirectory, fileName);
+            if (File.Exists(directPath))
+            {
+                return directPath;
+            }
+
+            if (!fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            {
+                string pngPath = Path.Combine(currentLocationTemplateDirectory, $"{fileName}.png");
+                if (File.Exists(pngPath))
+                {
+                    return pngPath;
+                }
+            }
+
+            string normalizedKey = CurrentLocationImageResolver.LocationKey(Path.GetFileNameWithoutExtension(fileName));
+            return Directory.Exists(currentLocationTemplateDirectory)
+                ? Directory
+                    .EnumerateFiles(currentLocationTemplateDirectory, "*.png", SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault(path => CurrentLocationImageResolver.LocationKey(Path.GetFileNameWithoutExtension(path)).Equals(normalizedKey, StringComparison.OrdinalIgnoreCase)) ?? ""
+                : "";
+        }
+
+        private static string? CreateTemplateScenarioSourceFrame(
+            string? templateName,
+            string source,
+            string templateDirectory,
+            string tempRoot,
+            int stepIndex,
+            int journalLineBucket,
+            Action<string, string> emit)
+        {
+            if (string.IsNullOrWhiteSpace(templateName))
+            {
+                return null;
+            }
+
+            string fileName = Path.GetFileName(templateName);
+            string templatePath = Path.Combine(templateDirectory, fileName);
+            if (!File.Exists(templatePath))
+            {
+                emit(
+                    "GoblinReplayTemplateScenarioTemplateMissing",
+                    $"stepIndex={stepIndex}; source={LogField(source)}; templateName={LogField(fileName)}; templatePath={LogField(templatePath)}");
+                return null;
+            }
+
+            Rectangle sourceRegion = RegionForSource(source);
+            using Bitmap template = new(templatePath);
+            int frameWidth = Math.Max(sourceRegion.Width, template.Width + 2);
+            int frameHeight = Math.Max(sourceRegion.Height, template.Height + 2);
+            Point matchPoint = source.Equals("MinimapCandidate", StringComparison.OrdinalIgnoreCase)
+                ? new Point(
+                    Math.Max(0, (frameWidth - template.Width) / 2),
+                    Math.Max(0, (frameHeight - template.Height) / 2))
+                : new Point(
+                    Math.Min(30, Math.Max(0, frameWidth - template.Width - 1)),
+                    Math.Min(Math.Max(0, journalLineBucket * 32 + 4), Math.Max(0, frameHeight - template.Height - 1)));
+            string framePath = Path.Combine(
+                tempRoot,
+                $"{stepIndex:000}_{source}_{SanitizeFileName(fileName)}");
+            using Bitmap frame = new(frameWidth, frameHeight);
+            using Graphics graphics = Graphics.FromImage(frame);
+            graphics.Clear(Color.Black);
+            graphics.DrawImageUnscaled(template, matchPoint);
+            frame.Save(framePath);
+            emit(
+                "GoblinReplayTemplateScenarioFrameCreated",
+                $"stepIndex={stepIndex}; source={LogField(source)}; templateName={LogField(fileName)}; framePath={LogField(framePath)}; matchPoint={matchPoint.X},{matchPoint.Y}; frameSize={frameWidth}x{frameHeight}");
+            return framePath;
+        }
+
+        private static string SanitizeFileName(string value)
+        {
+            string sanitized = value;
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+            {
+                sanitized = sanitized.Replace(invalid, '_');
+            }
+
+            return sanitized;
+        }
+
+        private static int RememberReplayResetCarryoverSuppressions(
+            Dictionary<string, ReplayEvidenceState> evidenceBySignature,
+            List<ReplayResetCarryoverState> resetCarryoverSuppressions,
+            DateTime nowUtc,
+            string reason)
+        {
+            ExpireReplayResetCarryoverSuppressions(resetCarryoverSuppressions, nowUtc);
+            int remembered = 0;
+            foreach (KeyValuePair<string, ReplayEvidenceState> pair in evidenceBySignature)
+            {
+                if (!pair.Value.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase) ||
+                    !GoblinJournalFreshnessPolicy.StaleSuppressionActive(pair.Value.LastSeenUtc, nowUtc, ReplayJournalFreshnessWindow))
+                {
+                    continue;
+                }
+
+                resetCarryoverSuppressions.RemoveAll(state =>
+                    state.Signature.Equals(pair.Key, StringComparison.OrdinalIgnoreCase));
+                resetCarryoverSuppressions.Add(new ReplayResetCarryoverState(
+                    pair.Key,
+                    nowUtc,
+                    pair.Value.LastSeenUtc,
+                    reason));
+                remembered++;
+            }
+
+            return remembered;
+        }
+
+        private static bool TrySuppressReplayResetCarryover(
+            string signature,
+            DateTime nowUtc,
+            List<ReplayResetCarryoverState>? resetCarryoverSuppressions,
+            out string freshnessReason)
+        {
+            freshnessReason = "";
+            if (resetCarryoverSuppressions == null || resetCarryoverSuppressions.Count == 0)
+            {
+                return false;
+            }
+
+            ExpireReplayResetCarryoverSuppressions(resetCarryoverSuppressions, nowUtc);
+            for (int index = 0; index < resetCarryoverSuppressions.Count; index++)
+            {
+                ReplayResetCarryoverState state = resetCarryoverSuppressions[index];
+                if (!GoblinJournalEvidencePolicy.SameVisibleLineFamily(
+                    signature,
+                    state.Signature,
+                    out int currentBucket,
+                    out int previousBucket))
+                {
+                    continue;
+                }
+
+                resetCarryoverSuppressions[index] = state with { LastSeenUtc = nowUtc };
+                freshnessReason = $"JournalCandidateIgnoredResetCarryover:{currentBucket}->{previousBucket}";
+                return true;
+            }
+
+            return false;
+        }
+
+        private static void ExpireReplayResetCarryoverSuppressions(
+            List<ReplayResetCarryoverState> resetCarryoverSuppressions,
+            DateTime nowUtc)
+        {
+            resetCarryoverSuppressions.RemoveAll(state =>
+                !GoblinJournalFreshnessPolicy.StaleSuppressionActive(state.LastSeenUtc, nowUtc, ReplayJournalFreshnessWindow));
+        }
+
         private static GoblinReplayFixtureStepResult EvaluateStep(
             string scenarioName,
             GoblinReplayFixtureStep step,
             GoblinReplayFixtureCandidate? candidate,
             Dictionary<string, ReplayEvidenceState> evidenceBySignature,
             Dictionary<string, ReplayEncounterState> encounterByGoblinType,
-            GoblinAreaDuplicateGuard duplicateGuard)
+            GoblinAreaDuplicateGuard duplicateGuard,
+            List<ReplayResetCarryoverState>? resetCarryoverSuppressions = null)
         {
             if (candidate == null)
             {
@@ -777,6 +1355,25 @@ namespace GoblinFarmer
             }
 
             string evidenceSignature = EvidenceSignature(candidate);
+            if (candidate.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase) &&
+                TrySuppressReplayResetCarryover(
+                    evidenceSignature,
+                    step.TimestampUtc,
+                    resetCarryoverSuppressions,
+                    out string resetCarryoverFreshnessReason))
+            {
+                return SuppressedStep(
+                    scenarioName,
+                    step,
+                    "Fixture",
+                    "Found",
+                    candidate.Source,
+                    candidate.GoblinType,
+                    evidenceSignature,
+                    "JournalCandidateIgnoredResetCarryover",
+                    resetCarryoverFreshnessReason);
+            }
+
             string encounterKey = GoblinTypeNormalizer.Normalize(candidate.GoblinType);
             if (encounterKey.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
             {
@@ -823,21 +1420,17 @@ namespace GoblinFarmer
             }
 
             string reason = "";
+            bool refreshEncounterLastSeen = false;
             if (state.Counted)
             {
                 reason = string.Equals(state.CountedAreaKey, step.AreaKey, StringComparison.OrdinalIgnoreCase)
                     ? "EvidenceAlreadyAutoCounted"
                     : "EncounterAlreadyAutoCounted";
-                if (!string.IsNullOrWhiteSpace(encounterKey) && encounterState != null)
-                {
-                    encounterByGoblinType[encounterKey] = encounterState with
-                    {
-                        LastSeenUtc = step.TimestampUtc,
-                        GoblinType = candidate.GoblinType,
-                        Source = candidate.Source,
-                        EvidenceKey = evidenceSignature,
-                    };
-                }
+                refreshEncounterLastSeen = encounterState != null &&
+                    GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+                        candidate.Source,
+                        step.AreaKey,
+                        encounterState.AreaKey);
             }
             else if (encounterState != null &&
                 GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
@@ -857,16 +1450,10 @@ namespace GoblinFarmer
                     out _))
             {
                 reason = "EncounterAlreadyAutoCounted";
-                if (!string.IsNullOrWhiteSpace(encounterKey))
-                {
-                    encounterByGoblinType[encounterKey] = encounterState with
-                    {
-                        LastSeenUtc = step.TimestampUtc,
-                        GoblinType = candidate.GoblinType,
-                        Source = candidate.Source,
-                        EvidenceKey = evidenceSignature,
-                    };
-                }
+                refreshEncounterLastSeen = GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+                    candidate.Source,
+                    step.AreaKey,
+                    encounterState.AreaKey);
             }
             else if (GoblinManualCountBlockList.IsBlocked(step.AreaKey))
             {
@@ -875,6 +1462,11 @@ namespace GoblinFarmer
             else if (!duplicateGuard.TryAccept(step.AreaKey, out GoblinAreaDuplicateGuardResult guardResult))
             {
                 reason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                refreshEncounterLastSeen = encounterState != null &&
+                    GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterAreaAlreadyCounted(
+                        candidate.Source,
+                        step.AreaKey,
+                        encounterState.AreaKey);
             }
             else
             {
@@ -908,6 +1500,19 @@ namespace GoblinFarmer
                     "Eligible",
                     freshnessReason,
                     true);
+            }
+
+            if (refreshEncounterLastSeen &&
+                !string.IsNullOrWhiteSpace(encounterKey) &&
+                encounterState != null)
+            {
+                encounterByGoblinType[encounterKey] = encounterState with
+                {
+                    LastSeenUtc = step.TimestampUtc,
+                    GoblinType = candidate.GoblinType,
+                    Source = candidate.Source,
+                    EvidenceKey = evidenceSignature,
+                };
             }
 
             return SuppressedStep(
@@ -1387,5 +1992,11 @@ namespace GoblinFarmer
             string GoblinType,
             string Source,
             string EvidenceKey);
+
+        private sealed record ReplayResetCarryoverState(
+            string Signature,
+            DateTime ResetUtc,
+            DateTime LastSeenUtc,
+            string ResetReason);
     }
 }

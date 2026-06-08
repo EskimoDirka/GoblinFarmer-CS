@@ -33,6 +33,7 @@ namespace GoblinFarmer
         private readonly Dictionary<string, GoblinJournalEngagedState> portRecentJournalEngagedByGoblinType = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, GoblinJournalStaleSuppressedState> portStaleSuppressedJournalEvidenceByKey = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, GoblinJournalKilledState> portJournalKilledEvidenceSeenBySignature = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, GoblinJournalResetCarryoverSuppressedState> portJournalResetCarryoverSuppressedBySignature = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, GoblinEvidenceCachedTemplate> portGoblinEvidenceTemplateMatCache = new(StringComparer.OrdinalIgnoreCase);
         private GoblinEvidenceTemplateCatalog? portCachedGoblinEvidenceTemplateCatalog;
         private string portCachedGoblinEvidenceTemplateCatalogDirectory = "";
@@ -555,6 +556,17 @@ namespace GoblinFarmer
                 return false;
             }
 
+            if (PortTrySuppressJournalEvidenceFromResetCarryover(journalLineSignature, nowUtc, out string resetCarryoverDetails))
+            {
+                PortLogJournalEvidenceFreshnessDiagnostic(
+                    "JournalCandidateIgnoredResetCarryover",
+                    template,
+                    match,
+                    portLastConfirmedLocation,
+                    resetCarryoverDetails);
+                return false;
+            }
+
             lock (portGoblinEvidenceLock)
             {
                 if (!portJournalEvidenceSeenByKey.TryGetValue(journalLineSignature, out GoblinJournalEvidenceSeenState? seenState))
@@ -832,6 +844,91 @@ namespace GoblinFarmer
 
                 portStaleSuppressedJournalEvidenceByKey[signature] = new GoblinJournalStaleSuppressedState(nowUtc, nowUtc);
             }
+        }
+
+        private bool PortTrySuppressJournalEvidenceFromResetCarryover(string signature, DateTime nowUtc, out string details)
+        {
+            details = "";
+            lock (portGoblinEvidenceLock)
+            {
+                List<string> expiredKeys = [];
+                foreach (KeyValuePair<string, GoblinJournalResetCarryoverSuppressedState> pair in portJournalResetCarryoverSuppressedBySignature)
+                {
+                    if (!GoblinJournalFreshnessPolicy.StaleSuppressionActive(pair.Value.LastSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                    {
+                        expiredKeys.Add(pair.Key);
+                        continue;
+                    }
+
+                    if (!GoblinJournalEvidencePolicy.SameVisibleLineFamily(signature, pair.Value.Signature, out int currentBucket, out int previousBucket))
+                    {
+                        continue;
+                    }
+
+                    portJournalResetCarryoverSuppressedBySignature[pair.Key] = pair.Value with { LastSeenUtc = nowUtc };
+                    details =
+                        $"signature={PortLogField(signature)}; " +
+                        $"previousSignature={PortLogField(pair.Value.Signature)}; " +
+                        $"currentLineBucket={currentBucket}; " +
+                        $"previousLineBucket={previousBucket}; " +
+                        $"resetReason={PortLogField(pair.Value.ResetReason)}; " +
+                        $"resetUtc={pair.Value.ResetUtc:O}; " +
+                        $"lastSeenAgeSeconds={Math.Max(0, (nowUtc - pair.Value.LastSeenUtc).TotalSeconds):0.0}; " +
+                        $"freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}";
+
+                    foreach (string expiredKey in expiredKeys)
+                    {
+                        portJournalResetCarryoverSuppressedBySignature.Remove(expiredKey);
+                    }
+
+                    return true;
+                }
+
+                foreach (string expiredKey in expiredKeys)
+                {
+                    portJournalResetCarryoverSuppressedBySignature.Remove(expiredKey);
+                }
+            }
+
+            return false;
+        }
+
+        private int PortRememberJournalResetCarryoverSuppressions(string reason, DateTime nowUtc)
+        {
+            int remembered = 0;
+            lock (portGoblinEvidenceLock)
+            {
+                List<string> expiredKeys = [];
+                foreach (KeyValuePair<string, GoblinJournalResetCarryoverSuppressedState> pair in portJournalResetCarryoverSuppressedBySignature)
+                {
+                    if (!GoblinJournalFreshnessPolicy.StaleSuppressionActive(pair.Value.LastSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                    {
+                        expiredKeys.Add(pair.Key);
+                    }
+                }
+
+                foreach (string expiredKey in expiredKeys)
+                {
+                    portJournalResetCarryoverSuppressedBySignature.Remove(expiredKey);
+                }
+
+                foreach (KeyValuePair<string, GoblinJournalEvidenceSeenState> pair in portJournalEvidenceSeenByKey)
+                {
+                    if (!GoblinJournalFreshnessPolicy.StaleSuppressionActive(pair.Value.LastSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                    {
+                        continue;
+                    }
+
+                    portJournalResetCarryoverSuppressedBySignature[pair.Key] = new GoblinJournalResetCarryoverSuppressedState(
+                        pair.Key,
+                        nowUtc,
+                        pair.Value.LastSeenUtc,
+                        reason);
+                    remembered++;
+                }
+            }
+
+            return remembered;
         }
 
         internal void PortSetGoblinEvidenceFrameSourceForReplayFixtures(IGoblinEvidenceFrameSource? frameSource)
@@ -1813,6 +1910,8 @@ namespace GoblinFarmer
 
         private void PortResetGoblinEvidenceObservationState(string reason)
         {
+            DateTime nowUtc = DateTime.UtcNow;
+            int resetCarryoverRemembered = PortRememberJournalResetCarryoverSuppressions(reason, nowUtc);
             int evidenceCooldownsCleared;
             int missingTemplateCooldownsCleared;
             int scanDiagnosticsCleared;
@@ -1865,12 +1964,18 @@ namespace GoblinFarmer
                 portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
             }
 
-            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedJournalKilled={journalKilledCleared} clearedAutoCountEvidence={autoCountEvidenceCleared} clearedAutoCountEncounters={autoCountEncounterCleared} clearedRecentMinimapObservations={recentMinimapObservationsCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
+            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedJournalKilled={journalKilledCleared} resetCarryoverSuppressionsRemembered={resetCarryoverRemembered} clearedAutoCountEvidence={autoCountEvidenceCleared} clearedAutoCountEncounters={autoCountEncounterCleared} clearedRecentMinimapObservations={recentMinimapObservationsCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
             AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(reason)} previousDisplayed={hadDisplayedObservation}");
         }
 
 
         private sealed record GoblinJournalStaleSuppressedState(DateTime FirstSuppressedUtc, DateTime LastSeenUtc);
+
+        private sealed record GoblinJournalResetCarryoverSuppressedState(
+            string Signature,
+            DateTime ResetUtc,
+            DateTime LastSeenUtc,
+            string ResetReason);
 
         private sealed record GoblinEvidenceCachedTemplate(
             OpenCvSharp.Mat TemplateMat,

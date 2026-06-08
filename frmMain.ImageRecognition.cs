@@ -481,30 +481,20 @@ namespace GoblinFarmer
                 return new("", "", 0, "", 0, templates.Count, perf.ElapsedMilliseconds);
             }
 
-            using Mat rawScreenMat = OpenCvSharp.Extensions.BitmapConverter.ToMat(screenshot);
-            using Mat screenMat = new();
-            Cv2.CvtColor(rawScreenMat, screenMat, ColorConversionCodes.BGRA2BGR);
-
-            foreach ((string name, string imagePath) in templates)
-            {
-                double confidence = PortLocationKey(name).StartsWith("pandemonium fortress level", StringComparison.Ordinal)
-                    ? PortBestPandemoniumTemplateConfidenceInMat(screenMat, imagePath)
-                    : PortBestTemplateConfidenceInMat(screenMat, imagePath);
-                if (confidence > bestConfidence)
-                {
-                    secondName = bestName;
-                    secondConfidence = bestConfidence;
-                    bestName = name;
-                    bestConfidence = confidence;
-                }
-                else if (confidence > secondConfidence)
-                {
-                    secondName = name;
-                    secondConfidence = confidence;
-                }
-            }
-
-            string detected = PortResolveDetectedLocation(bestName, bestConfidence, secondName, secondConfidence, threshold);
+            CurrentLocationImageResolverResult resolved = CurrentLocationImageResolver.DetectFromBitmap(
+                screenshot,
+                templates,
+                threshold,
+                missingPath => PortOfferMissingAssetCapture(
+                    missingPath,
+                    "CurrentLocationTemplateScan",
+                    Path.GetFileName(missingPath),
+                    captureInstruction: "Capture the missing current-location/template asset while the expected in-game title or UI element is visible."));
+            bestName = resolved.BestName;
+            bestConfidence = resolved.BestConfidence;
+            secondName = resolved.SecondName;
+            secondConfidence = resolved.SecondConfidence;
+            string detected = resolved.Detected;
             PortLogCaldeumDetection(detected, bestName, bestConfidence);
             DebugManager.RecordImageRecognition(new ImageRecognitionDiagnostic(
                 bestName,
@@ -519,7 +509,7 @@ namespace GoblinFarmer
                 templates.Count));
             if (logPerf)
             {
-                AppLogger.Info($"PERF PortDetectCurrentLocation ({label}): scanned {templates.Count} templates in title region in {perf.ElapsedMilliseconds}ms, best={PortDisplayLocation(bestName)} confidence={bestConfidence:0.000}, second={PortDisplayLocation(secondName)} confidence={secondConfidence:0.000}, threshold={threshold:0.000}, detected={PortDisplayLocation(detected)}");
+                AppLogger.Info($"PERF PortDetectCurrentLocation ({label}): scanned {templates.Count} templates in title region in {perf.ElapsedMilliseconds}ms, resolverElapsedMs={resolved.ElapsedMilliseconds}, best={PortDisplayLocation(bestName)} confidence={bestConfidence:0.000}, second={PortDisplayLocation(secondName)} confidence={secondConfidence:0.000}, threshold={threshold:0.000}, detected={PortDisplayLocation(detected)}");
             }
             return new(detected, bestName, bestConfidence, secondName, secondConfidence, templates.Count, perf.ElapsedMilliseconds);
         }

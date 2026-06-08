@@ -37,6 +37,7 @@ Run("GoblinEvidence retention deletes only inside GoblinEvidence", TestGoblinEvi
 Run("GoblinEvidence template discovery accepts per-goblin evidence files", TestGoblinEvidenceTemplateDiscoveryAcceptsPerGoblinEvidenceFiles);
 Run("GoblinEvidence template discovery finds source image set", TestGoblinEvidenceTemplateDiscoveryFindsSourceImageSet);
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
+Run("Current location image resolver detects saved title templates", TestCurrentLocationImageResolverDetectsSavedTitleTemplates);
 Run("Goblin replay fixture frame source reaches candidate detection", TestGoblinReplayFixtureFrameSourceReachesCandidateDetection);
 Run("Goblin replay explicit fixture runner detects saved encounter frames", TestGoblinReplayExplicitFixtureRunnerDetectsSavedEncounterFrames);
 Run("Goblin replay suppresses delayed journal after minimap count", TestGoblinReplaySuppressesDelayedJournalAfterMinimapCount);
@@ -51,6 +52,9 @@ Run("Goblin replay prefix loader reports missing metadata clearly", TestGoblinRe
 Run("Goblin replay decision-bundle loader reports available evidence", TestGoblinReplayDecisionBundleLoaderReportsAvailableEvidence);
 Run("Goblin replay decision-bundle loader can resolve replay-ready prefix", TestGoblinReplayDecisionBundleLoaderCanResolveReplayReadyPrefix);
 Run("Goblin replay decision-bundle loader reads local replay crops", TestGoblinReplayDecisionBundleLoaderReadsLocalReplayCrops);
+Run("Goblin replay template scenario suppresses reset carryover journal evidence", TestGoblinReplayTemplateScenarioSuppressesResetCarryoverJournalEvidence);
+Run("Goblin replay template scenario uses current-location resolver", TestGoblinReplayTemplateScenarioUsesCurrentLocationResolver);
+Run("Goblin replay template scenario allows fresh minimap after stale cross-area journal", TestGoblinReplayTemplateScenarioAllowsFreshMinimapAfterStaleCrossAreaJournal);
 Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
@@ -96,6 +100,8 @@ Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomat
 Run("Goblin auto-count source variant suppression uses recent last-seen state", TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState);
 Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
 Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses);
+Run("Goblin auto-count stale journal does not block fresh cross-area minimap", TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap);
+Run("Goblin auto-count same-area duplicate journal refreshes encounter state", TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin accepted counts persist Last Observation until reset", TestGoblinAcceptedCountsPersistLastObservationUntilReset);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
@@ -962,6 +968,26 @@ static void TestGoblinEvidenceObservationScanRegionsMatchCalibration()
     AssertEqual(new Rectangle(2108, 66, 421, 423), GoblinEvidenceScanRegions.MinimapReferenceRegion, "minimap observation scan region should match the calibrated GoblinEvidence minimap region");
 }
 
+static void TestCurrentLocationImageResolverDetectsSavedTitleTemplates()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string locationRoot = Path.Combine(repoRoot, "Images", "Current Location");
+    Dictionary<string, string> templates = CurrentLocationImageResolver.DiscoverTemplatePaths(locationRoot);
+    string easternChannelPath = Path.Combine(locationRoot, "Eastern Channel Level 1.png");
+    AssertTrue(File.Exists(easternChannelPath), "Eastern Channel Level 1 current-location template should exist");
+    AssertTrue(templates.Count > 20, "current-location resolver should discover the source title templates");
+
+    using Bitmap frame = new(easternChannelPath);
+    CurrentLocationImageResolverResult result = CurrentLocationImageResolver.DetectFromBitmap(
+        frame,
+        templates,
+        0.82);
+
+    AssertEqual("Eastern Channel Level 1", result.Detected, "current-location resolver should detect the saved Eastern Channel Level 1 title template");
+    AssertEqual("Eastern Channel Level 1", result.BestName, "current-location resolver should report the matching title template as best");
+    AssertTrue(result.BestConfidence >= 0.99, $"current-location resolver should match the exact template with high confidence, actual={result.BestConfidence:0.000}");
+}
+
 static void TestGoblinReplayFixtureFrameSourceReachesCandidateDetection()
 {
     string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerFixture_{Guid.NewGuid():N}");
@@ -1669,6 +1695,154 @@ static void TestGoblinReplayDecisionBundleLoaderReadsLocalReplayCrops()
     }
 }
 
+static void TestGoblinReplayTemplateScenarioSuppressesResetCarryoverJournalEvidence()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string templateRoot = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string scenarioRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayScenarioManifest_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(scenarioRoot);
+    try
+    {
+        string templateName = "Blood Thief Killed Journal.png";
+        AssertTrue(File.Exists(Path.Combine(templateRoot, templateName)), "template scenario test requires the Blood Thief killed journal template in Images\\Goblin Evidence");
+        string scenarioPath = Path.Combine(scenarioRoot, "new-game-reset-carryover.txt");
+        File.WriteAllLines(scenarioPath, [
+            "Scenario=New Game reset carryover",
+            $"Step=Weeping fresh killed|Scan|Area=The Weeping Hollow|Journal={templateName}|JournalLineBucket=10|AdvanceSeconds=1",
+            "Step=Make New Game|NewGame|AdvanceSeconds=6",
+            $"Step=Southern old visible killed|Scan|Area=Southern Highlands|Journal={templateName}|JournalLineBucket=9|AdvanceSeconds=1",
+        ]);
+
+        GoblinReplayTemplateScenarioManifestLoadResult load =
+            GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+        AssertTrue(load.Loaded, $"template scenario manifest should load cleanly, reason={load.Reason}");
+        AssertEqual(3, load.Steps.Count, "template scenario manifest should parse all three steps");
+
+        List<string> replayLogs = [];
+        DateTime startUtc = new(2026, 6, 8, 11, 18, 48, DateTimeKind.Utc);
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+            load.ScenarioName,
+            load.Steps,
+            templateRoot,
+            replayLogs.Add,
+            writeAppLog: false,
+            startUtc: startUtc);
+
+        AssertEqual(3, result.Steps.Count, "template scenario should produce scan/action/scan results");
+        AssertTrue(result.Steps[0].Counted, "fresh pre-new-game journal evidence should count");
+        AssertEqual("NewGame", result.Steps[1].Reason, "scenario action should record the NewGame reset step");
+        AssertFalse(result.Steps[2].Counted, "old visible journal evidence should not count after New Game state reset");
+        AssertEqual("JournalCandidateIgnoredResetCarryover", result.Steps[2].Reason, "old visible journal evidence should suppress as reset carryover");
+        AssertTrue(result.Steps[2].FreshnessReason.StartsWith("JournalCandidateIgnoredResetCarryover", StringComparison.Ordinal), "reset-carryover freshness details should be preserved");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioAction", StringComparison.Ordinal) && line.Contains("rememberedResetCarryover=1", StringComparison.Ordinal)), "template scenario should log remembered reset carryover rows");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioStepResult", StringComparison.Ordinal) && line.Contains("reason=JournalCandidateIgnoredResetCarryover", StringComparison.Ordinal)), "template scenario should log the reset-carryover suppression result");
+    }
+    finally
+    {
+        if (Directory.Exists(scenarioRoot))
+        {
+            Directory.Delete(scenarioRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayTemplateScenarioUsesCurrentLocationResolver()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string templateRoot = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string locationRoot = Path.Combine(repoRoot, "Images", "Current Location");
+    string scenarioRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayLocationScenario_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(scenarioRoot);
+    try
+    {
+        string journalTemplate = "Blood Thief Killed Journal.png";
+        string locationTemplate = "Eastern Channel Level 1.png";
+        AssertTrue(File.Exists(Path.Combine(templateRoot, journalTemplate)), "template scenario test requires Blood Thief killed journal evidence");
+        AssertTrue(File.Exists(Path.Combine(locationRoot, locationTemplate)), "template scenario test requires Eastern Channel Level 1 current-location evidence");
+        string scenarioPath = Path.Combine(scenarioRoot, "eastern-channel-location-resolved.txt");
+        File.WriteAllLines(scenarioPath, [
+            "Scenario=Eastern Channel location resolved",
+            $"Step=Eastern Channel fresh killed|Scan|Location={locationTemplate}|Journal={journalTemplate}|JournalLineBucket=10|AdvanceSeconds=1",
+        ]);
+
+        GoblinReplayTemplateScenarioManifestLoadResult load =
+            GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+        AssertTrue(load.Loaded, $"template scenario manifest should load cleanly, reason={load.Reason}");
+
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+            load.ScenarioName,
+            load.Steps,
+            templateRoot,
+            replayLogs.Add,
+            writeAppLog: false,
+            startUtc: new DateTime(2026, 6, 8, 12, 0, 0, DateTimeKind.Utc),
+            currentLocationTemplateDirectory: locationRoot);
+
+        AssertEqual(1, result.Steps.Count, "location-resolved scenario should produce one decision");
+        AssertTrue(result.Steps[0].Counted, "fresh Eastern Channel journal evidence should count");
+        AssertEqual("Eastern Channel Level 1", result.Steps[0].AreaKey, "scenario should resolve count area from the current-location template");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioLocationResolved", StringComparison.Ordinal) && line.Contains("areaKey=Eastern Channel Level 1", StringComparison.Ordinal)), "scenario replay should log the resolved current-location area");
+    }
+    finally
+    {
+        if (Directory.Exists(scenarioRoot))
+        {
+            Directory.Delete(scenarioRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayTemplateScenarioAllowsFreshMinimapAfterStaleCrossAreaJournal()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string templateRoot = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string scenarioRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayStaleJournalMinimap_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(scenarioRoot);
+    try
+    {
+        string journalTemplate = "Treasure Goblin Killed Journal.png";
+        string minimapTemplate = "Treasure Goblin Minimap.png";
+        AssertTrue(File.Exists(Path.Combine(templateRoot, journalTemplate)), "template scenario test requires Treasure Goblin killed journal evidence");
+        AssertTrue(File.Exists(Path.Combine(templateRoot, minimapTemplate)), "template scenario test requires Treasure Goblin minimap evidence");
+        string scenarioPath = Path.Combine(scenarioRoot, "stale-journal-fresh-minimap.txt");
+        File.WriteAllLines(scenarioPath, [
+            "Scenario=Stale journal should not block fresh minimap",
+            $"Step=Eastern Channel fresh journal|Scan|Area=Eastern Channel Level 1|Journal={journalTemplate}|JournalLineBucket=10|AdvanceSeconds=1",
+            $"Step=Stinging stale journal from prior area|Scan|Area=Stinging Winds|Journal={journalTemplate}|JournalLineBucket=11|AdvanceSeconds=8",
+            $"Step=Stinging fresh minimap|Scan|Area=Stinging Winds|Minimap={minimapTemplate}|AdvanceSeconds=20",
+        ]);
+
+        GoblinReplayTemplateScenarioManifestLoadResult load =
+            GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+        AssertTrue(load.Loaded, $"template scenario manifest should load cleanly, reason={load.Reason}");
+
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+            load.ScenarioName,
+            load.Steps,
+            templateRoot,
+            replayLogs.Add,
+            writeAppLog: false,
+            startUtc: new DateTime(2026, 6, 8, 16, 35, 29, DateTimeKind.Utc));
+
+        AssertEqual(3, result.Steps.Count, "stale-journal scenario should produce all three decisions");
+        AssertTrue(result.Steps[0].Counted, "fresh Eastern Channel journal evidence should count");
+        AssertFalse(result.Steps[1].Counted, "same visible Treasure Goblin journal text should suppress after moving to Stinging Winds");
+        AssertEqual("EncounterAlreadyAutoCounted", result.Steps[1].Reason, "old cross-area journal text should stay attached to the prior encounter");
+        AssertTrue(result.Steps[2].Counted, "fresh Stinging Winds minimap evidence should not be blocked by the old Eastern Channel journal row");
+        AssertEqual("Stinging Winds", result.Steps[2].AreaKey, "fresh minimap count should remain in Stinging Winds");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioStepResult", StringComparison.Ordinal) && line.Contains("step=Stinging fresh minimap", StringComparison.Ordinal) && line.Contains("counted=True", StringComparison.Ordinal)), "template scenario should log the fresh minimap count");
+    }
+    finally
+    {
+        if (Directory.Exists(scenarioRoot))
+        {
+            Directory.Delete(scenarioRoot, recursive: true);
+        }
+    }
+}
+
 static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -1679,24 +1853,29 @@ static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
     AssertTrue(programSource.Contains("--goblin-replay-metadata", StringComparison.Ordinal), "metadata replay command should live in the test harness CLI");
     AssertTrue(programSource.Contains("--goblin-replay-prefix", StringComparison.Ordinal), "prefix replay command should live in the test harness CLI");
     AssertTrue(programSource.Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "decision-bundle replay command should live in the test harness CLI");
+    AssertTrue(programSource.Contains("--goblin-replay-scenario", StringComparison.Ordinal), "template-scenario replay command should live in the test harness CLI");
     AssertTrue(programSource.Contains("RunExplicitCaptureFoldersForHarness", StringComparison.Ordinal), "developer replay command should call the explicit capture-folder runner");
     AssertTrue(programSource.Contains("RunExplicitMetadataFilesForHarness", StringComparison.Ordinal), "developer replay command should call the explicit metadata-file runner");
     AssertTrue(programSource.Contains("RunExplicitCapturePrefixesForHarness", StringComparison.Ordinal), "developer replay command should call the explicit capture-prefix runner");
     AssertTrue(programSource.Contains("RunExplicitDecisionBundlesForHarness", StringComparison.Ordinal), "developer replay command should call the explicit decision-bundle runner");
+    AssertTrue(programSource.Contains("RunExplicitTemplateScenarioForHarness", StringComparison.Ordinal), "developer replay command should call the explicit template-scenario runner");
     AssertTrue(programSource.Contains("writeAppLog: false", StringComparison.Ordinal), "developer replay command should avoid persistent app logs by default");
     AssertTrue(replayRunnerSource.Contains("writeAppLog = true", StringComparison.Ordinal), "replay runner should keep existing harness logging defaults unless the command opts out");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "WinForms startup should not know about the replay command");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-metadata", StringComparison.Ordinal), "WinForms startup should not know about metadata replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-prefix", StringComparison.Ordinal), "WinForms startup should not know about prefix replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "WinForms startup should not know about decision-bundle replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-replay-scenario", StringComparison.Ordinal), "WinForms startup should not know about template-scenario replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "live scanner should not know about the replay command");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-metadata", StringComparison.Ordinal), "live scanner should not know about metadata replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-prefix", StringComparison.Ordinal), "live scanner should not know about prefix replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "live scanner should not know about decision-bundle replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-replay-scenario", StringComparison.Ordinal), "live scanner should not know about template-scenario replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-captures", StringComparison.Ordinal), "debug package creation should not invoke replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-metadata", StringComparison.Ordinal), "debug package creation should not invoke metadata replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-prefix", StringComparison.Ordinal), "debug package creation should not invoke prefix replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "debug package creation should not invoke decision-bundle replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-scenario", StringComparison.Ordinal), "debug package creation should not invoke template-scenario replay");
 }
 
 static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitCode)
@@ -1710,6 +1889,7 @@ static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitC
     string repoRoot = FindRepositoryRootForTests();
     string templateDirectory = Path.Combine(repoRoot, "Images", "Goblin Evidence");
     string scenarioName = $"Explicit capture replay {DateTime.Now:yyyyMMdd_HHmmss}";
+    bool scenarioNameOverridden = false;
     string command = commandArgs[0];
     string inputMode = GoblinReplayInputMode(command);
     List<string> replayInputs = [];
@@ -1750,6 +1930,7 @@ static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitC
             }
 
             scenarioName = commandArgs[++i];
+            scenarioNameOverridden = true;
             continue;
         }
 
@@ -1788,6 +1969,64 @@ static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitC
         Console.WriteLine($"Scenario: {scenarioName}");
         Console.WriteLine($"TemplateDirectory: {templateDirectory}");
         Console.WriteLine($"InputCount: {replayInputs.Count}");
+
+        if (command.Equals("--goblin-replay-scenario", StringComparison.OrdinalIgnoreCase))
+        {
+            int failedScenarios = 0;
+            int totalSteps = 0;
+            int totalCounted = 0;
+            foreach (string scenarioPath in replayInputs)
+            {
+                GoblinReplayTemplateScenarioManifestLoadResult load =
+                    GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+                string loadStatus = load.Loaded ? "PASS" : "FAIL";
+                Console.WriteLine(
+                    $"{loadStatus} SCENARIO_LOAD reason={load.Reason} scenario=\"{load.ScenarioName}\" path=\"{load.ScenarioPath}\" steps={load.Steps.Count}");
+                foreach (string error in load.Errors)
+                {
+                    Console.WriteLine($"ERROR scenario=\"{load.ScenarioName}\" message=\"{error}\"");
+                }
+
+                if (!load.Loaded)
+                {
+                    failedScenarios++;
+                    continue;
+                }
+
+                GoblinReplayFixtureScenarioResult scenarioResult = GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+                    scenarioNameOverridden ? scenarioName : load.ScenarioName,
+                    load.Steps,
+                    templateDirectory,
+                    log: null,
+                    setFrameSourceForReplay: null,
+                    writeAppLog: false);
+                foreach (GoblinReplayFixtureStepResult step in scenarioResult.Steps)
+                {
+                    string status = step.FrameSource.Equals("ScenarioAction", StringComparison.OrdinalIgnoreCase) ||
+                        step.CandidateFound ||
+                        step.Counted
+                        ? "PASS"
+                        : "FAIL";
+                    Console.WriteLine(
+                        $"{status} SCENARIO_STEP step=\"{step.StepName}\" area=\"{step.AreaKey}\" candidate={step.CandidateResult} source={step.Source} goblinType=\"{step.GoblinType}\" decision={step.CountDecision} reason={step.Reason} freshness={step.FreshnessReason} counted={step.Counted}");
+                }
+
+                totalSteps += scenarioResult.Steps.Count;
+                totalCounted += scenarioResult.Steps.Count(step => step.Counted);
+            }
+
+            Console.WriteLine(
+                $"SUMMARY scenarioFiles={replayInputs.Count} failedScenarios={failedScenarios} decisions={totalSteps} counted={totalCounted} suppressed={totalSteps - totalCounted}");
+            if (failedScenarios > 0 || totalSteps == 0)
+            {
+                Console.Error.WriteLine("FAIL Goblin Replay scenario command completed with missing/invalid scenarios or no replay decisions.");
+                exitCode = 1;
+                return true;
+            }
+
+            Console.WriteLine("PASS Goblin Replay scenario completed.");
+            return true;
+        }
 
         IReadOnlyList<GoblinReplayCaptureFolderStep> inputSteps = replayInputs
             .Select((input, index) => new GoblinReplayCaptureFolderStep($"{inputMode} {index + 1}", input))
@@ -1868,7 +2107,8 @@ static bool GoblinReplayCommandIsSupported(string command)
     return command.Equals("--goblin-replay-captures", StringComparison.OrdinalIgnoreCase) ||
         command.Equals("--goblin-replay-metadata", StringComparison.OrdinalIgnoreCase) ||
         command.Equals("--goblin-replay-prefix", StringComparison.OrdinalIgnoreCase) ||
-        command.Equals("--goblin-replay-decision-bundle", StringComparison.OrdinalIgnoreCase);
+        command.Equals("--goblin-replay-decision-bundle", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("--goblin-replay-scenario", StringComparison.OrdinalIgnoreCase);
 }
 
 static string GoblinReplayInputMode(string command)
@@ -1878,6 +2118,7 @@ static string GoblinReplayInputMode(string command)
         "--goblin-replay-metadata" => "Metadata",
         "--goblin-replay-prefix" => "Prefix",
         "--goblin-replay-decision-bundle" => "DecisionBundle",
+        "--goblin-replay-scenario" => "TemplateScenario",
         _ => "CaptureFolder",
     };
 }
@@ -1889,10 +2130,12 @@ static void PrintGoblinReplayCaptureCommandHelp()
     Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-metadata [--templates \".\\Images\\Goblin Evidence\"] \"Capture_Metadata.txt\"");
     Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-prefix [--templates \".\\Images\\Goblin Evidence\"] \"CapturePrefix\"");
     Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-decision-bundle [--templates \".\\Images\\Goblin Evidence\"] \"DecisionBundleFolder\"");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-replay-scenario [--templates \".\\Images\\Goblin Evidence\"] \"ScenarioFile.txt\"");
     Console.WriteLine();
     Console.WriteLine("Capture folders are real saved Goblin Evidence encounter/manual capture folders containing *_Metadata.txt plus *_Journal.png and/or *_Minimap.png.");
     Console.WriteLine("Metadata and prefix inputs let you target a specific older capture inside shared EncounterCaptures or ManualCaptures folders.");
     Console.WriteLine("Decision bundles can replay only when they contain or point to replay-ready Journal/Minimap capture frames; otherwise they report available evidence and explain the limitation.");
+    Console.WriteLine("Scenario files synthesize replay frames from Images\\Goblin Evidence templates. Use Step=Name|Scan|Area=...|Journal=... and Step=Name|NewGame to model reset/transition cases.");
     Console.WriteLine("Replay is explicit/on-demand only and does not run during app startup, VS Debug startup, live scanning, automation workflows, or debug package creation.");
 }
 
@@ -3751,6 +3994,94 @@ static void TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses()
     AssertEqual("RecentSourceVariant:Minimap->Journal", matchReason, "delayed minimap-to-journal suppression should explain the source variant");
 }
 
+static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
+{
+    DateTime nowUtc = DateTime.UtcNow;
+    string journalEvidenceKey = "Journal|Treasure Goblin|JournalKill|Journal|Treasure Goblin|Template=Treasure Goblin Killed Journal.png|Kind=JournalKilled|LineBucket=11";
+    string minimapEvidenceKey = "Minimap|Treasure Goblin|MinimapIcon|Minimap|Treasure Goblin|Template=Treasure Goblin Minimap.png|Kind=Minimap|LineBucket=";
+
+    bool staleJournalSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Stinging Winds",
+        globalEvidenceKey: journalEvidenceKey,
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Eastern Channel Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: journalEvidenceKey,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(47),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(7),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string staleJournalReason);
+
+    AssertTrue(staleJournalSuppressed, "old same-type journal text should still suppress after moving into another area");
+    AssertEqual("SameEvidenceKey", staleJournalReason, "old visible journal text should explain the exact evidence match");
+    AssertFalse(
+        GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+            "Journal",
+            "Stinging Winds",
+            "Eastern Channel Level 1"),
+        "cross-area stale journal suppression should not refresh the counted encounter and block later fresh minimap evidence");
+
+    bool freshMinimapSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Minimap",
+        goblinType: "Treasure Goblin",
+        areaKey: "Stinging Winds",
+        globalEvidenceKey: minimapEvidenceKey,
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Eastern Channel Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: journalEvidenceKey,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(75),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(35),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string freshMinimapReason);
+
+    AssertFalse(freshMinimapSuppressed, "fresh minimap evidence in a new area should not be suppressed by a prior-area journal row");
+    AssertTrue(string.IsNullOrWhiteSpace(freshMinimapReason), "fresh cross-area minimap evidence should not report a stale journal match reason");
+}
+
+static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
+{
+    AssertTrue(
+        GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterAreaAlreadyCounted(
+            "Journal",
+            "Black Canyon Mines",
+            "Black Canyon Mines"),
+        "same-area duplicate journal evidence should refresh the counted encounter so the visible row cannot recount in the next area");
+
+    AssertFalse(
+        GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterAreaAlreadyCounted(
+            "Journal",
+            "Rakkis Crossing",
+            "Black Canyon Mines"),
+        "cross-area duplicate journal evidence should not refresh a previous-area encounter");
+
+    DateTime nowUtc = DateTime.UtcNow;
+    bool staleJournalSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Odious Collector",
+        areaKey: "Rakkis Crossing",
+        globalEvidenceKey: "Journal|Odious Collector|JournalEncounter|Journal|Odious Collector|Template=Odious Collector Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
+        countedGoblinType: "Odious Collector",
+        countedAreaKey: "Black Canyon Mines",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Odious Collector|JournalEncounter|Journal|Odious Collector|Template=Odious Collector Engaged Journal.png|Kind=JournalEngaged|LineBucket=11",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(98),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(10),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string matchReason);
+
+    AssertTrue(staleJournalSuppressed, "same visible journal row should suppress after a counted area's duplicate journal evidence refreshed the encounter last-seen state");
+    AssertTrue(matchReason.StartsWith("JournalLineBucket", StringComparison.Ordinal) || matchReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal), "stale Rakkis journal suppression should explain the journal evidence match");
+}
+
 static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -3831,8 +4162,36 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     AssertTrue(signatureMethod.Contains("GoblinJournalEvidencePolicy.LineSignature", StringComparison.Ordinal), "journal freshness should use the shared line-signature policy");
     AssertTrue(evidenceModelSource.Contains("LineBucket(match.MatchPoint)", StringComparison.Ordinal), "journal line freshness signatures should include a coarse row bucket so later legitimate same-template lines can be fresh");
     AssertTrue(evidenceModelSource.Contains("Math.Max(0, matchPoint.Y) / 32", StringComparison.Ordinal), "journal line freshness should bucket the match row instead of using an exact volatile point");
+    AssertTrue(evidenceModelSource.Contains("SameVisibleLineFamily", StringComparison.Ordinal), "reset carryover suppression should match the same visible row even if it moves up a few buckets");
+    AssertTrue(evidenceSource.Contains("JournalCandidateIgnoredResetCarryover", StringComparison.Ordinal), "New Game/Reset Stats should suppress already-visible journal rows before they can become fresh in the new area");
+    AssertTrue(evidenceSource.Contains("PortRememberJournalResetCarryoverSuppressions(reason", StringComparison.Ordinal), "reset should remember visible journal rows before clearing first-seen state");
+    AssertTrue(evidenceSource.Contains("resetCarryoverSuppressionsRemembered", StringComparison.Ordinal), "reset diagnostics should report how many journal rows were protected from carryover recounts");
     AssertFalse(signatureMethod.Contains("ScreenMatchPoint", StringComparison.Ordinal), "journal line freshness signatures should not use absolute screen coordinates");
     AssertFalse(evidenceSource.Contains("nowUtc - state.LastSeenUtc > GoblinJournalEvidenceFreshWindow", StringComparison.Ordinal), "Killed journal first-seen state should not reset just because the same visible line matched again later");
+
+    AssertTrue(
+        GoblinJournalEvidencePolicy.SameVisibleLineFamily(
+            "JournalKilled|Blood Thief|Blood Thief Killed Journal.png|LineBucket=9",
+            "JournalKilled|Blood Thief|Blood Thief Killed Journal.png|LineBucket=11",
+            out int currentBucket,
+            out int previousBucket),
+        "reset carryover suppression should treat a nearby moved-up journal row as the same visible row");
+    AssertEqual(9, currentBucket, "current bucket should be parsed for diagnostics");
+    AssertEqual(11, previousBucket, "previous bucket should be parsed for diagnostics");
+    AssertFalse(
+        GoblinJournalEvidencePolicy.SameVisibleLineFamily(
+            "JournalKilled|Blood Thief|Blood Thief Killed Journal.png|LineBucket=4",
+            "JournalKilled|Blood Thief|Blood Thief Killed Journal.png|LineBucket=11",
+            out _,
+            out _),
+        "a far-away line bucket should be allowed to become a separate future journal row");
+    AssertFalse(
+        GoblinJournalEvidencePolicy.SameVisibleLineFamily(
+            "JournalKilled|Treasure Goblin|Treasure Goblin Killed Journal.png|LineBucket=9",
+            "JournalKilled|Blood Thief|Blood Thief Killed Journal.png|LineBucket=11",
+            out _,
+            out _),
+        "different goblin/template families should not be suppressed as reset carryover");
 }
 
 static void TestGoblinFreshKilledJournalCanSatisfyEvidenceGate()

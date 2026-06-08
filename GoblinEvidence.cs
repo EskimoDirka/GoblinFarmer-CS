@@ -1025,15 +1025,30 @@ namespace GoblinFarmer
             bool sameArea = GoblinAreaResolver.NormalizedKey(areaKey).Equals(
                 GoblinAreaResolver.NormalizedKey(countedAreaKey),
                 StringComparison.OrdinalIgnoreCase);
+            bool currentJournal = normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase);
+            bool countedJournal = normalizedCountedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase);
+            bool currentMinimap = normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
+            bool countedMinimap = normalizedCountedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
             bool bothMinimap = normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
                 normalizedCountedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
+            bool recentOrContinuouslySeen = encounterAge <= sourceVariantWindow || lastSeenAge <= sourceVariantWindow;
 
             if (encounterAge <= encounterSuppressWindow &&
                 !string.IsNullOrWhiteSpace(globalEvidenceKey) &&
                 !string.IsNullOrWhiteSpace(countedEvidenceKey) &&
                 string.Equals(countedEvidenceKey, globalEvidenceKey, StringComparison.OrdinalIgnoreCase))
             {
-                if (!bothMinimap || sameArea)
+                if (bothMinimap)
+                {
+                    if (sameArea)
+                    {
+                        matchReason = "SameEvidenceKey";
+                        return true;
+                    }
+                }
+                else if (sameArea ||
+                    (!currentMinimap || !countedJournal) &&
+                    (!currentJournal && !countedJournal || recentOrContinuouslySeen))
                 {
                     matchReason = "SameEvidenceKey";
                     return true;
@@ -1041,17 +1056,18 @@ namespace GoblinFarmer
             }
 
             if (encounterAge <= encounterSuppressWindow &&
-                normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) &&
-                normalizedCountedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) &&
+                currentJournal &&
+                countedJournal &&
                 JournalEvidenceBucketsMatch(globalEvidenceKey, countedEvidenceKey, out int currentBucket, out int countedBucket))
             {
                 matchReason = $"JournalLineBucket:{currentBucket}->{countedBucket}";
                 return true;
             }
 
-            if ((encounterAge <= sourceVariantWindow || lastSeenAge <= sourceVariantWindow) &&
-                (normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
-                normalizedCountedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+            if (recentOrContinuouslySeen &&
+                (sameArea || !currentMinimap || !countedJournal) &&
+                (currentJournal ||
+                countedJournal ||
                 !normalizedSource.Equals(normalizedCountedSource, StringComparison.OrdinalIgnoreCase)))
             {
                 matchReason = encounterAge <= sourceVariantWindow
@@ -1061,6 +1077,47 @@ namespace GoblinFarmer
             }
 
             return false;
+        }
+
+        public static bool ShouldRefreshEncounterLastSeenAfterSuppression(
+            string source,
+            string areaKey,
+            string countedAreaKey)
+        {
+            if (string.IsNullOrWhiteSpace(areaKey) ||
+                string.IsNullOrWhiteSpace(countedAreaKey))
+            {
+                return false;
+            }
+
+            bool sameArea = GoblinAreaResolver.NormalizedKey(areaKey).Equals(
+                GoblinAreaResolver.NormalizedKey(countedAreaKey),
+                StringComparison.OrdinalIgnoreCase);
+            if (sameArea)
+            {
+                return IsGoblinObservationEvidenceSource(source);
+            }
+
+            string normalizedSource = NormalizeObservationSource(source);
+            return IsGoblinObservationEvidenceSource(normalizedSource) &&
+                !normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool ShouldRefreshEncounterLastSeenAfterAreaAlreadyCounted(
+            string source,
+            string areaKey,
+            string countedAreaKey)
+        {
+            if (string.IsNullOrWhiteSpace(areaKey) ||
+                string.IsNullOrWhiteSpace(countedAreaKey))
+            {
+                return false;
+            }
+
+            bool sameArea = GoblinAreaResolver.NormalizedKey(areaKey).Equals(
+                GoblinAreaResolver.NormalizedKey(countedAreaKey),
+                StringComparison.OrdinalIgnoreCase);
+            return sameArea && IsGoblinObservationEvidenceSource(source);
         }
 
         public static bool JournalEvidenceBucketsMatch(string currentEvidenceKey, string countedEvidenceKey, out int currentBucket, out int countedBucket)
@@ -1659,6 +1716,7 @@ namespace GoblinFarmer
     internal static class GoblinJournalEvidencePolicy
     {
         public const int ActiveFeedMinimumY = 256;
+        public const int NearbyLineBucketMaximumDelta = 2;
 
         public static string LineSignature(
             GoblinEvidenceTemplateRequirement template,
@@ -1675,6 +1733,43 @@ namespace GoblinFarmer
         public static int LineBucket(System.Drawing.Point matchPoint)
         {
             return Math.Max(0, matchPoint.Y) / 32;
+        }
+
+        public static bool SameVisibleLineFamily(string currentSignature, string previousSignature, out int currentBucket, out int previousBucket)
+        {
+            currentBucket = -1;
+            previousBucket = -1;
+            string currentFamily = LineFamily(currentSignature, out currentBucket);
+            string previousFamily = LineFamily(previousSignature, out previousBucket);
+            return !string.IsNullOrWhiteSpace(currentFamily) &&
+                currentFamily.Equals(previousFamily, StringComparison.OrdinalIgnoreCase) &&
+                currentBucket >= 0 &&
+                previousBucket >= 0 &&
+                Math.Abs(currentBucket - previousBucket) <= NearbyLineBucketMaximumDelta;
+        }
+
+        private static string LineFamily(string signature, out int lineBucket)
+        {
+            lineBucket = -1;
+            if (string.IsNullOrWhiteSpace(signature))
+            {
+                return "";
+            }
+
+            List<string> familyParts = [];
+            foreach (string part in signature.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                const string prefix = "LineBucket=";
+                if (part.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = int.TryParse(part[prefix.Length..], out lineBucket);
+                    continue;
+                }
+
+                familyParts.Add(part);
+            }
+
+            return string.Join("|", familyParts);
         }
 
         public static bool AppearsInActiveFeed(GoblinEvidenceTemplateMatch match)
