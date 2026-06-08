@@ -39,6 +39,7 @@ Run("GoblinEvidence template discovery finds source image set", TestGoblinEviden
 Run("GoblinEvidence observation scan regions match calibration", TestGoblinEvidenceObservationScanRegionsMatchCalibration);
 Run("Goblin replay fixture frame source reaches candidate detection", TestGoblinReplayFixtureFrameSourceReachesCandidateDetection);
 Run("Goblin replay explicit fixture runner detects saved encounter frames", TestGoblinReplayExplicitFixtureRunnerDetectsSavedEncounterFrames);
+Run("Goblin replay suppresses delayed journal after minimap count", TestGoblinReplaySuppressesDelayedJournalAfterMinimapCount);
 Run("Goblin replay suppresses Moon Clan Level 1 evidence after Level 2 transition", TestGoblinReplaySuppressesMoonClanLevelOneEvidenceAfterLevelTwoTransition);
 Run("Goblin replay suppresses Battlefields journal history evidence", TestGoblinReplaySuppressesBattlefieldsJournalHistoryEvidence);
 Run("Goblin replay capture folder loader suppresses old area evidence after transition", TestGoblinReplayCaptureFolderLoaderSuppressesOldAreaEvidenceAfterTransition);
@@ -1055,6 +1056,67 @@ static void TestGoblinReplayExplicitFixtureRunnerDetectsSavedEncounterFrames()
         AssertTrue(scopedFrameSource == null, "explicit replay runner should restore the live/default frame source after replay");
         AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureRunStarted", StringComparison.Ordinal) && line.Contains("mode=ExplicitOnDemand", StringComparison.Ordinal)), "explicit replay runner should log obvious start guard");
         AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureFrameSourceRestored", StringComparison.Ordinal) && line.Contains("target=LiveDefault", StringComparison.Ordinal)), "explicit replay runner should log frame-source restoration");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplaySuppressesDelayedJournalAfterMinimapCount()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayMinimapJournal_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string minimapTemplatePath = Path.Combine(templateRoot, "Treasure Goblin Minimap.png");
+        string journalTemplatePath = Path.Combine(templateRoot, "Treasure Goblin Engaged Journal.png");
+        string minimapFramePath = Path.Combine(fixtureRoot, "southern-minimap.png");
+        string southernJournalFramePath = Path.Combine(fixtureRoot, "southern-journal.png");
+        string caveJournalFramePath = Path.Combine(fixtureRoot, "cave-old-journal-shifted.png");
+        using Bitmap minimapTemplate = CreateFixturePatternBitmap(11, 11);
+        using Bitmap journalTemplate = CreateFixturePatternBitmap(13, 11);
+        minimapTemplate.Save(minimapTemplatePath);
+        journalTemplate.Save(journalTemplatePath);
+        SaveFixtureFrame(minimapFramePath, 80, 80, minimapTemplate, new Point(21, 13));
+        SaveFixtureFrame(southernJournalFramePath, 180, 380, journalTemplate, new Point(30, 335));
+        SaveFixtureFrame(caveJournalFramePath, 180, 380, journalTemplate, new Point(30, 312));
+
+        DateTime startUtc = new(2026, 6, 8, 2, 17, 7, DateTimeKind.Utc);
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitScenarioForHarness(
+            "Southern Highlands minimap then stale Cave journal",
+            [
+                new GoblinReplayFixtureStep(
+                    "Southern Highlands fresh minimap",
+                    new GoblinReplayFixture("southern minimap", null, minimapFramePath),
+                    "Southern Highlands",
+                    startUtc),
+                new GoblinReplayFixtureStep(
+                    "Southern Highlands matching journal",
+                    new GoblinReplayFixture("southern journal", southernJournalFramePath, null),
+                    "Southern Highlands",
+                    startUtc.AddSeconds(1)),
+                new GoblinReplayFixtureStep(
+                    "Cave Level 1 old shifted journal",
+                    new GoblinReplayFixture("cave old journal", caveJournalFramePath, null),
+                    "Cave Of The Moon Clan Level 1",
+                    startUtc.AddSeconds(185)),
+            ],
+            templateRoot,
+            replayLogs.Add);
+
+        AssertEqual(3, result.Steps.Count, "minimap/journal replay should evaluate all three steps");
+        AssertTrue(result.Steps[0].Counted, "fresh Southern Highlands minimap evidence should count");
+        AssertFalse(result.Steps[1].Counted, "matching Southern Highlands journal evidence should not double-count after minimap count");
+        AssertEqual("EncounterAlreadyAutoCounted", result.Steps[1].Reason, "matching journal evidence should suppress as the same counted encounter");
+        AssertFalse(result.Steps[2].Counted, "old Southern Highlands journal evidence must not count after moving to Cave Level 1");
+        AssertEqual("EncounterAlreadyAutoCounted", result.Steps[2].Reason, "old Cave journal replay should remain attached to the counted Southern Highlands encounter");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureStepResult", StringComparison.Ordinal) && line.Contains("areaKey=Cave Of The Moon Clan Level 1", StringComparison.Ordinal) && line.Contains("reason=EncounterAlreadyAutoCounted", StringComparison.Ordinal)), "replay should log the Cave stale-journal suppression clearly");
     }
     finally
     {
@@ -3255,6 +3317,9 @@ static void TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly()
     AssertTrue(evidenceCaptureSource.Contains("GoblinRecognitionCaptureSaved", StringComparison.Ordinal), "manual recognition capture should log saved paths");
     AssertTrue(evidenceCaptureSource.Contains("createdOnlyByButton=True", StringComparison.Ordinal), "manual recognition capture logs should make click-only creation explicit");
     AssertTrue(evidenceCaptureSource.Contains("counterWorkflowCapturesRemainAutomatic=True", StringComparison.Ordinal), "manual capture logs should state that counter-workflow captures remain automatic");
+    AssertTrue(evidenceCaptureSource.Contains("GoblinEvidenceRootScreenshotSkipped", StringComparison.Ordinal), "normal evidence events should skip redundant root fullscreen event images");
+    AssertTrue(evidenceCaptureSource.Contains("RedundantWithDecisionBundleAndEncounterCrops", StringComparison.Ordinal), "root evidence screenshot skip should explain the storage policy");
+    AssertTrue(evidenceCaptureSource.Contains("manualCaptureStillSavesFullscreen=True", StringComparison.Ordinal), "root evidence screenshot skip should confirm manual Capture keeps fullscreen");
     AssertTrue(evidenceCaptureSource.Contains("_Fullscreen.png", StringComparison.Ordinal), "manual recognition capture should save a fullscreen image");
     AssertTrue(evidenceCaptureSource.Contains("_Minimap.png", StringComparison.Ordinal), "manual recognition capture should save a minimap crop");
     AssertTrue(evidenceCaptureSource.Contains("_Journal.png", StringComparison.Ordinal), "manual recognition capture should save a journal crop");
@@ -3559,6 +3624,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(automationSource.Contains("PortAutomaticGoblinSourceVariantSuppressWindow", StringComparison.Ordinal), "cross-source stale text suppression should use an explicit recent-variant window");
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress", StringComparison.Ordinal), "automatic counting should share a testable encounter suppression policy");
     AssertTrue(autoCountSource.Contains("refreshEncounterLastSeen", StringComparison.Ordinal), "suppressed source variants should refresh encounter last-seen state instead of expiring from the original count time");
+    AssertTrue(autoCountSource.Contains("EvidenceKey = string.IsNullOrWhiteSpace(globalEvidenceKey)", StringComparison.Ordinal), "suppressed source variants should refresh the encounter evidence key so old journal rows cannot replay after area changes");
     AssertTrue(evidenceModelSource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
     AssertTrue(evidenceModelSource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
     AssertTrue(evidenceModelSource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");

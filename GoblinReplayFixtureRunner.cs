@@ -210,6 +210,7 @@ namespace GoblinFarmer
             List<GoblinReplayFixtureStepResult> stepResults = [];
             List<string> logMessages = [];
             Dictionary<string, ReplayEvidenceState> evidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, ReplayEncounterState> encounterByGoblinType = new(StringComparer.OrdinalIgnoreCase);
             GoblinAreaDuplicateGuard duplicateGuard = new();
 
             void Emit(string eventName, string details)
@@ -246,6 +247,7 @@ namespace GoblinFarmer
                     step,
                     candidate,
                     evidenceBySignature,
+                    encounterByGoblinType,
                     duplicateGuard);
                 stepResults.Add(stepResult);
 
@@ -743,6 +745,7 @@ namespace GoblinFarmer
             GoblinReplayFixtureStep step,
             GoblinReplayFixtureCandidate? candidate,
             Dictionary<string, ReplayEvidenceState> evidenceBySignature,
+            Dictionary<string, ReplayEncounterState> encounterByGoblinType,
             GoblinAreaDuplicateGuard duplicateGuard)
         {
             if (candidate == null)
@@ -774,6 +777,12 @@ namespace GoblinFarmer
             }
 
             string evidenceSignature = EvidenceSignature(candidate);
+            string encounterKey = GoblinTypeNormalizer.Normalize(candidate.GoblinType);
+            if (encounterKey.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                encounterKey = "";
+            }
+
             if (!evidenceBySignature.TryGetValue(evidenceSignature, out ReplayEvidenceState? state))
             {
                 state = new ReplayEvidenceState(
@@ -796,6 +805,7 @@ namespace GoblinFarmer
             }
 
             evidenceBySignature[evidenceSignature] = state;
+            encounterByGoblinType.TryGetValue(encounterKey, out ReplayEncounterState? encounterState);
             string freshnessReason = FreshnessReason(candidate, state, step);
             if (!freshnessReason.Equals("Fresh", StringComparison.OrdinalIgnoreCase))
             {
@@ -818,6 +828,45 @@ namespace GoblinFarmer
                 reason = string.Equals(state.CountedAreaKey, step.AreaKey, StringComparison.OrdinalIgnoreCase)
                     ? "EvidenceAlreadyAutoCounted"
                     : "EncounterAlreadyAutoCounted";
+                if (!string.IsNullOrWhiteSpace(encounterKey) && encounterState != null)
+                {
+                    encounterByGoblinType[encounterKey] = encounterState with
+                    {
+                        LastSeenUtc = step.TimestampUtc,
+                        GoblinType = candidate.GoblinType,
+                        Source = candidate.Source,
+                        EvidenceKey = evidenceSignature,
+                    };
+                }
+            }
+            else if (encounterState != null &&
+                GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+                    candidate.Source,
+                    candidate.GoblinType,
+                    step.AreaKey,
+                    evidenceSignature,
+                    encounterState.GoblinType,
+                    encounterState.AreaKey,
+                    encounterState.Source,
+                    encounterState.EvidenceKey,
+                    encounterState.CountedUtc,
+                    encounterState.LastSeenUtc,
+                    step.TimestampUtc,
+                    TimeSpan.FromMinutes(10),
+                    TimeSpan.FromSeconds(45),
+                    out _))
+            {
+                reason = "EncounterAlreadyAutoCounted";
+                if (!string.IsNullOrWhiteSpace(encounterKey))
+                {
+                    encounterByGoblinType[encounterKey] = encounterState with
+                    {
+                        LastSeenUtc = step.TimestampUtc,
+                        GoblinType = candidate.GoblinType,
+                        Source = candidate.Source,
+                        EvidenceKey = evidenceSignature,
+                    };
+                }
             }
             else if (GoblinManualCountBlockList.IsBlocked(step.AreaKey))
             {
@@ -834,6 +883,16 @@ namespace GoblinFarmer
                     Counted = true,
                     CountedAreaKey = step.AreaKey,
                 };
+                if (!string.IsNullOrWhiteSpace(encounterKey))
+                {
+                    encounterByGoblinType[encounterKey] = new ReplayEncounterState(
+                        step.TimestampUtc,
+                        step.TimestampUtc,
+                        step.AreaKey,
+                        candidate.GoblinType,
+                        candidate.Source,
+                        evidenceSignature);
+                }
 
                 return new GoblinReplayFixtureStepResult(
                     scenarioName,
@@ -1320,5 +1379,13 @@ namespace GoblinFarmer
             string Source,
             bool Counted,
             string CountedAreaKey);
+
+        private sealed record ReplayEncounterState(
+            DateTime CountedUtc,
+            DateTime LastSeenUtc,
+            string AreaKey,
+            string GoblinType,
+            string Source,
+            string EvidenceKey);
     }
 }

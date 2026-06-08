@@ -26,6 +26,7 @@ This file contains only open work and remaining test/verifications. Historical c
 - [ ] Confirm `GoblinEvidenceTimingSummary` appears during normal VS Debug scans and shows useful scan-stage timing.
 - [ ] Confirm `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` records observation, suppression, and automatic-count events alongside human logs.
 - [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence from any goblin type.
+- [ ] Live-validate Southern Highlands -> Cave Of The Moon Clan Level 1 no longer replays a stale Southern Highlands Journal row as a Cave Level 1 count after a fresh Southern Highlands Minimap count.
 - [ ] Live-validate Eastern Channel Level 2 fresh evidence from any goblin type auto-counts once and does not inherit stale evidence from another area.
 - [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the second level has evidence first seen after Level 2 is detected.
 - [ ] Live-validate notification latency after the Minimap collision/source-variant fix. If accepted-count logs are immediate but splash appears late, investigate notification display. If logs themselves are late, use `GoblinEvidenceTimingSummary` and DecisionBundles to identify whether Minimap, Journal, area resolution, or stale policy caused the delay.
@@ -42,6 +43,7 @@ This file contains only open work and remaining test/verifications. Historical c
 - [ ] Click `Capture` only when diagnosing image recognition; confirm it writes files under `Debug\GoblinEvidence\ManualCaptures`.
 - [ ] Confirm automatic count workflows still create decision bundles and encounter captures without using the Capture button.
 - [ ] Confirm new automatic DecisionBundles are replay-ready by default: each should include `decision-trace.txt`, `*_Metadata.txt`, `*_Journal.png`, and `*_Minimap.png`, with no full `evidence.png` unless explicitly opted in.
+- [ ] Confirm normal scanner events log `GoblinEvidenceRootScreenshotSkipped` and no longer create root `GoblinEvidence_*` full/event images during automatic counting.
 - [ ] Keep ignored `Config\AppSettings.local.json` for private VS Debug paths/toggles and keep tracked `Config\AppSettings.json` sanitized.
 
 ## Debug Package Workflow
@@ -49,6 +51,7 @@ This file contains only open work and remaining test/verifications. Historical c
 - [ ] Generate a ZIP with `Scripts\Create Debug Package.bat` after a run with any suspicious Goblin Tracker behavior.
 - [ ] Confirm packages still include logs, manifests, session info, decision bundles, encounter captures, observation diagnostics, and Goblin Evidence samples.
 - [ ] Confirm package size is reduced by default: old DecisionBundle `evidence.*` full images and Encounter/ManualCapture `*_Fullscreen` images should be excluded, while Journal/Minimap crops and metadata remain included.
+- [ ] Confirm loose runtime `Debug\GoblinEvidence` growth is reduced now that redundant root `GoblinEvidence_*` images are skipped by default.
 - [ ] Confirm `debug-package-manifest.txt` reports included/excluded Goblin Evidence counts and excluded full-image sizes.
 - [ ] Confirm VS Debug and release/debug-mode retention keeps artifacts for 7 days and does not keep stale troubleshooting files indefinitely.
 

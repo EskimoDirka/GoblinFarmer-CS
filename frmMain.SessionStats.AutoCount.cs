@@ -167,6 +167,9 @@ namespace GoblinFarmer
                         LastSeenUtc = nowUtc,
                         GoblinType = observation.GoblinType,
                         Source = observation.Source,
+                        EvidenceKey = string.IsNullOrWhiteSpace(globalEvidenceKey)
+                            ? encounterState.EvidenceKey
+                            : globalEvidenceKey,
                     };
                     portGoblinAutoCountEncounterByGoblinType[autoEncounterKey] = encounterState;
                 }

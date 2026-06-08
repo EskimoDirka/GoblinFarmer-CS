@@ -6,27 +6,13 @@ namespace GoblinFarmer
     {
         private string PortCaptureGoblinEvidenceScreenshot(GoblinEvidenceType type, DateTime timestamp)
         {
-            try
-            {
-                string directory = DebugManager.GoblinEvidenceDirectory;
-                Directory.CreateDirectory(directory);
-
-                string safeType = PortSafeScreenshotName(type.ToString(), "Unknown");
-                string path = Path.Combine(directory, $"GoblinEvidence_{timestamp:yyyyMMdd_HHmmss}_{safeType}.png");
-                string savedPath = PortCaptureDiabloScreenshotToFile(path, $"GoblinEvidence:{type}");
-                if (!string.IsNullOrWhiteSpace(savedPath))
-                {
-                    DebugManager.RecordDebugScreenshotPath(savedPath);
-                }
-
-                // TODO: Save cropped evidence-region screenshots after journal/minimap regions are calibrated.
-                return savedPath;
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error($"Goblin evidence screenshot capture failed: type={type}", ex);
-                return "";
-            }
+            AppLogger.Info(
+                "GoblinEvidenceRootScreenshotSkipped: " +
+                $"type={type}; " +
+                $"timestamp={timestamp:O}; " +
+                "reason=RedundantWithDecisionBundleAndEncounterCrops; " +
+                "manualCaptureStillSavesFullscreen=True");
+            return "";
         }
 
         private void PortQueueGoblinRecognitionDebugCapture(string source)
