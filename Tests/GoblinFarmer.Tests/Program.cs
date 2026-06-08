@@ -49,6 +49,7 @@ Run("Goblin replay capture-prefix loader replays a specific capture", TestGoblin
 Run("Goblin replay prefix loader reports missing metadata clearly", TestGoblinReplayCapturePrefixLoaderReportsMissingMetadataClearly);
 Run("Goblin replay decision-bundle loader reports available evidence", TestGoblinReplayDecisionBundleLoaderReportsAvailableEvidence);
 Run("Goblin replay decision-bundle loader can resolve replay-ready prefix", TestGoblinReplayDecisionBundleLoaderCanResolveReplayReadyPrefix);
+Run("Goblin replay decision-bundle loader reads local replay crops", TestGoblinReplayDecisionBundleLoaderReadsLocalReplayCrops);
 Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
@@ -91,7 +92,11 @@ Run("Goblin VS Debug simulation controls use count guards", TestGoblinVsDebugSim
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
 Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLiveEvidenceOnly);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
+Run("Goblin auto-count source variant suppression uses recent last-seen state", TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState);
+Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
+Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
+Run("Goblin accepted counts persist Last Observation until reset", TestGoblinAcceptedCountsPersistLastObservationUntilReset);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
 Run("Goblin fresh killed journal can satisfy evidence gate", TestGoblinFreshKilledJournalCanSatisfyEvidenceGate);
 Run("Goblin refresh logs fresh and stale killed journal decisions", TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions);
@@ -1472,7 +1477,7 @@ static void TestGoblinReplayDecisionBundleLoaderReportsAvailableEvidence()
         AssertTrue(result.CaptureLoads[0].Metadata.ContainsKey("DecisionTracePath"), "decision bundle result should expose the trace path");
         AssertTrue(result.CaptureLoads[0].Metadata.ContainsKey("EvidencePath"), "decision bundle result should expose the evidence path");
         AssertEqual(0, result.Steps.Count, "non-replay-ready decision bundle should not create replay decisions");
-        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayDecisionBundleSkipped", StringComparison.Ordinal) && line.Contains("Decision bundles usually contain", StringComparison.Ordinal)), "decision bundle should log a plain explanation");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayDecisionBundleSkipped", StringComparison.Ordinal) && line.Contains("Replay-ready decision bundles contain", StringComparison.Ordinal)), "decision bundle should log a plain explanation");
     }
     finally
     {
@@ -1524,6 +1529,73 @@ static void TestGoblinReplayDecisionBundleLoaderCanResolveReplayReadyPrefix()
         AssertEqual("Caverns of Frost Level 2", result.CaptureLoads[0].AreaKey, "decision bundle prefix replay should keep the metadata area");
         AssertEqual(1, result.Steps.Count, "decision bundle prefix replay should evaluate one decision");
         AssertTrue(result.Steps[0].Counted, "decision bundle prefix replay should reach candidate detection");
+    }
+    finally
+    {
+        if (Directory.Exists(fixtureRoot))
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayDecisionBundleLoaderReadsLocalReplayCrops()
+{
+    string fixtureRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayDecisionBundleLocal_{Guid.NewGuid():N}");
+    string templateRoot = Path.Combine(fixtureRoot, "templates");
+    Directory.CreateDirectory(templateRoot);
+    try
+    {
+        string templatePath = Path.Combine(templateRoot, "Blood Thief Killed Journal.png");
+        using Bitmap template = CreateFixturePatternBitmap(12, 12);
+        template.Save(templatePath);
+
+        string bundleFolder = Path.Combine(fixtureRoot, "DecisionBundles", "gdt-local-replay-ready");
+        Directory.CreateDirectory(bundleFolder);
+        string replayPrefix = Path.Combine(bundleFolder, "decision_gdt-local-replay-ready");
+        string journalPath = $"{replayPrefix}_Journal.png";
+        string minimapPath = $"{replayPrefix}_Minimap.png";
+        string metadataPath = $"{replayPrefix}_Metadata.txt";
+        SaveFixtureFrame(journalPath, 160, 320, template, new Point(20, 260));
+        using (Bitmap minimap = new(24, 24))
+        {
+            using Graphics graphics = Graphics.FromImage(minimap);
+            graphics.Clear(Color.Black);
+            minimap.Save(minimapPath);
+        }
+
+        File.WriteAllLines(metadataPath,
+        [
+            "Goblin Decision Bundle Capture",
+            "CreatedUtc=2026-06-07T19:02:45.2240000Z",
+            "AreaKey=Battlefields",
+            "DisplayLocation=Battlefields",
+            $"JournalPath={journalPath}",
+            $"MinimapPath={minimapPath}",
+            "FullImagePolicy=DisabledByDefault",
+        ]);
+        File.WriteAllLines(Path.Combine(bundleFolder, "decision-trace.txt"),
+        [
+            "GoblinDecisionTrace: correlationId=gdt-local-replay-ready; mode=Live; source=Journal; imageFile=Blood Thief Killed Journal.png; imagePath=Debug\\GoblinEvidence\\DecisionBundles\\gdt-local-replay-ready\\decision_gdt-local-replay-ready_Journal.png; areaRaw=Battlefields; areaKey=Battlefields; goblinType=Blood Thief; reason=Eligible",
+            $"metadataPath={metadataPath}",
+            $"journalPath={journalPath}",
+            $"minimapPath={minimapPath}",
+            "fullImageCopied=False",
+            "fullImagePolicy=DisabledByDefault",
+        ]);
+
+        GoblinReplayCaptureFolderScenarioResult result = GoblinReplayFixtureRunner.RunExplicitDecisionBundlesForHarness(
+            "Decision bundle local replay crops",
+            [new GoblinReplayCaptureFolderStep("Decision bundle", bundleFolder)],
+            templateRoot);
+
+        AssertEqual(1, result.CaptureLoads.Count, "local replay-ready decision bundle should return one load result");
+        AssertTrue(result.CaptureLoads[0].Loaded, "local replay-ready decision bundle should load its own crop frames");
+        AssertEqual("LoadedFromDecisionBundle", result.CaptureLoads[0].Reason, "decision bundle should report the replay-ready bundle load");
+        AssertEqual("Battlefields", result.CaptureLoads[0].AreaKey, "local replay metadata should keep the bundle area");
+        AssertEqual(1, result.Steps.Count, "local replay-ready decision bundle should evaluate one decision");
+        AssertTrue(result.Steps[0].Counted, "local replay-ready decision bundle should reach shared candidate detection");
+        AssertEqual("Blood Thief", result.Steps[0].GoblinType, "local replay-ready decision bundle should preserve detected goblin type");
     }
     finally
     {
@@ -3042,10 +3114,10 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinObservationDisplayHold", StringComparison.Ordinal), "automatic observations should stay readable briefly after the first no-candidate scan");
     AssertTrue(sessionStatsSource.Contains("ObservationDisplayHold", StringComparison.Ordinal), "no-candidate clears should report when they preserve a recent automatic observation");
     AssertTrue(sessionStatsSource.Contains("LastObservationPersistent", StringComparison.Ordinal), "no-candidate scans should preserve the latest real observation after the short hold expires");
-    AssertTrue(sessionStatsSource.Contains("AreaChanged", StringComparison.Ordinal), "no-candidate clears should drop stale persisted observations when the current area changes");
+    AssertTrue(sessionStatsSource.Contains("AreaChanged", StringComparison.Ordinal), "no-candidate clears should still identify area changes for non-accepted observation state");
     AssertTrue(sessionStatsSource.Contains("currentAreaKey", StringComparison.Ordinal), "Last Observation clear logs should report the current area used for stale-area decisions");
     AssertTrue(sessionStatsSource.Contains("displayHoldSeconds={PortAutomaticGoblinObservationDisplayHold.TotalSeconds:0}", StringComparison.Ordinal), "automatic observation update logs should include the display hold duration");
-    AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "no-candidate/stale scans should log LastObservationCleared when the UI state changes");
+    AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "reset and non-accepted clear paths should log LastObservationCleared when the UI state changes");
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should route through the Last Observation state helper");
     AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 500", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback without loosening evidence thresholds");
 }
@@ -3381,8 +3453,14 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertFalse(evidenceSource.Contains("ReviewDebugPackageComplete", StringComparison.Ordinal), "app code should not carry a duplicate in-app ZIP package creation flow");
     AssertFalse(evidenceSource.Contains("PortExtractDebugPackagePathFromOutput", StringComparison.Ordinal), "app code should not parse package script output when ZIP export is script-only");
     AssertFalse(evidenceSource.Contains("PortCreateDebugPackage(", StringComparison.Ordinal), "app code should not spawn the ZIP package script from VS Debug review flow");
+    AssertTrue(autoCountSource.Contains("PortShouldWriteGoblinDecisionBundle(trace", StringComparison.Ordinal), "live decision traces should throttle repeated suppressed decision bundles");
     AssertTrue(autoCountSource.Contains("PortWriteGoblinDecisionBundle(trace)", StringComparison.Ordinal), "live decision traces should write evidence bundles");
     AssertTrue(autoCountSource.Contains("GoblinDecisionBundleSaved", StringComparison.Ordinal), "live decision bundles should log their saved folder");
+    AssertTrue(autoCountSource.Contains("_Metadata.txt", StringComparison.Ordinal), "decision bundles should include replay-ready metadata");
+    AssertTrue(autoCountSource.Contains("_Journal.png", StringComparison.Ordinal), "decision bundles should include replay-ready journal crops");
+    AssertTrue(autoCountSource.Contains("_Minimap.png", StringComparison.Ordinal), "decision bundles should include replay-ready minimap crops");
+    AssertTrue(autoCountSource.Contains("fullImagePolicy=DisabledByDefault", StringComparison.Ordinal), "decision bundles should disable full evidence image copies by default");
+    AssertFalse(autoCountSource.Contains("Path.Combine(bundleDirectory, $\"evidence{extension}\")", StringComparison.Ordinal), "decision bundles should not copy full evidence.png by default");
     AssertTrue(File.Exists(Path.Combine(repoRoot, "frmMain.GoblinEvidence.Captures.cs")), "Goblin Evidence capture helpers should be split into a dedicated partial file");
     AssertTrue(File.Exists(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs")), "automatic count helpers should be split into a dedicated partial file");
     AssertTrue(evidenceCaptureSource.Contains("PortQueueGoblinRecognitionDebugCapture", StringComparison.Ordinal), "manual recognition capture should live in the capture partial");
@@ -3423,6 +3501,10 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageScript.Contains("png|jpg|jpeg|bmp|txt|jsonl", StringComparison.Ordinal), "debug packages should include image, text, and structured JSONL evidence from GoblinEvidence folders");
     AssertTrue(packageScript.Contains("Live evidence artifacts:", StringComparison.Ordinal), "debug package summary should report live evidence rather than derived output");
     AssertTrue(packageScript.Contains("DecisionBundles", StringComparison.Ordinal), "debug packages should include live decision bundles");
+    AssertTrue(packageScript.Contains("IncludeGoblinDecisionBundleFullImages", StringComparison.Ordinal), "debug packages should make full decision-bundle evidence images opt-in");
+    AssertTrue(packageScript.Contains("Debug\\GoblinEvidence\\DecisionBundles\\evidence.* full images are excluded by default", StringComparison.Ordinal), "debug packages should exclude old full decision-bundle evidence images by default");
+    AssertTrue(packageScript.Contains("IncludeGoblinCaptureFullscreenImages", StringComparison.Ordinal), "debug packages should make encounter/manual fullscreen images opt-in");
+    AssertTrue(packageScript.Contains("EncounterCaptures and ManualCaptures *_Fullscreen images are excluded by default", StringComparison.Ordinal), "debug packages should keep replay crops while excluding fullscreen capture images by default");
     AssertTrue(packageScript.Contains("EncounterCaptures", StringComparison.Ordinal), "debug packages should include live encounter captures");
     AssertTrue(packageScript.Contains("ObservationDiagnostics", StringComparison.Ordinal), "debug packages should include live observation diagnostics");
     AssertFalse(packageScript.Contains("generated automatically as loose files", StringComparison.Ordinal), "debug package script should not point to the old form-close loose review flow");
@@ -3449,6 +3531,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
     string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
     string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
@@ -3473,17 +3556,132 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(observeMethod.Contains("PortShouldPreserveDisplayedObservationAgainstIncoming", StringComparison.Ordinal), "suppressed old journal repeats should not replace the Last Observation display");
     AssertTrue(automationSource.Contains("portGoblinAutoCountEncounterByGoblinType", StringComparison.Ordinal), "automatic counting should remember recently counted goblin types across source/template variants");
     AssertTrue(automationSource.Contains("PortAutomaticGoblinJournalEncounterSuppressWindow", StringComparison.Ordinal), "cross-area journal suppression should use an explicit bounded window");
-    AssertTrue(autoCountSource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
-    AssertTrue(autoCountSource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
-    AssertTrue(autoCountSource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
+    AssertTrue(automationSource.Contains("PortAutomaticGoblinSourceVariantSuppressWindow", StringComparison.Ordinal), "cross-source stale text suppression should use an explicit recent-variant window");
+    AssertTrue(autoCountSource.Contains("GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress", StringComparison.Ordinal), "automatic counting should share a testable encounter suppression policy");
+    AssertTrue(autoCountSource.Contains("refreshEncounterLastSeen", StringComparison.Ordinal), "suppressed source variants should refresh encounter last-seen state instead of expiring from the original count time");
+    AssertTrue(evidenceModelSource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
+    AssertTrue(evidenceModelSource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
+    AssertTrue(evidenceModelSource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
+    AssertTrue(evidenceModelSource.Contains("RecentSourceVariantLastSeen", StringComparison.Ordinal), "source variants should remain suppressed while the same stale encounter is still being seen");
     AssertTrue(autoCountSource.Contains("PortGoblinEvidenceHash", StringComparison.Ordinal), "accepted and suppressed auto-count logs should include a compact evidence hash");
     AssertTrue(autoCountMethod.Contains("encounterMatch=", StringComparison.Ordinal), "auto-count logs should include the duplicate encounter match reason");
     AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");
     AssertTrue(autoCountMethod.Contains("PortShowSplash($\"Goblin auto-counted", StringComparison.Ordinal), "automatic counting should show a visible notification when it increments");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinAutoCountEvidenceState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear auto-count evidence signatures");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinAutoCountEvidenceState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear auto-count evidence signatures");
+    AssertTrue(sessionStatsSource.Contains("DebugManager.Session.ResetGoblinTrackerStats()", StringComparison.Ordinal), "New Game should reset GoblinCount, GPH source time, and found records like Reset Stats");
     AssertTrue(evidenceSource.Contains("clearedAutoCountEvidence", StringComparison.Ordinal), "evidence-state reset logs should report auto-count signature clearing");
     AssertTrue(evidenceSource.Contains("clearedAutoCountEncounters", StringComparison.Ordinal), "evidence-state reset logs should report auto-count encounter clearing");
+}
+
+static void TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState()
+{
+    DateTime countedUtc = DateTime.UtcNow - TimeSpan.FromSeconds(21);
+    DateTime lastSeenUtc = DateTime.UtcNow - TimeSpan.FromSeconds(1);
+    DateTime nowUtc = DateTime.UtcNow;
+    bool suppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Fields of Slaughter",
+        globalEvidenceKey: "Journal|Treasure Goblin|fields of slaughter|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=11",
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Battlefields",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Treasure Goblin|battlefields|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=11",
+        countedUtc: countedUtc,
+        lastSeenUtc: lastSeenUtc,
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(20),
+        out string matchReason);
+
+    AssertTrue(suppressed, "journal evidence should remain suppressed when the prior counted encounter was just seen as stale text, even after 20 seconds from the original count");
+    AssertTrue(matchReason.StartsWith("JournalLineBucket", StringComparison.Ordinal) || matchReason.StartsWith("RecentSourceVariantLastSeen", StringComparison.Ordinal), "suppression should explain whether it matched by row bucket or recent last-seen source variant");
+
+    bool oldVariantSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Fields of Slaughter",
+        globalEvidenceKey: "Journal|Treasure Goblin|fields of slaughter|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=4",
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Battlefields",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Treasure Goblin|battlefields|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=11",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(45),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(30),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(20),
+        out _);
+
+    AssertFalse(oldVariantSuppressed, "a same-type journal row with no bucket match and no recent last-seen continuity should not be globally blocked forever");
+}
+
+static void TestGoblinAutoCountMinimapCollisionAllowsNewAreas()
+{
+    DateTime nowUtc = DateTime.UtcNow;
+    const string sharedMinimapKey = "Minimap|Gem Hoarder|MinimapIcon|Minimap|Gem Hoarder|Template=Gem Hoarder Minimap.png|Kind=Minimap|LineBucket=";
+
+    bool crossAreaSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Minimap",
+        goblinType: "Gem Hoarder",
+        areaKey: "Rakkis Crossing",
+        globalEvidenceKey: sharedMinimapKey,
+        countedGoblinType: "Gem Hoarder",
+        countedAreaKey: "Western Channel Level 1",
+        countedSource: "Minimap",
+        countedEvidenceKey: sharedMinimapKey,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(30),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(30),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string crossAreaReason);
+
+    AssertFalse(crossAreaSuppressed, "a repeated minimap icon signature in a different area should not suppress a fresh same-type goblin");
+    AssertTrue(string.IsNullOrWhiteSpace(crossAreaReason), "cross-area minimap collisions should not report a duplicate match reason");
+
+    bool sameAreaSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Minimap",
+        goblinType: "Gem Hoarder",
+        areaKey: "Western Channel Level 1",
+        globalEvidenceKey: sharedMinimapKey,
+        countedGoblinType: "Gem Hoarder",
+        countedAreaKey: "Western Channel Level 1",
+        countedSource: "Minimap",
+        countedEvidenceKey: sharedMinimapKey,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(30),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(30),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string sameAreaReason);
+
+    AssertTrue(sameAreaSuppressed, "the same minimap signature in the same area should still suppress duplicate scans");
+    AssertEqual("SameEvidenceKey", sameAreaReason, "same-area minimap duplicate suppression should keep its existing reason");
+}
+
+static void TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses()
+{
+    DateTime nowUtc = DateTime.UtcNow;
+    bool suppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Black Canyon Mines",
+        globalEvidenceKey: "Journal|Treasure Goblin|JournalKill|Journal|Treasure Goblin|Template=Treasure Goblin Killed Journal.png|Kind=JournalKilled|LineBucket=11",
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Stinging Winds",
+        countedSource: "Minimap",
+        countedEvidenceKey: "Minimap|Treasure Goblin|MinimapIcon|Minimap|Treasure Goblin|Template=Treasure Goblin Minimap.png|Kind=Minimap|LineBucket=",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(29),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(29),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string matchReason);
+
+    AssertTrue(suppressed, "a delayed journal row inside the freshness window should attach to the recent minimap count instead of counting a new area");
+    AssertEqual("RecentSourceVariant:Minimap->Journal", matchReason, "delayed minimap-to-journal suppression should explain the source variant");
 }
 
 static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
@@ -3491,13 +3689,14 @@ static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
     string repoRoot = FindRepositoryRootForTests();
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
     string publishMethod = ExtractMethodBody(sessionStatsSource, "private void PortPublishManualGoblinCountObservation");
+    string acceptedPublishMethod = ExtractMethodBody(sessionStatsSource, "private void PortPublishAcceptedGoblinCountObservation");
     string clearMethod = ExtractMethodBody(sessionStatsSource, "private void PortMarkGoblinObservationNoCurrent");
 
     AssertTrue(sessionStatsSource.Contains("PortPublishManualGoblinCountObservation(area, goblinType, source, guardResult)", StringComparison.Ordinal), "accepted manual counts should publish the Last Observation display immediately");
-    AssertTrue(publishMethod.Contains("ManualCountAccepted", StringComparison.Ordinal), "manual count display should identify the accepted-count state");
-    AssertTrue(publishMethod.Contains("\"Counted\"", StringComparison.Ordinal), "manual count display should show Counted as the Last Observation reason");
-    AssertTrue(publishMethod.Contains("PortManualGoblinCountDisplayHold", StringComparison.Ordinal), "manual count display should be held long enough to be visible");
-    AssertTrue(publishMethod.Contains("LastObservationUiRefreshRequested", StringComparison.Ordinal), "manual count display should log an immediate UI refresh request");
+    AssertTrue(publishMethod.Contains("\"ManualCountAccepted\"", StringComparison.Ordinal), "manual count display should identify the accepted-count state");
+    AssertTrue(acceptedPublishMethod.Contains("\"Counted\"", StringComparison.Ordinal), "accepted count display should show Counted as the Last Observation reason");
+    AssertTrue(acceptedPublishMethod.Contains("PortManualGoblinCountDisplayHold", StringComparison.Ordinal), "accepted count display should be held immediately and then persist as the last accepted count");
+    AssertTrue(acceptedPublishMethod.Contains("LastObservationUiRefreshRequested", StringComparison.Ordinal), "accepted count display should log an immediate UI refresh request");
     AssertFalse(publishMethod.Contains("RecordGoblinObservation", StringComparison.Ordinal), "manual count display updates should not increment observation-only counters");
     AssertTrue(clearMethod.Contains("LastObservationClearSkipped", StringComparison.Ordinal), "no-candidate scanner clears should be skipped during the manual-count display hold");
     AssertTrue(clearMethod.Contains("PortShouldPreserveDisplayedGoblinObservation", StringComparison.Ordinal), "Last Observation clearing should preserve recent accepted manual counts briefly");
@@ -3509,8 +3708,27 @@ static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
     AssertTrue(sessionStatsSource.Contains("StaleEvidence", StringComparison.Ordinal), "stale evidence should not overwrite the displayed Last Observation");
     AssertTrue(sessionStatsSource.Contains("LastObservationUpdateSkippedDuringManualHold", StringComparison.Ordinal), "scanner observation updates should not overwrite accepted manual counts during the display hold");
     AssertTrue(sessionStatsSource.Contains("PortManualCountDisplayHoldActive", StringComparison.Ordinal), "manual count display hold priority should be shared by clear and update paths");
-    AssertTrue(sessionStatsSource.Contains("PortClearDisplayedGoblinObservationAfterConfirmedAreaChange", StringComparison.Ordinal), "confirmed area changes should clear stale previous-area Last Observation displays");
+    AssertTrue(sessionStatsSource.Contains("PortClearDisplayedGoblinObservationAfterConfirmedAreaChange", StringComparison.Ordinal), "confirmed area changes should still be logged for observation synchronization");
     AssertTrue(sessionStatsSource.Contains("ConfirmedAreaChanged", StringComparison.Ordinal), "confirmed area changes should log Last Observation area synchronization");
+}
+
+static void TestGoblinAcceptedCountsPersistLastObservationUntilReset()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
+    string acceptedPublishMethod = ExtractMethodBody(sessionStatsSource, "private void PortPublishAcceptedGoblinCountObservation");
+    string clearMethod = ExtractMethodBody(sessionStatsSource, "private void PortMarkGoblinObservationNoCurrent");
+    string preserveIncomingMethod = ExtractMethodBody(sessionStatsSource, "private bool PortShouldPreserveDisplayedObservationAgainstIncoming");
+
+    AssertTrue(autoCountSource.Contains("PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, \"AutomaticCountAccepted\", guardResult)", StringComparison.Ordinal), "accepted automatic counts should publish the Last Observation as Counted");
+    AssertTrue(acceptedPublishMethod.Contains("persistUntilNextAcceptedCount=True", StringComparison.Ordinal), "accepted count update logs should document the persistent display policy");
+    AssertTrue(clearMethod.Contains("PortDisplayedObservationIsAcceptedCount(previousObservation)", StringComparison.Ordinal), "clear/no-candidate paths should preserve the last accepted count before area-change clearing");
+    AssertTrue(clearMethod.Contains("AcceptedCountPersistent", StringComparison.Ordinal), "clear skips should identify accepted-count persistence");
+    AssertTrue(preserveIncomingMethod.Contains("PortDisplayedObservationIsAcceptedCount(displayedObservation)", StringComparison.Ordinal), "suppressed/stale incoming observations should not replace an accepted-count display");
+    AssertTrue(sessionStatsSource.Contains("PortResetGoblinEvidenceObservationState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear the accepted Last Observation");
+    AssertTrue(sessionStatsSource.Contains("PortResetGoblinEvidenceObservationState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear the accepted Last Observation like Reset Stats");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("preservedAcceptedDisplay", StringComparison.Ordinal), "New Game should not preserve accepted Last Observation display state");
 }
 
 static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()

@@ -55,12 +55,15 @@ namespace GoblinFarmer
         private static readonly TimeSpan PortManualGoblinCountDisplayHold = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan PortAutomaticGoblinObservationDisplayHold = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan PortAutomaticGoblinJournalEncounterSuppressWindow = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan PortAutomaticGoblinSourceVariantSuppressWindow = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan PortGoblinDecisionBundleSuppressionThrottleWindow = TimeSpan.FromSeconds(30);
         private GoblinObservationRecord? portLastGoblinObservationForManualCount;
         private GoblinObservationRecord? portDisplayedGoblinObservation;
         private string portDisplayedGoblinObservationStatus = "";
         private DateTime portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
         private readonly Dictionary<string, PortGoblinAutoCountEvidenceState> portGoblinAutoCountEvidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PortGoblinAutoCountEncounterState> portGoblinAutoCountEncounterByGoblinType = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, DateTime> portGoblinDecisionBundleLastSavedByKey = new(StringComparer.OrdinalIgnoreCase);
         private DateTime portGoblinAutomaticCountingArmedAtUtc = DateTime.MinValue;
         private bool portGoblinTrackerDebugPreferenceControlsInitialized;
         private CheckBox? chkGoblinObservationMode;

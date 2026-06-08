@@ -13,17 +13,21 @@ This file is the current source of truth for the active release, stable behavior
 - VS Debug `Sim Count` button: developer-only count-policy simulator. It uses existing area-key resolution, blocked-area checks, duplicate guard, and area-limit logic so accepted counts, duplicate suppression, and PF1/PF2/Stinging Winds `AreaLimitReached` behavior can be tested without waiting for rare live spawns.
 - Automatic debug artifacts: accepted Goblin Tracker count workflows still automatically write decision bundles and encounter captures needed for debugging.
 - `Next Tests` tab: removed. Current validation steps are tracked in `Docs/TODO.md`.
-- Latest change: Goblin Replay now accepts explicit capture folders, specific `*_Metadata.txt` files, specific capture prefixes, and DecisionBundle folders from the developer harness. This changed replay usability only; live Goblin Tracker counting behavior was not changed.
+- Latest change: decision bundles are now replay-ready and package-safe by default. New bundles write `decision-trace.txt`, local `*_Metadata.txt`, `*_Journal.png`, and `*_Minimap.png` files, no longer copy full-size `evidence.png` by default, and throttle repeated suppressed decision folders while still logging every decision line. Debug ZIP creation excludes old DecisionBundle `evidence.*` full images and Encounter/ManualCapture `*_Fullscreen` images by default while keeping Journal/Minimap crops and metadata for replay/review.
 
 ## Latest Review Finding
 
-- Latest reviewed package `GoblinFarmer_Debug_20260607_175901.zip` showed Southern Highlands Gelatinous Sire and Eastern Channel Level 2 Blood Thief auto-counting correctly.
-- Battlefields stale Blood Thief `JournalKilled` evidence after teleport was detected but suppressed as `EncounterAlreadyAutoCounted`, which matches intended stale-transition behavior.
-- Battlefields later accepted a Blood Thief count from fresh `JournalEngaged` evidence in the Battlefields area, then suppressed repeats through duplicate/evidence guards.
-- Goblin Replay against the Battlefields manual Capture metadata returned `NoCandidate`; replay against the accepted Battlefields EncounterCapture returned `Count/Eligible`. DecisionBundle-only folders reported `DecisionBundleMissingReplayFrames` because the package contains `evidence.png` and `decision-trace.txt`, not replay-ready Journal/Minimap crop pairs.
-- Loose VS Debug log review from the Sim Count validation run confirmed the new controls are visible in VS Debug and use the intended count policy: Southern Highlands accepted once then suppressed duplicates, PF1 accepted two then suppressed the third, Stinging Winds accepted two then suppressed the third, and New Tristram suppressed as `BlockedArea`.
-- Southern Highlands Sim Count did persist internally: logs showed `GoblinCountAccepted ... total=1` and JSONL showed `GoblinDebugSimulationAccepted ... total=1`. The visible-count concern was treated as a UI refresh/readability issue, so Goblin Tracker stats labels now force an immediate repaint and log `StatsUiRefreshed` only when visible state changes.
-- Reset Stats after the simulation run cleared duplicate guard, auto-count evidence state, observation state, Last Observation, and session GoblinCount back to zero.
+- Latest reviewed package `GoblinFarmer_Debug_20260607_192644.zip` was a VS Debug form run with Observation Mode, Auto Goblin Count, and Decision Trace enabled. The package already contained the prior recent-last-seen suppression fix.
+- Confirmed good behavior from the package: Highlands Cave, Weeping Hollow, Eastern Channel Level 1, and Eastern Channel Level 2 all produced accepted automatic counts; Eastern Channel Level 2 Gelatinous Sire counted quickly; accepted-count Last Observation persistence stayed active.
+- Root cause of the Stinging Winds miss and Rakkis Crossing miss: fresh Minimap observations were detected, but `SameEvidenceKey` compared the area-independent Minimap icon signature against a much older same-type encounter in another area. Tight Minimap templates can naturally produce the same evidence signature across different maps, so Minimap-to-Minimap exact-key suppression is now same-area only.
+- Root cause of the later Black Canyon Mines stale count: the fresh Stinging Winds Treasure Goblin Minimap hit was suppressed by that cross-area Minimap collision, then the delayed Treasure Goblin journal row appeared about 29 seconds later in Black Canyon Mines and was treated as eligible. Cross-source Minimap-to-Journal encounter suppression now uses a 45-second window to match the journal freshness window, so delayed journal rows after recent Minimap counts stay attached to the original encounter.
+- The same package showed Rakkis Crossing Gem Hoarder Minimap evidence at high confidence (`0.972`) but suppressed as a stale Western Channel Level 1 Gem Hoarder by the same cross-area Minimap collision. The same policy fix should allow the fresh Rakkis count while still suppressing same-area duplicate Minimap scans.
+- Notification latency remains mainly evidence-detection latency, not splash display latency. Timing summaries show a 500ms scanner interval with average total scan time around 460-470ms in this run. Continue live-validation after the stale/minimap collision fix before lowering thresholds or adding broader timing changes.
+- VS Debug `Sim Count` controls remain useful for deterministic policy checks until full automatic counting has enough live confidence. Re-evaluate removal after remaining live auto-count validation is stable.
+- Latest reviewed package `GoblinFarmer_Debug_20260607_183831.zip` showed Battlefields Treasure Goblin auto-counting correctly from fresh minimap evidence, then incorrectly counting stale Battlefields Treasure Goblin journal text as a new Fields of Slaughter count at `encounterAgeSeconds=20.8`.
+- Root cause: same-encounter source-variant protection used only the original count timestamp for its 20-second recent-variant guard. The stale journal row was repeatedly suppressed until `19.6s`, refreshed encounter last-seen state, then slipped through just after the original count age crossed 20 seconds. The fix uses recent encounter `LastSeenUtc` continuity for source variants, while still keeping the suppression bounded so a later unrelated same-type goblin is not blocked forever.
+- The same package showed Caverns of Frost Level 1 Gilded Baron auto-counting. User clarified Caverns of Frost Level 1 should allow one Goblin count even though it blocks Teleport Next route advancement; Caverns of Frost Level 2 should also allow one independent fresh count. Stale Level 1 evidence must still not become a Level 2 count.
+- Last Observation was clearing repeatedly on no-candidate scans and area changes. Accepted manual, simulation, and automatic counts now publish a `Counted` Last Observation state that suppressed/stale/no-candidate scans and area changes preserve until Reset Stats, Make New Game, app restart, or a newer accepted count replaces it.
 
 ## Stable Systems
 
@@ -32,6 +36,7 @@ This file is the current source of truth for the active release, stable behavior
 - Debug package workflow remains `Scripts\Create Debug Package.bat`, which creates a ZIP for VS Debug and Release review.
 - Form close remains quiet and does not generate packages or loose review files.
 - VS Debug and release/debug-mode artifact retention is 7 days; Goblin Evidence folders also use count/package limits.
+- Debug ZIPs keep Goblin Tracker evidence replayable without carrying every full screenshot: Journal/Minimap crops, metadata, JSONL, logs, manifests, summaries, observation diagnostics, encounter captures, and decision traces are kept; old full DecisionBundle evidence images and capture fullscreen images are excluded by default and reported in the manifest.
 - Tracked `Config\AppSettings.json` is sanitized for release/defaults. Private VS Debug paths and toggles should live in ignored `Config\AppSettings.local.json` when needed.
 - Generated EXEs, installer output, portable ZIPs, debug packages, logs, screenshots, source-upload output, and retired `GitHub Upload` copies are not source files.
 
@@ -45,15 +50,17 @@ This file is the current source of truth for the active release, stable behavior
 - Goblin Evidence scanning caches discovered template metadata and loaded OpenCV template mats, captures each source scan region once per pass, and scans Minimap before Journal while preserving Journal as the primary confirmation if both match.
 - Goblin Replay Fixture Runner Phase 2E is implemented as explicit/on-demand harness support. Live scans still use `CopyFromScreen` by default, saved Journal/Minimap PNG fixtures can be fed through the shared frame/template matching path, and real saved encounter/manual capture folders can be loaded from the test harness command line for stale-location regression coverage without normal startup, VS Debug startup, scanner, route, combat, town, or debug package workflows invoking replay.
 - Goblin Replay supported inputs: shared capture folders through `--goblin-replay-captures`, specific `*_Metadata.txt` files through `--goblin-replay-metadata`, exact capture prefixes through `--goblin-replay-prefix`, and DecisionBundle folders through `--goblin-replay-decision-bundle`. DecisionBundle replay runs only when replay-ready Journal/Minimap capture frames can be resolved; otherwise it reports the trace/evidence files it found and explains the limitation.
+- New DecisionBundles are directly replay-ready through `--goblin-replay-decision-bundle` because each bundle carries its own metadata plus Journal/Minimap crops. Older bundles that contain only `decision-trace.txt` and fullscreen `evidence.png` remain manual-review evidence but are not crop-replayable unless matching capture frames exist elsewhere.
 - VS Debug `Sim Count` is not a replay feature and is not wired into live scanning. It is an explicit developer button that records through the existing session count path only when clicked.
 - Goblin Evidence timing summaries log stage histograms through `GoblinEvidenceTimingSummary`.
 - VS Debug/debug/decision-trace sessions write structured Goblin Tracker JSONL events to `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` alongside human-readable logs.
 - Default area limit: 1 count per resolved area per game.
 - Two-count exceptions: Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds.
 - Blocked count areas include New Tristram, WhimsyDale, City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
+- Last Observation displays the most recent accepted goblin count after one exists. Suppressed, stale, duplicate, no-candidate, and area-change scans do not clear or replace that accepted-count display.
 - Treasure/Odious and Gilded/Malevolent minimap ambiguity pairs use color diagnostics/overrides.
 - Reset Stats clears count, GPH/active time, duplicate guard, auto-count evidence state, observation state, and Last Observation.
-- New Game clears per-game duplicate/evidence state so fresh evidence can count again.
+- New Game clears count, GPH/active time, per-game duplicate/evidence state, observation state, and Last Observation so the next game starts clean.
 
 ## Route Logic
 
@@ -79,3 +86,4 @@ This file is the current source of truth for the active release, stable behavior
 - Continue using automatic counting in real runs instead of focused specific-goblin hunts.
 - Use the `Capture` button only when an image-recognition issue is visible and extra minimap/journal/fullscreen evidence would help.
 - Keep `Docs/TODO.md` synchronized with remaining work and next test steps.
+- Next validation should confirm the next package is materially smaller while still containing replay-ready DecisionBundles, EncounterCapture Journal/Minimap crops, manifests, JSONL, and analysis files.

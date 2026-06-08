@@ -9,7 +9,9 @@ param(
     [int]$MaxGoblinEvidenceFullImages = 0,
     [int]$MaxGoblinEvidenceEventScreenshots = 3,
     [long]$MaxGoblinEvidenceEventScreenshotBytes = 1048576,
-    [int]$MaxGoblinObservationDiagnosticCrops = 12
+    [int]$MaxGoblinObservationDiagnosticCrops = 12,
+    [switch]$IncludeGoblinDecisionBundleFullImages,
+    [switch]$IncludeGoblinCaptureFullscreenImages
 )
 
 $ErrorActionPreference = "Stop"
@@ -1680,6 +1682,8 @@ Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
 Write-Host "Max goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots"
 Write-Host "Max goblin evidence event screenshot bytes: $MaxGoblinEvidenceEventScreenshotBytes"
 Write-Host "Max goblin observation diagnostic crops: $MaxGoblinObservationDiagnosticCrops"
+Write-Host "Include goblin decision bundle full images: $($IncludeGoblinDecisionBundleFullImages.IsPresent)"
+Write-Host "Include goblin capture fullscreen images: $($IncludeGoblinCaptureFullscreenImages.IsPresent)"
 
 if (Test-Path -LiteralPath $stagingRoot) {
     Remove-Item -LiteralPath $stagingRoot -Recurse -Force
@@ -1924,6 +1928,46 @@ try {
     $goblinEvidenceScreenshots = @($goblinEvidenceCandidates |
         Where-Object { $_.LastWriteTime -ge $sessionStart -or $_.CreationTime -ge $sessionStart } |
         Sort-Object LastWriteTime -Descending)
+    $goblinDecisionBundleFullEvidenceImages = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $normalizedFullName = $_.FullName.Replace('/', '\')
+            $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                $_.BaseName -ieq 'evidence' -and
+                $normalizedFullName.IndexOf('\Debug\GoblinEvidence\DecisionBundles\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+        } |
+        Sort-Object LastWriteTime -Descending)
+    $excludedGoblinDecisionBundleFullEvidenceImages = if ($IncludeGoblinDecisionBundleFullImages) { 0 } else { $goblinDecisionBundleFullEvidenceImages.Count }
+    $excludedGoblinDecisionBundleFullEvidenceImageBytes = if ($IncludeGoblinDecisionBundleFullImages) { 0L } else { [long](($goblinDecisionBundleFullEvidenceImages | Measure-Object Length -Sum).Sum) }
+    if (-not $IncludeGoblinDecisionBundleFullImages) {
+        $goblinEvidenceScreenshots = @($goblinEvidenceScreenshots |
+            Where-Object {
+                $normalizedFullName = $_.FullName.Replace('/', '\')
+                -not ($_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                    $_.BaseName -ieq 'evidence' -and
+                    $normalizedFullName.IndexOf('\Debug\GoblinEvidence\DecisionBundles\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+            })
+    }
+    $goblinCaptureFullscreenImages = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $normalizedFullName = $_.FullName.Replace('/', '\')
+            $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                $_.BaseName -like '*_Fullscreen' -and
+                ($normalizedFullName.IndexOf('\Debug\GoblinEvidence\EncounterCaptures\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                    $normalizedFullName.IndexOf('\Debug\GoblinEvidence\ManualCaptures\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+        } |
+        Sort-Object LastWriteTime -Descending)
+    $excludedGoblinCaptureFullscreenImages = if ($IncludeGoblinCaptureFullscreenImages) { 0 } else { $goblinCaptureFullscreenImages.Count }
+    $excludedGoblinCaptureFullscreenImageBytes = if ($IncludeGoblinCaptureFullscreenImages) { 0L } else { [long](($goblinCaptureFullscreenImages | Measure-Object Length -Sum).Sum) }
+    if (-not $IncludeGoblinCaptureFullscreenImages) {
+        $goblinEvidenceScreenshots = @($goblinEvidenceScreenshots |
+            Where-Object {
+                $normalizedFullName = $_.FullName.Replace('/', '\')
+                -not ($_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and
+                    $_.BaseName -like '*_Fullscreen' -and
+                    ($normalizedFullName.IndexOf('\Debug\GoblinEvidence\EncounterCaptures\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                        $normalizedFullName.IndexOf('\Debug\GoblinEvidence\ManualCaptures\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0))
+            })
+    }
     $goblinEvidenceFullImages = @($goblinEvidenceScreenshots |
         Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -and $_.BaseName -like '*_Full' } |
         Sort-Object LastWriteTime -Descending)
@@ -2002,6 +2046,8 @@ try {
     $selectedGoblinEvidenceFolder = if ($goblinEvidenceScreenshots.Count -gt 0) { Split-Path -Parent $goblinEvidenceScreenshots[0].FullName } elseif (-not [string]::IsNullOrWhiteSpace($goblinTrackerInfo.EvidenceScreenshotFolder)) { $goblinTrackerInfo.EvidenceScreenshotFolder } else { "none" }
     Write-Host "Selected goblin evidence folder: $selectedGoblinEvidenceFolder"
     Write-Host "Excluded goblin evidence full images: $excludedGoblinEvidenceFullImages"
+    Write-Host "Excluded goblin decision bundle full evidence images: $excludedGoblinDecisionBundleFullEvidenceImages ($(Format-ByteSize $excludedGoblinDecisionBundleFullEvidenceImageBytes))"
+    Write-Host "Excluded goblin capture fullscreen images: $excludedGoblinCaptureFullscreenImages ($(Format-ByteSize $excludedGoblinCaptureFullscreenImageBytes))"
     Write-Host "Included goblin evidence event screenshots: $($selectedGoblinEvidenceEventScreenshots.Count)"
     Write-Host "Excluded goblin evidence event screenshots: $excludedGoblinEvidenceEventScreenshots"
     Write-Host "Oversized goblin evidence event screenshots excluded: $oversizedGoblinEvidenceEventScreenshots"
@@ -2126,6 +2172,8 @@ try {
             "Debug.EnableSuccessScreenshots source: $($successScreenshotSetting.Source)",
             $successAvailabilityLine,
             "Goblin evidence full-image package policy: most recent $MaxGoblinEvidenceFullImages included; $excludedGoblinEvidenceFullImages excluded",
+            "Goblin decision bundle full-image package policy: excluded by default; $excludedGoblinDecisionBundleFullEvidenceImages excluded; excludedSize=$(Format-ByteSize $excludedGoblinDecisionBundleFullEvidenceImageBytes) ($excludedGoblinDecisionBundleFullEvidenceImageBytes bytes); replay-ready Journal/Minimap crops and metadata are kept",
+            "Goblin encounter/manual capture fullscreen package policy: excluded by default; $excludedGoblinCaptureFullscreenImages excluded; excludedSize=$(Format-ByteSize $excludedGoblinCaptureFullscreenImageBytes) ($excludedGoblinCaptureFullscreenImageBytes bytes); Journal/Minimap crops and metadata are kept",
             "Goblin evidence event screenshot package policy: most recent $MaxGoblinEvidenceEventScreenshots included when <= $MaxGoblinEvidenceEventScreenshotBytes bytes; $excludedGoblinEvidenceEventScreenshots excluded; $oversizedGoblinEvidenceEventScreenshots oversized",
             "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
             "Failure screenshot package policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; includedSize=$failureScreenshotSizeDisplay ($failureScreenshotSizeBytes bytes); excludedSize=$excludedFailureScreenshotSizeDisplay ($excludedFailureScreenshotSizeBytes bytes); availableSize=$availableFailureScreenshotSizeDisplay ($availableFailureScreenshotSizeBytes bytes)",
@@ -2172,6 +2220,10 @@ try {
             "- Debug screenshots package limit: $MaxDebugScreenshots",
             "- Goblin evidence screenshots included: $goblinEvidenceScreenshotCount",
             "- Goblin evidence full images excluded: $excludedGoblinEvidenceFullImages",
+            "- Goblin decision bundle full evidence images excluded: $excludedGoblinDecisionBundleFullEvidenceImages",
+            "- Goblin decision bundle full evidence excluded total size: $(Format-ByteSize $excludedGoblinDecisionBundleFullEvidenceImageBytes) ($excludedGoblinDecisionBundleFullEvidenceImageBytes bytes)",
+            "- Goblin capture fullscreen images excluded: $excludedGoblinCaptureFullscreenImages",
+            "- Goblin capture fullscreen excluded total size: $(Format-ByteSize $excludedGoblinCaptureFullscreenImageBytes) ($excludedGoblinCaptureFullscreenImageBytes bytes)",
             "- Goblin evidence event screenshots included: $($selectedGoblinEvidenceEventScreenshots.Count)",
             "- Goblin evidence event screenshots excluded: $excludedGoblinEvidenceEventScreenshots",
             "- Goblin evidence event screenshots oversized: $oversizedGoblinEvidenceEventScreenshots",
@@ -2214,6 +2266,8 @@ try {
             "- Screenshots/Success is excluded unless -IncludeSuccessScreenshots is set",
             "- debug-screenshots is limited to MaxDebugScreenshots current-session files",
             "- Debug/GoblinEvidence/Calibration *_Full images are excluded except the most recent MaxGoblinEvidenceFullImages",
+            "- Debug\GoblinEvidence\DecisionBundles\evidence.* full images are excluded by default; replay-ready *_Metadata.txt, *_Journal.png, *_Minimap.png, and decision-trace.txt are kept",
+            "- Debug\GoblinEvidence\EncounterCaptures and ManualCaptures *_Fullscreen images are excluded by default; replay-ready *_Metadata.txt, *_Journal.png, and *_Minimap.png are kept",
             "- Debug/GoblinEvidence/GoblinEvidence_* event screenshots are limited to MaxGoblinEvidenceEventScreenshots newest files and MaxGoblinEvidenceEventScreenshotBytes",
             "- Debug/GoblinEvidence/ObservationDiagnostics image crops are limited to MaxGoblinObservationDiagnosticCrops newest files",
             "- bin folders are not copied",

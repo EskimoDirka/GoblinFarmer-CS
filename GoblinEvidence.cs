@@ -974,6 +974,149 @@ namespace GoblinFarmer
         }
     }
 
+    internal static class GoblinAutoCountEncounterSuppressionPolicy
+    {
+        public static bool ShouldSuppress(
+            string source,
+            string goblinType,
+            string areaKey,
+            string globalEvidenceKey,
+            string countedGoblinType,
+            string countedAreaKey,
+            string countedSource,
+            string countedEvidenceKey,
+            DateTime countedUtc,
+            DateTime lastSeenUtc,
+            DateTime nowUtc,
+            TimeSpan encounterSuppressWindow,
+            TimeSpan sourceVariantWindow,
+            out string matchReason)
+        {
+            matchReason = "";
+            if (string.IsNullOrWhiteSpace(areaKey) ||
+                string.IsNullOrWhiteSpace(countedAreaKey) ||
+                !GoblinTypeNormalizer.Normalize(countedGoblinType).Equals(GoblinTypeNormalizer.Normalize(goblinType), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            TimeSpan encounterAge = nowUtc - countedUtc;
+            TimeSpan lastSeenAge = nowUtc - lastSeenUtc;
+            if (encounterAge > encounterSuppressWindow &&
+                lastSeenAge > sourceVariantWindow)
+            {
+                return false;
+            }
+
+            string normalizedSource = NormalizeObservationSource(source);
+            string normalizedCountedSource = NormalizeObservationSource(countedSource);
+            if (!IsGoblinObservationEvidenceSource(normalizedSource) ||
+                !IsGoblinObservationEvidenceSource(normalizedCountedSource))
+            {
+                return false;
+            }
+
+            bool sameArea = GoblinAreaResolver.NormalizedKey(areaKey).Equals(
+                GoblinAreaResolver.NormalizedKey(countedAreaKey),
+                StringComparison.OrdinalIgnoreCase);
+            bool bothMinimap = normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
+                normalizedCountedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
+
+            if (encounterAge <= encounterSuppressWindow &&
+                !string.IsNullOrWhiteSpace(globalEvidenceKey) &&
+                !string.IsNullOrWhiteSpace(countedEvidenceKey) &&
+                string.Equals(countedEvidenceKey, globalEvidenceKey, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!bothMinimap || sameArea)
+                {
+                    matchReason = "SameEvidenceKey";
+                    return true;
+                }
+            }
+
+            if (encounterAge <= encounterSuppressWindow &&
+                normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) &&
+                normalizedCountedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) &&
+                JournalEvidenceBucketsMatch(globalEvidenceKey, countedEvidenceKey, out int currentBucket, out int countedBucket))
+            {
+                matchReason = $"JournalLineBucket:{currentBucket}->{countedBucket}";
+                return true;
+            }
+
+            if ((encounterAge <= sourceVariantWindow || lastSeenAge <= sourceVariantWindow) &&
+                (normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                normalizedCountedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                !normalizedSource.Equals(normalizedCountedSource, StringComparison.OrdinalIgnoreCase)))
+            {
+                matchReason = encounterAge <= sourceVariantWindow
+                    ? $"RecentSourceVariant:{normalizedCountedSource}->{normalizedSource}"
+                    : $"RecentSourceVariantLastSeen:{normalizedCountedSource}->{normalizedSource}";
+                return true;
+            }
+
+            return false;
+        }
+
+        public static bool JournalEvidenceBucketsMatch(string currentEvidenceKey, string countedEvidenceKey, out int currentBucket, out int countedBucket)
+        {
+            currentBucket = -1;
+            countedBucket = -1;
+            if (!TryParseJournalEvidenceLineBucket(currentEvidenceKey, out currentBucket) ||
+                !TryParseJournalEvidenceLineBucket(countedEvidenceKey, out countedBucket))
+            {
+                return false;
+            }
+
+            return Math.Abs(currentBucket - countedBucket) <= 2;
+        }
+
+        private static bool TryParseJournalEvidenceLineBucket(string evidenceKey, out int lineBucket)
+        {
+            lineBucket = -1;
+            if (string.IsNullOrWhiteSpace(evidenceKey))
+            {
+                return false;
+            }
+
+            foreach (string part in evidenceKey.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                const string prefix = "LineBucket=";
+                if (part.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(part[prefix.Length..], out int parsed))
+                {
+                    lineBucket = parsed;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsGoblinObservationEvidenceSource(string source)
+        {
+            string normalizedSource = NormalizeObservationSource(source);
+            return normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeObservationSource(string source)
+        {
+            if (string.Equals(source, "JournalCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Journal";
+            }
+
+            if (string.Equals(source, "MinimapCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Minimap", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Minimap";
+            }
+
+            return string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim();
+        }
+    }
+
     internal static class GoblinTypeNormalizer
     {
         private static readonly Dictionary<string, string> CanonicalTypes = BuildCanonicalTypes();

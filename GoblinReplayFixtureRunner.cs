@@ -715,7 +715,7 @@ namespace GoblinFarmer
                 metadata);
             emit(
                 "GoblinReplayDecisionBundleSkipped",
-                $"step={LogField(stepName)}; bundlePath={LogField(root)}; reason={notReplayable.Reason}; tracePath={LogField(tracePath)}; evidencePath={LogField(evidencePath)}; availableFiles={LogField(string.Join(",", Directory.EnumerateFiles(root).Select(Path.GetFileName)))}; explanation={LogField("Decision bundles usually contain decision-trace.txt and fullscreen evidence.png. Replay needs Journal/Minimap crop frames or a capture prefix with *_Metadata.txt, *_Journal.png, and/or *_Minimap.png.")}");
+                $"step={LogField(stepName)}; bundlePath={LogField(root)}; reason={notReplayable.Reason}; tracePath={LogField(tracePath)}; evidencePath={LogField(evidencePath)}; availableFiles={LogField(string.Join(",", Directory.EnumerateFiles(root).Select(Path.GetFileName)))}; explanation={LogField("Replay-ready decision bundles contain decision-trace.txt plus local *_Metadata.txt, *_Journal.png, and *_Minimap.png frames. Older bundles may contain only fullscreen evidence.png; those are useful for manual review but cannot replay until crop frames or a capture prefix are available.")}");
             return notReplayable;
         }
 
