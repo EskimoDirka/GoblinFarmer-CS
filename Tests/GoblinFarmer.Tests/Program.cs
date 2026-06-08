@@ -110,6 +110,7 @@ Run("Goblin area detection disambiguates PF false positives from route context",
 Run("Goblin area detection uses strong route-context runner-up", TestGoblinAreaDetectionUsesStrongRouteContextRunnerUp);
 Run("Goblin area detection blocks unresolved PF ambiguity", TestGoblinAreaDetectionBlocksUnresolvedPandemoniumAmbiguity);
 Run("Goblin area detection false PF matches do not consume PF area slots", TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniumSlots);
+Run("Goblin journal PF area uses recent channel minimap context", TestGoblinJournalPandemoniumAreaUsesRecentChannelMinimapContext);
 Run("Goblin tracker records allow unknown manual fallback and reset cleanly", TestGoblinTrackerRecordsAllowUnknownManualFallbackAndReset);
 
 if (failures > 0)
@@ -4151,6 +4152,67 @@ static void TestGoblinAreaDetectionFalsePandemoniumMatchesDoNotConsumePandemoniu
     AssertTrue(guard.TryAccept("Pandemonium Fortress Level 2"), "false PF2 matches should not consume PF2 first slot");
     AssertTrue(guard.TryAccept("Pandemonium Fortress Level 2"), "false PF2 matches should not consume PF2 second slot");
     AssertFalse(guard.TryAccept("Pandemonium Fortress Level 2"), "PF2 third count should still be suppressed");
+}
+
+static void TestGoblinJournalPandemoniumAreaUsesRecentChannelMinimapContext()
+{
+    DateTime nowUtc = DateTime.UtcNow;
+    GoblinAreaResolution pf1 = GoblinAreaResolver.Resolve("Pandemonium Fortress Level 1");
+    GoblinObservationRecord recentEasternChannel = new(
+        nowUtc.AddSeconds(-8),
+        "Minimap",
+        "Blood Thief",
+        "Eastern Channel Level 1",
+        "Eastern Channel Level 1",
+        true,
+        "Eligible",
+        "Available",
+        1,
+        0,
+        0.890);
+
+    GoblinJournalAreaOverrideDecision decision = GoblinJournalAreaOverridePolicy.TryUseRecentMinimapChannelArea(
+        pf1,
+        "Blood Thief",
+        recentEasternChannel,
+        "Eastern Channel Level 1",
+        nowUtc,
+        TimeSpan.FromSeconds(45));
+
+    AssertTrue(decision.Overridden, "recent same-goblin minimap evidence should correct journal PF1 back to Eastern Channel Level 1");
+    AssertEqual("Eastern Channel Level 1", decision.Area.AreaKey, "journal follow-up should inherit the safer channel area");
+    AssertEqual("RecentMinimapChannelContext", decision.Reason, "override reason should identify the minimap/channel context");
+
+    GoblinJournalAreaOverrideDecision expired = GoblinJournalAreaOverridePolicy.TryUseRecentMinimapChannelArea(
+        pf1,
+        "Blood Thief",
+        recentEasternChannel with { TimestampUtc = nowUtc.AddSeconds(-50) },
+        "Eastern Channel Level 1",
+        nowUtc,
+        TimeSpan.FromSeconds(45));
+
+    AssertFalse(expired.Overridden, "expired minimap context should not rewrite journal area");
+    AssertEqual("RecentMinimapExpired", expired.Reason, "expired context should explain why no override happened");
+
+    GoblinJournalAreaOverrideDecision mismatchedLevel = GoblinJournalAreaOverridePolicy.TryUseRecentMinimapChannelArea(
+        pf1,
+        "Blood Thief",
+        recentEasternChannel with { AreaKey = "Eastern Channel Level 2", DisplayLocation = "Eastern Channel Level 2" },
+        "Eastern Channel Level 2",
+        nowUtc,
+        TimeSpan.FromSeconds(45));
+
+    AssertFalse(mismatchedLevel.Overridden, "Level 2 minimap context should not rewrite a PF1 journal result");
+
+    GoblinJournalAreaOverrideDecision truePandemoniumContext = GoblinJournalAreaOverridePolicy.TryUseRecentMinimapChannelArea(
+        pf1,
+        "Blood Thief",
+        recentEasternChannel,
+        "Rakkis Crossing",
+        nowUtc,
+        TimeSpan.FromSeconds(45));
+
+    AssertFalse(truePandemoniumContext.Overridden, "Rakkis/PF route context should preserve a true PF journal result");
 }
 
 static void AssertDisambiguates(

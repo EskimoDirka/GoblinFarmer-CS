@@ -17,6 +17,12 @@ This file is the current source of truth for the active release, stable behavior
 
 ## Latest Review Finding
 
+- Latest reviewed package `GoblinFarmer_Debug_20260608_055247.zip` was a VS Debug run with Observation Mode, Auto Goblin Count, and Decision Trace enabled.
+- Confirmed Cave Of The Moon Clan Level 1 and Level 2 can count independently in the same game from fresh evidence: Level 1 Gem Hoarder counted from Journal, then Level 2 Gem Hoarder counted from Minimap and subsequent Level 2 Journal evidence suppressed as the same encounter.
+- Confirmed Eastern Channel Level 2 can count independently after Level 1 stale evidence: Level 1 Blood Thief evidence was later suppressed on Level 2, then a fresh Eastern Channel Level 2 Treasure Goblin counted.
+- Found an Eastern Channel Level 1/Pandemonium false-positive issue: a Blood Thief minimap candidate resolved to `Eastern Channel Level 1`, but the later Journal confirmation resolved/count accepted as `Pandemonium Fortress Level 1`, consuming a PF1 area slot and showing the wrong Last Observation area.
+- Fix implemented: recent same-goblin Minimap observations in Eastern/Western Channel Level 1 or 2 now provide a short-lived area context for Journal follow-up evidence when the Journal current-location scan resolves to the matching Pandemonium Fortress level while route context is Ancient Waterway/channel. This preserves real PF1/PF2 behavior but prevents channel journal follow-ups from consuming PF slots.
+- Goblin Replay against the Battlefields/Rakkis Gilded Baron decision bundles from the same package counted the fresh Battlefields evidence and suppressed the later Rakkis journal row as `EncounterAlreadyAutoCounted`, matching intended stale-transition behavior.
 - Latest reviewed package `GoblinFarmer_Debug_20260607_212052.zip` was a VS Debug run with Observation Mode, Auto Goblin Count, and Decision Trace enabled.
 - Confirmed package behavior matched live notes: Southern Highlands Treasure Goblin auto-counted correctly from fresh Minimap evidence, then Cave Of The Moon Clan Level 1 incorrectly auto-counted the stale Southern Highlands Treasure Goblin Journal row.
 - Goblin Replay against the exact accepted Cave DecisionBundle `gdt-20260608022012960-08083e38` reproduced the bad decision as `Count/Eligible`, confirming this was a policy/state bug rather than only live timing.

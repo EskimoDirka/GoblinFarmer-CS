@@ -563,6 +563,12 @@ namespace GoblinFarmer
         string Reason,
         double Delta);
 
+    internal readonly record struct GoblinJournalAreaOverrideDecision(
+        bool Overridden,
+        GoblinAreaResolution Area,
+        string Reason,
+        double RecentObservationAgeSeconds);
+
     internal static class GoblinAreaResolver
     {
         public static IReadOnlyList<string> KnownAreas { get; } =
@@ -1401,6 +1407,90 @@ namespace GoblinFarmer
             return string.IsNullOrWhiteSpace(value)
                 ? "Unknown"
                 : value.Replace(";", ",").Replace(Environment.NewLine, " ").Trim();
+        }
+    }
+
+    internal static class GoblinJournalAreaOverridePolicy
+    {
+        public static GoblinJournalAreaOverrideDecision TryUseRecentMinimapChannelArea(
+            GoblinAreaResolution journalArea,
+            string goblinType,
+            GoblinObservationRecord? recentMinimapObservation,
+            string routeContext,
+            DateTime nowUtc,
+            TimeSpan maxAge)
+        {
+            if (!journalArea.Resolved ||
+                !IsPandemonium(journalArea.AreaKey) ||
+                recentMinimapObservation == null ||
+                !recentMinimapObservation.Source.Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
+                !GoblinTypeNormalizer.Normalize(recentMinimapObservation.GoblinType).Equals(GoblinTypeNormalizer.Normalize(goblinType), StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(recentMinimapObservation.AreaKey) ||
+                !IsChannel(recentMinimapObservation.AreaKey) ||
+                !SameLevel(journalArea.AreaKey, recentMinimapObservation.AreaKey) ||
+                !IsAncientWaterwayOrChannelContext(routeContext))
+            {
+                return new GoblinJournalAreaOverrideDecision(false, journalArea, "NotApplicable", -1);
+            }
+
+            double ageSeconds = Math.Max(0, (nowUtc - recentMinimapObservation.TimestampUtc).TotalSeconds);
+            if (ageSeconds > maxAge.TotalSeconds)
+            {
+                return new GoblinJournalAreaOverrideDecision(false, journalArea, "RecentMinimapExpired", ageSeconds);
+            }
+
+            GoblinAreaResolution minimapArea = GoblinAreaResolver.Resolve(recentMinimapObservation.AreaKey);
+            if (!minimapArea.Resolved)
+            {
+                return new GoblinJournalAreaOverrideDecision(false, journalArea, "RecentMinimapAreaUnresolved", ageSeconds);
+            }
+
+            return new GoblinJournalAreaOverrideDecision(true, minimapArea, "RecentMinimapChannelContext", ageSeconds);
+        }
+
+        private static bool SameLevel(string first, string second)
+        {
+            int firstLevel = ExtractLevel(first);
+            return firstLevel > 0 && firstLevel == ExtractLevel(second);
+        }
+
+        private static int ExtractLevel(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            if (key.EndsWith("level 1", StringComparison.OrdinalIgnoreCase))
+            {
+                return 1;
+            }
+
+            if (key.EndsWith("level 2", StringComparison.OrdinalIgnoreCase))
+            {
+                return 2;
+            }
+
+            return 0;
+        }
+
+        private static bool IsPandemonium(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Pandemonium Fortress Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Pandemonium Fortress Level 2");
+        }
+
+        private static bool IsChannel(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Western Channel Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Western Channel Level 2") ||
+                key == GoblinAreaResolver.NormalizedKey("Eastern Channel Level 1") ||
+                key == GoblinAreaResolver.NormalizedKey("Eastern Channel Level 2");
+        }
+
+        private static bool IsAncientWaterwayOrChannelContext(string location)
+        {
+            string key = GoblinAreaResolver.NormalizedKey(location);
+            return key == GoblinAreaResolver.NormalizedKey("Ancient Waterway") ||
+                IsChannel(location);
         }
     }
 

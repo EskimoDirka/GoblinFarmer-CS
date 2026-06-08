@@ -61,6 +61,7 @@ namespace GoblinFarmer
         private GoblinObservationRecord? portDisplayedGoblinObservation;
         private string portDisplayedGoblinObservationStatus = "";
         private DateTime portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
+        private readonly Dictionary<string, GoblinObservationRecord> portRecentMinimapGoblinObservationByType = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PortGoblinAutoCountEvidenceState> portGoblinAutoCountEvidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PortGoblinAutoCountEncounterState> portGoblinAutoCountEncounterByGoblinType = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DateTime> portGoblinDecisionBundleLastSavedByKey = new(StringComparer.OrdinalIgnoreCase);

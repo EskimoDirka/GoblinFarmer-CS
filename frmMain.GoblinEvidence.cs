@@ -593,6 +593,7 @@ namespace GoblinFarmer
             }
 
             PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea("Journal");
+            areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, nowUtc, "JournalFreshness");
             string areaKey = areaResult.Area.Resolved ? areaResult.Area.AreaKey : "";
             string displayArea = areaResult.Area.Resolved ? areaResult.Area.DisplayLocation : "Unknown";
 
@@ -1822,6 +1823,7 @@ namespace GoblinFarmer
             int journalKilledCleared;
             int autoCountEvidenceCleared;
             int autoCountEncounterCleared;
+            int recentMinimapObservationsCleared;
             lock (portGoblinEvidenceLock)
             {
                 evidenceCooldownsCleared = portLastGoblinEvidenceByType.Count;
@@ -1851,8 +1853,10 @@ namespace GoblinFarmer
             {
                 autoCountEvidenceCleared = portGoblinAutoCountEvidenceBySignature.Count;
                 autoCountEncounterCleared = portGoblinAutoCountEncounterByGoblinType.Count;
+                recentMinimapObservationsCleared = portRecentMinimapGoblinObservationByType.Count;
                 portGoblinAutoCountEvidenceBySignature.Clear();
                 portGoblinAutoCountEncounterByGoblinType.Clear();
+                portRecentMinimapGoblinObservationByType.Clear();
                 hadManualObservation = portLastGoblinObservationForManualCount != null;
                 hadDisplayedObservation = portDisplayedGoblinObservation != null || !string.IsNullOrWhiteSpace(portDisplayedGoblinObservationStatus);
                 portLastGoblinObservationForManualCount = null;
@@ -1861,7 +1865,7 @@ namespace GoblinFarmer
                 portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
             }
 
-            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedJournalKilled={journalKilledCleared} clearedAutoCountEvidence={autoCountEvidenceCleared} clearedAutoCountEncounters={autoCountEncounterCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
+            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedJournalKilled={journalKilledCleared} clearedAutoCountEvidence={autoCountEvidenceCleared} clearedAutoCountEncounters={autoCountEncounterCleared} clearedRecentMinimapObservations={recentMinimapObservationsCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
             AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(reason)} previousDisplayed={hadDisplayedObservation}");
         }
 

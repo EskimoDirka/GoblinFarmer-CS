@@ -334,6 +334,11 @@ namespace GoblinFarmer
         {
             string observationSource = PortNormalizeGoblinObservationSource(source);
             PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea(observationSource);
+            if (observationSource.Equals("Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, DateTime.UtcNow, "ObservationCandidate");
+            }
+
             GoblinAreaResolution area = areaResult.Area;
             goblinType = GoblinTypeNormalizer.Normalize(goblinType);
             string areaKey = PortDisplayLocation(area.AreaKey);
@@ -408,6 +413,12 @@ namespace GoblinFarmer
                     portLastGoblinObservationForManualCount = observation;
                 }
 
+                if (observationSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
+                    area.Resolved)
+                {
+                    portRecentMinimapGoblinObservationByType[goblinType] = observation;
+                }
+
                 if (PortManualCountDisplayHoldActive(portDisplayedGoblinObservation, nowUtc))
                 {
                     displayUpdated = false;
@@ -465,6 +476,56 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return wouldCount;
+        }
+
+        private PortGoblinTrackerAreaResolution PortApplyJournalMinimapAreaOverride(
+            string goblinType,
+            PortGoblinTrackerAreaResolution areaResult,
+            DateTime nowUtc,
+            string reason)
+        {
+            GoblinObservationRecord? recentMinimapObservation = null;
+            string normalizedGoblinType = GoblinTypeNormalizer.Normalize(goblinType);
+            lock (portGoblinTrackerLock)
+            {
+                portRecentMinimapGoblinObservationByType.TryGetValue(normalizedGoblinType, out recentMinimapObservation);
+            }
+
+            string routeContext = PortGoblinTrackerAreaRouteContext();
+            GoblinJournalAreaOverrideDecision overrideDecision = GoblinJournalAreaOverridePolicy.TryUseRecentMinimapChannelArea(
+                areaResult.Area,
+                normalizedGoblinType,
+                recentMinimapObservation,
+                routeContext,
+                nowUtc,
+                PortAutomaticGoblinSourceVariantSuppressWindow);
+
+            if (!overrideDecision.Overridden)
+            {
+                return areaResult;
+            }
+
+            AppLogger.Info(
+                "GoblinTracker: JournalAreaOverrideApplied " +
+                $"reason={PortLogField(reason)} " +
+                $"goblinType={PortLogField(normalizedGoblinType)} " +
+                $"originalAreaKey={PortLogField(PortDisplayLocation(areaResult.Area.AreaKey))} " +
+                $"overrideAreaKey={PortLogField(PortDisplayLocation(overrideDecision.Area.AreaKey))} " +
+                $"overrideReason={PortLogField(overrideDecision.Reason)} " +
+                $"recentMinimapSource={PortLogField(recentMinimapObservation?.Source ?? "")} " +
+                $"recentMinimapAreaKey={PortLogField(PortDisplayLocation(recentMinimapObservation?.AreaKey ?? ""))} " +
+                $"recentMinimapAgeSeconds={overrideDecision.RecentObservationAgeSeconds:0.0} " +
+                $"maxAgeSeconds={PortAutomaticGoblinSourceVariantSuppressWindow.TotalSeconds:0} " +
+                $"routeContext={PortLogField(PortDisplayLocation(routeContext))}");
+
+            return areaResult with
+            {
+                Area = overrideDecision.Area,
+                AmbiguityGroup = string.IsNullOrWhiteSpace(areaResult.AmbiguityGroup)
+                    ? "ChannelVsPandemonium"
+                    : areaResult.AmbiguityGroup,
+                DisambiguationReason = overrideDecision.Reason,
+            };
         }
 
 

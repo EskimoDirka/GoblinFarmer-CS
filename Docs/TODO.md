@@ -25,9 +25,10 @@ This file contains only open work and remaining test/verifications. Historical c
   - `JournalCandidateIgnoredHistoryInput`
 - [ ] Confirm `GoblinEvidenceTimingSummary` appears during normal VS Debug scans and shows useful scan-stage timing.
 - [ ] Confirm `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` records observation, suppression, and automatic-count events alongside human logs.
-- [ ] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence from any goblin type.
 - [ ] Live-validate Southern Highlands -> Cave Of The Moon Clan Level 1 no longer replays a stale Southern Highlands Journal row as a Cave Level 1 count after a fresh Southern Highlands Minimap count.
-- [ ] Live-validate Eastern Channel Level 2 fresh evidence from any goblin type auto-counts once and does not inherit stale evidence from another area.
+- [x] Live-validate Cave Of The Moon Clan Level 1 and Level 2 each auto-count independently in the same game when each level has fresh evidence from any goblin type.
+- [x] Live-validate Eastern Channel Level 2 fresh evidence from any goblin type auto-counts once and does not inherit stale evidence from another area.
+- [ ] Live-validate Eastern Channel Level 1 after the Journal/Minimap channel-context fix: any fresh goblin should count as `Eastern Channel Level 1`, not `Pandemonium Fortress Level 1`.
 - [ ] Live-validate Caverns of Frost Level 1 and Level 2 can each auto-count once only when the second level has evidence first seen after Level 2 is detected.
 - [ ] Live-validate notification latency after the Minimap collision/source-variant fix. If accepted-count logs are immediate but splash appears late, investigate notification display. If logs themselves are late, use `GoblinEvidenceTimingSummary` and DecisionBundles to identify whether Minimap, Journal, area resolution, or stale policy caused the delay.
 - [ ] Live-validate Last Observation keeps the latest accepted count across normal scans/area changes, then clears on Reset Stats, Make New Game, or app restart.
