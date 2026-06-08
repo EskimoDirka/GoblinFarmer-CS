@@ -393,6 +393,16 @@ namespace GoblinFarmer
                         reason = "EncounterAlreadyAutoCounted";
                         duplicateState = reason;
                     }
+                    else if (!GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+                        observationSource,
+                        evidenceSignature,
+                        out string reliabilityReason,
+                        out string evidenceReliability))
+                    {
+                        wouldCount = false;
+                        reason = reliabilityReason;
+                        duplicateState = evidenceReliability;
+                    }
                 }
 
                 observation = new(

@@ -130,6 +130,7 @@ namespace GoblinFarmer
     internal static class GoblinReplayFixtureRunner
     {
         private static readonly TimeSpan ReplayJournalFreshnessWindow = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan ReplayNewGameCarryoverSuppressWindow = TimeSpan.FromSeconds(20);
 
         public static GoblinReplayFixtureRunResult RunExplicitFixtureForHarness(
             GoblinReplayFixture fixture,
@@ -309,9 +310,11 @@ namespace GoblinFarmer
             Dictionary<string, ReplayEvidenceState> evidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
             Dictionary<string, ReplayEncounterState> encounterByGoblinType = new(StringComparer.OrdinalIgnoreCase);
             List<ReplayResetCarryoverState> resetCarryoverSuppressions = [];
+            List<ReplayStaleVisibleLineState> staleVisibleLineSuppressions = [];
             GoblinAreaDuplicateGuard duplicateGuard = new();
             string tempRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayScenario_{Guid.NewGuid():N}");
             DateTime cursorUtc = startUtc ?? DateTime.UtcNow;
+            DateTime newGameCarryoverSuppressUntilUtc = DateTime.MinValue;
             string resolvedCurrentLocationTemplateDirectory = string.IsNullOrWhiteSpace(currentLocationTemplateDirectory)
                 ? Path.Combine(Path.GetDirectoryName(templateDirectory) ?? "", "Current Location")
                 : currentLocationTemplateDirectory!;
@@ -364,6 +367,10 @@ namespace GoblinFarmer
                             clearedAreas = duplicateGuard.Reset();
                             evidenceBySignature.Clear();
                             encounterByGoblinType.Clear();
+                            staleVisibleLineSuppressions.Clear();
+                            newGameCarryoverSuppressUntilUtc = step.Kind == GoblinReplayTemplateScenarioStepKind.NewGame
+                                ? stepUtc + ReplayNewGameCarryoverSuppressWindow
+                                : DateTime.MinValue;
                         }
 
                         GoblinReplayFixtureStepResult actionResult = new(
@@ -417,7 +424,9 @@ namespace GoblinFarmer
                         evidenceBySignature,
                         encounterByGoblinType,
                         duplicateGuard,
-                        resetCarryoverSuppressions);
+                        resetCarryoverSuppressions,
+                        staleVisibleLineSuppressions,
+                        newGameCarryoverSuppressUntilUtc);
                     stepResults.Add(stepResult);
                     Emit(
                         "GoblinReplayTemplateScenarioStepResult",
@@ -1324,7 +1333,9 @@ namespace GoblinFarmer
             Dictionary<string, ReplayEvidenceState> evidenceBySignature,
             Dictionary<string, ReplayEncounterState> encounterByGoblinType,
             GoblinAreaDuplicateGuard duplicateGuard,
-            List<ReplayResetCarryoverState>? resetCarryoverSuppressions = null)
+            List<ReplayResetCarryoverState>? resetCarryoverSuppressions = null,
+            List<ReplayStaleVisibleLineState>? staleVisibleLineSuppressions = null,
+            DateTime? newGameCarryoverSuppressUntilUtc = null)
         {
             if (candidate == null)
             {
@@ -1355,6 +1366,7 @@ namespace GoblinFarmer
             }
 
             string evidenceSignature = EvidenceSignature(candidate);
+            bool journalCandidate = candidate.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase);
             if (candidate.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase) &&
                 TrySuppressReplayResetCarryover(
                     evidenceSignature,
@@ -1372,6 +1384,42 @@ namespace GoblinFarmer
                     evidenceSignature,
                     "JournalCandidateIgnoredResetCarryover",
                     resetCarryoverFreshnessReason);
+            }
+
+            if (journalCandidate &&
+                newGameCarryoverSuppressUntilUtc.HasValue &&
+                step.TimestampUtc < newGameCarryoverSuppressUntilUtc.Value)
+            {
+                RememberReplayStaleVisibleLine(staleVisibleLineSuppressions, evidenceSignature, step.TimestampUtc);
+                return SuppressedStep(
+                    scenarioName,
+                    step,
+                    "Fixture",
+                    "Found",
+                    candidate.Source,
+                    candidate.GoblinType,
+                    evidenceSignature,
+                    "JournalCandidateIgnoredNewGameCarryoverWindow",
+                    $"JournalCandidateIgnoredNewGameCarryoverWindow:{Math.Max(0, (newGameCarryoverSuppressUntilUtc.Value - step.TimestampUtc).TotalSeconds):0.0}s");
+            }
+
+            if (journalCandidate &&
+                TrySuppressReplayStaleVisibleLine(
+                    evidenceSignature,
+                    step.TimestampUtc,
+                    staleVisibleLineSuppressions,
+                    out string staleVisibleLineFreshnessReason))
+            {
+                return SuppressedStep(
+                    scenarioName,
+                    step,
+                    "Fixture",
+                    "Found",
+                    candidate.Source,
+                    candidate.GoblinType,
+                    evidenceSignature,
+                    "JournalCandidateIgnoredStaleVisibleLine",
+                    staleVisibleLineFreshnessReason);
             }
 
             string encounterKey = GoblinTypeNormalizer.Normalize(candidate.GoblinType);
@@ -1406,6 +1454,13 @@ namespace GoblinFarmer
             string freshnessReason = FreshnessReason(candidate, state, step);
             if (!freshnessReason.Equals("Fresh", StringComparison.OrdinalIgnoreCase))
             {
+                if (journalCandidate &&
+                    (freshnessReason.Contains("Stale", StringComparison.OrdinalIgnoreCase) ||
+                    freshnessReason.Contains("AreaChanged", StringComparison.OrdinalIgnoreCase)))
+                {
+                    RememberReplayStaleVisibleLine(staleVisibleLineSuppressions, evidenceSignature, step.TimestampUtc);
+                }
+
                 string suppressionReason = SuppressionReasonForFreshness(freshnessReason);
                 return SuppressedStep(
                     scenarioName,
@@ -1454,6 +1509,14 @@ namespace GoblinFarmer
                     candidate.Source,
                     step.AreaKey,
                     encounterState.AreaKey);
+            }
+            else if (!GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+                candidate.Source,
+                evidenceSignature,
+                out string reliabilityReason,
+                out _))
+            {
+                reason = reliabilityReason;
             }
             else if (GoblinManualCountBlockList.IsBlocked(step.AreaKey))
             {
@@ -1616,6 +1679,56 @@ namespace GoblinFarmer
             }
 
             return freshnessReason;
+        }
+
+        private static void RememberReplayStaleVisibleLine(
+            List<ReplayStaleVisibleLineState>? staleVisibleLineSuppressions,
+            string signature,
+            DateTime nowUtc)
+        {
+            if (staleVisibleLineSuppressions == null || string.IsNullOrWhiteSpace(signature))
+            {
+                return;
+            }
+
+            staleVisibleLineSuppressions.RemoveAll(state =>
+                state.Signature.Equals(signature, StringComparison.OrdinalIgnoreCase) ||
+                !GoblinJournalFreshnessPolicy.StaleSuppressionActive(state.LastSeenUtc, nowUtc, ReplayJournalFreshnessWindow));
+            staleVisibleLineSuppressions.Add(new ReplayStaleVisibleLineState(signature, nowUtc, nowUtc));
+        }
+
+        private static bool TrySuppressReplayStaleVisibleLine(
+            string signature,
+            DateTime nowUtc,
+            List<ReplayStaleVisibleLineState>? staleVisibleLineSuppressions,
+            out string freshnessReason)
+        {
+            freshnessReason = "";
+            if (staleVisibleLineSuppressions == null || staleVisibleLineSuppressions.Count == 0)
+            {
+                return false;
+            }
+
+            for (int index = staleVisibleLineSuppressions.Count - 1; index >= 0; index--)
+            {
+                ReplayStaleVisibleLineState state = staleVisibleLineSuppressions[index];
+                if (!GoblinJournalFreshnessPolicy.StaleSuppressionActive(state.LastSeenUtc, nowUtc, ReplayJournalFreshnessWindow))
+                {
+                    staleVisibleLineSuppressions.RemoveAt(index);
+                    continue;
+                }
+
+                if (!GoblinJournalEvidencePolicy.SameVisibleGoblinLine(signature, state.Signature, out int currentBucket, out int staleBucket))
+                {
+                    continue;
+                }
+
+                staleVisibleLineSuppressions[index] = state with { LastSeenUtc = nowUtc };
+                freshnessReason = $"JournalCandidateIgnoredStaleVisibleLine:{currentBucket}->{staleBucket}";
+                return true;
+            }
+
+            return false;
         }
 
         private static GoblinReplayFixtureCandidate? SelectScenarioCandidate(IReadOnlyList<GoblinReplayFixtureCandidate> candidates)
@@ -1998,5 +2111,10 @@ namespace GoblinFarmer
             DateTime ResetUtc,
             DateTime LastSeenUtc,
             string ResetReason);
+
+        private sealed record ReplayStaleVisibleLineState(
+            string Signature,
+            DateTime FirstSuppressedUtc,
+            DateTime LastSeenUtc);
     }
 }

@@ -13,6 +13,7 @@ namespace GoblinFarmer
         private const int GoblinEvidenceObservationDiagnosticRetentionCount = 24;
         private static readonly TimeSpan GoblinEvidenceCooldown = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan GoblinJournalEvidenceFreshWindow = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan GoblinJournalNewGameCarryoverSuppressWindow = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan GoblinJournalHistoryInputSuppressWindow = TimeSpan.FromSeconds(12);
         private static readonly TimeSpan GoblinEvidenceMissingTemplateLogCooldown = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan GoblinEvidenceDiagnosticLogCooldown = TimeSpan.FromSeconds(5);
@@ -50,6 +51,7 @@ namespace GoblinFarmer
         private long portLastGoblinEvidenceDiagnosticCropTicks;
         private long portLastGoblinEvidenceMissingTemplateScanSummaryTicks;
         private long portGoblinJournalHistorySuppressUntilTicks;
+        private long portGoblinJournalNewGameCarryoverSuppressUntilTicks;
 
         private void PortStartGoblinEvidenceScanner(CancellationToken token)
         {
@@ -567,6 +569,29 @@ namespace GoblinFarmer
                 return false;
             }
 
+            if (PortNewGameJournalCarryoverSuppressionActive(nowUtc, out double newGameCarryoverRemainingSeconds))
+            {
+                PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
+                PortLogJournalEvidenceFreshnessDiagnostic(
+                    "JournalCandidateIgnoredNewGameCarryoverWindow",
+                    template,
+                    match,
+                    portLastConfirmedLocation,
+                    $"remainingSeconds={newGameCarryoverRemainingSeconds:0.0}; suppressWindowSeconds={GoblinJournalNewGameCarryoverSuppressWindow.TotalSeconds:0}");
+                return false;
+            }
+
+            if (PortTryTouchStaleSuppressedJournalEvidenceByVisibleGoblinLine(journalLineSignature, nowUtc, out string staleVisibleLineDetails))
+            {
+                PortLogJournalEvidenceFreshnessDiagnostic(
+                    "JournalCandidateIgnoredStaleVisibleLine",
+                    template,
+                    match,
+                    portLastConfirmedLocation,
+                    staleVisibleLineDetails);
+                return false;
+            }
+
             lock (portGoblinEvidenceLock)
             {
                 if (!portJournalEvidenceSeenByKey.TryGetValue(journalLineSignature, out GoblinJournalEvidenceSeenState? seenState))
@@ -627,6 +652,7 @@ namespace GoblinFarmer
                     !string.Equals(firstSeenAreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
                 if (firstSeenAreaChanged)
                 {
+                    PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalEngagedIgnoredAreaChanged",
                         template,
@@ -678,6 +704,7 @@ namespace GoblinFarmer
                     GoblinJournalEvidenceFreshWindow);
                 if (!killedFreshInCurrentArea)
                 {
+                    PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalKilledIgnoredStale",
                         template,
@@ -812,6 +839,19 @@ namespace GoblinFarmer
             return true;
         }
 
+        private bool PortNewGameJournalCarryoverSuppressionActive(DateTime nowUtc, out double remainingSeconds)
+        {
+            long suppressUntilTicks = Interlocked.Read(ref portGoblinJournalNewGameCarryoverSuppressUntilTicks);
+            remainingSeconds = 0;
+            if (suppressUntilTicks <= nowUtc.Ticks)
+            {
+                return false;
+            }
+
+            remainingSeconds = Math.Max(0, (new DateTime(suppressUntilTicks, DateTimeKind.Utc) - nowUtc).TotalSeconds);
+            return true;
+        }
+
         private bool PortTryTouchStaleSuppressedJournalEvidence(string signature, DateTime nowUtc)
         {
             lock (portGoblinEvidenceLock)
@@ -830,6 +870,51 @@ namespace GoblinFarmer
                 portStaleSuppressedJournalEvidenceByKey[signature] = state with { LastSeenUtc = nowUtc };
                 return true;
             }
+        }
+
+        private bool PortTryTouchStaleSuppressedJournalEvidenceByVisibleGoblinLine(string signature, DateTime nowUtc, out string details)
+        {
+            details = "";
+            lock (portGoblinEvidenceLock)
+            {
+                List<string> expiredKeys = [];
+                foreach (KeyValuePair<string, GoblinJournalStaleSuppressedState> pair in portStaleSuppressedJournalEvidenceByKey)
+                {
+                    if (!GoblinJournalFreshnessPolicy.StaleSuppressionActive(pair.Value.LastSeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow))
+                    {
+                        expiredKeys.Add(pair.Key);
+                        continue;
+                    }
+
+                    if (!GoblinJournalEvidencePolicy.SameVisibleGoblinLine(signature, pair.Key, out int currentBucket, out int previousBucket))
+                    {
+                        continue;
+                    }
+
+                    portStaleSuppressedJournalEvidenceByKey[pair.Key] = pair.Value with { LastSeenUtc = nowUtc };
+                    details =
+                        $"signature={PortLogField(signature)}; " +
+                        $"staleSignature={PortLogField(pair.Key)}; " +
+                        $"currentLineBucket={currentBucket}; " +
+                        $"staleLineBucket={previousBucket}; " +
+                        $"staleLastSeenAgeSeconds={Math.Max(0, (nowUtc - pair.Value.LastSeenUtc).TotalSeconds):0.0}; " +
+                        $"freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}";
+
+                    foreach (string expiredKey in expiredKeys)
+                    {
+                        portStaleSuppressedJournalEvidenceByKey.Remove(expiredKey);
+                    }
+
+                    return true;
+                }
+
+                foreach (string expiredKey in expiredKeys)
+                {
+                    portStaleSuppressedJournalEvidenceByKey.Remove(expiredKey);
+                }
+            }
+
+            return false;
         }
 
         private void PortRememberStaleSuppressedJournalEvidence(string signature, DateTime nowUtc)
@@ -1944,6 +2029,10 @@ namespace GoblinFarmer
                 Interlocked.Exchange(ref portLastGoblinEvidenceDiagnosticCropTicks, 0);
                 Interlocked.Exchange(ref portLastGoblinEvidenceMissingTemplateScanSummaryTicks, 0);
                 Interlocked.Exchange(ref portGoblinJournalHistorySuppressUntilTicks, 0);
+                DateTime carryoverSuppressUntilUtc = string.Equals(reason, "NewGameCreated", StringComparison.OrdinalIgnoreCase)
+                    ? nowUtc + GoblinJournalNewGameCarryoverSuppressWindow
+                    : DateTime.MinValue;
+                Interlocked.Exchange(ref portGoblinJournalNewGameCarryoverSuppressUntilTicks, carryoverSuppressUntilUtc.Ticks);
             }
 
             bool hadManualObservation;

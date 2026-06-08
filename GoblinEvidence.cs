@@ -980,6 +980,112 @@ namespace GoblinFarmer
         }
     }
 
+    internal static class GoblinAutoCountEvidenceReliabilityPolicy
+    {
+        public const string JournalPendingKilledOrMinimapConfirmation = "JournalPendingKilledOrMinimapConfirmation";
+        public const string JournalEvidenceKindUnknown = "JournalEvidenceKindUnknown";
+
+        public static bool AllowsAutomaticCount(
+            string source,
+            string evidenceSignature,
+            out string reason,
+            out string reliability)
+        {
+            reason = "";
+            reliability = "Unknown";
+            string normalizedSource = NormalizeObservationSource(source);
+            if (normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase))
+            {
+                reliability = "MinimapConfirmed";
+                return true;
+            }
+
+            if (!normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                reliability = "NonJournalEvidence";
+                return true;
+            }
+
+            string evidenceKind = ExtractEvidenceSignatureValue(evidenceSignature, "Kind");
+            if (evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalKilled), StringComparison.OrdinalIgnoreCase))
+            {
+                reliability = "JournalKilledConfirmed";
+                return true;
+            }
+
+            if (evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngaged), StringComparison.OrdinalIgnoreCase) ||
+                evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngagedAndKilled), StringComparison.OrdinalIgnoreCase))
+            {
+                reason = JournalPendingKilledOrMinimapConfirmation;
+                reliability = "JournalEngagedOnly";
+                return false;
+            }
+
+            reason = JournalEvidenceKindUnknown;
+            reliability = string.IsNullOrWhiteSpace(evidenceKind)
+                ? "JournalKindMissing"
+                : $"JournalKind:{evidenceKind}";
+            return false;
+        }
+
+        private static string NormalizeObservationSource(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                return "";
+            }
+
+            if (source.Contains("Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Journal";
+            }
+
+            if (source.Contains("Minimap", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Minimap";
+            }
+
+            return source.Trim();
+        }
+
+        private static string ExtractEvidenceSignatureValue(string evidenceSignature, string key)
+        {
+            if (string.IsNullOrWhiteSpace(evidenceSignature) || string.IsNullOrWhiteSpace(key))
+            {
+                return "";
+            }
+
+            string[] parts = evidenceSignature.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (string part in parts)
+            {
+                int separator = part.IndexOf('=');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                string partKey = part[..separator].Trim();
+                if (partKey.Equals(key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return part[(separator + 1)..].Trim();
+                }
+            }
+
+            if (key.Equals("Kind", StringComparison.OrdinalIgnoreCase) && parts.Length > 0)
+            {
+                string first = parts[0].Trim();
+                if (first.Equals(nameof(GoblinEvidenceTemplateKind.JournalKilled), StringComparison.OrdinalIgnoreCase) ||
+                    first.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngaged), StringComparison.OrdinalIgnoreCase) ||
+                    first.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngagedAndKilled), StringComparison.OrdinalIgnoreCase))
+                {
+                    return first;
+                }
+            }
+
+            return "";
+        }
+    }
+
     internal static class GoblinAutoCountEncounterSuppressionPolicy
     {
         public static bool ShouldSuppress(
@@ -1130,7 +1236,39 @@ namespace GoblinFarmer
                 return false;
             }
 
-            return Math.Abs(currentBucket - countedBucket) <= 2;
+            if (!JournalEvidenceLineFamily(currentEvidenceKey).Equals(
+                JournalEvidenceLineFamily(countedEvidenceKey),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return Math.Abs(currentBucket - countedBucket) <= GoblinJournalEvidencePolicy.NearbyLineBucketMaximumDelta;
+        }
+
+        private static string JournalEvidenceLineFamily(string evidenceKey)
+        {
+            if (string.IsNullOrWhiteSpace(evidenceKey))
+            {
+                return "";
+            }
+
+            List<string> familyParts = [];
+            foreach (string part in evidenceKey.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (part.StartsWith("LineBucket=", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (part.StartsWith("Template=", StringComparison.OrdinalIgnoreCase) ||
+                    part.StartsWith("Kind=", StringComparison.OrdinalIgnoreCase))
+                {
+                    familyParts.Add(part);
+                }
+            }
+
+            return string.Join("|", familyParts);
         }
 
         private static bool TryParseJournalEvidenceLineBucket(string evidenceKey, out int lineBucket)
@@ -1716,7 +1854,7 @@ namespace GoblinFarmer
     internal static class GoblinJournalEvidencePolicy
     {
         public const int ActiveFeedMinimumY = 256;
-        public const int NearbyLineBucketMaximumDelta = 2;
+        public const int NearbyLineBucketMaximumDelta = 4;
 
         public static string LineSignature(
             GoblinEvidenceTemplateRequirement template,
@@ -1748,6 +1886,19 @@ namespace GoblinFarmer
                 Math.Abs(currentBucket - previousBucket) <= NearbyLineBucketMaximumDelta;
         }
 
+        public static bool SameVisibleGoblinLine(string currentSignature, string previousSignature, out int currentBucket, out int previousBucket)
+        {
+            currentBucket = -1;
+            previousBucket = -1;
+            string currentGoblinType = LineGoblinType(currentSignature, out currentBucket);
+            string previousGoblinType = LineGoblinType(previousSignature, out previousBucket);
+            return !string.IsNullOrWhiteSpace(currentGoblinType) &&
+                currentGoblinType.Equals(previousGoblinType, StringComparison.OrdinalIgnoreCase) &&
+                currentBucket >= 0 &&
+                previousBucket >= 0 &&
+                Math.Abs(currentBucket - previousBucket) <= NearbyLineBucketMaximumDelta;
+        }
+
         private static string LineFamily(string signature, out int lineBucket)
         {
             lineBucket = -1;
@@ -1770,6 +1921,28 @@ namespace GoblinFarmer
             }
 
             return string.Join("|", familyParts);
+        }
+
+        private static string LineGoblinType(string signature, out int lineBucket)
+        {
+            lineBucket = -1;
+            if (string.IsNullOrWhiteSpace(signature))
+            {
+                return "";
+            }
+
+            string[] parts = signature.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (string part in parts)
+            {
+                const string prefix = "LineBucket=";
+                if (part.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = int.TryParse(part[prefix.Length..], out lineBucket);
+                    break;
+                }
+            }
+
+            return parts.Length >= 2 ? GoblinTypeNormalizer.Normalize(parts[1]) : "";
         }
 
         public static bool AppearsInActiveFeed(GoblinEvidenceTemplateMatch match)

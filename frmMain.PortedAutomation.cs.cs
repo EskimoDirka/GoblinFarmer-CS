@@ -195,6 +195,7 @@ namespace GoblinFarmer
         {
             private const int WS_EX_NOACTIVATE = 0x08000000;
             private const int WS_EX_TOOLWINDOW = 0x00000080;
+            private const int WS_EX_TRANSPARENT = 0x00000020;
 
             protected override bool ShowWithoutActivation => true;
 
@@ -203,7 +204,7 @@ namespace GoblinFarmer
                 get
                 {
                     CreateParams createParams = base.CreateParams;
-                    createParams.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+                    createParams.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT;
                     return createParams;
                 }
             }
