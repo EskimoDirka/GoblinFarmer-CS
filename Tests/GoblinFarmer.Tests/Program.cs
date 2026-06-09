@@ -123,9 +123,12 @@ Run("Goblin refresh logs fresh and stale killed journal decisions", TestGoblinRe
 Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObservationState);
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
+Run("Salvage loop handles expected confirmation failures", TestSalvageLoopHandlesExpectedConfirmationFailures);
 Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierRejectsTexturedEmptyCells);
+Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier caches DVR-style item anchors", TestSalvageClassifierCachesDvrStyleItemAnchors);
 Run("Salvage classifier deduplicates multi-slot footprints", TestSalvageClassifierDeduplicatesMultiSlotFootprints);
+Run("Salvage classifier flags high rarity confirmation targets", TestSalvageClassifierFlagsHighRarityConfirmationTargets);
 Run("Kadala hotkey uses faster cadence and timing logs", TestKadalaHotkeyUsesFasterCadenceAndTimingLogs);
 Run("Teleport Next no-route state notifies user", TestTeleportNextNoRouteStateNotifiesUser);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
@@ -5084,28 +5087,39 @@ static void DrawTexturedEmptyCell(Bitmap bitmap, int row, int column, bool brigh
     }
 }
 
-static void DrawSyntheticTwoSlotSalvageItem(Bitmap bitmap, int topRow, int column)
+static void DrawSyntheticTwoSlotSalvageItem(
+    Bitmap bitmap,
+    int topRow,
+    int column,
+    bool weakTopAnchor = false,
+    bool highRarity = false)
 {
     Rectangle top = SyntheticSalvageSlotRect(topRow, column);
     Rectangle bottom = SyntheticSalvageSlotRect(topRow + 1, column);
     using Graphics graphics = Graphics.FromImage(bitmap);
-    using Pen frame = new(Color.FromArgb(234, 122, 13), 5);
+    Color frameColor = highRarity ? Color.FromArgb(55, 178, 48) : Color.FromArgb(234, 122, 13);
+    Color iconColor = highRarity ? Color.FromArgb(54, 138, 42) : Color.FromArgb(112, 86, 58);
+    using Pen frame = new(frameColor, 5);
     using Pen weakTopFrame = new(Color.FromArgb(126, 70, 21), 2);
-    using SolidBrush icon = new(Color.FromArgb(112, 86, 58));
+    using SolidBrush icon = new(iconColor);
     using SolidBrush blue = new(Color.FromArgb(60, 150, 255));
-    using SolidBrush topBackground = new(Color.FromArgb(34, 27, 18));
-    using SolidBrush bottomBackground = new(Color.FromArgb(38, 30, 19));
-    using SolidBrush strongTopFrame = new(Color.FromArgb(245, 143, 22));
+    using SolidBrush topBackground = new(highRarity ? Color.FromArgb(22, 48, 20) : Color.FromArgb(34, 27, 18));
+    using SolidBrush bottomBackground = new(highRarity ? Color.FromArgb(23, 52, 21) : Color.FromArgb(38, 30, 19));
+    using SolidBrush strongTopFrame = new(highRarity ? Color.FromArgb(70, 210, 60) : Color.FromArgb(245, 143, 22));
     using Font font = new(FontFamily.GenericSansSerif, 30, FontStyle.Bold, GraphicsUnit.Pixel);
 
     graphics.FillRectangle(topBackground, top);
-    if (topRow > 1)
+    if (topRow > 1 && !weakTopAnchor)
     {
         graphics.FillRectangle(strongTopFrame, top.Left + 4, top.Top + 2, top.Width - 8, 10);
     }
 
-    graphics.DrawLine(frame, top.Left + 2, top.Top + 4, top.Left + 2, top.Bottom - 2);
-    graphics.DrawLine(frame, top.Right - 3, top.Top + 4, top.Right - 3, top.Bottom - 2);
+    if (!weakTopAnchor)
+    {
+        graphics.DrawLine(frame, top.Left + 2, top.Top + 4, top.Left + 2, top.Bottom - 2);
+        graphics.DrawLine(frame, top.Right - 3, top.Top + 4, top.Right - 3, top.Bottom - 2);
+    }
+
     graphics.FillEllipse(icon, top.Left + 18, top.Top + 22, 32, 30);
     graphics.DrawString("?", font, blue, top.Left + 22, top.Top + 16);
 
@@ -5131,17 +5145,40 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     AssertTrue(townSource.Contains("confirmationScans=", StringComparison.Ordinal), "salvage should log confirmation scan counts for timing diagnosis");
     AssertTrue(townSource.Contains("PortSalvagePostSlotDelayMs = 35", StringComparison.Ordinal), "salvage post-slot delay should be short but explicit");
     AssertTrue(townSource.Contains("PortSafeSalvageSlotClick", StringComparison.Ordinal), "salvage slot clicks should use the faster slot-only safe click helper");
-    AssertTrue(townSource.Contains("List<DrawingPoint> cachedSlots = PortFilledInventorySlots()", StringComparison.Ordinal), "salvage should scan inventory once and cache filled slots");
+    AssertTrue(townSource.Contains("List<SalvageInventorySlotTarget> cachedSlots = PortFilledInventorySlots()", StringComparison.Ordinal), "salvage should scan inventory once and cache structured salvage targets");
     AssertFalse(townSource.Contains("slot = PortFirstFilledInventorySlot()", StringComparison.Ordinal), "salvage should not rescan inventory after each slot");
     AssertTrue(townSource.Contains("cacheMode=SingleInventoryScan", StringComparison.Ordinal), "salvage timing should identify the single-scan cache mode");
     AssertTrue(townSource.Contains("cachedSlotCount=", StringComparison.Ordinal), "salvage should log the cached slot count");
     AssertTrue(townSource.Contains("slotClickSent=", StringComparison.Ordinal), "salvage should log whether the slot click was sent");
+    AssertTrue(townSource.Contains("confirmationExpected=", StringComparison.Ordinal), "salvage should log whether a target is expected to show a confirmation prompt");
+    AssertTrue(townSource.Contains("confirmedSalvages=", StringComparison.Ordinal), "salvage summary should report confirmed salvages");
+    AssertTrue(townSource.Contains("noPromptSalvages=", StringComparison.Ordinal), "salvage summary should report no-prompt salvages");
     AssertTrue(townSource.Contains("Salvage timing: slotIndex=", StringComparison.Ordinal), "salvage should log per-slot timing");
     AssertTrue(townSource.Contains("confirmationMisses=", StringComparison.Ordinal), "salvage summary should report confirmation misses");
+    AssertTrue(townSource.Contains("expectedConfirmationMisses=", StringComparison.Ordinal), "salvage summary should report missed expected confirmations");
+    AssertTrue(townSource.Contains("salvageSuccess=", StringComparison.Ordinal), "salvage summary should report the final success state");
     AssertTrue(townSource.Contains("Salvage timing summary:", StringComparison.Ordinal), "salvage should log a summary timing line");
     AssertTrue(imageRecognitionSource.Contains("Salvage cache candidate:", StringComparison.Ordinal), "salvage cache should log each candidate decision");
     AssertTrue(imageRecognitionSource.Contains("SalvageInventorySlotClassifier.Scan", StringComparison.Ordinal), "salvage should use the stricter item-anchor classifier");
+    AssertTrue(imageRecognitionSource.Contains("quality=", StringComparison.Ordinal), "salvage cache diagnostics should include target quality");
+    AssertTrue(imageRecognitionSource.Contains("footprintRows=", StringComparison.Ordinal), "salvage cache diagnostics should include collapsed footprint size");
     AssertFalse(imageRecognitionSource.Contains("blankLike = mean.Val0 < 18.0 && stdDev.Val0 < 10.0", StringComparison.Ordinal), "salvage should not use broad whole-cell blank detection");
+}
+
+static void TestSalvageLoopHandlesExpectedConfirmationFailures()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+
+    AssertTrue(townSource.Contains("PortSalvageExpectedConfirmationTimeoutMs = 900", StringComparison.Ordinal), "confirmation-expected salvage should wait longer than no-prompt salvage");
+    AssertTrue(townSource.Contains("PortWaitForSalvageConfirmationExpected", StringComparison.Ordinal), "confirmation-expected salvage should use a dedicated wait path");
+    AssertTrue(townSource.Contains("retryAttempted", StringComparison.Ordinal), "confirmation-expected salvage should retry once before failing");
+    AssertTrue(townSource.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "confirmation-expected salvage should accept the confirmation when found");
+    AssertTrue(townSource.Contains("target.ConfirmationExpected && !confirmationFound", StringComparison.Ordinal), "missing expected confirmation should be handled separately from no-prompt items");
+    AssertTrue(townSource.Contains("RecordSalvageFailure(\"Salvage failed: expected confirmation not found\")", StringComparison.Ordinal), "missing expected confirmation should record a salvage failure");
+    AssertTrue(townSource.Contains("PortCaptureFailureScreenshot(\"SalvageExpectedConfirmationMissing\", \"Salvage\")", StringComparison.Ordinal), "missing expected confirmation should capture diagnostics");
+    AssertTrue(townSource.Contains("salvageSuccess=False", StringComparison.Ordinal), "missing expected confirmation should not be logged as salvage success");
+    AssertTrue(townSource.Contains("noPromptSalvages++", StringComparison.Ordinal), "no-prompt salvage targets should continue without failing when no dialog appears");
 }
 
 static void TestSalvageClassifierRejectsTexturedEmptyCells()
@@ -5156,6 +5193,21 @@ static void TestSalvageClassifierRejectsTexturedEmptyCells()
     AssertEqual(0, result.Targets.Count, "textured empty cells should not be cached as salvage targets");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 1 && candidate.Column == 2 && !candidate.Accepted), "textured empty top-row cell should be rejected");
     AssertTrue(result.Candidates.Any(candidate => candidate.Reason == "NoItemFrameAnchor" || candidate.Reason == "NoItemIconAnchor"), "empty rejection should expose a metric reason");
+}
+
+static void TestSalvageClassifierUsesTopCellForWeakTopFootprint()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticTwoSlotSalvageItem(grid, 1, 1, weakTopAnchor: true);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(100, 200, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "weak top plus strong lower footprint should still produce one salvage target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(1, target.Row, "weak top footprint should click the top inventory cell, not the lower footprint");
+    AssertEqual(1, target.Column, "weak top footprint should keep the same column");
+    AssertEqual(2, target.FootprintRows, "two-slot footprint should report both occupied rows");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "lower footprint should still be rejected as duplicate");
 }
 
 static void TestSalvageClassifierCachesDvrStyleItemAnchors()
@@ -5180,6 +5232,7 @@ static void TestSalvageClassifierCachesDvrStyleItemAnchors()
 
     AssertEqual(5, result.Targets.Count, "DVR-style five-item inventory should cache exactly five salvage targets, not textured empty cells");
     AssertTrue(result.Targets.All(target => target.Row == 1), "DVR-style two-slot items should click only top item anchors");
+    AssertTrue(result.Targets.All(target => target.FootprintRows == 2), "DVR-style two-slot items should report collapsed two-row footprints");
     AssertTrue(result.Targets.Select(target => target.Column).SequenceEqual(new[] { 1, 2, 3, 4, 5 }), "DVR-style item anchors should stay in the first five columns");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 1 && candidate.Column == 6 && !candidate.Accepted), "empty top-row cell after real items should be rejected");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "second row of a two-slot item should be collapsed");
@@ -5197,6 +5250,20 @@ static void TestSalvageClassifierDeduplicatesMultiSlotFootprints()
     AssertTrue(result.Targets.Select(target => target.Row).SequenceEqual(new[] { 1, 3 }), "multi-slot footprints should click the top cell of each item");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "first lower footprint should be rejected");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 4 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "second lower footprint should be rejected");
+}
+
+static void TestSalvageClassifierFlagsHighRarityConfirmationTargets()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticTwoSlotSalvageItem(grid, 1, 1, highRarity: true);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "high-rarity synthetic item should produce one target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual("Set", target.Quality, "green high-rarity synthetic item should be classified as set quality");
+    AssertTrue(target.ConfirmationExpected, "set-quality salvage targets should expect a confirmation prompt");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Accepted && candidate.ConfirmationExpected && candidate.Quality == "Set"), "candidate diagnostics should expose confirmation expectation");
 }
 
 static void TestKadalaHotkeyUsesFasterCadenceAndTimingLogs()

@@ -759,11 +759,11 @@ namespace GoblinFarmer
 
         private DrawingPoint? PortFirstFilledInventorySlot()
         {
-            List<DrawingPoint> slots = PortFilledInventorySlots();
-            return slots.Count == 0 ? null : slots[0];
+            List<SalvageInventorySlotTarget> slots = PortFilledInventorySlots();
+            return slots.Count == 0 ? null : slots[0].ScreenPoint;
         }
 
-        private List<DrawingPoint> PortFilledInventorySlots()
+        private List<SalvageInventorySlotTarget> PortFilledInventorySlots()
         {
             if (!PortTryGetDiabloRect(out RECT rect))
             {
@@ -787,6 +787,9 @@ namespace GoblinFarmer
                     $"screenPoint={FormatPoint(candidate.ScreenPoint)}; " +
                     $"accepted={candidate.Accepted}; " +
                     $"reason={PortLogField(candidate.Reason)}; " +
+                    $"quality={PortLogField(candidate.Quality)}; " +
+                    $"confirmationExpected={candidate.ConfirmationExpected}; " +
+                    $"footprintRows={candidate.FootprintRows}; " +
                     $"confidence={candidate.Metrics.Confidence:0.000}; " +
                     $"meanBrightness={candidate.Metrics.MeanBrightness:0.0}; " +
                     $"brightnessStdDev={candidate.Metrics.BrightnessStdDev:0.0}; " +
@@ -795,10 +798,12 @@ namespace GoblinFarmer
                     $"topFramePixels={candidate.Metrics.TopFramePixels}; " +
                     $"innerBrightPixels={candidate.Metrics.InnerBrightPixels}; " +
                     $"innerSaturatedPixels={candidate.Metrics.InnerSaturatedPixels}; " +
+                    $"greenQualityPixels={candidate.Metrics.GreenQualityPixels}; " +
+                    $"orangeQualityPixels={candidate.Metrics.OrangeQualityPixels}; " +
                     "cacheMode=SingleInventoryScan");
             }
 
-            return scan.Targets.Select(target => target.ScreenPoint).ToList();
+            return scan.Targets.ToList();
         }
 
         private PortScanRegionManager PortScanRegions => portScanRegionManager ??= PortCreateScanRegionManager();

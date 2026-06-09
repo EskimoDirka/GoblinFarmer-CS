@@ -12,6 +12,10 @@ namespace GoblinFarmer
         private const int PortSalvageConfirmationTimeoutMs = 100;
         private const int PortSalvageConfirmationFastAttempts = 3;
         private const int PortSalvageConfirmationFastDelayMs = 30;
+        private const int PortSalvageExpectedConfirmationTimeoutMs = 900;
+        private const int PortSalvageExpectedConfirmationAttempts = 9;
+        private const int PortSalvageExpectedConfirmationDelayMs = 75;
+        private const int PortSalvageExpectedConfirmationRetryDelayMs = 100;
         private const int PortSalvagePostSlotDelayMs = 35;
         private const int PortSalvageSlotClickSettleMs = 35;
         private const int PortSalvageSlotClickHoldMs = 20;
@@ -118,7 +122,7 @@ namespace GoblinFarmer
             AddWorkflowStep("Inventory open confirmed via vendor/salvage UI");
             AddWorkflowStep("Inventory not required because vendor/salvage UI is open");
             Stopwatch inventoryScanPerf = Stopwatch.StartNew();
-            List<DrawingPoint> cachedSlots = PortFilledInventorySlots();
+            List<SalvageInventorySlotTarget> cachedSlots = PortFilledInventorySlots();
             inventoryScanPerf.Stop();
             if (cachedSlots.Count == 0)
             {
@@ -143,7 +147,10 @@ namespace GoblinFarmer
             Stopwatch salvagePerf = Stopwatch.StartNew();
             int cachedSlotAttempts = 0;
             int slotsClicked = 0;
+            int confirmedSalvages = 0;
+            int noPromptSalvages = 0;
             int confirmationMisses = 0;
+            int expectedConfirmationMisses = 0;
             for (int i = 0; i < cachedSlots.Count && i < 60; i++)
             {
                 if (token.IsCancellationRequested)
@@ -152,27 +159,72 @@ namespace GoblinFarmer
                 }
 
                 Stopwatch slotPerf = Stopwatch.StartNew();
-                DrawingPoint slot = cachedSlots[i];
-                bool slotClickSent = PortSafeSalvageSlotClick(slot);
+                SalvageInventorySlotTarget target = cachedSlots[i];
+                bool slotClickSent = PortSafeSalvageSlotClick(target.ScreenPoint);
                 cachedSlotAttempts++;
                 if (slotClickSent)
                 {
                     slotsClicked++;
                 }
 
-                bool confirmationFound = PortWaitForSalvageConfirmationFast(token, out long confirmationWaitMs, out int confirmationScans);
-                if (!confirmationFound)
+                bool confirmationFound = PortWaitForSalvageConfirmation(token, target.ConfirmationExpected, out long confirmationWaitMs, out int confirmationScans);
+                bool retryAttempted = false;
+                bool retryClickSent = false;
+                if (!confirmationFound && target.ConfirmationExpected && slotClickSent && !token.IsCancellationRequested)
                 {
-                    confirmationMisses++;
+                    retryAttempted = true;
+                    PortSleep(token, PortSalvageExpectedConfirmationRetryDelayMs);
+                    retryClickSent = PortSafeSalvageSlotClick(target.ScreenPoint);
+                    if (retryClickSent)
+                    {
+                        slotsClicked++;
+                    }
+
+                    bool retryConfirmationFound = PortWaitForSalvageConfirmationExpected(token, out long retryConfirmationWaitMs, out int retryConfirmationScans);
+                    confirmationWaitMs += retryConfirmationWaitMs;
+                    confirmationScans += retryConfirmationScans;
+                    confirmationFound = retryConfirmationFound;
                 }
 
+                bool enterSent = false;
+                string outcome;
                 if (confirmationFound)
                 {
                     PortPressKey(PortVkReturn);
+                    enterSent = true;
+                    confirmedSalvages++;
+                    outcome = "Confirmed";
+                }
+                else
+                {
+                    confirmationMisses++;
+                    if (target.ConfirmationExpected)
+                    {
+                        expectedConfirmationMisses++;
+                        outcome = "ExpectedConfirmationMissing";
+                    }
+                    else
+                    {
+                        noPromptSalvages++;
+                        outcome = "NoPrompt";
+                    }
                 }
 
                 PortSleep(token, PortSalvagePostSlotDelayMs);
-                AppLogger.Info($"Salvage timing: slotIndex={cachedSlotAttempts}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; slotClickSent={slotClickSent}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs=0; cacheMode=SingleInventoryScan; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+                AppLogger.Info($"Salvage timing: slotIndex={cachedSlotAttempts}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; row={target.Row}; column={target.Column}; screenPoint={FormatPoint(target.ScreenPoint)}; footprintRows={target.FootprintRows}; quality={PortLogField(target.Quality)}; confirmationExpected={target.ConfirmationExpected}; slotClickSent={slotClickSent}; retryAttempted={retryAttempted}; retryClickSent={retryClickSent}; confirmationFound={confirmationFound}; enterSent={enterSent}; outcome={PortLogField(outcome)}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs=0; cacheMode=SingleInventoryScan; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                if (target.ConfirmationExpected && !confirmationFound)
+                {
+                    DebugManager.Session.RecordSalvageFailure("Salvage failed: expected confirmation not found");
+                    AppLogger.Info($"Salvage timing summary: slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+                    PortCaptureFailureScreenshot("SalvageExpectedConfirmationMissing", "Salvage");
+                    return false;
+                }
             }
 
             if (closeAfterSalvage)
@@ -182,7 +234,7 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep(slotsClicked == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {slotsClicked} slots clicked");
-            AppLogger.Info($"Salvage timing summary: slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmationMisses={confirmationMisses}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+            AppLogger.Info($"Salvage timing summary: slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; salvageSuccess=True; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
         }
@@ -205,11 +257,46 @@ namespace GoblinFarmer
 
         private bool PortWaitForSalvageConfirmationFast(CancellationToken token, out long elapsedMs, out int scans)
         {
+            return PortWaitForSalvageConfirmationWithBudget(
+                token,
+                PortSalvageConfirmationTimeoutMs,
+                PortSalvageConfirmationFastAttempts,
+                PortSalvageConfirmationFastDelayMs,
+                out elapsedMs,
+                out scans);
+        }
+
+        private bool PortWaitForSalvageConfirmationExpected(CancellationToken token, out long elapsedMs, out int scans)
+        {
+            return PortWaitForSalvageConfirmationWithBudget(
+                token,
+                PortSalvageExpectedConfirmationTimeoutMs,
+                PortSalvageExpectedConfirmationAttempts,
+                PortSalvageExpectedConfirmationDelayMs,
+                out elapsedMs,
+                out scans);
+        }
+
+        private bool PortWaitForSalvageConfirmation(CancellationToken token, bool confirmationExpected, out long elapsedMs, out int scans)
+        {
+            return confirmationExpected
+                ? PortWaitForSalvageConfirmationExpected(token, out elapsedMs, out scans)
+                : PortWaitForSalvageConfirmationFast(token, out elapsedMs, out scans);
+        }
+
+        private bool PortWaitForSalvageConfirmationWithBudget(
+            CancellationToken token,
+            int timeoutMs,
+            int attempts,
+            int delayMs,
+            out long elapsedMs,
+            out int scans)
+        {
             Stopwatch sw = Stopwatch.StartNew();
             scans = 0;
             string confirmationImage = Img("Salvage", "Salvage Confirmation Button.png");
 
-            for (int attempt = 0; attempt < PortSalvageConfirmationFastAttempts && sw.ElapsedMilliseconds < PortSalvageConfirmationTimeoutMs; attempt++)
+            for (int attempt = 0; attempt < attempts && sw.ElapsedMilliseconds < timeoutMs; attempt++)
             {
                 if (token.IsCancellationRequested)
                 {
@@ -224,9 +311,9 @@ namespace GoblinFarmer
                     return true;
                 }
 
-                if (attempt + 1 < PortSalvageConfirmationFastAttempts)
+                if (attempt + 1 < attempts)
                 {
-                    PortSleep(token, PortSalvageConfirmationFastDelayMs);
+                    PortSleep(token, delayMs);
                 }
             }
 
