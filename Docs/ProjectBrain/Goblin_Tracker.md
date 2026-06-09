@@ -25,6 +25,7 @@ Source of truth: `Docs\Project_Status.md`. This file summarizes current Goblin T
 
 - Default area limit: one count per resolved area per game.
 - Two-count exceptions: Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds.
+- PF1/PF2 can count a second real same-type goblin even when the Minimap evidence signature repeats, but only after the conservative 8-second PF duplicate-bypass threshold, while an area slot remains, and with fresh supporting Minimap or sustained Journal Engaged evidence.
 - Blocked count areas include New Tristram, WhimsyDale, City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
 - Caverns of Frost Level 1 and Level 2 can each count independently when evidence is fresh for that level, even though Level 1 blocks Teleport Next.
 - Cave Of The Moon Clan Level 1 and Level 2 can each count independently when evidence is fresh for that level.
@@ -37,6 +38,7 @@ Source of truth: `Docs\Project_Status.md`. This file summarizes current Goblin T
 - Journal matches validate goblin-name text, ignore upper/history rows, and suppress candidates after journal-history input.
 - Old visible Journal rows are prevented from recounting after route transitions, area changes, Reset Stats, or Make New Game.
 - Same-area duplicate Journal evidence refreshes the remembered encounter row so visible text cannot become fresh after the next teleport.
+- Immediate same-signature PF duplicates still suppress; PF1/PF2 third counts still suppress as `AreaLimitReached`.
 - Cross-area stale Journal suppression does not block a later fresh Minimap hit in the new area.
 - Minimap-only duplicate checks stay area-aware so tight icon signatures in different route areas do not suppress fresh counts.
 - Recent same-goblin Minimap context helps Channel Level 1/2 Journal follow-up evidence avoid false Pandemonium Fortress area assignment.
@@ -46,6 +48,7 @@ Source of truth: `Docs\Project_Status.md`. This file summarizes current Goblin T
 
 - Replay/policy validation is strong for Make New Game carryover, Stinging Winds to Black Canyon Mines, Black Canyon Mines to Rakkis Crossing, Southern Highlands to Cave Of The Moon Clan, Cave/Caverns Level 1 to Level 2, Battlefields history-row suppression, same-area duplicate suppression, and default/two-count area limits.
 - VS Debug Sim Count validated default duplicate suppression, PF1/PF2/Stinging Winds two-count limits, blocked-area suppression, Reset Stats clearing, and Eastern Channel Level 2 count simulation.
+- Replay/policy validation covers PF2 first count, immediate same-signature duplicate suppression, delayed same-signature second count, and third PF count suppression. Policy tests also cover PF1 parity and non-PF unchanged duplicate behavior.
 - Latest live validation passed for notification latency, blocked-area suppression, cached salvage scanning, debug package retention, and Sim Count area availability.
 - Live packages validated several fresh-count and stale-suppression fixes, including Eastern Channel Level 1 area binding, Eastern Channel Level 2 coverage, and Northern Highlands count acceptance.
 
@@ -54,4 +57,5 @@ Source of truth: `Docs\Project_Status.md`. This file summarizes current Goblin T
 - Live-validate reliability gate behavior during normal play: pending first Engaged, prompt Minimap/Killed count, and sustained Engaged count.
 - Live-validate Rainbow Goblin distinct alert and local alert sound.
 - Live-validate Last Observation clearing on Reset Stats, Make New Game, and app restart.
+- Live-validate a real PF1/PF2 two-goblin encounter: first and second real goblins should count, and a third PF count should suppress.
 - If future packages contradict replay/policy-validated stale behavior, reopen the smallest matching replay scenario before changing production logic.

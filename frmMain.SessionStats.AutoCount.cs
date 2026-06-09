@@ -34,6 +34,9 @@ namespace GoblinFarmer
             double encounterAgeSeconds = -1;
             string encounterAreaKey = "";
             bool refreshEncounterLastSeen = false;
+            bool pfMultiCountDuplicateBypass = false;
+            string pfMultiCountDuplicateBypassReason = "";
+            double pfMultiCountDuplicateElapsedSeconds = -1;
             double autoArmedAgeSeconds = portGoblinAutomaticCountingArmedAtUtc == DateTime.MinValue
                 ? -1
                 : Math.Max(0, (nowUtc - portGoblinAutomaticCountingArmedAtUtc).TotalSeconds);
@@ -92,16 +95,71 @@ namespace GoblinFarmer
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
                     evidenceState!.Counted)
                 {
-                    suppressionReason = "EvidenceAlreadyAutoCounted";
+                    GoblinAreaDuplicateGuardResult pfGuardResult = portGoblinAreaDuplicateGuard.Peek(area.AreaKey);
+                    if (encounterState != null &&
+                        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+                            observation.Source,
+                            area.AreaKey,
+                            pfGuardResult.AreaCount,
+                            pfGuardResult.AreaLimit,
+                            encounterState.AreaKey,
+                            encounterState.CountedUtc,
+                            nowUtc,
+                            globalEvidenceKey,
+                            observation.EvidenceConfidence,
+                            minimapAutoCountMinimumConfidence,
+                            evidenceFirstSeenAgeSeconds,
+                            portCombatRunning,
+                            out pfMultiCountDuplicateBypassReason,
+                            out pfMultiCountDuplicateElapsedSeconds))
+                    {
+                        pfMultiCountDuplicateBypass = true;
+                        guardResult = pfGuardResult;
+                        encounterSuppressionMatch = "PfMultiCountDuplicateBypass";
+                    }
+                    else
+                    {
+                        suppressionReason = "EvidenceAlreadyAutoCounted";
+                        encounterSuppressionMatch = pfMultiCountDuplicateBypassReason;
+                    }
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
+                    !pfMultiCountDuplicateBypass &&
                     PortShouldSuppressEncounterAlreadyAutoCounted(observation, area, globalEvidenceKey, encounterState, nowUtc, out encounterSuppressionMatch))
                 {
-                    suppressionReason = "EncounterAlreadyAutoCounted";
-                    refreshEncounterLastSeen = GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
-                        observation.Source,
-                        area.AreaKey,
-                        encounterState!.AreaKey);
+                    GoblinAreaDuplicateGuardResult pfGuardResult = portGoblinAreaDuplicateGuard.Peek(area.AreaKey);
+                    if (encounterState != null &&
+                        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+                            observation.Source,
+                            area.AreaKey,
+                            pfGuardResult.AreaCount,
+                            pfGuardResult.AreaLimit,
+                            encounterState.AreaKey,
+                            encounterState.CountedUtc,
+                            nowUtc,
+                            globalEvidenceKey,
+                            observation.EvidenceConfidence,
+                            minimapAutoCountMinimumConfidence,
+                            evidenceFirstSeenAgeSeconds,
+                            portCombatRunning,
+                            out pfMultiCountDuplicateBypassReason,
+                            out pfMultiCountDuplicateElapsedSeconds))
+                    {
+                        pfMultiCountDuplicateBypass = true;
+                        guardResult = pfGuardResult;
+                        encounterSuppressionMatch = "PfMultiCountDuplicateBypass";
+                    }
+                    else
+                    {
+                        suppressionReason = "EncounterAlreadyAutoCounted";
+                        encounterSuppressionMatch = string.IsNullOrWhiteSpace(pfMultiCountDuplicateBypassReason)
+                            ? encounterSuppressionMatch
+                            : $"{encounterSuppressionMatch};{pfMultiCountDuplicateBypassReason}";
+                        refreshEncounterLastSeen = GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+                            observation.Source,
+                            area.AreaKey,
+                            encounterState!.AreaKey);
+                    }
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
                     minimapAutoCountConfidencePending)
@@ -243,6 +301,24 @@ namespace GoblinFarmer
 
             if (!string.IsNullOrWhiteSpace(suppressionReason))
             {
+                if (GoblinPandemoniumMultiCountDuplicatePolicy.IsPandemoniumFortressTwoCountArea(area.AreaKey) &&
+                    (suppressionReason.Equals("EvidenceAlreadyAutoCounted", StringComparison.OrdinalIgnoreCase) ||
+                    suppressionReason.Equals("EncounterAlreadyAutoCounted", StringComparison.OrdinalIgnoreCase)))
+                {
+                    AppLogger.Info(
+                        "GoblinTracker: PfMultiCountDuplicateBypassSkipped " +
+                        $"areaKey={areaKey} " +
+                        $"areaCount={guardResult.AreaCount} " +
+                        $"areaLimit={guardResult.AreaLimit} " +
+                        $"elapsedSinceLastAcceptedSeconds={pfMultiCountDuplicateElapsedSeconds:0.0} " +
+                        $"reason={PortLogField(pfMultiCountDuplicateBypassReason)} " +
+                        $"suppressionReason={PortLogField(suppressionReason)} " +
+                        $"source={PortLogField(observation.Source)} " +
+                        $"goblinType={PortLogField(observation.GoblinType)} " +
+                        $"evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} " +
+                        $"evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))}");
+                }
+
                 string eventName = autoCountingEnabled
                     ? "GoblinAutoCountSuppressed"
                     : "GoblinAutoCountSkippedDisabled";
@@ -272,6 +348,20 @@ namespace GoblinFarmer
                         ["enableAutomaticCounting"] = AppSettings.GoblinTracker.EnableAutomaticCounting,
                     });
                 return false;
+            }
+
+            if (pfMultiCountDuplicateBypass)
+            {
+                AppLogger.Info(
+                    "GoblinTracker: PfMultiCountDuplicateBypass " +
+                    $"areaKey={areaKey} " +
+                    $"areaCount={guardResult.AreaCount} " +
+                    $"areaLimit={guardResult.AreaLimit} " +
+                    $"elapsedSinceLastAcceptedSeconds={pfMultiCountDuplicateElapsedSeconds:0.0} " +
+                    $"source={PortLogField(observation.Source)} " +
+                    $"goblinType={PortLogField(observation.GoblinType)} " +
+                    $"evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} " +
+                    $"evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))}");
             }
 
             if (string.IsNullOrWhiteSpace(evidenceReliability))

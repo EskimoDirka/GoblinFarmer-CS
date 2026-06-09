@@ -62,6 +62,7 @@ Run("Goblin replay template scenario allows fresh minimap after stale cross-area
 Run("Goblin replay template scenario waits for killed confirmation after engaged journal", TestGoblinReplayTemplateScenarioWaitsForKilledConfirmationAfterEngagedJournal);
 Run("Goblin replay template scenario lets strong minimap override pending engaged journal", TestGoblinReplayTemplateScenarioLetsStrongMinimapOverridePendingEngagedJournal);
 Run("Goblin replay template scenario counts sustained active engaged journal", TestGoblinReplayTemplateScenarioCountsSustainedActiveEngagedJournal);
+Run("Goblin replay template scenario allows PF same-signature second minimap", TestGoblinReplayTemplateScenarioAllowsPandemoniumSameSignatureSecondMinimap);
 Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
@@ -107,6 +108,7 @@ Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLive
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin automatic count reliability requires killed or minimap confirmation", TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmation);
 Run("Goblin auto-count source variant suppression uses recent last-seen state", TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState);
+Run("Goblin PF multi-count duplicate bypass stays bounded", TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded);
 Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
 Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses);
 Run("Goblin auto-count stale journal does not block fresh cross-area minimap", TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap);
@@ -2108,6 +2110,58 @@ static void TestGoblinReplayTemplateScenarioCountsSustainedActiveEngagedJournal(
         AssertTrue(result.Steps[1].Counted, "same-area active Engaged evidence sustained past the confirmation window should count");
         AssertEqual("Eligible", result.Steps[1].Reason, "sustained same-area Engaged should become eligible");
         AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioStepResult", StringComparison.Ordinal) && line.Contains("countDecision=Count", StringComparison.Ordinal)), "template scenario should log the sustained Engaged count");
+    }
+    finally
+    {
+        if (Directory.Exists(scenarioRoot))
+        {
+            Directory.Delete(scenarioRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayTemplateScenarioAllowsPandemoniumSameSignatureSecondMinimap()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string templateRoot = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string scenarioRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayPfSameMinimap_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(scenarioRoot);
+    try
+    {
+        string bloodThiefMinimap = "Blood Thief Minimap.png";
+        string treasureMinimap = "Treasure Goblin Minimap.png";
+        AssertTrue(File.Exists(Path.Combine(templateRoot, bloodThiefMinimap)), "template scenario test requires Blood Thief minimap evidence");
+        AssertTrue(File.Exists(Path.Combine(templateRoot, treasureMinimap)), "template scenario test requires Treasure Goblin minimap evidence");
+        string scenarioPath = Path.Combine(scenarioRoot, "pf2-two-blood-thief-minimap.txt");
+        File.WriteAllLines(scenarioPath, [
+            "Scenario=PF2 same-signature second minimap",
+            $"Step=PF2 first Blood Thief|Scan|Area=Pandemonium Fortress Level 2|Minimap={bloodThiefMinimap}|AdvanceSeconds=1",
+            $"Step=PF2 immediate duplicate Blood Thief|Scan|Area=Pandemonium Fortress Level 2|Minimap={bloodThiefMinimap}|AdvanceSeconds=9",
+            $"Step=PF2 second Blood Thief|Scan|Area=Pandemonium Fortress Level 2|Minimap={bloodThiefMinimap}|AdvanceSeconds=10",
+            $"Step=PF2 third Treasure Goblin|Scan|Area=Pandemonium Fortress Level 2|Minimap={treasureMinimap}|AdvanceSeconds=1",
+        ]);
+
+        GoblinReplayTemplateScenarioManifestLoadResult load =
+            GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+        AssertTrue(load.Loaded, $"template scenario manifest should load cleanly, reason={load.Reason}");
+
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+            load.ScenarioName,
+            load.Steps,
+            templateRoot,
+            replayLogs.Add,
+            writeAppLog: false,
+            startUtc: new DateTime(2026, 6, 9, 6, 0, 42, DateTimeKind.Utc));
+
+        AssertEqual(4, result.Steps.Count, "PF2 same-signature scenario should produce all four decisions");
+        AssertTrue(result.Steps[0].Counted, "PF2 first Blood Thief minimap should count");
+        AssertFalse(result.Steps[1].Counted, "PF2 immediate same-signature duplicate should still suppress");
+        AssertEqual("EvidenceAlreadyAutoCounted", result.Steps[1].Reason, "immediate duplicate should keep exact evidence suppression");
+        AssertTrue(result.Steps[2].Counted, "PF2 second Blood Thief with the same minimap signature after the threshold should count");
+        AssertFalse(result.Steps[3].Counted, "PF2 third goblin should not exceed the two-count area limit");
+        AssertEqual("AreaLimitReached", result.Steps[3].Reason, "PF2 third fresh goblin should suppress by area limit");
+        AssertTrue(replayLogs.Any(line => line.Contains("step=PF2 second Blood Thief", StringComparison.Ordinal) && line.Contains("counted=True", StringComparison.Ordinal)), "template scenario should log the second PF2 same-signature count");
     }
     finally
     {
@@ -4380,6 +4434,186 @@ static void TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState()
         out _);
 
     AssertFalse(oldVariantSuppressed, "a same-type journal row with no bucket match and no recent last-seen continuity should not be globally blocked forever");
+}
+
+static void TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded()
+{
+    DateTime countedUtc = new(2026, 6, 9, 6, 0, 42, DateTimeKind.Utc);
+    string pf1 = GoblinAreaResolver.Resolve("Pandemonium Fortress Level 1").AreaKey;
+    string pf2 = GoblinAreaResolver.Resolve("Pandemonium Fortress Level 2").AreaKey;
+    const string minimapEvidence = "Minimap|Blood Thief|MinimapIcon|Minimap|Blood Thief|Template=Blood Thief Minimap.png|Kind=Minimap|LineBucket=";
+    const string engagedEvidence = "Journal|Blood Thief|JournalEncounter|Journal|Blood Thief|Template=Blood Thief Engaged.png|Kind=JournalEngaged|LineBucket=10";
+    const string killedEvidence = "Journal|Blood Thief|JournalKill|Journal|Blood Thief|Template=Blood Thief Killed Journal.png|Kind=JournalKilled|LineBucket=10";
+
+    GoblinAreaDuplicateGuard pf2Guard = new();
+    AssertTrue(pf2Guard.TryAccept(pf2, out GoblinAreaDuplicateGuardResult pf2First), "PF2 first goblin should count through the normal duplicate guard");
+    AssertEqual(1, pf2First.AreaCount, "PF2 first goblin should consume the first slot");
+    AssertEqual(2, pf2First.AreaLimit, "PF2 should keep a two-count limit");
+
+    GoblinAreaDuplicateGuardResult pf2PeekAfterFirst = pf2Guard.Peek(pf2);
+    AssertFalse(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Minimap",
+            pf2,
+            pf2PeekAfterFirst.AreaCount,
+            pf2PeekAfterFirst.AreaLimit,
+            pf2,
+            countedUtc,
+            countedUtc.AddSeconds(4),
+            minimapEvidence,
+            0.865,
+            0.85,
+            4,
+            combatActive: true,
+            out string immediateReason,
+            out double immediateElapsed),
+        "PF2 immediate same-signature minimap duplicate should not bypass exact evidence suppression");
+    AssertEqual("ElapsedTooShort", immediateReason, "immediate PF2 duplicate should explain the conservative time gate");
+    AssertTrue(immediateElapsed < GoblinPandemoniumMultiCountDuplicatePolicy.MinimumElapsedSinceLastAccepted.TotalSeconds, "immediate duplicate elapsed time should be below the threshold");
+
+    AssertTrue(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Minimap",
+            pf2,
+            pf2PeekAfterFirst.AreaCount,
+            pf2PeekAfterFirst.AreaLimit,
+            pf2,
+            countedUtc,
+            countedUtc.AddSeconds(10),
+            minimapEvidence,
+            0.865,
+            0.85,
+            10,
+            combatActive: true,
+            out string secondReason,
+            out double secondElapsed),
+        "PF2 second same-signature minimap evidence after the threshold should bypass duplicate evidence suppression");
+    AssertEqual("Allowed", secondReason, "PF2 second same-signature minimap should report an allowed duplicate bypass");
+    AssertTrue(secondElapsed >= GoblinPandemoniumMultiCountDuplicatePolicy.MinimumElapsedSinceLastAccepted.TotalSeconds, "PF2 second duplicate elapsed time should satisfy the threshold");
+    AssertTrue(pf2Guard.TryAccept(pf2, out GoblinAreaDuplicateGuardResult pf2Second), "PF2 second goblin should still consume only the second area slot");
+    AssertEqual(2, pf2Second.AreaCount, "PF2 second goblin should fill the two-count limit");
+
+    GoblinAreaDuplicateGuardResult pf2PeekAfterSecond = pf2Guard.Peek(pf2);
+    AssertFalse(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Minimap",
+            pf2,
+            pf2PeekAfterSecond.AreaCount,
+            pf2PeekAfterSecond.AreaLimit,
+            pf2,
+            countedUtc.AddSeconds(10),
+            countedUtc.AddSeconds(20),
+            minimapEvidence,
+            0.865,
+            0.85,
+            20,
+            combatActive: true,
+            out string thirdReason,
+            out _),
+        "PF2 third same-signature duplicate should not bypass once both PF slots are consumed");
+    AssertEqual("AreaLimitReached", thirdReason, "PF2 third duplicate should report the area-limit gate");
+    AssertFalse(pf2Guard.TryAccept(pf2, out GoblinAreaDuplicateGuardResult pf2Third), "PF2 third goblin should still suppress through the duplicate guard");
+    AssertEqual(2, pf2Third.AreaLimit, "PF2 third duplicate should retain the two-count limit");
+
+    GoblinAreaDuplicateGuard pf1Guard = new();
+    AssertTrue(pf1Guard.TryAccept(pf1), "PF1 first goblin should count through the normal duplicate guard");
+    GoblinAreaDuplicateGuardResult pf1Peek = pf1Guard.Peek(pf1);
+    AssertTrue(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Minimap",
+            pf1,
+            pf1Peek.AreaCount,
+            pf1Peek.AreaLimit,
+            pf1,
+            countedUtc,
+            countedUtc.AddSeconds(10),
+            minimapEvidence,
+            0.865,
+            0.85,
+            10,
+            combatActive: true,
+            out _,
+            out _),
+        "PF1 should use the same bounded second-goblin duplicate bypass as PF2");
+
+    GoblinAreaDuplicateGuard weepingGuard = new();
+    string weeping = GoblinAreaResolver.Resolve("The Weeping Hollow").AreaKey;
+    AssertTrue(weepingGuard.TryAccept(weeping), "non-PF first goblin should count normally");
+    GoblinAreaDuplicateGuardResult weepingPeek = weepingGuard.Peek(weeping);
+    AssertFalse(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Minimap",
+            weeping,
+            weepingPeek.AreaCount,
+            weepingPeek.AreaLimit,
+            weeping,
+            countedUtc,
+            countedUtc.AddSeconds(10),
+            minimapEvidence,
+            0.865,
+            0.85,
+            10,
+            combatActive: true,
+            out string nonPfReason,
+            out _),
+        "non-PF same-signature evidence should not use the PF duplicate bypass");
+    AssertEqual("NotPandemoniumFortressTwoCountArea", nonPfReason, "non-PF duplicate bypass rejection should be explicit");
+
+    AssertFalse(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Minimap",
+            pf2,
+            pf2PeekAfterFirst.AreaCount,
+            pf2PeekAfterFirst.AreaLimit,
+            "Western Channel Level 2",
+            countedUtc,
+            countedUtc.AddSeconds(10),
+            minimapEvidence,
+            0.865,
+            0.85,
+            10,
+            combatActive: true,
+            out string previousAreaReason,
+            out _),
+        "same goblin evidence from a prior area should not bypass stale-area protection");
+    AssertEqual("PreviousAcceptedDifferentArea", previousAreaReason, "previous-area duplicate bypass rejection should be explicit");
+
+    AssertTrue(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Journal",
+            pf2,
+            pf2PeekAfterFirst.AreaCount,
+            pf2PeekAfterFirst.AreaLimit,
+            pf2,
+            countedUtc,
+            countedUtc.AddSeconds(10),
+            engagedEvidence,
+            0.92,
+            0.85,
+            3,
+            combatActive: true,
+            out _,
+            out _),
+        "sustained current-area PF Engaged journal evidence can support a second-goblin duplicate bypass");
+
+    AssertFalse(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Journal",
+            pf2,
+            pf2PeekAfterFirst.AreaCount,
+            pf2PeekAfterFirst.AreaLimit,
+            pf2,
+            countedUtc,
+            countedUtc.AddSeconds(10),
+            killedEvidence,
+            0.92,
+            0.85,
+            3,
+            combatActive: true,
+            out string noFreshSupportReason,
+            out _),
+        "same-signature killed journal evidence should not be enough by itself because old killed rows are high-risk stale evidence");
+    AssertEqual("NoFreshSupportingEvidence", noFreshSupportReason, "journal killed duplicate rejection should identify the missing fresh support");
 }
 
 static void TestGoblinAutoCountMinimapCollisionAllowsNewAreas()

@@ -389,9 +389,42 @@ namespace GoblinFarmer
                         portGoblinAutoCountEncounterByGoblinType.TryGetValue(PortGoblinAutoCountEncounterKey(goblinType), out PortGoblinAutoCountEncounterState? encounterState) &&
                         PortShouldSuppressEncounterAlreadyAutoCounted(observationSource, goblinType, area.AreaKey, globalEvidenceKey, encounterState, nowUtc, out encounterSuppressionMatch))
                     {
-                        wouldCount = false;
-                        reason = "EncounterAlreadyAutoCounted";
-                        duplicateState = reason;
+                        if (GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+                            observationSource,
+                            area.AreaKey,
+                            guardResult.AreaCount,
+                            guardResult.AreaLimit,
+                            encounterState.AreaKey,
+                            encounterState.CountedUtc,
+                            nowUtc,
+                            globalEvidenceKey,
+                            evidenceConfidence,
+                            PortAutomaticGoblinMinimapCountMinimumConfidenceFor(goblinType),
+                            Math.Max(0, (nowUtc - encounterState.CountedUtc).TotalSeconds),
+                            portCombatRunning,
+                            out string pfBypassReason,
+                            out double pfElapsedSeconds))
+                        {
+                            encounterSuppressionMatch = $"PfMultiCountDuplicateBypass;{encounterSuppressionMatch}";
+                            AppLogger.Info(
+                                "GoblinTracker: PfMultiCountObservationDuplicateBypass " +
+                                $"areaKey={areaKey} " +
+                                $"areaCount={guardResult.AreaCount} " +
+                                $"areaLimit={guardResult.AreaLimit} " +
+                                $"elapsedSinceLastAcceptedSeconds={pfElapsedSeconds:0.0} " +
+                                $"source={PortLogField(observationSource)} " +
+                                $"goblinType={PortLogField(goblinType)} " +
+                                $"evidenceHash={PortGoblinEvidenceHash(globalEvidenceKey)}");
+                        }
+                        else
+                        {
+                            wouldCount = false;
+                            reason = "EncounterAlreadyAutoCounted";
+                            duplicateState = reason;
+                            encounterSuppressionMatch = string.IsNullOrWhiteSpace(pfBypassReason)
+                                ? encounterSuppressionMatch
+                                : $"{encounterSuppressionMatch};{pfBypassReason}";
+                        }
                     }
                     else if (!GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
                         observationSource,

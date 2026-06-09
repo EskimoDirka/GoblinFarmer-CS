@@ -54,3 +54,11 @@ Do not create alternate debug package generators without explicit approval.
 - Reason about stale suppression using row bucket, template family, goblin type, area resolution, current route context, and reset/new-game timing.
 - First-seen Journal Engaged evidence is diagnostic/pending unless policy confirms it through Minimap, Killed evidence, or sustained active-combat confirmation.
 - Do not loosen stale policy from a single ambiguous package; prefer replayable evidence or a repeated live package shape.
+
+## PF Multi-Goblin Duplicate Review
+
+- PF1/PF2 allow two counts per level, but exact evidence signatures can repeat for separate real same-type goblins.
+- When reviewing PF duplicate suppressions, compare area count/limit, elapsed time since the last accepted PF count, source, confidence, and whether the current evidence is fresh Minimap or sustained current-area Journal Engaged.
+- `PfMultiCountDuplicateBypass` means the scoped PF duplicate exception allowed a delayed second same-signature count while a PF slot remained.
+- `PfMultiCountDuplicateBypassSkipped` should explain why a PF-shaped duplicate stayed suppressed, such as elapsed-too-short, area-limit reached, previous accepted area mismatch, or missing fresh supporting evidence.
+- Do not generalize this bypass to normal one-count areas, stale previous-area Journal rows, immediate same-goblin duplicates, or third PF counts.

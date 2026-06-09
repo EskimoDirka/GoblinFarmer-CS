@@ -1373,6 +1373,128 @@ namespace GoblinFarmer
         }
     }
 
+    internal static class GoblinPandemoniumMultiCountDuplicatePolicy
+    {
+        public static readonly TimeSpan MinimumElapsedSinceLastAccepted = TimeSpan.FromSeconds(8);
+
+        public static bool ShouldBypass(
+            string source,
+            string areaKey,
+            int currentAreaCount,
+            int areaLimit,
+            string countedAreaKey,
+            DateTime countedUtc,
+            DateTime nowUtc,
+            string evidenceKey,
+            double evidenceConfidence,
+            double minimapMinimumConfidence,
+            double evidenceFirstSeenAgeSeconds,
+            bool combatActive,
+            out string reason,
+            out double elapsedSinceLastAcceptedSeconds)
+        {
+            reason = "";
+            elapsedSinceLastAcceptedSeconds = Math.Max(0, (nowUtc - countedUtc).TotalSeconds);
+
+            if (!IsPandemoniumFortressTwoCountArea(areaKey))
+            {
+                reason = "NotPandemoniumFortressTwoCountArea";
+                return false;
+            }
+
+            if (areaLimit != 2)
+            {
+                reason = "AreaLimitNotTwo";
+                return false;
+            }
+
+            if (currentAreaCount >= areaLimit)
+            {
+                reason = "AreaLimitReached";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(countedAreaKey) ||
+                !GoblinAreaResolver.NormalizedKey(areaKey).Equals(GoblinAreaResolver.NormalizedKey(countedAreaKey), StringComparison.OrdinalIgnoreCase))
+            {
+                reason = "PreviousAcceptedDifferentArea";
+                return false;
+            }
+
+            if (nowUtc - countedUtc < MinimumElapsedSinceLastAccepted)
+            {
+                reason = "ElapsedTooShort";
+                return false;
+            }
+
+            if (!HasFreshSupportingEvidence(
+                source,
+                evidenceKey,
+                evidenceConfidence,
+                minimapMinimumConfidence,
+                evidenceFirstSeenAgeSeconds,
+                combatActive))
+            {
+                reason = "NoFreshSupportingEvidence";
+                return false;
+            }
+
+            reason = "Allowed";
+            return true;
+        }
+
+        public static bool IsPandemoniumFortressTwoCountArea(string areaKey)
+        {
+            string normalized = GoblinAreaResolver.NormalizedKey(areaKey);
+            return normalized == GoblinAreaResolver.NormalizedKey("Pandemonium Fortress Level 1") ||
+                normalized == GoblinAreaResolver.NormalizedKey("Pandemonium Fortress Level 2");
+        }
+
+        private static bool HasFreshSupportingEvidence(
+            string source,
+            string evidenceKey,
+            double evidenceConfidence,
+            double minimapMinimumConfidence,
+            double evidenceFirstSeenAgeSeconds,
+            bool combatActive)
+        {
+            string normalizedSource = NormalizeObservationSource(source);
+            if (normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase))
+            {
+                return evidenceConfidence >= minimapMinimumConfidence;
+            }
+
+            if (!normalizedSource.Equals("Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            bool engagedEvidence = evidenceKey.Contains("Kind=JournalEngaged", StringComparison.OrdinalIgnoreCase) ||
+                evidenceKey.Contains("Kind=JournalEngagedAndKilled", StringComparison.OrdinalIgnoreCase);
+            return engagedEvidence &&
+                combatActive &&
+                evidenceFirstSeenAgeSeconds >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds &&
+                evidenceFirstSeenAgeSeconds <= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMaximumAge.TotalSeconds;
+        }
+
+        private static string NormalizeObservationSource(string source)
+        {
+            if (string.Equals(source, "JournalCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Journal";
+            }
+
+            if (string.Equals(source, "MinimapCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Minimap", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Minimap";
+            }
+
+            return string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim();
+        }
+    }
+
     internal static class GoblinTypeNormalizer
     {
         private static readonly Dictionary<string, string> CanonicalTypes = BuildCanonicalTypes();

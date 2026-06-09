@@ -1476,18 +1476,41 @@ namespace GoblinFarmer
 
             string reason = "";
             bool refreshEncounterLastSeen = false;
+            bool pfMultiCountDuplicateBypass = false;
             if (state.Counted)
             {
-                reason = string.Equals(state.CountedAreaKey, step.AreaKey, StringComparison.OrdinalIgnoreCase)
-                    ? "EvidenceAlreadyAutoCounted"
-                    : "EncounterAlreadyAutoCounted";
-                refreshEncounterLastSeen = encounterState != null &&
-                    GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+                GoblinAreaDuplicateGuardResult pfGuardResult = duplicateGuard.Peek(step.AreaKey);
+                pfMultiCountDuplicateBypass = encounterState != null &&
+                    GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
                         candidate.Source,
                         step.AreaKey,
-                        encounterState.AreaKey);
+                        pfGuardResult.AreaCount,
+                        pfGuardResult.AreaLimit,
+                        encounterState.AreaKey,
+                        encounterState.CountedUtc,
+                        step.TimestampUtc,
+                        evidenceSignature,
+                        candidate.Confidence,
+                        ReplayAutomaticMinimapCountMinimumConfidenceFor(candidate.GoblinType),
+                        Math.Max(0, (step.TimestampUtc - state.FirstSeenUtc).TotalSeconds),
+                        combatActive: true,
+                        out _,
+                        out _);
+                if (!pfMultiCountDuplicateBypass)
+                {
+                    reason = string.Equals(state.CountedAreaKey, step.AreaKey, StringComparison.OrdinalIgnoreCase)
+                        ? "EvidenceAlreadyAutoCounted"
+                        : "EncounterAlreadyAutoCounted";
+                    refreshEncounterLastSeen = encounterState != null &&
+                        GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+                            candidate.Source,
+                            step.AreaKey,
+                            encounterState.AreaKey);
+                }
             }
-            else if (encounterState != null &&
+            if (string.IsNullOrWhiteSpace(reason) &&
+                !pfMultiCountDuplicateBypass &&
+                encounterState != null &&
                 GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
                     candidate.Source,
                     candidate.GoblinType,
@@ -1504,67 +1527,89 @@ namespace GoblinFarmer
                     TimeSpan.FromSeconds(45),
                     out _))
             {
-                reason = "EncounterAlreadyAutoCounted";
-                refreshEncounterLastSeen = GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
+                GoblinAreaDuplicateGuardResult pfGuardResult = duplicateGuard.Peek(step.AreaKey);
+                pfMultiCountDuplicateBypass = GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
                     candidate.Source,
                     step.AreaKey,
-                    encounterState.AreaKey);
-            }
-            else if (!GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
-                candidate.Source,
-                evidenceSignature,
-                Math.Max(0, (step.TimestampUtc - state.FirstSeenUtc).TotalSeconds),
-                combatActive: true,
-                out string reliabilityReason,
-                out _))
-            {
-                reason = reliabilityReason;
-            }
-            else if (GoblinManualCountBlockList.IsBlocked(step.AreaKey))
-            {
-                reason = "BlockedArea";
-            }
-            else if (!duplicateGuard.TryAccept(step.AreaKey, out GoblinAreaDuplicateGuardResult guardResult))
-            {
-                reason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
-                refreshEncounterLastSeen = encounterState != null &&
-                    GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterAreaAlreadyCounted(
+                    pfGuardResult.AreaCount,
+                    pfGuardResult.AreaLimit,
+                    encounterState.AreaKey,
+                    encounterState.CountedUtc,
+                    step.TimestampUtc,
+                    evidenceSignature,
+                    candidate.Confidence,
+                    ReplayAutomaticMinimapCountMinimumConfidenceFor(candidate.GoblinType),
+                    Math.Max(0, (step.TimestampUtc - state.FirstSeenUtc).TotalSeconds),
+                    combatActive: true,
+                    out _,
+                    out _);
+                if (!pfMultiCountDuplicateBypass)
+                {
+                    reason = "EncounterAlreadyAutoCounted";
+                    refreshEncounterLastSeen = GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
                         candidate.Source,
                         step.AreaKey,
                         encounterState.AreaKey);
-            }
-            else
-            {
-                evidenceBySignature[evidenceSignature] = state with
-                {
-                    Counted = true,
-                    CountedAreaKey = step.AreaKey,
-                };
-                if (!string.IsNullOrWhiteSpace(encounterKey))
-                {
-                    encounterByGoblinType[encounterKey] = new ReplayEncounterState(
-                        step.TimestampUtc,
-                        step.TimestampUtc,
-                        step.AreaKey,
-                        candidate.GoblinType,
-                        candidate.Source,
-                        evidenceSignature);
                 }
-
-                return new GoblinReplayFixtureStepResult(
-                    scenarioName,
-                    step.Name,
-                    step.AreaKey,
-                    "Fixture",
-                    true,
-                    "Found",
+            }
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                if (!GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
                     candidate.Source,
-                    candidate.GoblinType,
                     evidenceSignature,
-                    GoblinDecisionTracePolicy.DecisionForReason("", counted: true),
-                    "Eligible",
-                    freshnessReason,
-                    true);
+                    Math.Max(0, (step.TimestampUtc - state.FirstSeenUtc).TotalSeconds),
+                    combatActive: true,
+                    out string reliabilityReason,
+                    out _))
+                {
+                    reason = reliabilityReason;
+                }
+                else if (GoblinManualCountBlockList.IsBlocked(step.AreaKey))
+                {
+                    reason = "BlockedArea";
+                }
+                else if (!duplicateGuard.TryAccept(step.AreaKey, out GoblinAreaDuplicateGuardResult guardResult))
+                {
+                    reason = guardResult.AreaLimit > 1 ? "AreaLimitReached" : "AreaAlreadyCounted";
+                    refreshEncounterLastSeen = encounterState != null &&
+                        GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterAreaAlreadyCounted(
+                            candidate.Source,
+                            step.AreaKey,
+                            encounterState.AreaKey);
+                }
+                else
+                {
+                    evidenceBySignature[evidenceSignature] = state with
+                    {
+                        Counted = true,
+                        CountedAreaKey = step.AreaKey,
+                    };
+                    if (!string.IsNullOrWhiteSpace(encounterKey))
+                    {
+                        encounterByGoblinType[encounterKey] = new ReplayEncounterState(
+                            step.TimestampUtc,
+                            step.TimestampUtc,
+                            step.AreaKey,
+                            candidate.GoblinType,
+                            candidate.Source,
+                            evidenceSignature);
+                    }
+
+                    return new GoblinReplayFixtureStepResult(
+                        scenarioName,
+                        step.Name,
+                        step.AreaKey,
+                        "Fixture",
+                        true,
+                        "Found",
+                        candidate.Source,
+                        candidate.GoblinType,
+                        evidenceSignature,
+                        GoblinDecisionTracePolicy.DecisionForReason("", counted: true),
+                        "Eligible",
+                        freshnessReason,
+                        true);
+                }
             }
 
             if (refreshEncounterLastSeen &&
