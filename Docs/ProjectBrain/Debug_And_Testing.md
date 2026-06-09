@@ -87,7 +87,7 @@ The report is written to `Reports\Storage_Breakdown.md`. It is report-only and h
 
 ## Project Cleanup Script
 
-`Scripts\Cleanup Project.bat` and `Scripts\cleanup-project.ps1` are maintenance-only cleanup tools. They are tracked as an exception to the normal two package launchers.
+`Scripts\Cleanup Project.bat`, `Scripts\Cleanup Project Delete.bat`, and `Scripts\cleanup-project.ps1` are maintenance-only cleanup tools. They are tracked as an exception to the normal two package launchers.
 
 Default dry-run:
 
@@ -100,6 +100,8 @@ Delete mode requires an explicit flag:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\cleanup-project.ps1 -Delete
 ```
+
+`Scripts\Cleanup Project Delete.bat` is a confirmation-gated launcher for the default delete mode. It asks for `Y/N` before calling `cleanup-project.ps1 -Delete`, and it does not pass `-RuntimeArtifacts` or `-PruneOldInstallers`.
 
 Useful options:
 

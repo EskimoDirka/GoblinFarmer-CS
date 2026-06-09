@@ -4039,11 +4039,13 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     string projectSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
     string packageLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Create Debug Package.bat"));
     string cleanupLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Cleanup Project.bat"));
+    string cleanupDeleteLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Cleanup Project Delete.bat"));
     string cleanupScriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "cleanup-project.ps1"));
     string debugAnalysisToolsSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "debug-analysis-tools.ps1"));
     string[] expectedBatchScripts =
     [
         "Cleanup Project.bat",
+        "Cleanup Project Delete.bat",
         "Create Debug Package.bat",
         "Create Project Brain.bat",
     ];
@@ -4161,6 +4163,11 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageLauncher.Contains("create-debug-package.ps1", StringComparison.Ordinal), "debug package launcher should delegate to the PowerShell package script");
     AssertTrue(cleanupLauncher.Contains("Default mode is DRY RUN", StringComparison.Ordinal), "cleanup launcher should identify dry-run default");
     AssertTrue(cleanupLauncher.Contains("cleanup-project.ps1", StringComparison.Ordinal), "cleanup launcher should delegate to the PowerShell cleanup script");
+    AssertTrue(cleanupDeleteLauncher.Contains("choice /C YN", StringComparison.Ordinal), "cleanup delete launcher should require confirmation");
+    AssertTrue(cleanupDeleteLauncher.Contains("cleanup-project.ps1", StringComparison.Ordinal), "cleanup delete launcher should delegate to the PowerShell cleanup script");
+    AssertTrue(cleanupDeleteLauncher.Contains("-Delete", StringComparison.Ordinal), "cleanup delete launcher should pass the explicit delete flag");
+    AssertFalse(cleanupDeleteLauncher.Contains("-RuntimeArtifacts", StringComparison.Ordinal), "cleanup delete launcher should not include optional runtime artifacts by default");
+    AssertFalse(cleanupDeleteLauncher.Contains("-PruneOldInstallers", StringComparison.Ordinal), "cleanup delete launcher should not prune old installers by default");
     AssertTrue(cleanupScriptSource.Contains("[switch]$Delete", StringComparison.Ordinal), "cleanup script should require an explicit delete switch");
     AssertTrue(cleanupScriptSource.Contains("DRY RUN", StringComparison.Ordinal), "cleanup script should clearly report dry-run mode");
     AssertTrue(cleanupScriptSource.Contains("Refusing to consider path outside project root", StringComparison.Ordinal), "cleanup script should guard against paths outside the project root");

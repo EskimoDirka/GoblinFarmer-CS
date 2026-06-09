@@ -467,4 +467,5 @@ Scripts/Local Tools/
 !Scripts/debug-analysis-tools.ps1
 !Scripts/cleanup-project.ps1
 !Scripts/Cleanup Project.bat
+!Scripts/Cleanup Project Delete.bat
 !Scripts/.gitkeep

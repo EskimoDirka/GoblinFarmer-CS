@@ -37,6 +37,7 @@ $explicitSourceFiles = @(
 )
 
 $projectBrainSourceRoot = Join-Path $repoRoot "Docs\ProjectBrain"
+$agentDocsSourceRoot = Join-Path $repoRoot "Docs\Agent"
 
 function Add-UniqueRelativePath {
     param(
@@ -339,6 +340,15 @@ if (Test-Path -LiteralPath $projectBrainSourceRoot -PathType Container) {
 }
 else {
     [void]$skippedFiles.Add("Docs\ProjectBrain\*.md")
+}
+
+if (Test-Path -LiteralPath $agentDocsSourceRoot -PathType Container) {
+    foreach ($agentDocFile in Get-ChildItem -LiteralPath $agentDocsSourceRoot -Filter "*.md" -File | Sort-Object Name) {
+        Add-UniqueRelativePath -Paths $sourceFiles -RelativePath "Docs\Agent\$($agentDocFile.Name)"
+    }
+}
+else {
+    [void]$skippedFiles.Add("Docs\Agent\*.md")
 }
 
 try {

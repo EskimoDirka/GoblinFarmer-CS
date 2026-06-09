@@ -214,7 +214,7 @@ For both VS Debug and Release troubleshooting, use the single ZIP export path: `
 
 For AI-assisted development handoff context, `Scripts\Create Project Brain.bat` creates a timestamped docs-only ZIP under `ProjectBrain` from the allowlisted project instructions, README, and current status/reference docs when present.
 
-The tracked `Scripts` folder keeps `Create Debug Package.bat` and `Create Project Brain.bat` as the normal package launchers. Their backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`; `debug-analysis-tools.ps1` remains as a direct dependency of the debug package workflow. `Cleanup Project.bat` and `cleanup-project.ps1` are a maintenance-only exception for generated artifact cleanup. Older manual helpers are archived under `Docs\ScriptArchive\2026-06-09` for reference rather than active use.
+The tracked `Scripts` folder keeps `Create Debug Package.bat` and `Create Project Brain.bat` as the normal package launchers. Their backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`; `debug-analysis-tools.ps1` remains as a direct dependency of the debug package workflow. `Cleanup Project.bat`, `Cleanup Project Delete.bat`, and `cleanup-project.ps1` are maintenance-only exceptions for generated artifact cleanup. Older manual helpers are archived under `Docs\ScriptArchive\2026-06-09` for reference rather than active use.
 
 Project Brain topic summaries live under `Docs\ProjectBrain`. They organize current context for ChatGPT/Codex while keeping `Docs\Project_Status.md` as the source of truth.
 
@@ -257,7 +257,7 @@ Generated artifact cleanup is dry-run by default:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\cleanup-project.ps1
 ```
 
-Real deletion requires `-Delete`. Use `-RuntimeArtifacts` only for disposable runtime logs/screenshots/evidence/replay captures, and `-PruneOldInstallers` only when older installers should be removed while keeping the latest installer. The cleanup report is written to `Reports\Cleanup_Report.md`.
+Real deletion requires `-Delete`. `Scripts\Cleanup Project Delete.bat` is a confirmation-gated launcher for the default delete mode: generated build outputs plus debug package retention pruning. Use direct PowerShell with `-RuntimeArtifacts` only for disposable runtime logs/screenshots/evidence/replay captures, and `-PruneOldInstallers` only when older installers should be removed while keeping the latest installer. The cleanup report is written to `Reports\Cleanup_Report.md`.
 
 ## Release v1.4
 
@@ -309,7 +309,7 @@ dotnet build GoblinFarmer.csproj
 
 ## Local Source Uploads
 
-Local developer checkouts can keep private ChatGPT source-upload helpers under `Scripts\Local Tools\`. Those helpers and their timestamped ZIP output under `ChatGPT Uploads\` are intentionally ignored by Git; tracked package launchers remain limited to `Scripts\Create Debug Package.bat` and `Scripts\Create Project Brain.bat`, with `Scripts\Cleanup Project.bat` as a maintenance-only cleanup exception.
+Local developer checkouts can keep private ChatGPT source-upload helpers under `Scripts\Local Tools\`. Those helpers and their timestamped ZIP output under `ChatGPT Uploads\` are intentionally ignored by Git; tracked package launchers remain limited to `Scripts\Create Debug Package.bat` and `Scripts\Create Project Brain.bat`, with `Scripts\Cleanup Project.bat` and `Scripts\Cleanup Project Delete.bat` as maintenance-only cleanup exceptions.
 
 ## Release Build
 

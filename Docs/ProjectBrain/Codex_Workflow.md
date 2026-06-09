@@ -49,13 +49,14 @@ Do not assume GitHub reflects the user's latest local state.
 - Normal tracked user-facing package batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`.
 - Required backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`.
 - `debug-analysis-tools.ps1` remains because `create-debug-package.ps1` directly loads it.
-- `Cleanup Project.bat` and `cleanup-project.ps1` are a documented maintenance-only exception for generated artifact cleanup. They must default to dry-run, and real deletion requires `-Delete`.
+- `Cleanup Project.bat`, `Cleanup Project Delete.bat`, and `cleanup-project.ps1` are documented maintenance-only exceptions for generated artifact cleanup. The dry-run launcher and PowerShell script must default to dry-run. The delete launcher must ask for `Y/N` before passing `-Delete`.
 - Retired/manual helpers are archived under `Docs\ScriptArchive\2026-06-09` and should not be reintroduced as active scripts without explicit approval.
 
 ## Cleanup Workflow
 
 - Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\cleanup-project.ps1` first and review `Reports\Cleanup_Report.md`.
 - Delete mode is explicit only: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\cleanup-project.ps1 -Delete`.
+- `Scripts\Cleanup Project Delete.bat` is allowed as a convenience launcher for default delete mode, but it must remain confirmation-gated and must not include `-RuntimeArtifacts` or `-PruneOldInstallers`.
 - Use `-RuntimeArtifacts` only when runtime logs, screenshots, GoblinEvidence, DecisionBundles, or replay/capture folders are intentionally disposable.
 - Use `-PruneOldInstallers` only when older installer files should be pruned; the newest installer remains protected.
 - Keep source/docs protected. Do not use cleanup to remove `Images`, `Docs`, `Scripts`, `Config`, `Installer`, `.git`, source files, project files, `README.md`, `AGENTS.md`, or Project Brain docs.

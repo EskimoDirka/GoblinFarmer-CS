@@ -1,0 +1,56 @@
+# Agent Debugging Manual
+
+Stable debugging guidance for Codex. Latest package findings and active issues live in `Docs/Project_Status.md`; that file wins on conflict.
+
+## Debug Package Contents
+
+Use `Scripts\Create Debug Package.bat` to create the supported review ZIP. Useful package roots include:
+
+- `debug-package-analysis.txt`
+- `goblin-tracker-timeline.md`
+- `goblin-evidence-health.txt`
+- `debug-package-manifest.txt`
+- `goblin-tracker-summary.txt`
+- `goblin-tracker-review.html`
+- latest logs, route summaries, session metadata, screenshots, and structured JSONL events
+
+Do not create alternate debug package generators without explicit approval.
+
+## Useful Logs And Evidence
+
+- Human-readable logs show route, timing, hotkey, combat, town, and Goblin Tracker decisions.
+- `Debug\GoblinEvidence\GoblinTrackerEvents.jsonl` records structured scanner/count events when enabled.
+- Route context fields help distinguish raw/current/display/blocking area confusion.
+- Latency diagnostics use `GoblinLatencyTrace` stages such as evidence detected, count accepted, notification queued, and notification displayed.
+
+## GoblinEvidence Captures
+
+- EncounterCaptures and DecisionBundles should carry replay-ready Journal/Minimap crops and metadata.
+- Normal scanner events should avoid redundant root fullscreen/event images by default.
+- The VS Debug `Capture` button is supplemental and should be used only when visible image-recognition evidence is needed.
+
+## DecisionBundles
+
+- DecisionBundles are the preferred evidence for count-policy review.
+- New bundles should be replay-ready when Journal/Minimap crops and metadata are available.
+- Older bundles with only fullscreen evidence may be manual-review evidence but not crop-replayable.
+
+## Replay Tooling
+
+- Goblin Replay is explicit/on-demand only.
+- Use focused harness inputs: metadata file, capture prefix, capture folder, DecisionBundle folder, or a small scenario file.
+- Replay must not run during startup, VS Debug startup, scanner execution, route workflows, package creation, form close, or automated live testing.
+- Replay validates policy and saved-frame recognition, not real-time scanner timing, sound playback, mouse click-through, or Diablo focus behavior.
+
+## Notification Latency
+
+- Separate detection-to-count, count-to-notification, and detection-to-display timing.
+- A delayed notification may actually be delayed candidate acceptance, especially when Journal Engaged waits for Killed/Minimap/sustained confirmation.
+- Compare Minimap confidence, Journal state, candidate selection logs, and `GoblinLatencyTrace` stages before changing UI notification code.
+
+## Stale Journal Suppression
+
+- Old visible Journal rows can follow route transitions and should not recount in new areas.
+- Reason about stale suppression using row bucket, template family, goblin type, area resolution, current route context, and reset/new-game timing.
+- First-seen Journal Engaged evidence is diagnostic/pending unless policy confirms it through Minimap, Killed evidence, or sustained active-combat confirmation.
+- Do not loosen stale policy from a single ambiguous package; prefer replayable evidence or a repeated live package shape.
