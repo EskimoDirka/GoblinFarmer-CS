@@ -292,6 +292,24 @@ namespace GoblinFarmer
 
             if (primaryJournalCandidate != null)
             {
+                GoblinEvidenceCandidate? strongMinimapCandidate = supportingCandidates.FirstOrDefault(PortGoblinEvidenceCandidateIsStrongMinimap);
+                if (PortGoblinEvidenceCandidateIsPendingJournalEngaged(primaryJournalCandidate) &&
+                    strongMinimapCandidate != null)
+                {
+                    AppLogger.Info(
+                        "GoblinEvidenceCandidateSelection: " +
+                        "selected=Minimap; " +
+                        "reason=JournalPendingMinimapConfirmed; " +
+                        $"journalGoblinType={PortLogField(primaryJournalCandidate.GoblinType)}; " +
+                        $"journalConfidence={primaryJournalCandidate.Confidence:0.000}; " +
+                        $"journalKind={PortLogField(PortGoblinEvidenceNoteValue(primaryJournalCandidate.Notes, "Kind"))}; " +
+                        $"minimapGoblinType={PortLogField(strongMinimapCandidate.GoblinType)}; " +
+                        $"minimapConfidence={strongMinimapCandidate.Confidence:0.000}; " +
+                        $"minimapCountThreshold={PortAutomaticGoblinMinimapCountMinimumConfidenceFor(strongMinimapCandidate.GoblinType):0.000}");
+                    yield return strongMinimapCandidate;
+                    yield break;
+                }
+
                 yield return primaryJournalCandidate;
                 yield break;
             }
@@ -300,6 +318,24 @@ namespace GoblinFarmer
             {
                 yield return candidate;
             }
+        }
+
+        private static bool PortGoblinEvidenceCandidateIsPendingJournalEngaged(GoblinEvidenceCandidate candidate)
+        {
+            if (!PortNormalizeGoblinObservationSource(candidate.Source).Equals("Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string kind = PortGoblinEvidenceNoteValue(candidate.Notes, "Kind");
+            return candidate.Type == GoblinEvidenceType.JournalEncounter &&
+                kind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngaged), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool PortGoblinEvidenceCandidateIsStrongMinimap(GoblinEvidenceCandidate candidate)
+        {
+            return PortNormalizeGoblinObservationSource(candidate.Source).Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
+                candidate.Confidence >= PortAutomaticGoblinMinimapCountMinimumConfidenceFor(candidate.GoblinType);
         }
 
         private Rectangle PortGoblinEvidenceRegionForSource(string source)
@@ -1646,6 +1682,19 @@ namespace GoblinFarmer
         {
             candidate = candidate with { GoblinType = GoblinTypeNormalizer.Normalize(candidate.GoblinType) };
             DateTime now = DateTime.Now;
+            DateTime detectedUtc = now.ToUniversalTime();
+            string evidenceSignature = PortGoblinEvidenceSignature(candidate);
+            AppLogger.Info(
+                "GoblinLatencyTrace: " +
+                "stage=EvidenceDetected; " +
+                $"detectedUtc={detectedUtc:O}; " +
+                $"source={PortLogField(PortNormalizeGoblinObservationSource(candidate.Source))}; " +
+                $"goblinType={PortLogField(candidate.GoblinType)}; " +
+                $"evidenceType={candidate.Type}; " +
+                $"evidenceKind={PortLogField(PortGoblinEvidenceNoteValue(candidate.Notes, "Kind"))}; " +
+                $"confidence={candidate.Confidence:0.000}; " +
+                $"evidenceHash={PortGoblinEvidenceHash(evidenceSignature)}; " +
+                $"forceObservation={forceObservation}");
             bool suppressedByCooldown = false;
             lock (portGoblinEvidenceLock)
             {
@@ -1665,7 +1714,7 @@ namespace GoblinFarmer
                 if (forceObservation)
                 {
                     AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=True; reason=EvidenceCooldownObservationOnly; type={candidate.Type}; source={candidate.Source}; goblinType={PortLogField(candidate.GoblinType)}; cooldownSeconds={GoblinEvidenceCooldown.TotalSeconds:0}");
-                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence);
+                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence);
                 }
 
                 return;
@@ -1682,7 +1731,7 @@ namespace GoblinFarmer
 
             DebugManager.Session.RecordGoblinEvidence(evidenceEvent);
             AppLogger.Info($"GoblinEvidence: Type={candidate.Type}; Confidence={candidate.Confidence:0.00}; Source={candidate.Source}; Screenshot={PortLogField(PortDisplayLocation(screenshotPath))}; Notes={PortLogField(candidate.Notes)}");
-            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, PortGoblinEvidenceSignature(candidate), candidate.Confidence, screenshotPath);
+            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath);
         }
 
         private static string PortResolveDebugPackageRuntimeRoot()

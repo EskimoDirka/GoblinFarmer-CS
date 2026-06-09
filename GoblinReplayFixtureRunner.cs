@@ -1735,11 +1735,51 @@ namespace GoblinFarmer
 
         private static GoblinReplayFixtureCandidate? SelectScenarioCandidate(IReadOnlyList<GoblinReplayFixtureCandidate> candidates)
         {
-            return candidates
+            List<GoblinReplayFixtureCandidate> passedCandidates = candidates
                 .Where(candidate => candidate.PassedThreshold)
+                .ToList();
+            GoblinReplayFixtureCandidate? journalCandidate = passedCandidates
+                .Where(candidate => candidate.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(candidate => candidate.Confidence)
+                .FirstOrDefault();
+            GoblinReplayFixtureCandidate? strongMinimapCandidate = passedCandidates
+                .Where(IsStrongReplayMinimapCandidate)
+                .OrderByDescending(candidate => candidate.Confidence)
+                .FirstOrDefault();
+
+            if (journalCandidate != null &&
+                IsReplayPendingJournalEngagedCandidate(journalCandidate) &&
+                strongMinimapCandidate != null)
+            {
+                return strongMinimapCandidate;
+            }
+
+            return journalCandidate ?? passedCandidates
                 .OrderBy(candidate => string.Equals(candidate.Source, "JournalCandidate", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
                 .ThenByDescending(candidate => candidate.Confidence)
                 .FirstOrDefault();
+        }
+
+        private static bool IsReplayPendingJournalEngagedCandidate(GoblinReplayFixtureCandidate candidate)
+        {
+            return candidate.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase) &&
+                candidate.EvidenceType == GoblinEvidenceType.JournalEncounter &&
+                candidate.EvidenceKind == GoblinEvidenceTemplateKind.JournalEngaged;
+        }
+
+        private static bool IsStrongReplayMinimapCandidate(GoblinReplayFixtureCandidate candidate)
+        {
+            return candidate.Source.Equals("MinimapCandidate", StringComparison.OrdinalIgnoreCase) &&
+                candidate.Confidence >= ReplayAutomaticMinimapCountMinimumConfidenceFor(candidate.GoblinType);
+        }
+
+        private static double ReplayAutomaticMinimapCountMinimumConfidenceFor(string goblinType)
+        {
+            string normalized = GoblinTypeNormalizer.Normalize(goblinType);
+            return normalized.Equals("Gilded Baron", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Equals("Malevolent Tormentor", StringComparison.OrdinalIgnoreCase)
+                ? 0.90
+                : 0.85;
         }
 
         private static string EvidenceSignature(GoblinReplayFixtureCandidate candidate)

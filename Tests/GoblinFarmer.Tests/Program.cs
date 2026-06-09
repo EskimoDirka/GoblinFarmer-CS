@@ -59,6 +59,7 @@ Run("Goblin replay template scenario suppresses late New Game journal carryover"
 Run("Goblin replay template scenario uses current-location resolver", TestGoblinReplayTemplateScenarioUsesCurrentLocationResolver);
 Run("Goblin replay template scenario allows fresh minimap after stale cross-area journal", TestGoblinReplayTemplateScenarioAllowsFreshMinimapAfterStaleCrossAreaJournal);
 Run("Goblin replay template scenario waits for killed confirmation after engaged journal", TestGoblinReplayTemplateScenarioWaitsForKilledConfirmationAfterEngagedJournal);
+Run("Goblin replay template scenario lets strong minimap override pending engaged journal", TestGoblinReplayTemplateScenarioLetsStrongMinimapOverridePendingEngagedJournal);
 Run("Goblin replay template scenario counts sustained active engaged journal", TestGoblinReplayTemplateScenarioCountsSustainedActiveEngagedJournal);
 Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
@@ -1999,6 +2000,51 @@ static void TestGoblinReplayTemplateScenarioWaitsForKilledConfirmationAfterEngag
         AssertTrue(result.Steps[1].Counted, "fresh killed journal evidence should count after the Engaged diagnostic");
         AssertEqual("Eligible", result.Steps[1].Reason, "killed journal confirmation should remain eligible");
         AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioStepResult", StringComparison.Ordinal) && line.Contains("reason=JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal)), "template scenario should log pending Engaged-only evidence");
+    }
+    finally
+    {
+        if (Directory.Exists(scenarioRoot))
+        {
+            Directory.Delete(scenarioRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayTemplateScenarioLetsStrongMinimapOverridePendingEngagedJournal()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string templateRoot = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string scenarioRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplayMinimapOverridesEngaged_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(scenarioRoot);
+    try
+    {
+        string engagedTemplate = "Treasure Goblin Engaged Journal.png";
+        string minimapTemplate = "Treasure Goblin Minimap.png";
+        AssertTrue(File.Exists(Path.Combine(templateRoot, engagedTemplate)), "template scenario test requires Treasure Goblin engaged journal evidence");
+        AssertTrue(File.Exists(Path.Combine(templateRoot, minimapTemplate)), "template scenario test requires Treasure Goblin minimap evidence");
+        string scenarioPath = Path.Combine(scenarioRoot, "minimap-overrides-pending-engaged.txt");
+        File.WriteAllLines(scenarioPath, [
+            "Scenario=Strong minimap overrides pending engaged journal",
+            $"Step=Northern same-scan minimap and engaged|Scan|Area=Northern Highlands|Journal={engagedTemplate}|Minimap={minimapTemplate}|JournalLineBucket=10|AdvanceSeconds=1",
+        ]);
+
+        GoblinReplayTemplateScenarioManifestLoadResult load =
+            GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+        AssertTrue(load.Loaded, $"template scenario manifest should load cleanly, reason={load.Reason}");
+
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+            load.ScenarioName,
+            load.Steps,
+            templateRoot,
+            replayLogs.Add,
+            writeAppLog: false,
+            startUtc: new DateTime(2026, 6, 8, 18, 0, 0, DateTimeKind.Utc));
+
+        AssertEqual(1, result.Steps.Count, "same-scan minimap/journal scenario should produce one decision");
+        AssertTrue(result.Steps[0].Counted, "strong Minimap should count immediately even when Journal Engaged is also present");
+        AssertEqual("MinimapCandidate", result.Steps[0].Source, "same-scan strong Minimap should be selected over pending Journal Engaged");
+        AssertEqual("Eligible", result.Steps[0].Reason, "strong Minimap selection should use existing eligible count path");
     }
     finally
     {
@@ -4095,7 +4141,8 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountSource.Contains("PortGoblinEvidenceHash", StringComparison.Ordinal), "accepted and suppressed auto-count logs should include a compact evidence hash");
     AssertTrue(autoCountMethod.Contains("encounterMatch=", StringComparison.Ordinal), "auto-count logs should include the duplicate encounter match reason");
     AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");
-    AssertTrue(autoCountMethod.Contains("PortShowSplash($\"Goblin auto-counted", StringComparison.Ordinal), "automatic counting should show a visible notification when it increments");
+    AssertTrue(autoCountMethod.Contains("Goblin auto-counted", StringComparison.Ordinal), "automatic counting should show a visible notification when it increments");
+    AssertTrue(autoCountMethod.Contains("GoblinLatencyTrace", StringComparison.Ordinal), "automatic counting should log count-to-notification latency diagnostics");
     AssertTrue(autoCountMethod.Contains("RAINBOW GOBLIN!", StringComparison.Ordinal), "automatic counting should show a special Rainbow Goblin alert");
     AssertTrue(autoCountMethod.Contains("System.Media.SystemSounds.Exclamation.Play()", StringComparison.Ordinal), "Rainbow Goblin automatic counts should play a local alert sound");
     AssertTrue(automationSource.Contains("WS_EX_TRANSPARENT", StringComparison.Ordinal), "notification splash should be click-through so it does not block teleport clicks");

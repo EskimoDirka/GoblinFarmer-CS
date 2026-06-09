@@ -12,15 +12,39 @@ $zipName = "GoblinFarmer_ProjectBrain_$timestamp.zip"
 $zipPath = Join-Path $outputRoot $zipName
 $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) "GoblinFarmer_ProjectBrain_$timestamp"
 
-$sourceFiles = @(
+$explicitSourceFiles = @(
     "AGENTS.md",
     "README.md",
     "Docs\Project_Status.md",
+    "Docs\TODO.md",
+    "Docs\History.md",
+    "Docs\CombatProfiles.md",
+    "Docs\TeleportLogic.md",
+    "Docs\ScanRegions.md",
+    "Docs\Release_Checklist.md",
+    "Docs\Release_v1.4.md",
     "Docs\Test_Results.md",
     "Docs\Known_Issues.md",
     "Docs\Next_Tasks.md",
     "Docs\Release_Notes.md"
 )
+
+$projectBrainSourceRoot = Join-Path $repoRoot "Docs\ProjectBrain"
+
+function Add-UniqueRelativePath {
+    param(
+        [System.Collections.Generic.List[string]]$Paths,
+        [string]$RelativePath
+    )
+
+    foreach ($existingPath in $Paths) {
+        if ([string]::Equals($existingPath, $RelativePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+    }
+
+    [void]$Paths.Add($RelativePath)
+}
 
 function Write-Step {
     param([string]$Text)
@@ -78,6 +102,20 @@ New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
 
 $includedFiles = New-Object System.Collections.Generic.List[string]
 $skippedFiles = New-Object System.Collections.Generic.List[string]
+$sourceFiles = New-Object System.Collections.Generic.List[string]
+
+foreach ($relativePath in $explicitSourceFiles) {
+    Add-UniqueRelativePath -Paths $sourceFiles -RelativePath $relativePath
+}
+
+if (Test-Path -LiteralPath $projectBrainSourceRoot -PathType Container) {
+    foreach ($projectBrainFile in Get-ChildItem -LiteralPath $projectBrainSourceRoot -Filter "*.md" -File | Sort-Object Name) {
+        Add-UniqueRelativePath -Paths $sourceFiles -RelativePath "Docs\ProjectBrain\$($projectBrainFile.Name)"
+    }
+}
+else {
+    [void]$skippedFiles.Add("Docs\ProjectBrain\*.md")
+}
 
 try {
     foreach ($relativePath in $sourceFiles) {

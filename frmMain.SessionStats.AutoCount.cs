@@ -287,6 +287,19 @@ namespace GoblinFarmer
 
             AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceReliability={PortLogField(evidenceReliability)} reliabilityReason={PortLogField(reliabilityReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} evidenceFirstSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.FirstSeenUtc.ToString("O"))} evidenceLastSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.LastSeenUtc.ToString("O"))} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterMatch={PortLogField(encounterSuppressionMatch)} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
             AppLogger.Info($"GoblinTracker: GoblinCountAccepted areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} blockListStatus=Allowed countResult=Accepted rawLocation='{PortLogField(PortDisplayLocation(area.RawLocation))}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(observation.GoblinType)}' source='{PortLogField(source)}' evidenceSource='{PortLogField(observation.Source)}' evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} total={total}");
+            DateTime countAcceptedUtc = nowUtc;
+            AppLogger.Info(
+                "GoblinLatencyTrace: " +
+                "stage=CountAccepted; " +
+                $"evidenceDetectedUtc={observation.TimestampUtc:O}; " +
+                $"countAcceptedUtc={countAcceptedUtc:O}; " +
+                $"detectionToCountMs={Math.Max(0, (countAcceptedUtc - observation.TimestampUtc).TotalMilliseconds):0.0}; " +
+                $"source={PortLogField(observation.Source)}; " +
+                $"goblinType={PortLogField(observation.GoblinType)}; " +
+                $"areaKey={PortLogField(areaKey)}; " +
+                $"evidenceReliability={PortLogField(evidenceReliability)}; " +
+                $"reason=Eligible; " +
+                $"total={total}");
             PortWriteGoblinTrackerJsonEvent(
                 "GoblinAutoCountAccepted",
                 new Dictionary<string, object?>
@@ -312,6 +325,7 @@ namespace GoblinFarmer
                     ["enableAutomaticCounting"] = AppSettings.GoblinTracker.EnableAutomaticCounting,
                 });
             PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, "AutomaticCountAccepted", guardResult);
+            DateTime notificationQueuedUtc = DateTime.UtcNow;
             if (GoblinTypeNormalizer.Normalize(observation.GoblinType).Equals("Rainbow Goblin", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -323,11 +337,29 @@ namespace GoblinFarmer
                     AppLogger.Info($"Rainbow goblin alert sound failed: {ex.Message}");
                 }
 
-                PortShowSplash($"RAINBOW GOBLIN!\r\n{displayLocation}\r\nTotal: {total}", 7000);
+                PortShowSplash(
+                    $"RAINBOW GOBLIN!\r\n{displayLocation}\r\nTotal: {total}",
+                    7000,
+                    "GoblinAutoCount",
+                    observation.TimestampUtc,
+                    countAcceptedUtc,
+                    notificationQueuedUtc,
+                    observation.GoblinType,
+                    areaKey,
+                    observation.Source);
             }
             else
             {
-                PortShowSplash($"Goblin auto-counted\r\n{displayLocation}\r\nType: {observation.GoblinType}\r\nTotal: {total}", 5000);
+                PortShowSplash(
+                    $"Goblin auto-counted\r\n{displayLocation}\r\nType: {observation.GoblinType}\r\nTotal: {total}",
+                    5000,
+                    "GoblinAutoCount",
+                    observation.TimestampUtc,
+                    countAcceptedUtc,
+                    notificationQueuedUtc,
+                    observation.GoblinType,
+                    areaKey,
+                    observation.Source);
             }
             PortQueueGoblinEncounterDebugCapture(source, observation.Source, observation.GoblinType, areaKey, displayLocation, total);
             PortWriteSessionMetadata(logSuccess: false);

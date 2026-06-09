@@ -1,0 +1,80 @@
+# Debug And Testing
+
+Source of truth: `Docs\Project_Status.md`, `README.md`, `Docs\TODO.md`, and `AGENTS.md`.
+
+## Debug Package Workflow
+
+- Supported debug ZIP export path: `Scripts\Create Debug Package.bat`, which delegates to `Scripts\create-debug-package.ps1`.
+- Use it for both VS Debug and Release review.
+- The batch-created ZIP is the only supported debug package export workflow.
+- Form close must stay quiet and must not trigger debug package creation.
+- Debug packages write under `DebugPackages`.
+
+## Useful Debug Package Contents
+
+Useful review evidence includes:
+
+- `debug-package-analysis.txt`
+- `goblin-tracker-timeline.md`
+- `goblin-evidence-health.txt`
+- `debug-package-manifest.txt`
+- `goblin-tracker-summary.txt`
+- `goblin-tracker-review.html`
+- latest logs
+- route summaries
+- session metadata
+- Goblin Tracker JSONL events
+- decision bundles
+- encounter captures
+- observation diagnostics
+- bounded GoblinEvidence samples
+
+Normal scanner events skip redundant root `GoblinEvidence_*` full/event images by default. DecisionBundles and EncounterCaptures should carry replay-ready Journal/Minimap crops, metadata, JSONL, and trace data.
+
+## Replay Tooling Status
+
+- Goblin Replay is explicit/on-demand only.
+- It is not wired into startup, VS Debug startup, scanner execution, Create Debug Package, form closing, route workflows, or automated live testing flows.
+- Supported harness inputs:
+  - `--goblin-replay-captures`
+  - `--goblin-replay-metadata`
+  - `--goblin-replay-prefix`
+  - `--goblin-replay-decision-bundle`
+  - `--goblin-replay-scenario`
+- Template scenarios can synthesize temporary crop frames from `Images\Goblin Evidence` and can use `Location=...` with `Images\Current Location` title templates.
+- Scenario replay creates only temporary crop frames that are deleted after the run.
+
+## Test Commands
+
+Required build command before finishing code changes:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+```
+
+For Goblin Tracker, Goblin Evidence, Goblin Replay, or debug package changes, run when practical:
+
+```powershell
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+git diff --check
+```
+
+Project Brain generation:
+
+```powershell
+Scripts\Create-ProjectBrain.bat
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\create-project-brain.ps1
+```
+
+## Live Test Workflow
+
+- Treat every user live-test run as a VS Debug run unless the user explicitly says otherwise.
+- Review the latest named/provided debug package and live-test notes before changing code.
+- For Goblin Tracker next tests, list route-specific scenarios in official route order first, then general reset, stale evidence, display, classification, package, and documentation checks.
+- Use VS Debug `Capture` only when image-recognition evidence is visibly needed.
+- Use automatic decision bundles and encounter captures for normal Goblin Tracker debugging.
+
+## What To Provide For AI Review
+
+For a full runtime issue, provide the latest debug package ZIP plus live notes and any matching recording. For a quick project-context handoff without runtime artifacts, use the Project Brain ZIP.

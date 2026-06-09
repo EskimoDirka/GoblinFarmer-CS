@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using DrawingPoint = System.Drawing.Point;
@@ -1441,12 +1442,39 @@ namespace GoblinFarmer
             return point.X >= rect.Left && point.X < rect.Right && point.Y >= rect.Top && point.Y < rect.Bottom;
         }
 
-        private void PortShowSplash(string message, int durationMs)
+        private void PortShowSplash(
+            string message,
+            int durationMs,
+            string latencyContext = "",
+            DateTime? evidenceDetectedUtc = null,
+            DateTime? countAcceptedUtc = null,
+            DateTime? notificationQueuedUtc = null,
+            string goblinType = "",
+            string areaKey = "",
+            string source = "")
         {
+            DateTime queuedUtc = notificationQueuedUtc ?? DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(latencyContext))
+            {
+                AppLogger.Info(
+                    "GoblinLatencyTrace: " +
+                    "stage=NotificationQueued; " +
+                    $"context={PortLogField(latencyContext)}; " +
+                    $"queuedUtc={queuedUtc:O}; " +
+                    $"evidenceDetectedUtc={(evidenceDetectedUtc.HasValue ? evidenceDetectedUtc.Value.ToString("O") : "Unknown")}; " +
+                    $"countAcceptedUtc={(countAcceptedUtc.HasValue ? countAcceptedUtc.Value.ToString("O") : "Unknown")}; " +
+                    $"detectionToQueueMs={PortElapsedMsForLog(evidenceDetectedUtc, queuedUtc)}; " +
+                    $"countToQueueMs={PortElapsedMsForLog(countAcceptedUtc, queuedUtc)}; " +
+                    $"source={PortLogField(source)}; " +
+                    $"goblinType={PortLogField(goblinType)}; " +
+                    $"areaKey={PortLogField(areaKey)}");
+            }
+
             RunOnUiThread(() =>
             {
                 try
                 {
+                    DateTime displayedUtc = DateTime.UtcNow;
                     if (portSplashForm == null || portSplashForm.IsDisposed)
                     {
                         portSplashForm = new PortNoActivateSplashForm
@@ -1495,12 +1523,36 @@ namespace GoblinFarmer
                     portSplashForm.Show();
                     portSplashTimer.Start();
                     AppLogger.Info($"Notification shown without focus steal: message={message}; diabloActive={PortDiabloIsActive()}");
+                    if (!string.IsNullOrWhiteSpace(latencyContext))
+                    {
+                        AppLogger.Info(
+                            "GoblinLatencyTrace: " +
+                            "stage=NotificationDisplayed; " +
+                            $"context={PortLogField(latencyContext)}; " +
+                            $"queuedUtc={queuedUtc:O}; " +
+                            $"displayedUtc={displayedUtc:O}; " +
+                            $"evidenceDetectedUtc={(evidenceDetectedUtc.HasValue ? evidenceDetectedUtc.Value.ToString("O") : "Unknown")}; " +
+                            $"countAcceptedUtc={(countAcceptedUtc.HasValue ? countAcceptedUtc.Value.ToString("O") : "Unknown")}; " +
+                            $"queueToDisplayMs={Math.Max(0, (displayedUtc - queuedUtc).TotalMilliseconds):0.0}; " +
+                            $"detectionToDisplayMs={PortElapsedMsForLog(evidenceDetectedUtc, displayedUtc)}; " +
+                            $"countToDisplayMs={PortElapsedMsForLog(countAcceptedUtc, displayedUtc)}; " +
+                            $"source={PortLogField(source)}; " +
+                            $"goblinType={PortLogField(goblinType)}; " +
+                            $"areaKey={PortLogField(areaKey)}");
+                    }
                 }
                 catch (Exception ex)
                 {
                     AppLogger.Error("Unable to show teleport blocked splash.", ex);
                 }
             });
+        }
+
+        private static string PortElapsedMsForLog(DateTime? startUtc, DateTime endUtc)
+        {
+            return startUtc.HasValue
+                ? Math.Max(0, (endUtc - startUtc.Value).TotalMilliseconds).ToString("0.0", CultureInfo.InvariantCulture)
+                : "Unknown";
         }
 
         private void PortPositionSplash()
