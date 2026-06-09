@@ -501,15 +501,11 @@ namespace GoblinFarmer
                 Size = new Size(204, 23),
                 TabIndex = 4,
             };
-            cboGoblinDebugSimulationArea.Items.AddRange(
-            [
-                "Current Area",
-                "Southern Highlands",
-                "Pandemonium Fortress Level 1",
-                "Pandemonium Fortress Level 2",
-                "Stinging Winds",
-                "New Tristram",
-            ]);
+            foreach (string area in GoblinTrackerDebugSimulationAreas.DropdownItems())
+            {
+                cboGoblinDebugSimulationArea.Items.Add(area);
+            }
+
             cboGoblinDebugSimulationArea.SelectedIndex = 0;
 
             btnGoblinDebugSimulateCount = new Button

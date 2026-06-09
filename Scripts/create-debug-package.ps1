@@ -10,6 +10,7 @@ param(
     [int]$MaxGoblinEvidenceEventScreenshots = 3,
     [long]$MaxGoblinEvidenceEventScreenshotBytes = 1048576,
     [int]$MaxGoblinObservationDiagnosticCrops = 12,
+    [int]$DebugPackageRetentionCount = 20,
     [switch]$IncludeGoblinDecisionBundleFullImages,
     [switch]$IncludeGoblinCaptureFullscreenImages
 )
@@ -36,6 +37,52 @@ function Write-Step {
 
     Write-Host ""
     Write-Host "==> $Text"
+}
+
+function Invoke-DebugPackageRetentionCleanup {
+    param(
+        [string]$PackageDirectory,
+        [int]$RetentionCount
+    )
+
+    if ($RetentionCount -le 0) {
+        Write-Host "Debug package retention cleanup disabled: retentionCount=$RetentionCount; folder=$PackageDirectory"
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $PackageDirectory -PathType Container)) {
+        Write-Host "Debug package retention cleanup skipped: folder missing; folder=$PackageDirectory"
+        return
+    }
+
+    $root = [System.IO.Path]::GetFullPath($PackageDirectory)
+    $packages = @(Get-ChildItem -LiteralPath $root -Filter "GoblinFarmer_Debug_*.zip" -File -ErrorAction SilentlyContinue |
+        Sort-Object @{ Expression = { $_.LastWriteTimeUtc }; Descending = $true }, @{ Expression = { $_.Name }; Descending = $true })
+
+    $deleted = 0
+    $skipped = 0
+    foreach ($package in ($packages | Select-Object -Skip $RetentionCount)) {
+        try {
+            $fullPath = [System.IO.Path]::GetFullPath($package.FullName)
+            $insideRoot = $fullPath.StartsWith($root.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+            if (-not $insideRoot) {
+                $skipped++
+                Write-Warning "Debug package retention cleanup skipped outside folder: path=$fullPath; folder=$root"
+                continue
+            }
+
+            Remove-Item -LiteralPath $fullPath -Force
+            $deleted++
+            Write-Host "Debug package retention cleanup deleted: $fullPath"
+        }
+        catch {
+            $skipped++
+            Write-Warning "Debug package retention cleanup delete failed: path=$($package.FullName); error=$($_.Exception.Message)"
+        }
+    }
+
+    $kept = [Math]::Min($packages.Count, [Math]::Max($RetentionCount, 0))
+    Write-Host "Debug package retention cleanup complete: scanned=$($packages.Count); deleted=$deleted; skipped=$skipped; kept=$kept; retentionCount=$RetentionCount; folder=$root"
 }
 
 function Copy-PackageFile {
@@ -2317,6 +2364,8 @@ finally {
         Remove-Item -LiteralPath $stagingRoot -Recurse -Force
     }
 }
+
+Invoke-DebugPackageRetentionCleanup $packageDirectory $DebugPackageRetentionCount
 
 Write-Host ""
 Write-Host "========== Debug Package Summary =========="

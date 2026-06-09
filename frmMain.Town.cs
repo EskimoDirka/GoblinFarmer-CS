@@ -106,23 +106,7 @@ namespace GoblinFarmer
 
         private bool PortSalvageInventoryFromOpenBlacksmith(CancellationToken token, bool closeAfterSalvage)
         {
-            DrawingPoint? firstSlot = PortFirstFilledInventorySlot();
-            if (firstSlot == null)
-            {
-                AddWorkflowStep("First filled inventory slot not found");
-                AddWorkflowStep("Salvage skipped: no filled inventory slots found.");
-                if (closeAfterSalvage)
-                {
-                    PortPressEscapeForAutomation();
-                    PortSleep(token, 350);
-                }
-
-                PortCaptureSuccessScreenshot("Salvage", "SalvageSkippedNoFilledSlots");
-                return true;
-            }
-
             AddWorkflowStep("Salvaging");
-            AddWorkflowStep($"First filled inventory slot found at {firstSlot.Value.X},{firstSlot.Value.Y}");
             PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Tab", new DrawingPoint(683, 638))));
             if (!PortWaitForImageInDiablo(Img("Salvage", "Salvage Button.png"), token, 20000, PortVendorUiConfidence))
             {
@@ -133,27 +117,41 @@ namespace GoblinFarmer
             AddWorkflowStep("Inventory open requested: skipped");
             AddWorkflowStep("Inventory open confirmed via vendor/salvage UI");
             AddWorkflowStep("Inventory not required because vendor/salvage UI is open");
+            Stopwatch inventoryScanPerf = Stopwatch.StartNew();
+            List<DrawingPoint> cachedSlots = PortFilledInventorySlots();
+            inventoryScanPerf.Stop();
+            if (cachedSlots.Count == 0)
+            {
+                AddWorkflowStep("First filled inventory slot not found");
+                AddWorkflowStep("Salvage skipped: no filled inventory slots found.");
+                AppLogger.Info($"Salvage inventory scan: cachedSlotCount=0; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
+                if (closeAfterSalvage)
+                {
+                    PortPressEscapeForAutomation();
+                    PortSleep(token, 350);
+                }
+
+                PortCaptureSuccessScreenshot("Salvage", "SalvageSkippedNoFilledSlots");
+                return true;
+            }
+
+            AddWorkflowStep($"Cached salvage slots: {cachedSlots.Count}");
+            AppLogger.Info($"Salvage inventory scan: cachedSlotCount={cachedSlots.Count}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
             PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Button", new DrawingPoint(215, 382))));
             PortSleep(token, 150);
 
             Stopwatch salvagePerf = Stopwatch.StartNew();
             int salvagedCount = 0;
-            DrawingPoint? slot = firstSlot;
-            for (int i = 0; i < 60; i++)
+            for (int i = 0; i < cachedSlots.Count && i < 60; i++)
             {
                 if (token.IsCancellationRequested)
                 {
                     return false;
                 }
 
-                if (slot == null)
-                {
-                    AddWorkflowStep("No more filled inventory slots found");
-                    break;
-                }
-
                 Stopwatch slotPerf = Stopwatch.StartNew();
-                bool slotClickSent = PortSafeSalvageSlotClick(slot.Value);
+                DrawingPoint slot = cachedSlots[i];
+                bool slotClickSent = PortSafeSalvageSlotClick(slot);
                 salvagedCount++;
                 bool confirmationFound = PortWaitForSalvageConfirmationFast(token, out long confirmationWaitMs, out int confirmationScans);
                 if (confirmationFound)
@@ -162,9 +160,7 @@ namespace GoblinFarmer
                 }
 
                 PortSleep(token, PortSalvagePostSlotDelayMs);
-                Stopwatch nextSlotPerf = Stopwatch.StartNew();
-                slot = PortFirstFilledInventorySlot();
-                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; slotClickSent={slotClickSent}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs={nextSlotPerf.ElapsedMilliseconds}; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; slotClickSent={slotClickSent}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs=0; cacheMode=SingleInventoryScan; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
             }
 
             if (closeAfterSalvage)
@@ -174,7 +170,7 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep(salvagedCount == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {salvagedCount} slots clicked");
-            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; cachedSlotCount={cachedSlots.Count}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
         }

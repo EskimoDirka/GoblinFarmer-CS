@@ -624,7 +624,7 @@ namespace GoblinFarmer
                     template,
                     match,
                     portLastConfirmedLocation,
-                    staleVisibleLineDetails);
+                    $"{staleVisibleLineDetails}; areaResolutionSkippedReason=StaleVisibleLinePreAreaResolution");
                 return false;
             }
 
@@ -1415,7 +1415,7 @@ namespace GoblinFarmer
                 portLastGoblinEvidenceScanDiagnosticByKey[key] = now;
             }
 
-            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; observationModeEnabled={PortGoblinObservationScannerEnabled()}; automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; observationModeSetting=GoblinTracker.EnableObservationMode; automaticCountingSetting=GoblinTracker.EnableAutomaticCounting; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
+            AppLogger.Info($"{eventName}: reason={PortLogField(reason)}; observationModeEnabled={PortGoblinObservationScannerEnabled()}; automaticCountingEnabled={PortGoblinAutomaticCountingEnabled()}; observationModeSetting=GoblinTracker.EnableObservationMode; automaticCountingSetting=GoblinTracker.EnableAutomaticCounting; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; currentArea={PortLogField(PortDisplayLocation(portLastConfirmedLocation))}; {PortGoblinEvidenceRouteContextForLog()}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
         }
 
         private void PortLogJournalEvidenceFreshnessDiagnostic(
@@ -1438,7 +1438,21 @@ namespace GoblinFarmer
                 portLastGoblinEvidenceDetectorDiagnosticByKey[key] = now;
             }
 
-            AppLogger.Info($"{eventName}: source=Journal; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; templateName={PortLogField(template.FileName)}; currentArea={PortLogField(PortDisplayLocation(currentArea))}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; {details}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
+            AppLogger.Info($"{eventName}: source=Journal; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; templateName={PortLogField(template.FileName)}; currentArea={PortLogField(PortDisplayLocation(currentArea))}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; {details}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; diabloRunning={IsDiabloRunning()}; diabloActive={PortDiabloIsActive()}; {PortGoblinEvidenceRouteContextForLog()}; cooldownState={PortLogField(PortGoblinEvidenceCooldownStateForLog())}");
+        }
+
+        private string PortGoblinEvidenceRouteContextForLog()
+        {
+            string rawArea = PortDisplayLocation(portLastConfirmedLocation);
+            string normalizedArea = PortDisplayLocation(PortNormalizeBlockingLocation(portLastConfirmedLocation));
+            string displayArea = PortDisplayLocation(PortDetectedLocationDisplayName(portLastConfirmedLocation));
+            string routeGroup = PortDisplayLocation(PortGetRouteLocationForDetectedLocation(portLastConfirmedLocation));
+            string buttonArea = PortDisplayLocation(PortGetButtonLocationForDetectedLocation(portLastConfirmedLocation));
+            string blockingArea = PortDisplayLocation(PortGetConfirmedCurrentLocation());
+            string currentButton = PortDisplayLocation(PortTeleportLocationForKey(portLastTeleportKey));
+            string nextButton = PortDisplayLocation(PortTeleportLocationForKey(portQueuedTeleportKey));
+            string retryButton = PortDisplayLocation(PortTeleportLocationForKey(portQueuedRetryTeleportKey));
+            return $"routeRawArea={PortLogField(rawArea)}; routeNormalizedArea={PortLogField(normalizedArea)}; routeDisplayArea={PortLogField(displayArea)}; routeGroup={PortLogField(routeGroup)}; routeButtonArea={PortLogField(buttonArea)}; routeBlockingArea={PortLogField(blockingArea)}; routeCurrentButton={PortLogField(currentButton)}; routeNextButton={PortLogField(nextButton)}; routeRetryButton={PortLogField(retryButton)}";
         }
 
         private string PortGoblinEvidenceCooldownStateForLog()
@@ -1498,7 +1512,7 @@ namespace GoblinFarmer
                     : "CroppedTemplate; if confidence stays below threshold, compare timing and crop visibility";
             }
 
-            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={template.Type}; source={PortNormalizeGoblinObservationSource(template.Source)}; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; result={result}; reason={reason}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; templateName={PortLogField(template.FileName)}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; templateSize={FormatSize(match.TemplateSize)}; templateCoveragePct={templateCoverage:0.0}; journalDiagnosis={PortLogField(journalDiagnosis)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            AppLogger.Info($"GoblinEvidenceCandidateCheck: type={template.Type}; source={PortNormalizeGoblinObservationSource(template.Source)}; goblinType={PortLogField(template.GoblinType)}; evidenceKind={template.Kind}; result={result}; reason={reason}; bestConfidence={match.Confidence:0.000}; threshold={template.Threshold:0.000}; templateName={PortLogField(template.FileName)}; template={PortLogField(imagePath)}; templateExists={File.Exists(imagePath)}; templateSize={FormatSize(match.TemplateSize)}; templateCoveragePct={templateCoverage:0.0}; journalDiagnosis={PortLogField(journalDiagnosis)}; scanRegion={FormatRectangle(referenceRegion)}; screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)}; matchPoint={FormatPoint(match.MatchPoint)}; screenMatchPoint={FormatPoint(match.ScreenMatchPoint)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; {PortGoblinEvidenceRouteContextForLog()}");
         }
 
         private void PortLogGoblinEvidenceSourceScanResult(
@@ -1529,7 +1543,7 @@ namespace GoblinFarmer
                 threshold = PortExtractGoblinEvidenceNoteValue(candidate!.Notes, "Threshold");
             }
 
-            AppLogger.Info($"GoblinEvidenceScanResult source={observationSource} scanRegion={FormatRectangle(referenceRegion)} screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)} candidateFound={candidateFound} templateCount={templateCount} templateName={PortLogField(templateName)} goblinType={PortLogField(goblinType)} bestConfidence={confidence:0.000} threshold={PortLogField(threshold)} matchPoint={PortLogField(matchPoint)} templateSize={templateSize} templateCoveragePct={templateCoverage:0.0} journalDiagnosis={PortLogField(journalDiagnosis)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}");
+            AppLogger.Info($"GoblinEvidenceScanResult source={observationSource} scanRegion={FormatRectangle(referenceRegion)} screenRegion={PortGoblinEvidenceScreenRegionForLog(referenceRegion)} candidateFound={candidateFound} templateCount={templateCount} templateName={PortLogField(templateName)} goblinType={PortLogField(goblinType)} bestConfidence={confidence:0.000} threshold={PortLogField(threshold)} matchPoint={PortLogField(matchPoint)} templateSize={templateSize} templateCoveragePct={templateCoverage:0.0} journalDiagnosis={PortLogField(journalDiagnosis)}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationRunning={isAutomationRunning}; {PortGoblinEvidenceRouteContextForLog()}");
         }
 
         private static double PortGoblinEvidenceTemplateCoveragePct(Rectangle referenceRegion, Size templateSize)

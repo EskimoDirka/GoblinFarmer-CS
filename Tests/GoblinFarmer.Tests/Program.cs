@@ -29,6 +29,7 @@ Run("Diablo discovery stays bounded to known roots", TestDiabloDiscoveryStaysBou
 Run("Configured valid Diablo path wins over discovery", TestConfiguredValidDiabloPathWinsOverDiscovery);
 Run("DebugManager profile helpers separate VS, release debug, and normal release", TestDebugManagerProfileHelpers);
 Run("DebugManager retention cleanup only deletes matching artifacts", TestDebugManagerRetentionCleanupFilters);
+Run("Debug package script applies 20 package retention", TestDebugPackageScriptAppliesPackageRetention);
 Run("DebugManager age retention deletes old debug artifacts", TestDebugManagerAgeRetentionDeletesOldArtifacts);
 Run("GoblinEvidence retention keeps newest 250 files", TestGoblinEvidenceRetentionKeepsNewest250Files);
 Run("GoblinEvidence retention breaks timestamp ties by filename", TestGoblinEvidenceRetentionBreaksTimestampTiesByFilename);
@@ -100,6 +101,7 @@ Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCount
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
 Run("Goblin VS Debug recognition Capture button is manual-only", TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly);
 Run("Goblin VS Debug simulation controls use count guards", TestGoblinVsDebugSimulationControlsUseCountGuards);
+Run("Goblin VS Debug simulation area list covers route and blocked areas", TestGoblinVsDebugSimulationAreaListCoversRouteAndBlockedAreas);
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
 Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLiveEvidenceOnly);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
@@ -640,6 +642,18 @@ static void TestDebugManagerRetentionCleanupFilters()
         File.SetLastWriteTimeUtc(path, timestamp);
         return path;
     }
+}
+
+static void TestDebugPackageScriptAppliesPackageRetention()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string scriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
+
+    AssertTrue(scriptSource.Contains("[int]$DebugPackageRetentionCount = 20", StringComparison.Ordinal), "debug package export script should default to retaining 20 packages");
+    AssertTrue(scriptSource.Contains("Invoke-DebugPackageRetentionCleanup", StringComparison.Ordinal), "debug package export script should invoke retention cleanup after creating a package");
+    AssertTrue(scriptSource.Contains("GoblinFarmer_Debug_*.zip", StringComparison.Ordinal), "debug package retention should target only GoblinFarmer debug ZIPs");
+    AssertTrue(scriptSource.Contains("Debug package retention cleanup deleted:", StringComparison.Ordinal), "debug package retention should log deleted packages");
+    AssertTrue(scriptSource.Contains("Debug package retention cleanup complete:", StringComparison.Ordinal), "debug package retention should log a cleanup summary");
 }
 
 static void TestDebugManagerAgeRetentionDeletesOldArtifacts()
@@ -3852,6 +3866,51 @@ static void TestGoblinVsDebugSimulationControlsUseCountGuards()
     AssertFalse(method.Contains("PortQueueGoblinEncounterDebugCapture", StringComparison.Ordinal), "debug simulations should not create encounter captures or replay artifacts");
 }
 
+static void TestGoblinVsDebugSimulationAreaListCoversRouteAndBlockedAreas()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    IReadOnlyList<string> areas = GoblinTrackerDebugSimulationAreas.DropdownItems();
+
+    AssertTrue(automationSource.Contains("GoblinTrackerDebugSimulationAreas.DropdownItems()", StringComparison.Ordinal), "VS Debug simulation dropdown should use the centralized area list");
+    AssertEqual("Current Area", areas[0], "simulation dropdown should keep Current Area as the first option");
+
+    foreach (string expectedArea in new[]
+    {
+        "Southern Highlands",
+        "Northern Highlands",
+        "The Weeping Hollow",
+        "The Festering Woods",
+        "Cathedral Level 3",
+        "Royal Crypts",
+        "Western Channel Level 2",
+        "Eastern Channel Level 2",
+        "Stinging Winds",
+        "Black Canyon Mines",
+        "Battlefields",
+        "Rakkis Crossing",
+        "Caverns of Frost Level 2",
+        "Cave Of The Moon Clan Level 2",
+        "Pandemonium Fortress Level 1",
+        "Pandemonium Fortress Level 2",
+        "City of Caldeum",
+        "Gates of Caldeum",
+        "Caldeum Bazaar",
+        "Flooded Causeway",
+        "Ancient Waterway",
+        "Western Channel Level 1",
+        "Eastern Channel Level 1",
+        "The Bridge Of Korsikk",
+        "WhimsyDale",
+        "New Tristram",
+    })
+    {
+        AssertTrue(areas.Contains(expectedArea, StringComparer.OrdinalIgnoreCase), $"simulation dropdown should include {expectedArea}");
+    }
+
+    AssertEqual(areas.Count, areas.Distinct(StringComparer.OrdinalIgnoreCase).Count(), "simulation dropdown should not contain duplicate area entries");
+}
+
 static void TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate()
 {
     GoblinDecisionTraceRecord count = GoblinDecisionTracePolicy.Create(
@@ -4705,6 +4764,10 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     AssertTrue(townSource.Contains("confirmationScans=", StringComparison.Ordinal), "salvage should log confirmation scan counts for timing diagnosis");
     AssertTrue(townSource.Contains("PortSalvagePostSlotDelayMs = 35", StringComparison.Ordinal), "salvage post-slot delay should be short but explicit");
     AssertTrue(townSource.Contains("PortSafeSalvageSlotClick", StringComparison.Ordinal), "salvage slot clicks should use the faster slot-only safe click helper");
+    AssertTrue(townSource.Contains("List<DrawingPoint> cachedSlots = PortFilledInventorySlots()", StringComparison.Ordinal), "salvage should scan inventory once and cache filled slots");
+    AssertFalse(townSource.Contains("slot = PortFirstFilledInventorySlot()", StringComparison.Ordinal), "salvage should not rescan inventory after each slot");
+    AssertTrue(townSource.Contains("cacheMode=SingleInventoryScan", StringComparison.Ordinal), "salvage timing should identify the single-scan cache mode");
+    AssertTrue(townSource.Contains("cachedSlotCount=", StringComparison.Ordinal), "salvage should log the cached slot count");
     AssertTrue(townSource.Contains("slotClickSent=", StringComparison.Ordinal), "salvage should log whether the slot click was sent");
     AssertTrue(townSource.Contains("Salvage timing: slotIndex=", StringComparison.Ordinal), "salvage should log per-slot timing");
     AssertTrue(townSource.Contains("Salvage timing summary:", StringComparison.Ordinal), "salvage should log a summary timing line");

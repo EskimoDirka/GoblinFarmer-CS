@@ -759,9 +759,15 @@ namespace GoblinFarmer
 
         private DrawingPoint? PortFirstFilledInventorySlot()
         {
+            List<DrawingPoint> slots = PortFilledInventorySlots();
+            return slots.Count == 0 ? null : slots[0];
+        }
+
+        private List<DrawingPoint> PortFilledInventorySlots()
+        {
             if (!PortTryGetDiabloRect(out RECT rect))
             {
-                return null;
+                return [];
             }
 
             Rectangle grid = PortScaleReferenceRectangle(new Rectangle(1864, 725, 687, 423), rect);
@@ -790,6 +796,7 @@ namespace GoblinFarmer
             using Mat gray = new();
             Cv2.CvtColor(rawMat, gray, ColorConversionCodes.BGRA2GRAY);
             using Mat? blank = File.Exists(blankPath) ? Cv2.ImRead(blankPath, ImreadModes.Grayscale) : null;
+            List<DrawingPoint> filledSlots = [];
 
             for (int row = 0; row < rows; row++)
             {
@@ -812,12 +819,12 @@ namespace GoblinFarmer
 
                     if (!blankLike)
                     {
-                        return new DrawingPoint(grid.Left + local.Left + slotWidth / 2, grid.Top + local.Top + slotHeight / 2);
+                        filledSlots.Add(new DrawingPoint(grid.Left + local.Left + slotWidth / 2, grid.Top + local.Top + slotHeight / 2));
                     }
                 }
             }
 
-            return null;
+            return filledSlots;
         }
 
         private PortScanRegionManager PortScanRegions => portScanRegionManager ??= PortCreateScanRegionManager();
