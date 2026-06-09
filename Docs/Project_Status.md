@@ -107,11 +107,12 @@ This file is the current source of truth for the active release, stable behavior
 - Battle.net/Diablo launch, Start Game, Make New Game, route teleporting, interrupted teleport recovery, repair/salvage, Kadala timing, and Witch Doctor combat are stable enough for ongoing monitoring.
 - Release and VS Debug Goblin Tracker layouts keep evidence and Last Observation fields readable.
 - Debug package workflow remains `Scripts\Create Debug Package.bat`, which creates a ZIP for VS Debug and Release review.
+- Project Brain workflow is available through `Scripts\Create-ProjectBrain.bat`, which delegates to `Scripts\create-project-brain.ps1` and writes a timestamped docs-only ZIP under `ProjectBrain` for quick AI-assisted development handoff context.
 - Form close remains quiet and does not generate packages or loose review files.
 - VS Debug and release/debug-mode artifact retention is 7 days; Goblin Evidence folders also use count/package limits.
 - Debug ZIPs keep Goblin Tracker evidence replayable without carrying every full screenshot: Journal/Minimap crops, metadata, JSONL, logs, manifests, summaries, observation diagnostics, encounter captures, and decision traces are kept; normal root `GoblinEvidence_*` full/event images are skipped by default, and old full DecisionBundle evidence images plus capture fullscreen images are excluded from ZIPs by default and reported in the manifest.
 - Tracked `Config\AppSettings.json` is sanitized for release/defaults. Private VS Debug paths and toggles should live in ignored `Config\AppSettings.local.json` when needed.
-- Generated EXEs, installer output, portable ZIPs, debug packages, logs, screenshots, source-upload output, and retired `GitHub Upload` copies are not source files.
+- Generated EXEs, installer output, portable ZIPs, debug packages, Project Brain ZIPs, logs, screenshots, source-upload output, and retired `GitHub Upload` copies are not source files.
 
 ## Goblin Tracker Current Behavior
 
@@ -169,3 +170,14 @@ This file is the current source of truth for the active release, stable behavior
 - Use the `Capture` button only when an image-recognition issue is visible and extra minimap/journal/fullscreen evidence would help.
 - Keep `Docs/TODO.md` synchronized with remaining work and next test steps.
 - Next validation should confirm both loose runtime storage and the next package are smaller while still containing replay-ready DecisionBundles, EncounterCapture Journal/Minimap crops, manifests, JSONL, and analysis files.
+
+## Developer Utilities
+
+- Added `Scripts\Create-ProjectBrain.bat` and `Scripts\create-project-brain.ps1`.
+- Intended purpose: create a lightweight docs-only `GoblinFarmer_ProjectBrain_YYYYMMDD_HHMMSS.zip` package for AI-assisted development context without runtime/debug artifacts.
+- How to run: from the repository root, launch `Scripts\Create-ProjectBrain.bat` or run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\create-project-brain.ps1`.
+- Included files are allowlisted only: `AGENTS.md`, `README.md`, `Docs\Project_Status.md`, `Docs\Test_Results.md`, `Docs\Known_Issues.md`, `Docs\Next_Tasks.md`, and `Docs\Release_Notes.md` when they exist.
+- The script creates `ProjectBrain` automatically, reports included and skipped files, and prints the final ZIP size and path.
+- Tested: script run created a timestamped ZIP under `ProjectBrain`, skipped missing optional docs without failing, and ZIP contents were verified as documentation-only.
+- Still needs testing: repeat from a clean checkout where optional docs may be added later.
+- Next recommended task: use the generated Project Brain ZIP when handing current repository context to an AI assistant that does not need debug packages or runtime evidence.

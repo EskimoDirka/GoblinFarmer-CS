@@ -432,6 +432,7 @@ FodyWeavers.xsd
 # GoblinFarmer runtime/debug artifacts
 Screenshots/
 DebugPackages/
+ProjectBrain/
 Sessions/
 debug-screenshots/
 ChatGPT Uploads/
@@ -461,6 +462,8 @@ Scripts/*
 Scripts/Local Tools/
 !Scripts/create-debug-package.ps1
 !Scripts/Create Debug Package.bat
+!Scripts/create-project-brain.ps1
+!Scripts/Create-ProjectBrain.bat
 !Scripts/debug-analysis-tools.ps1
 !Scripts/analyze-latest-debug-package.ps1
 !Scripts/build-goblin-tracker-timeline.ps1

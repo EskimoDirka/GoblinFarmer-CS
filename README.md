@@ -212,6 +212,8 @@ Debug and release artifacts keep evidence useful but bounded by default. VS Debu
 
 For both VS Debug and Release troubleshooting, use the single ZIP export path: `Scripts\Create Debug Package.bat`, which launches `Scripts\create-debug-package.ps1`. The batch script self-discovers the runtime/package roots, writes the ZIP under `DebugPackages`, and includes the latest logs, manifests, route summaries, Goblin Tracker summaries, bounded screenshots, GoblinEvidence, replay-ready encounter captures, decision bundles, observation diagnostics, and root analysis files: `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt`. Closing the VS Debug form is intentionally quiet and does not generate packages or loose review files.
 
+For AI-assisted development handoff context, `Scripts\Create-ProjectBrain.bat` creates a timestamped docs-only ZIP under `ProjectBrain` from the allowlisted project instructions, README, and current status/reference docs when present.
+
 Release and Visual Studio Debug use a taller Goblin Tracker group so the evidence and Last Observation fields remain readable. Release-user launches keep diagnostic tabs hidden until Debug Mode is enabled.
 
 Debug tooling includes:
