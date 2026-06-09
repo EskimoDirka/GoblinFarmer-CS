@@ -465,4 +465,6 @@ Scripts/Local Tools/
 !Scripts/create-project-brain.ps1
 !Scripts/Create Project Brain.bat
 !Scripts/debug-analysis-tools.ps1
+!Scripts/cleanup-project.ps1
+!Scripts/Cleanup Project.bat
 !Scripts/.gitkeep

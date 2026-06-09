@@ -25,6 +25,6 @@ These scripts were moved out of the active `Scripts` folder during the repositor
 
 ## Current Policy
 
-- Active tracked user-facing batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`.
+- Active tracked package batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`; `Cleanup Project.bat` is a later maintenance-only exception for generated artifact cleanup.
 - Active tracked PowerShell scripts under `Scripts` are limited to `create-debug-package.ps1`, `create-project-brain.ps1`, and `debug-analysis-tools.ps1`.
 - Do not delete archived scripts until a separate cleanup pass confirms they are no longer useful as references.

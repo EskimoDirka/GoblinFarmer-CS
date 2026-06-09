@@ -43,6 +43,8 @@ The Project Brain utility now creates a docs-only ZIP under `ProjectBrain` and i
 
 ## Current Scripts Policy
 
-Tracked user-facing batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`. Required backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`; `debug-analysis-tools.ps1` remains as a direct debug package dependency. Older manual helpers were archived under `Docs\ScriptArchive\2026-06-09`.
+Tracked package batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`. Required backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`; `debug-analysis-tools.ps1` remains as a direct debug package dependency. `Cleanup Project.bat` and `cleanup-project.ps1` are a maintenance-only generated-artifact cleanup exception and default to dry-run. Older manual helpers were archived under `Docs\ScriptArchive\2026-06-09`.
 
 `Scripts\create-project-brain.ps1 -StorageBreakdownOnly` writes the report-only storage summary to `Reports\Storage_Breakdown.md`.
+
+`Scripts\cleanup-project.ps1` writes `Reports\Cleanup_Report.md`; real deletion requires `-Delete`.

@@ -85,6 +85,34 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\create-project
 
 The report is written to `Reports\Storage_Breakdown.md`. It is report-only and highlights source/docs, generated/debug/build artifacts, top-level folder sizes, largest subfolders, largest file extensions, largest files, and likely cleanup targets such as `bin`, `obj`, `DebugPackages`, `Debug`, `GoblinEvidence`, `DecisionBundles`, logs, screenshots, installers/packages, and replay captures.
 
+## Project Cleanup Script
+
+`Scripts\Cleanup Project.bat` and `Scripts\cleanup-project.ps1` are maintenance-only cleanup tools. They are tracked as an exception to the normal two package launchers.
+
+Default dry-run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\cleanup-project.ps1
+```
+
+Delete mode requires an explicit flag:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\cleanup-project.ps1 -Delete
+```
+
+Useful options:
+
+- `-DebugPackageRetention 10` keeps the newest 10 debug packages for active testing; use `5` only when stable.
+- `-RuntimeArtifacts` includes optional runtime folders such as `Debug`, logs, screenshots, `GoblinEvidence`, `DecisionBundles`, and replay/capture folders.
+- `-PruneOldInstallers` deletes older installer files while keeping the newest installer.
+
+The cleanup script writes `Reports\Cleanup_Report.md`, prints every path considered, estimates reclaimable bytes, skips missing paths, and refuses targets outside the project root. It must never delete by default.
+
+Protected paths include `Images`, `Docs`, `Scripts`, `Config`, `Installer`, `.git`, source files, project/solution files, `README.md`, `AGENTS.md`, and Project Brain docs.
+
+Recommended cleanup order: run dry-run first, prune `bin`/`obj` and test build outputs, reduce debug package retention if needed, then separately decide whether runtime evidence or older installers should be deleted.
+
 ## Live Test Workflow
 
 - Treat every user live-test run as a VS Debug run unless the user explicitly says otherwise.

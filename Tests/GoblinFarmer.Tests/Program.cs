@@ -4038,14 +4038,18 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     string programSource = File.ReadAllText(Path.Combine(repoRoot, "Program.cs"));
     string projectSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
     string packageLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Create Debug Package.bat"));
+    string cleanupLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Cleanup Project.bat"));
+    string cleanupScriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "cleanup-project.ps1"));
     string debugAnalysisToolsSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "debug-analysis-tools.ps1"));
-    string[] expectedUserFacingBatchScripts =
+    string[] expectedBatchScripts =
     [
+        "Cleanup Project.bat",
         "Create Debug Package.bat",
         "Create Project Brain.bat",
     ];
     string[] expectedActivePowerShellScripts =
     [
+        "cleanup-project.ps1",
         "create-debug-package.ps1",
         "create-project-brain.ps1",
         "debug-analysis-tools.ps1",
@@ -4155,6 +4159,15 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageLauncher.Contains("Supported debug ZIP export path for both VS Debug and Release", StringComparison.Ordinal), "debug package launcher should identify itself as the single review export path");
     AssertTrue(packageLauncher.Contains("single intentional review package workflow", StringComparison.Ordinal), "debug package launcher should make the batch workflow clear");
     AssertTrue(packageLauncher.Contains("create-debug-package.ps1", StringComparison.Ordinal), "debug package launcher should delegate to the PowerShell package script");
+    AssertTrue(cleanupLauncher.Contains("Default mode is DRY RUN", StringComparison.Ordinal), "cleanup launcher should identify dry-run default");
+    AssertTrue(cleanupLauncher.Contains("cleanup-project.ps1", StringComparison.Ordinal), "cleanup launcher should delegate to the PowerShell cleanup script");
+    AssertTrue(cleanupScriptSource.Contains("[switch]$Delete", StringComparison.Ordinal), "cleanup script should require an explicit delete switch");
+    AssertTrue(cleanupScriptSource.Contains("DRY RUN", StringComparison.Ordinal), "cleanup script should clearly report dry-run mode");
+    AssertTrue(cleanupScriptSource.Contains("Refusing to consider path outside project root", StringComparison.Ordinal), "cleanup script should guard against paths outside the project root");
+    AssertTrue(cleanupScriptSource.Contains("Cleanup_Report.md", StringComparison.Ordinal), "cleanup script should write the cleanup report");
+    AssertTrue(cleanupScriptSource.Contains("DebugPackageRetention = 10", StringComparison.Ordinal), "cleanup script should default to active-testing debug package retention");
+    AssertTrue(cleanupScriptSource.Contains("RuntimeArtifacts", StringComparison.Ordinal), "cleanup script should gate runtime artifact cleanup behind an explicit flag");
+    AssertTrue(cleanupScriptSource.Contains("PruneOldInstallers", StringComparison.Ordinal), "cleanup script should gate old installer pruning behind an explicit flag");
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaDebugPackageAnalysisContent", StringComparison.Ordinal), "shared debug helper should build the package analysis report");
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinTrackerTimelineContent", StringComparison.Ordinal), "shared debug helper should build the Goblin Tracker timeline");
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinEvidenceHealthContent", StringComparison.Ordinal), "shared debug helper should build the evidence health report");
@@ -4169,8 +4182,8 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
         .Select(Path.GetFileName)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
         .ToArray()!;
-    AssertSequenceEqual(expectedUserFacingBatchScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activeBatchScripts, "Scripts should expose only the two user-facing batch launchers");
-    AssertSequenceEqual(expectedActivePowerShellScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activePowerShellScripts, "Scripts should keep only the package scripts and direct debug-package helper");
+    AssertSequenceEqual(expectedBatchScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activeBatchScripts, "Scripts should expose the two package launchers plus the documented cleanup maintenance launcher");
+    AssertSequenceEqual(expectedActivePowerShellScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activePowerShellScripts, "Scripts should keep package scripts, direct debug-package helper, and cleanup maintenance script");
     foreach (string scriptName in expectedActivePowerShellScripts)
     {
         AssertTrue(File.Exists(Path.Combine(repoRoot, "Scripts", scriptName)), $"{scriptName} should exist under Scripts");
