@@ -983,11 +983,16 @@ namespace GoblinFarmer
     internal static class GoblinAutoCountEvidenceReliabilityPolicy
     {
         public const string JournalPendingKilledOrMinimapConfirmation = "JournalPendingKilledOrMinimapConfirmation";
+        public const string JournalEngagedSustainedActiveCombat = "JournalEngagedSustainedActiveCombat";
         public const string JournalEvidenceKindUnknown = "JournalEvidenceKindUnknown";
+        public static readonly TimeSpan JournalEngagedSustainedActiveCombatMinimumAge = TimeSpan.FromSeconds(2);
+        public static readonly TimeSpan JournalEngagedSustainedActiveCombatMaximumAge = TimeSpan.FromSeconds(8);
 
         public static bool AllowsAutomaticCount(
             string source,
             string evidenceSignature,
+            double evidenceFirstSeenAgeSeconds,
+            bool combatActive,
             out string reason,
             out string reliability)
         {
@@ -1016,6 +1021,14 @@ namespace GoblinFarmer
             if (evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngaged), StringComparison.OrdinalIgnoreCase) ||
                 evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngagedAndKilled), StringComparison.OrdinalIgnoreCase))
             {
+                if (combatActive &&
+                    evidenceFirstSeenAgeSeconds >= JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds &&
+                    evidenceFirstSeenAgeSeconds <= JournalEngagedSustainedActiveCombatMaximumAge.TotalSeconds)
+                {
+                    reliability = JournalEngagedSustainedActiveCombat;
+                    return true;
+                }
+
                 reason = JournalPendingKilledOrMinimapConfirmation;
                 reliability = "JournalEngagedOnly";
                 return false;
@@ -1026,6 +1039,21 @@ namespace GoblinFarmer
                 ? "JournalKindMissing"
                 : $"JournalKind:{evidenceKind}";
             return false;
+        }
+
+        public static bool AllowsAutomaticCount(
+            string source,
+            string evidenceSignature,
+            out string reason,
+            out string reliability)
+        {
+            return AllowsAutomaticCount(
+                source,
+                evidenceSignature,
+                evidenceFirstSeenAgeSeconds: 0,
+                combatActive: false,
+                out reason,
+                out reliability);
         }
 
         private static string NormalizeObservationSource(string source)

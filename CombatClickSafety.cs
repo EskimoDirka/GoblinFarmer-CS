@@ -46,6 +46,37 @@ namespace GoblinFarmer
             return !TryGetNoClickRegion(cursor, diabloRect, out _, out _, out _);
         }
 
+        public static bool TryGetDemonHunterFallbackClickPoint(Rectangle diabloRect, out Point point)
+        {
+            Point[] candidates =
+            [
+                RelativePoint(diabloRect, 0.50, 0.52),
+                RelativePoint(diabloRect, 0.50, 0.45),
+                RelativePoint(diabloRect, 0.45, 0.50),
+                RelativePoint(diabloRect, 0.55, 0.50),
+                RelativePoint(diabloRect, 0.50, 0.60),
+            ];
+
+            foreach (Point candidate in candidates)
+            {
+                if (diabloRect.Contains(candidate) && CombatMouseClickIsSafe(candidate, diabloRect))
+                {
+                    point = candidate;
+                    return true;
+                }
+            }
+
+            point = Point.Empty;
+            return false;
+        }
+
+        private static Point RelativePoint(Rectangle rectangle, double x, double y)
+        {
+            return new Point(
+                rectangle.Left + (int)Math.Round(rectangle.Width * x),
+                rectangle.Top + (int)Math.Round(rectangle.Height * y));
+        }
+
         public static bool ContainsPythonBoundary(Rectangle rectangle, Point point)
         {
             return point.X >= rectangle.Left &&
@@ -84,6 +115,15 @@ namespace GoblinFarmer
         public static bool SafeWaitTimeoutStopsCombat(bool safeFoundWithinTimeout)
         {
             return !safeFoundWithinTimeout;
+        }
+
+        public static bool ShouldUseFallbackClickWhileRightHeld(bool combatRunning, string combatClass, bool diabloActive, bool rightMouseHeld, bool rightHeldFromSafeRegion)
+        {
+            return combatRunning &&
+                combatClass == "demon_hunter" &&
+                diabloActive &&
+                rightMouseHeld &&
+                rightHeldFromSafeRegion;
         }
     }
 

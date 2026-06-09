@@ -26,6 +26,7 @@ namespace GoblinFarmer
             string encounterSuppressionMatch = "";
             string reliabilityReason = "";
             string evidenceReliability = "";
+            bool evidenceReliabilityAllowsCount = false;
             int total = 0;
             PortGoblinAutoCountEvidenceState? evidenceState = null;
             PortGoblinAutoCountEncounterState? encounterState = null;
@@ -108,11 +109,13 @@ namespace GoblinFarmer
                     suppressionReason = "MinimapConfidencePendingJournal";
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
-                    !GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+                    !(evidenceReliabilityAllowsCount = GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
                         observation.Source,
                         autoEvidenceKey,
+                        evidenceFirstSeenAgeSeconds,
+                        portCombatRunning,
                         out reliabilityReason,
-                        out evidenceReliability))
+                        out evidenceReliability)))
                 {
                     suppressionReason = reliabilityReason;
                 }
@@ -121,7 +124,9 @@ namespace GoblinFarmer
                 {
                     suppressionReason = "StaleEvidence";
                 }
-                else if (string.IsNullOrWhiteSpace(suppressionReason) && !observation.WouldCount)
+                else if (string.IsNullOrWhiteSpace(suppressionReason) &&
+                    !observation.WouldCount &&
+                    !PortObservationPendingJournalPromotedByReliability(observation, evidenceReliabilityAllowsCount, evidenceReliability))
                 {
                     suppressionReason = string.IsNullOrWhiteSpace(observation.Reason)
                         ? "ObservationNotEligible"
@@ -274,6 +279,8 @@ namespace GoblinFarmer
                 GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
                     observation.Source,
                     autoEvidenceKey,
+                    evidenceFirstSeenAgeSeconds,
+                    portCombatRunning,
                     out reliabilityReason,
                     out evidenceReliability);
             }
@@ -326,6 +333,17 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;
+        }
+
+        private static bool PortObservationPendingJournalPromotedByReliability(
+            GoblinObservationRecord observation,
+            bool evidenceReliabilityAllowsCount,
+            string evidenceReliability)
+        {
+            return evidenceReliabilityAllowsCount &&
+                observation.Source.Contains("Journal", StringComparison.OrdinalIgnoreCase) &&
+                observation.Reason.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation, StringComparison.OrdinalIgnoreCase) &&
+                evidenceReliability.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombat, StringComparison.OrdinalIgnoreCase);
         }
 
         private void PortLogGoblinDecisionTrace(GoblinDecisionTraceRecord trace)

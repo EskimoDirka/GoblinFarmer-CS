@@ -13,6 +13,7 @@ int failures = 0;
 
 Run("Python no-click rectangles use blacklist safety and Python boundaries", TestPythonNoClickRectangles);
 Run("Unsafe cursor suppresses left clicks without stopping Demon Hunter key loop", TestUnsafeCursorDoesNotStopKeyLoop);
+Run("Demon Hunter blocked-cursor fallback uses safe playfield point", TestDemonHunterBlockedCursorFallbackUsesSafePlayfieldPoint);
 Run("Demon Hunter right mouse remains held after initial safe start", TestRightMouseRemainsHeldAfterSafeStart);
 Run("Initial safe-wait timeout stops only when Python would stop", TestInitialSafeWaitTimeoutPolicy);
 Run("Default AppSettings path/debug profile are launch-surface neutral", TestAppSettingsLaunchParityDefaults);
@@ -58,6 +59,7 @@ Run("Goblin replay template scenario suppresses late New Game journal carryover"
 Run("Goblin replay template scenario uses current-location resolver", TestGoblinReplayTemplateScenarioUsesCurrentLocationResolver);
 Run("Goblin replay template scenario allows fresh minimap after stale cross-area journal", TestGoblinReplayTemplateScenarioAllowsFreshMinimapAfterStaleCrossAreaJournal);
 Run("Goblin replay template scenario waits for killed confirmation after engaged journal", TestGoblinReplayTemplateScenarioWaitsForKilledConfirmationAfterEngagedJournal);
+Run("Goblin replay template scenario counts sustained active engaged journal", TestGoblinReplayTemplateScenarioCountsSustainedActiveEngagedJournal);
 Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
@@ -173,6 +175,18 @@ static void TestUnsafeCursorDoesNotStopKeyLoop()
 
     AssertFalse(CombatClickSafety.CombatMouseClickIsSafe(unsafeCursor, diabloRect), "cursor should be unsafe inside no-click region");
     AssertTrue(DemonHunterCombatPolicy.KeyLoopContinuesWhenCursorUnsafe(combatRunning: true, combatClass: "demon_hunter", diabloActive: true), "key loop should continue independently of click suppression");
+}
+
+static void TestDemonHunterBlockedCursorFallbackUsesSafePlayfieldPoint()
+{
+    Rectangle diabloRect = new(0, 0, CombatClickSafety.ReferenceWidth, CombatClickSafety.ReferenceHeight);
+
+    AssertTrue(CombatClickSafety.TryGetDemonHunterFallbackClickPoint(diabloRect, out Point fallbackPoint), "Demon Hunter should have a safe fallback click point");
+    AssertTrue(diabloRect.Contains(fallbackPoint), "fallback point should remain inside Diablo window");
+    AssertTrue(CombatClickSafety.CombatMouseClickIsSafe(fallbackPoint, diabloRect), "fallback point should avoid no-click UI regions");
+    AssertTrue(DemonHunterCombatPolicy.ShouldUseFallbackClickWhileRightHeld(combatRunning: true, combatClass: "demon_hunter", diabloActive: true, rightMouseHeld: true, rightHeldFromSafeRegion: true), "fallback should be allowed for active Demon Hunter right-hold combat");
+    AssertFalse(DemonHunterCombatPolicy.ShouldUseFallbackClickWhileRightHeld(combatRunning: true, combatClass: "monk", diabloActive: true, rightMouseHeld: true, rightHeldFromSafeRegion: true), "fallback should stay Demon Hunter-specific");
+    AssertFalse(DemonHunterCombatPolicy.ShouldUseFallbackClickWhileRightHeld(combatRunning: true, combatClass: "demon_hunter", diabloActive: true, rightMouseHeld: true, rightHeldFromSafeRegion: false), "fallback should require right hold that started safely");
 }
 
 static void TestRightMouseRemainsHeldAfterSafeStart()
@@ -1985,6 +1999,55 @@ static void TestGoblinReplayTemplateScenarioWaitsForKilledConfirmationAfterEngag
         AssertTrue(result.Steps[1].Counted, "fresh killed journal evidence should count after the Engaged diagnostic");
         AssertEqual("Eligible", result.Steps[1].Reason, "killed journal confirmation should remain eligible");
         AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioStepResult", StringComparison.Ordinal) && line.Contains("reason=JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal)), "template scenario should log pending Engaged-only evidence");
+    }
+    finally
+    {
+        if (Directory.Exists(scenarioRoot))
+        {
+            Directory.Delete(scenarioRoot, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinReplayTemplateScenarioCountsSustainedActiveEngagedJournal()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string templateRoot = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string scenarioRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerReplaySustainedEngaged_{Guid.NewGuid():N}");
+    Directory.CreateDirectory(scenarioRoot);
+    try
+    {
+        string engagedTemplate = "Treasure Goblin Engaged Journal.png";
+        AssertTrue(File.Exists(Path.Combine(templateRoot, engagedTemplate)), "template scenario test requires Treasure Goblin engaged journal evidence");
+        string scenarioPath = Path.Combine(scenarioRoot, "sustained-engaged-counts.txt");
+        File.WriteAllLines(scenarioPath, [
+            "Scenario=Sustained engaged journal counts",
+            $"Step=Southern engaged first seen|Scan|Area=Southern Highlands|Journal={engagedTemplate}|JournalLineBucket=10|AdvanceSeconds=3",
+            $"Step=Southern engaged sustained|Scan|Area=Southern Highlands|Journal={engagedTemplate}|JournalLineBucket=10|AdvanceSeconds=1",
+        ]);
+
+        GoblinReplayTemplateScenarioManifestLoadResult load =
+            GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+        AssertTrue(load.Loaded, $"template scenario manifest should load cleanly, reason={load.Reason}");
+
+        List<string> replayLogs = [];
+        GoblinReplayFixtureScenarioResult result = GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+            load.ScenarioName,
+            load.Steps,
+            templateRoot,
+            replayLogs.Add,
+            writeAppLog: false,
+            startUtc: new DateTime(2026, 6, 8, 18, 0, 0, DateTimeKind.Utc));
+
+        AssertEqual(2, result.Steps.Count, "sustained engaged scenario should produce both decisions");
+        AssertFalse(result.Steps[0].Counted, "first Engaged-only journal sighting should remain pending");
+        AssertEqual(
+            GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation,
+            result.Steps[0].Reason,
+            "first Engaged-only sighting should report the pending-confirmation reason");
+        AssertTrue(result.Steps[1].Counted, "same-area active Engaged evidence sustained past the confirmation window should count");
+        AssertEqual("Eligible", result.Steps[1].Reason, "sustained same-area Engaged should become eligible");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayTemplateScenarioStepResult", StringComparison.Ordinal) && line.Contains("countDecision=Count", StringComparison.Ordinal)), "template scenario should log the sustained Engaged count");
     }
     finally
     {
@@ -4020,6 +4083,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(automationSource.Contains("PortAutomaticGoblinSourceVariantSuppressWindow", StringComparison.Ordinal), "cross-source stale text suppression should use an explicit recent-variant window");
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress", StringComparison.Ordinal), "automatic counting should share a testable encounter suppression policy");
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "automatic counting should require reliable evidence before incrementing");
+    AssertTrue(autoCountSource.Contains("PortObservationPendingJournalPromotedByReliability", StringComparison.Ordinal), "sustained active Engaged journal evidence should be able to promote a pending observation into the normal count guards");
     AssertTrue(observeMethod.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "observation summaries should show pending Engaged-only journal evidence before auto-count attempts run");
     AssertTrue(evidenceModelSource.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "Engaged-only journal evidence should have an explicit pending-confirmation reason");
     AssertTrue(autoCountSource.Contains("refreshEncounterLastSeen", StringComparison.Ordinal), "suppressed source variants should refresh encounter last-seen state instead of expiring from the original count time");
@@ -4056,6 +4120,35 @@ static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmati
         engagedReason,
         "Engaged-only journal evidence should report the pending-confirmation reason");
     AssertEqual("JournalEngagedOnly", engagedReliability, "Engaged-only journal reliability should be explicit in logs and JSONL");
+
+    AssertTrue(
+        GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+            "Journal",
+            "JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
+            evidenceFirstSeenAgeSeconds: 2.5,
+            combatActive: true,
+            out string sustainedEngagedReason,
+            out string sustainedEngagedReliability),
+        "same-area active Engaged journal evidence sustained past the confirmation window should count");
+    AssertEqual("", sustainedEngagedReason, "sustained Engaged journal evidence should not return a suppression reason");
+    AssertEqual(
+        GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombat,
+        sustainedEngagedReliability,
+        "sustained Engaged journal reliability should be explicit");
+
+    AssertFalse(
+        GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+            "Journal",
+            "JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
+            evidenceFirstSeenAgeSeconds: 12,
+            combatActive: true,
+            out string oldEngagedReason,
+            out _),
+        "old Engaged journal evidence should not become countable after the sustained confirmation window");
+    AssertEqual(
+        GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation,
+        oldEngagedReason,
+        "old Engaged journal evidence should continue to report the pending-confirmation reason");
 
     AssertFalse(
         GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(

@@ -702,7 +702,12 @@ namespace GoblinFarmer
                     areaKey,
                     nowUtc,
                     GoblinJournalEvidenceFreshWindow);
-                if (!killedFreshInCurrentArea)
+                bool recentEngagedMatches = GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(
+                    recentEngaged,
+                    areaKey,
+                    nowUtc,
+                    GoblinJournalEvidenceFreshWindow);
+                if (!killedFreshInCurrentArea && !recentEngagedMatches)
                 {
                     PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc);
                     PortLogJournalEvidenceFreshnessDiagnostic(
@@ -714,11 +719,6 @@ namespace GoblinFarmer
                     return false;
                 }
 
-                bool recentEngagedMatches = GoblinJournalFreshnessPolicy.KilledHasRecentEngaged(
-                    recentEngaged,
-                    areaKey,
-                    nowUtc,
-                    GoblinJournalEvidenceFreshWindow);
                 if (!recentEngagedMatches && !string.IsNullOrWhiteSpace(freshKilledWithoutEngagedReason))
                 {
                     bool acceptedForManualRefresh = string.Equals(freshKilledWithoutEngagedReason, "Manual", StringComparison.OrdinalIgnoreCase);

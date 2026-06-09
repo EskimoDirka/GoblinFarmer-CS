@@ -758,6 +758,12 @@ namespace GoblinFarmer
                         {
                             PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
                         }
+
+                        if (PortTrySendDemonHunterFallbackLeftClickFromBlockedCursor())
+                        {
+                            PortSleep(token, 90);
+                            continue;
+                        }
                     }
                     else
                     {
@@ -783,6 +789,63 @@ namespace GoblinFarmer
                     PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
                 }
             }
+        }
+
+        private bool PortTrySendDemonHunterFallbackLeftClickFromBlockedCursor()
+        {
+            PortCombatClickDiagnostics diagnostics = PortGetCombatClickDiagnostics();
+            if (!DemonHunterCombatPolicy.ShouldUseFallbackClickWhileRightHeld(
+                    portCombatRunning,
+                    portCombatClass,
+                    diagnostics.DiabloActive,
+                    portRuntimeRightMouseHeld,
+                    portDemonHunterRightHeldFromSafeRegion))
+            {
+                return false;
+            }
+
+            if (!PortCombatCursorShouldSendLeftClick(out string skipReason))
+            {
+                long nowTicks = DateTime.UtcNow.Ticks;
+                long lastLogTicks = Interlocked.Read(ref portLastCombatCursorDecisionLogTicks);
+                if (nowTicks - lastLogTicks >= TimeSpan.FromSeconds(1).Ticks)
+                {
+                    Interlocked.Exchange(ref portLastCombatCursorDecisionLogTicks, nowTicks);
+                    AppLogger.Info($"DemonHunterBlockedCursorFallbackSkipped: skipReason={PortLogField(skipReason)}; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; {PortCombatInputContext()}");
+                }
+
+                return false;
+            }
+
+            if (!diagnostics.HasDiabloRect)
+            {
+                AppLogger.Info($"DemonHunterBlockedCursorFallbackSkipped: skipReason=DiabloRectUnavailable; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; {PortCombatInputContext()}");
+                return false;
+            }
+
+            Rectangle diabloRectangle = new(
+                diagnostics.DiabloRect.Left,
+                diagnostics.DiabloRect.Top,
+                diagnostics.DiabloRect.Right - diagnostics.DiabloRect.Left,
+                diagnostics.DiabloRect.Bottom - diagnostics.DiabloRect.Top);
+            if (!CombatClickSafety.TryGetDemonHunterFallbackClickPoint(diabloRectangle, out DrawingPoint fallbackPoint))
+            {
+                AppLogger.Info($"DemonHunterBlockedCursorFallbackSkipped: skipReason=NoSafeFallbackPoint; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; {PortCombatInputContext()}");
+                return false;
+            }
+
+            DrawingPoint originalPoint = diagnostics.Cursor;
+            lock (portRuntimeInputLock)
+            {
+                SetCursorPos(fallbackPoint.X, fallbackPoint.Y);
+                Thread.Sleep(20);
+                PortRuntimeMouseDown(MOUSEEVENTF_LEFTDOWN);
+                Thread.Sleep(10);
+                PortRuntimeMouseUp(MOUSEEVENTF_LEFTUP);
+            }
+
+            AppLogger.Info($"DemonHunterBlockedCursorFallbackLeftClickSent: combatInputMode=PhysicalCursorHeldFromSafeRegion; clickSendMethod=safe-fallback; originalPoint={originalPoint.X},{originalPoint.Y}; fallbackPoint={fallbackPoint.X},{fallbackPoint.Y}; blockedRegion={PortLogField(diagnostics.NoClickRegionName)}; rightMouseHeld={portRuntimeRightMouseHeld}; rightHeldFromSafeRegion={portDemonHunterRightHeldFromSafeRegion}; {PortCombatInputContext()}");
+            return true;
         }
 
         private bool PortCombatCursorShouldSendLeftClick(out string skipReason)

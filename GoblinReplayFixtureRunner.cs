@@ -1513,6 +1513,8 @@ namespace GoblinFarmer
             else if (!GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
                 candidate.Source,
                 evidenceSignature,
+                Math.Max(0, (step.TimestampUtc - state.FirstSeenUtc).TotalSeconds),
+                combatActive: true,
                 out string reliabilityReason,
                 out _))
             {
