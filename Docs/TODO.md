@@ -33,6 +33,7 @@ This file contains only open work and remaining test/verifications. Historical c
 - [x] Expand VS Debug `Sim Count` dropdown coverage. The list now comes from centralized `GoblinTrackerDebugSimulationAreas` using `GoblinAreaResolver.KnownAreas` and includes route count areas, special two-count areas, and blocked/no-count validation areas while preserving the existing count guards.
 - [x] Alphabetize VS Debug `Sim Count` dropdown entries after the pinned `Current Area` option and audit coverage against every known area key.
 - [x] Optimize salvage slot processing to use one cached filled-slot inventory scan per open salvage UI cycle. Per-slot confirmation checks remain, but the loop no longer rescans the full inventory after each salvage click.
+- [x] Fix/replay-review salvage cache overreach from `Desktop 2026.06.09 - 16.31.24.07.DVR.mp4` and `GoblinFarmer_Debug_20260609_163330.zip`: the old whole-cell nonblank detector cached 18 cells when the DVR showed 5 real salvageable items. Salvage now caches item anchors from the single inventory scan, rejects textured empty cells, collapses multi-slot footprints, keeps per-slot confirmation checks, and logs per-cell cache candidate metrics plus summary confirmation misses.
 - [x] Review/fix debug package count retention. Defaults remain `DebugPackageRetentionCount=20`; startup cleanup already enforced this, and `Scripts\create-debug-package.ps1` now also prunes the resolved `DebugPackages` folder after creating a ZIP.
 - [x] Treat Stinging Winds -> Black Canyon Mines and Black Canyon Mines -> Rakkis Crossing stale-Journal transition policy as validated for now by explicit Goblin Replay. Reopen only if future live use shows a stale count in those transitions.
 - [x] Treat Southern Highlands -> Cave Of The Moon Clan Level 1 stale-Journal transition policy as replay-validated. The explicit replay scenario covers fresh Minimap count -> suppressed same-encounter Journal row -> stale Journal row after area transition suppressing as `EncounterAlreadyAutoCounted`.
@@ -114,7 +115,8 @@ This file contains only open work and remaining test/verifications. Historical c
 - [ ] Validate successful app-click Battle.net launches do not create false failure screenshots for `BattleNetManualPlaySuspected` or `BattleNetStillOpenAfterDiabloLaunch`.
 - [ ] Validate Kadala timing/feel once blood shards are available.
 - [ ] Review salvage item-to-item delay in a future town-workflow performance pass without weakening confirmation safety.
-- [x] Live-validate the salvage single-scan cache during a normal repair/salvage run. Expected logs: `Salvage inventory scan ... cacheMode=SingleInventoryScan`, per-slot `nextSlotScanMs=0`, and a successful `Salvage timing summary` without missed confirmation prompts.
+- [x] Live-validate the original salvage single-scan cache during a normal repair/salvage run. The follow-up DVR review found false cached empty cells and led to the stricter item-anchor cache fix.
+- [ ] Live-validate the stricter salvage item-anchor cache during a normal repair/salvage run. Expected logs: `Salvage cache candidate` per grid cell, `Salvage inventory scan ... cacheMode=SingleInventoryScan`, `cachedSlotCount` matching visible salvageable item anchors, low/zero `confirmationMisses`, per-slot `nextSlotScanMs=0`, and no empty-cell click sequence.
 - [x] After the next batch-created debug ZIP, confirm the script logs `Debug package retention cleanup complete` and the resolved `DebugPackages` folder keeps only the newest 20 `GoblinFarmer_Debug_*.zip` files.
 
 ## Future Improvements

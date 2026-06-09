@@ -14,7 +14,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Diablo launch detection and Start Game handling with stable-button verification, click acceptance checks, and manual-click recovery.
 - Route-aware Teleport Next workflow for the configured farming path.
 - Hotkey route blocking for known unsafe or incorrect location transitions.
-- Make New Game, Exit Game, repair, salvage, and town workflow helpers. Salvage uses a single cached inventory scan per open salvage UI cycle, then clicks the cached filled slots while keeping confirmation-prompt checks.
+- Make New Game, Exit Game, repair, salvage, and town workflow helpers. Salvage uses a single cached inventory scan per open salvage UI cycle, then clicks cached item-anchor targets while keeping confirmation-prompt checks.
 - Monk, Demon Hunter, and Witch Doctor combat support.
 - Location-aware Goblin Tracker with automatic evidence-based counting, per-area duplicate protection, active-combat-time GPH, live UI stats, accepted-count notifications, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and one batch-driven debug package workflow for VS Debug and Release.
@@ -102,7 +102,7 @@ Journal matches validate the goblin-name portion of the template, ignore upper/h
 
 Accepted-count notifications are no-activate and click-through so they do not steal focus or block route clicks. Rainbow Goblin automatic counts use a distinct alert message and local Windows alert sound.
 
-Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, notification latency traces through `GoblinLatencyTrace`, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, manual recognition-capture paths, and salvage timing with `cacheMode=SingleInventoryScan`.
+Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, notification latency traces through `GoblinLatencyTrace`, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, manual recognition-capture paths, and salvage cache/timing diagnostics with `cacheMode=SingleInventoryScan`.
 
 Goblin Replay is an explicit developer/test harness for feeding saved Journal/Minimap PNG fixtures, including real-style encounter/manual capture folders, through the shared Goblin Evidence matcher and stale-location policy without Diablo running. It is on-demand only and is not part of normal app startup, VS Debug startup, live scanning, combat, route, town, or debug package workflows. Real capture evidence can be replayed from the repository root with:
 

@@ -771,60 +771,34 @@ namespace GoblinFarmer
             }
 
             Rectangle grid = PortScaleReferenceRectangle(new Rectangle(1864, 725, 687, 423), rect);
-            int columns = 10;
-            int rows = 6;
-            int slotWidth = grid.Width / columns;
-            int slotHeight = grid.Height / rows;
-            string blankPath = Img("Salvage", "Blank Inventory Tile.png");
-            if (!File.Exists(blankPath))
-            {
-                PortOfferMissingAssetCapture(
-                    blankPath,
-                    "Salvage",
-                    "Blank Inventory Tile.png",
-                    grid,
-                    captureInstruction: "Capture an empty inventory tile for salvage blank-slot detection.");
-            }
-
             using Bitmap screenshot = new(grid.Width, grid.Height);
             using (Graphics graphics = Graphics.FromImage(screenshot))
             {
                 graphics.CopyFromScreen(grid.Left, grid.Top, 0, 0, screenshot.Size);
             }
 
-            using Mat rawMat = OpenCvSharp.Extensions.BitmapConverter.ToMat(screenshot);
-            using Mat gray = new();
-            Cv2.CvtColor(rawMat, gray, ColorConversionCodes.BGRA2GRAY);
-            using Mat? blank = File.Exists(blankPath) ? Cv2.ImRead(blankPath, ImreadModes.Grayscale) : null;
-            List<DrawingPoint> filledSlots = [];
-
-            for (int row = 0; row < rows; row++)
+            SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid);
+            foreach (SalvageInventorySlotCandidateDiagnostic candidate in scan.Candidates)
             {
-                for (int col = 0; col < columns; col++)
-                {
-                    Rectangle local = new(col * slotWidth, row * slotHeight, slotWidth, slotHeight);
-                    using Mat slot = new(gray, new OpenCvSharp.Rect(local.Left, local.Top, local.Width, local.Height));
-                    Cv2.MeanStdDev(slot, out Scalar mean, out Scalar stdDev);
-
-                    bool blankLike = mean.Val0 < 18.0 && stdDev.Val0 < 10.0;
-                    if (!blankLike && blank != null)
-                    {
-                        using Mat resized = new();
-                        using Mat result = new();
-                        Cv2.Resize(blank, resized, new OpenCvSharp.Size(slot.Width, slot.Height));
-                        Cv2.MatchTemplate(slot, resized, result, TemplateMatchModes.CCoeffNormed);
-                        Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out _);
-                        blankLike = maxVal >= PortBlankInventoryTileConfidence;
-                    }
-
-                    if (!blankLike)
-                    {
-                        filledSlots.Add(new DrawingPoint(grid.Left + local.Left + slotWidth / 2, grid.Top + local.Top + slotHeight / 2));
-                    }
-                }
+                AppLogger.Info(
+                    "Salvage cache candidate: " +
+                    $"row={candidate.Row}; " +
+                    $"column={candidate.Column}; " +
+                    $"screenPoint={FormatPoint(candidate.ScreenPoint)}; " +
+                    $"accepted={candidate.Accepted}; " +
+                    $"reason={PortLogField(candidate.Reason)}; " +
+                    $"confidence={candidate.Metrics.Confidence:0.000}; " +
+                    $"meanBrightness={candidate.Metrics.MeanBrightness:0.0}; " +
+                    $"brightnessStdDev={candidate.Metrics.BrightnessStdDev:0.0}; " +
+                    $"innerMeanBrightness={candidate.Metrics.InnerMeanBrightness:0.0}; " +
+                    $"coloredFramePixels={candidate.Metrics.ColoredFramePixels}; " +
+                    $"topFramePixels={candidate.Metrics.TopFramePixels}; " +
+                    $"innerBrightPixels={candidate.Metrics.InnerBrightPixels}; " +
+                    $"innerSaturatedPixels={candidate.Metrics.InnerSaturatedPixels}; " +
+                    "cacheMode=SingleInventoryScan");
             }
 
-            return filledSlots;
+            return scan.Targets.Select(target => target.ScreenPoint).ToList();
         }
 
         private PortScanRegionManager PortScanRegions => portScanRegionManager ??= PortCreateScanRegionManager();

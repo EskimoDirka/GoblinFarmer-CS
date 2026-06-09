@@ -141,7 +141,9 @@ namespace GoblinFarmer
             PortSleep(token, 150);
 
             Stopwatch salvagePerf = Stopwatch.StartNew();
-            int salvagedCount = 0;
+            int cachedSlotAttempts = 0;
+            int slotsClicked = 0;
+            int confirmationMisses = 0;
             for (int i = 0; i < cachedSlots.Count && i < 60; i++)
             {
                 if (token.IsCancellationRequested)
@@ -152,15 +154,25 @@ namespace GoblinFarmer
                 Stopwatch slotPerf = Stopwatch.StartNew();
                 DrawingPoint slot = cachedSlots[i];
                 bool slotClickSent = PortSafeSalvageSlotClick(slot);
-                salvagedCount++;
+                cachedSlotAttempts++;
+                if (slotClickSent)
+                {
+                    slotsClicked++;
+                }
+
                 bool confirmationFound = PortWaitForSalvageConfirmationFast(token, out long confirmationWaitMs, out int confirmationScans);
+                if (!confirmationFound)
+                {
+                    confirmationMisses++;
+                }
+
                 if (confirmationFound)
                 {
                     PortPressKey(PortVkReturn);
                 }
 
                 PortSleep(token, PortSalvagePostSlotDelayMs);
-                AppLogger.Info($"Salvage timing: slotIndex={salvagedCount}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; slotClickSent={slotClickSent}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs=0; cacheMode=SingleInventoryScan; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+                AppLogger.Info($"Salvage timing: slotIndex={cachedSlotAttempts}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; slotClickSent={slotClickSent}; confirmationFound={confirmationFound}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs=0; cacheMode=SingleInventoryScan; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
             }
 
             if (closeAfterSalvage)
@@ -169,8 +181,8 @@ namespace GoblinFarmer
                 PortSleep(token, 350);
             }
 
-            AddWorkflowStep(salvagedCount == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {salvagedCount} slots clicked");
-            AppLogger.Info($"Salvage timing summary: slotsClicked={salvagedCount}; cachedSlotCount={cachedSlots.Count}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+            AddWorkflowStep(slotsClicked == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {slotsClicked} slots clicked");
+            AppLogger.Info($"Salvage timing summary: slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmationMisses={confirmationMisses}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
         }
