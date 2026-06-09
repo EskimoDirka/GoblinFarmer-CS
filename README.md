@@ -212,7 +212,9 @@ Debug and release artifacts keep evidence useful but bounded by default. VS Debu
 
 For both VS Debug and Release troubleshooting, use the single ZIP export path: `Scripts\Create Debug Package.bat`, which launches `Scripts\create-debug-package.ps1`. The batch script self-discovers the runtime/package roots, writes the ZIP under `DebugPackages`, and includes the latest logs, manifests, route summaries, Goblin Tracker summaries, bounded screenshots, GoblinEvidence, replay-ready encounter captures, decision bundles, observation diagnostics, and root analysis files: `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt`. Closing the VS Debug form is intentionally quiet and does not generate packages or loose review files.
 
-For AI-assisted development handoff context, `Scripts\Create-ProjectBrain.bat` creates a timestamped docs-only ZIP under `ProjectBrain` from the allowlisted project instructions, README, and current status/reference docs when present.
+For AI-assisted development handoff context, `Scripts\Create Project Brain.bat` creates a timestamped docs-only ZIP under `ProjectBrain` from the allowlisted project instructions, README, and current status/reference docs when present.
+
+The tracked `Scripts` folder exposes only two user-facing batch launchers: `Create Debug Package.bat` and `Create Project Brain.bat`. Their backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`; `debug-analysis-tools.ps1` remains as a direct dependency of the debug package workflow. Older manual helpers are archived under `Docs\ScriptArchive\2026-06-09` for reference rather than active use.
 
 Project Brain topic summaries live under `Docs\ProjectBrain`. They organize current context for ChatGPT/Codex while keeping `Docs\Project_Status.md` as the source of truth.
 
@@ -239,7 +241,15 @@ Generate a debug package by double-clicking `Scripts\Create Debug Package.bat`. 
 powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
 
-Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample, old DecisionBundle `evidence.*` full images are excluded by default, and Encounter/ManualCapture fullscreen images are excluded by default while their Journal/Minimap crops and metadata remain included for replay. Optional focused helper scripts are available under `Scripts\` for package analysis, timeline generation, evidence-health checks, and local development verification, but normal test handoff still requires only the batch-created ZIP.
+Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample, old DecisionBundle `evidence.*` full images are excluded by default, and Encounter/ManualCapture fullscreen images are excluded by default while their Journal/Minimap crops and metadata remain included for replay.
+
+The Project Brain script can also generate a paste-friendly storage report without deleting files:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\create-project-brain.ps1 -StorageBreakdownOnly
+```
+
+The report is written to `Reports\Storage_Breakdown.md` and highlights build output, debug packages, runtime evidence, logs, screenshots, installers/packages, and replay/capture storage before any separate cleanup decision.
 
 ## Release v1.4
 
@@ -291,24 +301,7 @@ dotnet build GoblinFarmer.csproj
 
 ## Local Source Uploads
 
-Local developer checkouts can keep private ChatGPT source-upload helpers under `Scripts\Local Tools\`. Those helpers and their timestamped ZIP output under `ChatGPT Uploads\` are intentionally ignored by Git; the user-facing debug package launcher remains tracked separately under `Scripts\`.
-
-## Git Sync Helper
-
-`Scripts\Git Commit Push.bat` is a safe local helper for reviewing, committing, and optionally pushing repository changes from Windows Explorer. It shows the current branch and full `git status`, waits for confirmation before running `git add -A`, refuses blank commit messages, and only pushes after the commit succeeds and the user confirms the push.
-
-Usage:
-
-```text
-Double-click Scripts\Git Commit Push.bat
-```
-
-Example workflow:
-
-1. Review the displayed branch and git status.
-2. Press any key to stage all changes.
-3. Enter a commit message.
-4. Choose whether to push the commit to the current tracked branch.
+Local developer checkouts can keep private ChatGPT source-upload helpers under `Scripts\Local Tools\`. Those helpers and their timestamped ZIP output under `ChatGPT Uploads\` are intentionally ignored by Git; tracked user-facing launchers remain limited to `Scripts\Create Debug Package.bat` and `Scripts\Create Project Brain.bat`.
 
 ## Release Build
 
@@ -321,13 +314,13 @@ Release versioning starts in `GoblinFarmer.csproj`. Before publishing a new rele
 <InformationalVersion>1.4.0</InformationalVersion>
 ```
 
-Then publish the self-contained Windows build. You can publish from Visual Studio using the `GoblinFarmerRelease` publish profile, or run the publish script from the project root:
+Then publish the self-contained Windows build. Use Visual Studio with the `GoblinFarmerRelease` publish profile, or run the equivalent command from the project root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1
+dotnet publish .\GoblinFarmer.csproj --configuration Release --runtime win-x64 --self-contained true --output .\artifacts\publish\GoblinFarmer -p:PublishSingleFile=false -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-The script publishes to `artifacts\publish\GoblinFarmer`, verifies executable version metadata, icon, config, Images output, and `Scripts\create-debug-package.ps1`, then compiles `Installer\GoblinFarmer.iss` if Inno Setup is installed. The installer reads the version from the published executable, so the app must be published before compiling the `.iss` file.
+The publish output goes to `artifacts\publish\GoblinFarmer`. Confirm executable version metadata, icon, config, Images output, `Scripts\create-debug-package.ps1`, `Scripts\debug-analysis-tools.ps1`, and `Scripts\Create Debug Package.bat` before compiling the installer. The installer reads the version from the published executable, so the app must be published before compiling the `.iss` file.
 
 `artifacts\` is generated output and is intentionally ignored by Git. Do not commit published app folders or installer binaries.
 
@@ -341,7 +334,7 @@ Manual release flow:
 
 1. Update version metadata in `GoblinFarmer.csproj`.
 2. Update `Docs\Project_Status.md`, `README.md`, and release notes/checklists for the changes being shipped.
-3. Run `Scripts\publish-release.ps1`, or publish from Visual Studio and upload assets manually.
+3. Publish from Visual Studio or run the `dotnet publish` command above, then upload assets manually.
 4. Confirm the installer name and version, such as `GoblinFarmerSetup-1.4.0.exe`.
 5. For major app milestones, create a GitHub Release, then confirm the release uses the notes from the matching `Docs/Release_v*.md` file and includes the installer asset when available.
 

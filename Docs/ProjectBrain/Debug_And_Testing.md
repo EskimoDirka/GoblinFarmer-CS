@@ -73,9 +73,17 @@ git diff --check
 Project Brain generation:
 
 ```powershell
-Scripts\Create-ProjectBrain.bat
+Scripts\Create Project Brain.bat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\create-project-brain.ps1
 ```
+
+Storage report generation:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\create-project-brain.ps1 -StorageBreakdownOnly
+```
+
+The report is written to `Reports\Storage_Breakdown.md`. It is report-only and highlights source/docs, generated/debug/build artifacts, top-level folder sizes, largest subfolders, largest file extensions, largest files, and likely cleanup targets such as `bin`, `obj`, `DebugPackages`, `Debug`, `GoblinEvidence`, `DecisionBundles`, logs, screenshots, installers/packages, and replay captures.
 
 ## Live Test Workflow
 

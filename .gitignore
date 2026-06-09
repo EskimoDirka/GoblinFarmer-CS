@@ -463,12 +463,6 @@ Scripts/Local Tools/
 !Scripts/create-debug-package.ps1
 !Scripts/Create Debug Package.bat
 !Scripts/create-project-brain.ps1
-!Scripts/Create-ProjectBrain.bat
+!Scripts/Create Project Brain.bat
 !Scripts/debug-analysis-tools.ps1
-!Scripts/analyze-latest-debug-package.ps1
-!Scripts/build-goblin-tracker-timeline.ps1
-!Scripts/check-goblin-evidence-health.ps1
-!Scripts/dev-verify.ps1
-!Scripts/Git Commit Push.bat
-!Scripts/publish-release.ps1
 !Scripts/.gitkeep

@@ -1,6 +1,6 @@
 # Changelog
 
-Release notes are maintained manually. Before running `Scripts\publish-release.ps1` or creating a GitHub Release, update the next release section with the user-facing changes worth publishing.
+Release notes are maintained manually. Before publishing a build or creating a GitHub Release, update the next release section with the user-facing changes worth publishing.
 
 ## v1.4
 

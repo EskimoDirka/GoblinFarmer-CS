@@ -114,10 +114,6 @@
     <None Remove="Scripts\create-debug-package.ps1" />
     <None Remove="Scripts\Create Debug Package.bat" />
     <None Remove="Scripts\debug-analysis-tools.ps1" />
-    <None Remove="Scripts\analyze-latest-debug-package.ps1" />
-    <None Remove="Scripts\build-goblin-tracker-timeline.ps1" />
-    <None Remove="Scripts\check-goblin-evidence-health.ps1" />
-    <None Remove="Scripts\dev-verify.ps1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -405,22 +401,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="Scripts\analyze-latest-debug-package.ps1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\build-goblin-tracker-timeline.ps1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\check-goblin-evidence-health.ps1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\dev-verify.ps1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
   </ItemGroup>
 
   <Target Name="ValidateReleasePublishScripts" AfterTargets="Publish">
@@ -433,18 +413,6 @@
     <Error
       Condition="!Exists('$(PublishDir)Scripts\debug-analysis-tools.ps1')"
       Text="Published debug analysis helper missing: $(PublishDir)Scripts\debug-analysis-tools.ps1" />
-    <Error
-      Condition="!Exists('$(PublishDir)Scripts\analyze-latest-debug-package.ps1')"
-      Text="Published debug package analyzer missing: $(PublishDir)Scripts\analyze-latest-debug-package.ps1" />
-    <Error
-      Condition="!Exists('$(PublishDir)Scripts\build-goblin-tracker-timeline.ps1')"
-      Text="Published Goblin Tracker timeline helper missing: $(PublishDir)Scripts\build-goblin-tracker-timeline.ps1" />
-    <Error
-      Condition="!Exists('$(PublishDir)Scripts\check-goblin-evidence-health.ps1')"
-      Text="Published Goblin Evidence health helper missing: $(PublishDir)Scripts\check-goblin-evidence-health.ps1" />
-    <Error
-      Condition="!Exists('$(PublishDir)Scripts\dev-verify.ps1')"
-      Text="Published development verification helper missing: $(PublishDir)Scripts\dev-verify.ps1" />
   </Target>
 
   <ItemGroup>

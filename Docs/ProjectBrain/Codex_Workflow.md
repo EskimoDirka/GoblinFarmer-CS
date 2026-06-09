@@ -39,6 +39,14 @@ Do not assume GitHub reflects the user's latest local state.
 
 ## Project Brain Workflow
 
-- Use `Scripts\Create-ProjectBrain.bat` or `Scripts\create-project-brain.ps1` for AI-assisted context packages.
+- Use `Scripts\Create Project Brain.bat` or `Scripts\create-project-brain.ps1` for AI-assisted context packages.
 - Project Brain ZIPs are generated output under `ProjectBrain` and must not be committed.
 - Project Brain docs summarize and route context; they do not replace `Docs\Project_Status.md`.
+- The same PowerShell script can generate `Reports\Storage_Breakdown.md` with `-StorageBreakdownOnly`; this is report-only and must not delete files.
+
+## Scripts Policy
+
+- Tracked user-facing batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`.
+- Required backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`.
+- `debug-analysis-tools.ps1` remains because `create-debug-package.ps1` directly loads it.
+- Retired/manual helpers are archived under `Docs\ScriptArchive\2026-06-09` and should not be reintroduced as active scripts without explicit approval.

@@ -6,13 +6,13 @@
 #define SourceDebugPackageScript AddBackslash(SourceDir) + "Scripts\create-debug-package.ps1"
 #define SourceDebugPackageLauncher AddBackslash(SourceDir) + "Scripts\Create Debug Package.bat"
 #if !FileExists(SourceExe)
-#error "Published GoblinFarmer.exe was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
+#error "Published GoblinFarmer.exe was not found. Publish first with the Visual Studio GoblinFarmerRelease profile or the README dotnet publish command, then compile Installer\\GoblinFarmer.iss."
 #endif
 #if !FileExists(SourceDebugPackageScript)
-#error "Published Scripts\\create-debug-package.ps1 was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
+#error "Published Scripts\\create-debug-package.ps1 was not found. Publish first with the Visual Studio GoblinFarmerRelease profile or the README dotnet publish command, then compile Installer\\GoblinFarmer.iss."
 #endif
 #if !FileExists(SourceDebugPackageLauncher)
-#error "Published Scripts\\Create Debug Package.bat was not found. Publish first with Scripts\\publish-release.ps1 or the Visual Studio GoblinFarmerRelease profile, then compile Installer\\GoblinFarmer.iss."
+#error "Published Scripts\\Create Debug Package.bat was not found. Publish first with the Visual Studio GoblinFarmerRelease profile or the README dotnet publish command, then compile Installer\\GoblinFarmer.iss."
 #endif
 #define MyAppFileVersion GetVersionNumbersString(SourceExe)
 #if MyAppFileVersion == ""

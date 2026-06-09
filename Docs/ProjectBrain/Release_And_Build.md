@@ -1,6 +1,6 @@
 # Release And Build
 
-Source of truth: `README.md`, `Docs\Release_Checklist.md`, `Docs\Release_v1.4.md`, `Scripts\publish-release.ps1`, and `Docs\Project_Status.md`.
+Source of truth: `README.md`, `Docs\Release_Checklist.md`, `Docs\Release_v1.4.md`, and `Docs\Project_Status.md`.
 
 Do not infer a new release status from this summary. Use the current source docs for release decisions.
 
@@ -35,13 +35,13 @@ Release versioning starts in `GoblinFarmer.csproj`:
 <InformationalVersion>1.4.0</InformationalVersion>
 ```
 
-Publish from Visual Studio with the `GoblinFarmerRelease` profile or run:
+Publish from Visual Studio with the `GoblinFarmerRelease` profile or run the equivalent command:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\publish-release.ps1
+dotnet publish .\GoblinFarmer.csproj --configuration Release --runtime win-x64 --self-contained true --output .\artifacts\publish\GoblinFarmer -p:PublishSingleFile=false -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-The publish script writes to `artifacts\publish\GoblinFarmer`, verifies executable version metadata, icon, config, Images output, and debug package scripts, then compiles `Installer\GoblinFarmer.iss` if Inno Setup is installed.
+The publish output goes to `artifacts\publish\GoblinFarmer`. Confirm executable version metadata, icon, config, Images output, and debug package scripts before compiling `Installer\GoblinFarmer.iss` with Inno Setup.
 
 ## Installer Workflow
 

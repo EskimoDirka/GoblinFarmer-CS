@@ -4039,13 +4039,16 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     string projectSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
     string packageLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Create Debug Package.bat"));
     string debugAnalysisToolsSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "debug-analysis-tools.ps1"));
-    string[] debugAnalysisScripts =
+    string[] expectedUserFacingBatchScripts =
     [
+        "Create Debug Package.bat",
+        "Create Project Brain.bat",
+    ];
+    string[] expectedActivePowerShellScripts =
+    [
+        "create-debug-package.ps1",
+        "create-project-brain.ps1",
         "debug-analysis-tools.ps1",
-        "analyze-latest-debug-package.ps1",
-        "build-goblin-tracker-timeline.ps1",
-        "check-goblin-evidence-health.ps1",
-        "dev-verify.ps1",
     ];
     string retiredEvidenceToken = "Goblin" + ("Re" + "play");
     string retiredEvidenceName = "Goblin " + ("Re" + "play");
@@ -4157,11 +4160,26 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinEvidenceHealthContent", StringComparison.Ordinal), "shared debug helper should build the evidence health report");
     AssertTrue(projectSource.Contains("Scripts\\create-debug-package.ps1", StringComparison.Ordinal), "release/export ZIP package script should remain published");
     AssertTrue(projectSource.Contains("Scripts\\Create Debug Package.bat", StringComparison.Ordinal), "release/export ZIP package launcher should remain published");
-    foreach (string scriptName in debugAnalysisScripts)
+    AssertTrue(projectSource.Contains("Scripts\\debug-analysis-tools.ps1", StringComparison.Ordinal), "shared debug package helper should remain published because the package script dot-sources it");
+    string[] activeBatchScripts = Directory.GetFiles(Path.Combine(repoRoot, "Scripts"), "*.bat", SearchOption.TopDirectoryOnly)
+        .Select(Path.GetFileName)
+        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+        .ToArray()!;
+    string[] activePowerShellScripts = Directory.GetFiles(Path.Combine(repoRoot, "Scripts"), "*.ps1", SearchOption.TopDirectoryOnly)
+        .Select(Path.GetFileName)
+        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+        .ToArray()!;
+    AssertSequenceEqual(expectedUserFacingBatchScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activeBatchScripts, "Scripts should expose only the two user-facing batch launchers");
+    AssertSequenceEqual(expectedActivePowerShellScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activePowerShellScripts, "Scripts should keep only the package scripts and direct debug-package helper");
+    foreach (string scriptName in expectedActivePowerShellScripts)
     {
         AssertTrue(File.Exists(Path.Combine(repoRoot, "Scripts", scriptName)), $"{scriptName} should exist under Scripts");
-        AssertTrue(projectSource.Contains($"Scripts\\{scriptName}", StringComparison.Ordinal), $"{scriptName} should be copied to VS Debug and Release publish outputs");
     }
+    AssertTrue(projectSource.Contains("Scripts\\debug-analysis-tools.ps1", StringComparison.Ordinal), "debug-analysis-tools.ps1 should be copied to VS Debug and Release publish outputs");
+    AssertFalse(projectSource.Contains("Scripts\\analyze-latest-debug-package.ps1", StringComparison.Ordinal), "archived optional package analyzer should not be published");
+    AssertFalse(projectSource.Contains("Scripts\\build-goblin-tracker-timeline.ps1", StringComparison.Ordinal), "archived optional timeline helper should not be published");
+    AssertFalse(projectSource.Contains("Scripts\\check-goblin-evidence-health.ps1", StringComparison.Ordinal), "archived optional evidence-health helper should not be published");
+    AssertFalse(projectSource.Contains("Scripts\\dev-verify.ps1", StringComparison.Ordinal), "archived local verification helper should not be published");
     AssertFalse(projectSource.Contains(retiredTerminalScript, StringComparison.Ordinal), "removed terminal evidence helper should not be published");
     AssertFalse(File.Exists(Path.Combine(repoRoot, "Scripts", ("re" + "play-") + "goblin-evidence.ps1")), "duplicate terminal evidence package reviewer should be removed");
 }

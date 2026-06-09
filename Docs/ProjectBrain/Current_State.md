@@ -15,7 +15,7 @@ Current focus: Goblin Tracker full automatic counting readiness in VS Debug, wit
 - Battle.net/Diablo launch, Start Game, Make New Game, route teleporting, interrupted teleport recovery, repair/salvage, Kadala timing, and Witch Doctor combat are stable enough for ongoing monitoring.
 - Release and VS Debug Goblin Tracker layouts keep evidence and Last Observation fields readable.
 - Debug packages are created only through `Scripts\Create Debug Package.bat`.
-- Project Brain packages are created through `Scripts\Create-ProjectBrain.bat`.
+- Project Brain packages are created through `Scripts\Create Project Brain.bat`.
 - Form close is intentionally quiet and does not create debug packages, replay evidence, screenshots, or reports.
 - Runtime/debug artifacts are bounded by retention policy and are not source files.
 - Notification latency, stale journal suppression, Last Observation persistence, Sim Count expansion, salvage single-scan caching, and debug package retention are stable after the latest live validation pass.
@@ -40,3 +40,9 @@ Current focus: Goblin Tracker full automatic counting readiness in VS Debug, wit
 ## Recent Project Brain Utility State
 
 The Project Brain utility now creates a docs-only ZIP under `ProjectBrain` and includes `Docs\ProjectBrain\*.md` plus selected small stable docs. It must not include runtime artifacts, debug packages, screenshots, images, videos, binaries, replay captures, or existing ZIPs.
+
+## Current Scripts Policy
+
+Tracked user-facing batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`. Required backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`; `debug-analysis-tools.ps1` remains as a direct debug package dependency. Older manual helpers were archived under `Docs\ScriptArchive\2026-06-09`.
+
+`Scripts\create-project-brain.ps1 -StorageBreakdownOnly` writes the report-only storage summary to `Reports\Storage_Breakdown.md`.
