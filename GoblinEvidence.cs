@@ -982,67 +982,23 @@ namespace GoblinFarmer
 
     internal static class GoblinTrackerDebugSimulationAreas
     {
-        private static readonly string[] PreferredRouteOrder =
-        [
-            "Southern Highlands",
-            "Cave Of The Moon Clan Level 1",
-            "Cave Of The Moon Clan Level 2",
-            "Highlands Cave",
-            "Northern Highlands",
-            "The Weeping Hollow",
-            "The Festering Woods",
-            "Cathedral",
-            "Cathedral Level 1",
-            "Cathedral Level 2",
-            "Cathedral Level 3",
-            "Royal Crypts",
-            "City of Caldeum",
-            "Gates of Caldeum",
-            "Caldeum Bazaar",
-            "Flooded Causeway",
-            "Ruined Cistern",
-            "Sewers of Caldeum",
-            "Ancient Waterway",
-            "Western Channel Level 1",
-            "Western Channel Level 2",
-            "Eastern Channel Level 1",
-            "Eastern Channel Level 2",
-            "Stinging Winds",
-            "Black Canyon Mines",
-            "Battlefields",
-            "Fields of Slaughter",
-            "The Bridge Of Korsikk",
-            "Caverns of Frost Level 1",
-            "Caverns of Frost Level 2",
-            "Rakkis Crossing",
-            "Pandemonium Fortress Level 1",
-            "Pandemonium Fortress Level 2",
-            "New Tristram",
-            "Hidden Camp",
-            "WhimsyDale",
-        ];
-
         public static IReadOnlyList<string> DropdownItems()
         {
             List<string> items = ["Current Area"];
-            HashSet<string> added = new(StringComparer.OrdinalIgnoreCase);
-            foreach (string area in PreferredRouteOrder)
-            {
-                AddIfKnown(items, added, area);
-            }
-
+            SortedSet<string> sortedAreas = new(StringComparer.OrdinalIgnoreCase);
             foreach (string area in GoblinAreaResolver.KnownAreas)
             {
-                AddIfKnown(items, added, area);
+                AddIfKnown(sortedAreas, area);
             }
 
+            items.AddRange(sortedAreas);
             return items;
         }
 
-        private static void AddIfKnown(List<string> items, HashSet<string> added, string area)
+        private static void AddIfKnown(SortedSet<string> items, string area)
         {
             GoblinAreaResolution resolved = GoblinAreaResolver.Resolve(area);
-            if (!resolved.Resolved || !added.Add(resolved.AreaKey))
+            if (!resolved.Resolved)
             {
                 return;
             }

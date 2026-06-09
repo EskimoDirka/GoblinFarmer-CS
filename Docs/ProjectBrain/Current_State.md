@@ -8,7 +8,7 @@ GoblinFarmer is a personal Windows Forms automation project for Diablo III farmi
 
 Current release line: `v1.4.0`.
 
-Current focus: Goblin Tracker full automatic counting readiness in VS Debug, with continued live validation around evidence detection, stale suppression, notification latency, and display/reset behavior.
+Current focus: Goblin Tracker full automatic counting readiness in VS Debug, with recent post-validation cleanup complete for Sim Count ordering/coverage, salvage cache behavior, and debug package retention.
 
 ## Stable Behavior
 
@@ -18,21 +18,22 @@ Current focus: Goblin Tracker full automatic counting readiness in VS Debug, wit
 - Project Brain packages are created through `Scripts\Create-ProjectBrain.bat`.
 - Form close is intentionally quiet and does not create debug packages, replay evidence, screenshots, or reports.
 - Runtime/debug artifacts are bounded by retention policy and are not source files.
+- Notification latency, stale journal suppression, Last Observation persistence, Sim Count expansion, salvage single-scan caching, and debug package retention are stable after the latest live validation pass.
+- VS Debug `Sim Count` keeps `Current Area` pinned first, then alphabetizes the centralized area list while preserving existing count/block/duplicate behavior.
 - Tracked `Config\AppSettings.json` must stay sanitized; private VS Debug settings belong in ignored `Config\AppSettings.local.json`.
 
 ## Active Development Focus
 
 - Continue validating automatic Goblin Tracker counts during normal VS Debug use.
-- Use live testing for real detection misses, notification timing, Last Observation display, reset behavior, and cases where replay output does not match package evidence.
+- Use live testing for real detection misses, reset behavior, distinct alerts/sound, and cases where replay output does not match package evidence.
 - Use explicit Goblin Replay for suspicious stale-location or count-policy cases that can be modeled from saved Journal/Minimap/current-location evidence.
-- Use VS Debug `Sim Count` for deterministic duplicate and area-limit policy checks.
+- Use VS Debug `Sim Count` for deterministic duplicate, blocked-area, countable-area, and area-limit policy checks.
 
 ## Current Known Issues And Watch Items
 
-- Notification latency still needs post-fix live validation. Strong Minimap evidence should no longer be masked by pending Journal Engaged evidence, and logs should show `GoblinEvidenceCandidateSelection reason=JournalPendingMinimapConfirmed` when that path applies.
 - First-seen Journal Engaged-only evidence should remain pending; sustained same-area active-combat Engaged evidence can count after the confirmation window.
 - Rainbow Goblin distinct alert and sound still need live validation.
-- Last Observation persistence, Reset Stats clearing, and Make New Game clearing still need normal live validation.
+- Reset Stats clearing and Make New Game clearing still need normal live validation.
 - Demon Hunter blocked-cursor fallback needs focused live validation; unexpected combat stops should be investigated only when a package shows a stop without explicit hotkey, focus, teleport, or app-close cause.
 - Western Channel Level 1, Leoric's Passage, and Black Canyon Mines misses should be reopened only with fresh package evidence.
 

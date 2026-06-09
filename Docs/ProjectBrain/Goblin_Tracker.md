@@ -18,7 +18,7 @@ Source of truth: `Docs\Project_Status.md`. This file summarizes current Goblin T
 
 - The physical `X` Goblin Tracker hotkey is retired.
 - Goblin counts should come from automatic eligible evidence.
-- VS Debug `Sim Count` is a developer-only count-policy simulator. It uses normal area resolution, blocked-area checks, duplicate guard, and area-limit logic.
+- VS Debug `Sim Count` is a developer-only count-policy simulator. It keeps `Current Area` first, alphabetizes the centralized `GoblinAreaResolver.KnownAreas` entries, and uses normal area resolution, blocked-area checks, duplicate guard, and area-limit logic.
 - VS Debug `Capture` is a supplemental image-recognition aid only. It writes fullscreen, minimap, journal, and metadata files under `Debug\GoblinEvidence\ManualCaptures` when clicked.
 
 ## Countable And Blocked Areas
@@ -28,6 +28,7 @@ Source of truth: `Docs\Project_Status.md`. This file summarizes current Goblin T
 - Blocked count areas include New Tristram, WhimsyDale, City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
 - Caverns of Frost Level 1 and Level 2 can each count independently when evidence is fresh for that level, even though Level 1 blocks Teleport Next.
 - Cave Of The Moon Clan Level 1 and Level 2 can each count independently when evidence is fresh for that level.
+- Sim Count coverage has been audited against every known area key. All countable known areas and blocked validation areas are present in the dropdown.
 
 ## Suppression Rules
 
@@ -44,13 +45,13 @@ Source of truth: `Docs\Project_Status.md`. This file summarizes current Goblin T
 ## Current Test Status
 
 - Replay/policy validation is strong for Make New Game carryover, Stinging Winds to Black Canyon Mines, Black Canyon Mines to Rakkis Crossing, Southern Highlands to Cave Of The Moon Clan, Cave/Caverns Level 1 to Level 2, Battlefields history-row suppression, same-area duplicate suppression, and default/two-count area limits.
-- VS Debug Sim Count validated default duplicate suppression, PF1/PF2/Stinging Winds two-count limits, blocked-area suppression, and Reset Stats clearing.
-- Live packages validated several fresh-count and stale-suppression fixes, including Eastern Channel Level 1 area binding and Northern Highlands count acceptance.
+- VS Debug Sim Count validated default duplicate suppression, PF1/PF2/Stinging Winds two-count limits, blocked-area suppression, Reset Stats clearing, and Eastern Channel Level 2 count simulation.
+- Latest live validation passed for notification latency, blocked-area suppression, cached salvage scanning, debug package retention, and Sim Count area availability.
+- Live packages validated several fresh-count and stale-suppression fixes, including Eastern Channel Level 1 area binding, Eastern Channel Level 2 coverage, and Northern Highlands count acceptance.
 
 ## Remaining Issues And Validation
 
-- Live-validate notification latency after the strong-Minimap-over-pending-Journal fix.
 - Live-validate reliability gate behavior during normal play: pending first Engaged, prompt Minimap/Killed count, and sustained Engaged count.
 - Live-validate Rainbow Goblin distinct alert and local alert sound.
-- Live-validate Last Observation persistence and clearing on Reset Stats, Make New Game, and app restart.
+- Live-validate Last Observation clearing on Reset Stats, Make New Game, and app restart.
 - If future packages contradict replay/policy-validated stale behavior, reopen the smallest matching replay scenario before changing production logic.

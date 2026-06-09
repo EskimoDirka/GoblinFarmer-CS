@@ -9,6 +9,7 @@ Source of truth: `Docs\Project_Status.md`, `README.md`, `Docs\TODO.md`, and `AGE
 - The batch-created ZIP is the only supported debug package export workflow.
 - Form close must stay quiet and must not trigger debug package creation.
 - Debug packages write under `DebugPackages`.
+- Debug package retention keeps the newest 20 matching `GoblinFarmer_Debug_*.zip` files by default. Startup cleanup and the batch package script both enforce the count.
 
 ## Useful Debug Package Contents
 
@@ -30,6 +31,15 @@ Useful review evidence includes:
 - bounded GoblinEvidence samples
 
 Normal scanner events skip redundant root `GoblinEvidence_*` full/event images by default. DecisionBundles and EncounterCaptures should carry replay-ready Journal/Minimap crops, metadata, JSONL, and trace data.
+
+## Retention Summary
+
+- General debug artifact age retention is 7 days by default.
+- Startup cleans `Logs`, `Screenshots`, `debug-screenshots`, `Sessions`, `DebugPackages`, and `Debug\GoblinEvidence` under the runtime root and project/config root when available.
+- Session summaries keep the newest 50 `Session_*.md` files.
+- GoblinEvidence loose files keep the newest 250 files recursively; ObservationDiagnostics keeps 24 local crop samples during scanner cleanup.
+- DecisionBundles, EncounterCaptures, ManualCaptures, and replay-ready crops live under `Debug\GoblinEvidence`, so startup age/count cleanup covers them.
+- Debug package ZIP contents are additionally bounded by package-script include/exclude limits; old full DecisionBundle evidence images and Encounter/ManualCapture fullscreen images are excluded by default.
 
 ## Replay Tooling Status
 

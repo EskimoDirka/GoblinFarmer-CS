@@ -37,6 +37,7 @@ Source of truth: `Docs\Project_Status.md`, especially the `Route Logic` and `Gob
 - Blocked count areas include New Tristram, WhimsyDale, City of Caldeum, Gates of Caldeum, Caldeum Bazaar, Flooded Causeway, Ancient Waterway, and The Bridge Of Korsikk.
 - Blocked count suppression should not consume area slots.
 - Teleport blocking and count blocking are related but not identical. Some areas can count while still blocking route advancement.
+- VS Debug Sim Count includes every centralized known area key for countable-area and blocked-area validation. `Current Area` is pinned first; all explicit area keys are alphabetized.
 
 ## Special Cases
 

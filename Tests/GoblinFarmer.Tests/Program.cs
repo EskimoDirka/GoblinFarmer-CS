@@ -3874,6 +3874,10 @@ static void TestGoblinVsDebugSimulationAreaListCoversRouteAndBlockedAreas()
 
     AssertTrue(automationSource.Contains("GoblinTrackerDebugSimulationAreas.DropdownItems()", StringComparison.Ordinal), "VS Debug simulation dropdown should use the centralized area list");
     AssertEqual("Current Area", areas[0], "simulation dropdown should keep Current Area as the first option");
+    AssertSequenceEqual(
+        areas.Skip(1).OrderBy(area => area, StringComparer.OrdinalIgnoreCase),
+        areas.Skip(1),
+        "simulation dropdown areas after Current Area should be alphabetized");
 
     foreach (string expectedArea in new[]
     {
@@ -3906,6 +3910,14 @@ static void TestGoblinVsDebugSimulationAreaListCoversRouteAndBlockedAreas()
     })
     {
         AssertTrue(areas.Contains(expectedArea, StringComparer.OrdinalIgnoreCase), $"simulation dropdown should include {expectedArea}");
+    }
+
+    foreach (string knownArea in GoblinAreaResolver.KnownAreas)
+    {
+        string areaKey = GoblinAreaResolver.Resolve(knownArea).AreaKey;
+        bool countable = !GoblinManualCountBlockList.IsBlocked(areaKey);
+        bool blocked = GoblinManualCountBlockList.IsBlocked(areaKey);
+        AssertTrue(areas.Contains(areaKey, StringComparer.OrdinalIgnoreCase), $"simulation dropdown should include known area {areaKey}; countable={countable}; blocked={blocked}");
     }
 
     AssertEqual(areas.Count, areas.Distinct(StringComparer.OrdinalIgnoreCase).Count(), "simulation dropdown should not contain duplicate area entries");
@@ -5201,5 +5213,24 @@ static void AssertEqual<T>(T expected, T actual, string message)
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
     {
         throw new InvalidOperationException($"{message}: expected={expected}; actual={actual}");
+    }
+}
+
+static void AssertSequenceEqual<T>(IEnumerable<T> expected, IEnumerable<T> actual, string message)
+    where T : notnull
+{
+    T[] expectedItems = expected.ToArray();
+    T[] actualItems = actual.ToArray();
+    if (expectedItems.Length != actualItems.Length)
+    {
+        throw new InvalidOperationException($"{message}: expectedLength={expectedItems.Length}; actualLength={actualItems.Length}");
+    }
+
+    for (int index = 0; index < expectedItems.Length; index++)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expectedItems[index], actualItems[index]))
+        {
+            throw new InvalidOperationException($"{message}: index={index}; expected={expectedItems[index]}; actual={actualItems[index]}");
+        }
     }
 }

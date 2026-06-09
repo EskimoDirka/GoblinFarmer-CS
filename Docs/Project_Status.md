@@ -10,7 +10,7 @@ This file is the current source of truth for the active release, stable behavior
 - Manual count hotkey: physical `X` has been retired. Goblin counts should come from automatic eligible evidence.
 - VS Debug Goblin Tracker controls: `Observation Mode`, `Auto Goblin Count`, `Enable Goblin Decision Trace`, `Capture`, a debug-only simulation area selector, and `Sim Count`.
 - VS Debug `Capture` button: manual image-recognition aid only. It writes fullscreen, minimap, journal, and metadata files under `Debug\GoblinEvidence\ManualCaptures` only when clicked.
-- VS Debug `Sim Count` button: developer-only count-policy simulator. Its dropdown now uses a centralized route/policy area list built from `GoblinAreaResolver.KnownAreas`, with `Current Area` first and route/count/block validation areas included. It uses existing area-key resolution, blocked-area checks, duplicate guard, and area-limit logic so accepted counts, duplicate suppression, and PF1/PF2/Stinging Winds `AreaLimitReached` behavior can be tested without waiting for rare live spawns.
+- VS Debug `Sim Count` button: developer-only count-policy simulator. Its dropdown now uses a centralized route/policy area list built from `GoblinAreaResolver.KnownAreas`, with `Current Area` pinned first and the remaining route/count/block validation areas alphabetized. It uses existing area-key resolution, blocked-area checks, duplicate guard, and area-limit logic so accepted counts, duplicate suppression, and PF1/PF2/Stinging Winds `AreaLimitReached` behavior can be tested without waiting for rare live spawns.
 - Automatic debug artifacts: accepted Goblin Tracker count workflows still automatically write decision bundles and encounter captures needed for debugging.
 - `Next Tests` tab: removed. Current validation steps are tracked in `Docs/TODO.md`.
 - Latest change: normal Goblin Evidence scanner events no longer write redundant root `GoblinEvidence_*` full/event images by default. Decision bundles and encounter captures now carry the replay-ready Journal/Minimap crops, metadata, JSONL, and trace data needed for debugging; the explicit VS Debug `Capture` button remains the only path that intentionally saves a fullscreen image for image-recognition troubleshooting.
@@ -26,6 +26,9 @@ This file is the current source of truth for the active release, stable behavior
 - No counting behavior, stale suppression policy, notification latency path, combat, route, repair/salvage, Kadala, Battle.net, Start Game, replay, or debug package workflow changed in this diagnostic pass.
 - Follow-up implementation: expanded VS Debug `Sim Count` area coverage, changed salvage to use one cached filled-slot inventory scan per open salvage UI cycle, and added count-based retention cleanup to `Scripts\create-debug-package.ps1` so batch-created debug packages retain 20 matching `GoblinFarmer_Debug_*.zip` files by default.
 - Retention finding: the current local `DebugPackages` folder contained 21 matching packages before this change. Startup cleanup already used `DebugPackageRetentionCount=20`, but the batch export workflow did not immediately prune after creating a ZIP. The script now prunes the resolved export folder after package creation and logs deleted/skipped/kept counts.
+- Post-validation live test result: PASS. Sim Count includes Eastern Channel Level 2, Eastern Channel Level 2 count simulation validated the count path, blocked-area suppression validated, cached salvage scan optimization validated, debug package retention validated, and no regressions were found.
+- Post-validation cleanup: Sim Count dropdown now keeps `Current Area` first and alphabetizes all remaining centralized area keys. Tests now enforce the ordering and verify every `GoblinAreaResolver.KnownAreas` entry is present in Sim Count.
+- No Goblin Tracker count, stale suppression, blocked-area, duplicate, area-limit, route, combat, repair/salvage, replay, or debug package workflow logic changed during the Sim Count ordering cleanup.
 - Latest reviewed package `GoblinFarmer_Debug_20260608_204337.zip` was a VS Debug run with Observation Mode, Auto Goblin Count, and Decision Trace enabled.
 - Counting validation passed in the package: the Northern Highlands Treasure Goblin counted correctly, old visible Journal rows did not recount, decision bundles and encounter captures were generated, and package size stayed healthy at about 12 MB.
 - Root cause of the perceived notification latency: the splash notification was not the slow stage. The package shows strong Treasure Goblin Minimap evidence at `20:34:21.063`, then Treasure Goblin Journal Engaged evidence at `20:34:21.372`. Candidate selection preferred the pending Journal Engaged evidence, so automatic count waited until sustained active-combat confirmation around `20:34:23.978` before accepting the count and showing the notification at `20:34:24.051`. Count-to-notification display was only about 27 ms.
@@ -157,6 +160,76 @@ This file is the current source of truth for the active release, stable behavior
 - Reset Stats clears count, GPH/active time, duplicate guard, auto-count evidence state, observation state, and Last Observation.
 - New Game clears count, GPH/active time, per-game duplicate/evidence state, observation state, and Last Observation so the next game starts clean.
 
+## Sim Count Coverage Audit
+
+Source checked: `GoblinAreaResolver.KnownAreas`, `GoblinManualCountBlockList`, and `GoblinTrackerDebugSimulationAreas.DropdownItems()`.
+
+| Area key | Countable | Blocked | Present in Sim Count |
+|---|---:|---:|---:|
+| Ancient Waterway | No | Yes | Yes |
+| Battlefields | Yes | No | Yes |
+| Black Canyon Mines | Yes | No | Yes |
+| Caldeum Bazaar | No | Yes | Yes |
+| Cathedral | Yes | No | Yes |
+| Cathedral Level 1 | Yes | No | Yes |
+| Cathedral Level 2 | Yes | No | Yes |
+| Cathedral Level 3 | Yes | No | Yes |
+| Cave Of The Moon Clan Level 1 | Yes | No | Yes |
+| Cave Of The Moon Clan Level 2 | Yes | No | Yes |
+| Caverns of Frost Level 1 | Yes | No | Yes |
+| Caverns of Frost Level 2 | Yes | No | Yes |
+| City of Caldeum | No | Yes | Yes |
+| Eastern Channel Level 1 | Yes | No | Yes |
+| Eastern Channel Level 2 | Yes | No | Yes |
+| Fields of Slaughter | Yes | No | Yes |
+| Flooded Causeway | No | Yes | Yes |
+| Gates of Caldeum | No | Yes | Yes |
+| Hidden Camp | Yes | No | Yes |
+| Highlands Cave | Yes | No | Yes |
+| Leoric's Hunting Grounds | Yes | No | Yes |
+| Leoric's Passage | Yes | No | Yes |
+| New Tristram | No | Yes | Yes |
+| Northern Highlands | Yes | No | Yes |
+| Pandemonium Fortress Level 1 | Yes | No | Yes |
+| Pandemonium Fortress Level 2 | Yes | No | Yes |
+| Rakkis Crossing | Yes | No | Yes |
+| Royal Crypts | Yes | No | Yes |
+| Ruined Cistern | Yes | No | Yes |
+| Sewers of Caldeum | Yes | No | Yes |
+| Southern Highlands | Yes | No | Yes |
+| Stinging Winds | Yes | No | Yes |
+| The Bridge Of Korsikk | No | Yes | Yes |
+| The Festering Woods | Yes | No | Yes |
+| The Weeping Hollow | Yes | No | Yes |
+| Western Channel Level 1 | Yes | No | Yes |
+| Western Channel Level 2 | Yes | No | Yes |
+| WhimsyDale | No | Yes | Yes |
+
+Result: no missing countable areas. Blocked areas are intentionally present so `BlockedArea` suppression can be validated from the same dropdown. `Current Area` remains a pinned synthetic option and is not an area key.
+
+## Retention Policy Audit
+
+Configured values:
+
+- General debug artifact age retention: `AppSettings.RetentionDays=7`, exposed as `AppSettings.DebugArtifactRetentionAge`.
+- Session summaries: `Debug.SessionSummaryRetentionCount=50`.
+- Debug packages: `Debug.DebugPackageRetentionCount=20`.
+- Goblin Evidence loose files: `Debug.GoblinEvidenceRetentionCount=250`.
+- ObservationDiagnostics crop samples: `GoblinEvidenceObservationDiagnosticRetentionCount=24`.
+- Debug package export defaults: `DebugPackageRetentionCount=20`, `MaxGoblinObservationDiagnosticCrops=6`, `MaxGoblinEvidenceFullImages=0`, `MaxGoblinEvidenceEventScreenshots=3`, `MaxGoblinEvidenceEventScreenshotBytes=1048576`.
+
+Cleanup triggers and behavior:
+
+- Startup runs `DebugManager.CleanupDebugArtifactsByAge`, `CleanupOldSessionSummaries`, `CleanupOldDebugPackages`, and `CleanupOldGoblinEvidence`.
+- Age cleanup targets `Logs`, `Screenshots`, `debug-screenshots`, `Sessions`, `DebugPackages`, and `Debug\GoblinEvidence` under both the runtime base directory and resolved project/config root when available.
+- Session summary count cleanup keeps newest matching `Sessions\Session_*.md` files.
+- Debug package count cleanup keeps newest matching `DebugPackages\GoblinFarmer_Debug_*.zip` files; startup scans discovered `DebugPackages` folders and `Scripts\create-debug-package.ps1` also prunes the resolved export folder immediately after a batch-created ZIP is written.
+- GoblinEvidence count cleanup keeps newest loose files recursively under `Debug\GoblinEvidence`; it is called at startup and after calibration snapshot completion. ObservationDiagnostics also runs its own 24-file cleanup during scanner passes.
+- DecisionBundles, EncounterCaptures, ManualCaptures, and replay-ready crops are included in the GoblinEvidence tree and are therefore covered by the startup age/count cleanup. Debug package ZIP contents are additionally bounded by package-script include/exclude limits.
+- Goblin Replay template scenarios create only temporary crop frames and delete their temp root at the end of explicit harness execution; Replay is not a normal startup, scanner, package, or form-close cleanup trigger.
+
+Result: actual cleanup trigger locations match the configured policy. No code mismatch found.
+
 ## Route Logic
 
 - Southern Highlands -> Northern Highlands.
@@ -188,6 +261,13 @@ This file is the current source of truth for the active release, stable behavior
 - Next validation should confirm both loose runtime storage and the next package are smaller while still containing replay-ready DecisionBundles, EncounterCapture Journal/Minimap crops, manifests, JSONL, and analysis files.
 - Next town-workflow validation should confirm salvage scans the inventory once, logs `cacheMode=SingleInventoryScan`, clicks the cached slots without repeated full inventory rescans, and still completes without bad clicks or missed confirmation prompts.
 - Next debug-package validation should confirm the package script logs `Debug package retention cleanup complete` and retains only the newest 20 matching `GoblinFarmer_Debug_*.zip` files in the resolved `DebugPackages` folder.
+
+## Potential Next Major Features
+
+- Automatic gem stashing workflow after repair/salvage/town automation remains stable.
+- Additional Goblin Tracker detection hardening for low-confidence Minimap frames, route-title ambiguity, and rare Journal line variants.
+- Replay-assisted evidence diagnostics that summarize suspicious saved evidence while keeping Goblin Replay explicit/on-demand.
+- Release readiness items: final VS Debug confidence pass, package-size check, installer/publish verification, release notes, and GitHub release artifact validation.
 
 ## Developer Utilities
 
