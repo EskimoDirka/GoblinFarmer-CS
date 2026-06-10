@@ -6519,8 +6519,12 @@ static void TestGemStashSettingsAndAssetSeparationAreWired()
     AssertTrue(appSettingsSource.Contains("public StashSettings Stash { get; set; } = new();", StringComparison.Ordinal), "settings model should expose a separate Stash group");
     AssertTrue(appSettingsSource.Contains("settings.Stash.EnableAutoGemStash = true", StringComparison.Ordinal), "VS Debug defaults should enable gem stashing");
     AssertTrue(appSettingsJson.Contains("\"EnableAutoGemStash\": false", StringComparison.Ordinal), "release config should keep gem stashing disabled by default");
-    AssertTrue(appSettingsSource.Contains("public int TravelToStashWaitMs { get; set; } = 3000;", StringComparison.Ordinal), "stash travel wait should default to 3 seconds");
-    AssertTrue(appSettingsJson.Contains("\"TravelToStashWaitMs\": 3000", StringComparison.Ordinal), "release config should carry the 3-second stash travel wait");
+    AssertTrue(appSettingsSource.Contains("public int TravelToStashWaitMs { get; set; } = 1500;", StringComparison.Ordinal), "stash travel wait should default to the faster validated 1.5-second travel settle");
+    AssertTrue(appSettingsJson.Contains("\"TravelToStashWaitMs\": 1500", StringComparison.Ordinal), "release config should carry the faster stash travel wait");
+    AssertTrue(appSettingsSource.Contains("public int OpenStashWaitMs { get; set; } = 600;", StringComparison.Ordinal), "stash open wait should default to the faster validated settle");
+    AssertTrue(appSettingsJson.Contains("\"OpenStashWaitMs\": 600", StringComparison.Ordinal), "release config should carry the faster stash open wait");
+    AssertTrue(appSettingsSource.Contains("public int StashTabSettleMs { get; set; } = 150;", StringComparison.Ordinal), "gem tab settle should use the faster validated default");
+    AssertTrue(appSettingsSource.Contains("public int PostGemClickDelayMs { get; set; } = 25;", StringComparison.Ordinal), "gem clicks should use the faster validated post-click delay");
     AssertTrue(appSettingsSource.Contains("TravelToStashWaitMs = Math.Clamp(TravelToStashWaitMs, 0, 10000);", StringComparison.Ordinal), "stash travel wait should be configurable and normalized");
     AssertTrue(automationSource.Contains("Img(\"Gems\", \"Gem Coordinates.txt\")", StringComparison.Ordinal), "gem stash coordinates should be read from Images\\Gems");
     AssertTrue(townSource.Contains("PortGemStashTemplateDirectory()", StringComparison.Ordinal), "town workflow should use gem template directory helper");
@@ -6558,10 +6562,10 @@ static void TestGemStashTravelWaitHappensAfterStashCoordinateClick()
     int openWaitIndex = stashMethod.IndexOf("PortWaitForGemStashUiSignal", StringComparison.Ordinal);
 
     AssertTrue(travelClickIndex >= 0, "stash flow should click the stash coordinate as the travel click");
-    AssertTrue(travelWaitIndex > travelClickIndex, "3-second stash travel wait should happen after the stash-coordinate click");
+    AssertTrue(travelWaitIndex > travelClickIndex, "stash travel wait should happen after the stash-coordinate click");
     AssertTrue(openClickIndex > travelWaitIndex, "stash should be clicked/opened only after the travel wait");
     AssertTrue(openWaitIndex > openClickIndex, "stash UI wait should happen after the stash-open click");
-    AssertFalse(stashMethod.Substring(0, travelClickIndex).Contains("TravelToStashWaitMs", StringComparison.Ordinal), "3-second travel wait should not occur before the stash-coordinate click");
+    AssertFalse(stashMethod.Substring(0, travelClickIndex).Contains("TravelToStashWaitMs", StringComparison.Ordinal), "stash travel wait should not occur before the stash-coordinate click");
     AssertTrue(stashMethod.Contains("Auto gem stash travel wait", StringComparison.Ordinal), "stash travel wait should be logged separately from stash open wait");
     AssertTrue(stashMethod.Contains("stashOpenClickSent", StringComparison.Ordinal), "stash flow should log the second stash-open click separately");
     AssertEqual(1, closeMethod.Split("PortPressEscapeForAutomation();", StringSplitOptions.None).Length - 1, "post-salvage close should press Escape exactly once");

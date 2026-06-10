@@ -270,7 +270,7 @@ Highlights:
 - Added tooltip-safer salvage scans and pale-item support so hover text does not become a recovery target and pale legendary-style leftovers are not rejected as gems.
 - Added gated normal-gem auto-stashing behind `Stash.EnableAutoGemStash`.
 - Added separated `Images\Gems` support for gem templates and gem stash coordinates.
-- Added `Stash.TravelToStashWaitMs`, defaulting to 3000 ms, so auto-stash waits after the stash-coordinate movement click before opening stash.
+- Added `Stash.TravelToStashWaitMs`, defaulting to 1500 ms, so auto-stash waits briefly after the stash-coordinate movement click before opening stash.
 - Added structured replay logs for salvage and gem-stash scans.
 - Added `GemColorMatched` fallback for normal gem stashing when live gem stacks score below strict template confidence but still have strong gem color-family evidence.
 - Added reviewed OBS evidence support in debug packages without including full video files or automatic replay screenshot folders by default.

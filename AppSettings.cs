@@ -1492,10 +1492,10 @@ namespace GoblinFarmer
         {
             public bool EnableAutoGemStash { get; set; } = false;
             public double GemTemplateConfidence { get; set; } = 0.78;
-            public int TravelToStashWaitMs { get; set; } = 3000;
-            public int OpenStashWaitMs { get; set; } = 1200;
-            public int StashTabSettleMs { get; set; } = 250;
-            public int PostGemClickDelayMs { get; set; } = 45;
+            public int TravelToStashWaitMs { get; set; } = 1500;
+            public int OpenStashWaitMs { get; set; } = 600;
+            public int StashTabSettleMs { get; set; } = 150;
+            public int PostGemClickDelayMs { get; set; } = 25;
             public int RecoveryRescanLimit { get; set; } = 1;
 
             public void Normalize()
