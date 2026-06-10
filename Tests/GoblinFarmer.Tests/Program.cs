@@ -35,7 +35,6 @@ Run("Configured valid Diablo path wins over discovery", TestConfiguredValidDiabl
 Run("DebugManager profile helpers separate VS, release debug, and normal release", TestDebugManagerProfileHelpers);
 Run("DebugManager retention cleanup only deletes matching artifacts", TestDebugManagerRetentionCleanupFilters);
 Run("Debug package script applies 20 package retention", TestDebugPackageScriptAppliesPackageRetention);
-Run("Project Brain script applies 7-day ZIP retention", TestProjectBrainScriptAppliesZipRetention);
 Run("DebugManager age retention deletes old debug artifacts", TestDebugManagerAgeRetentionDeletesOldArtifacts);
 Run("GoblinEvidence retention keeps newest 250 files", TestGoblinEvidenceRetentionKeepsNewest250Files);
 Run("GoblinEvidence retention breaks timestamp ties by filename", TestGoblinEvidenceRetentionBreaksTimestampTiesByFilename);
@@ -139,6 +138,7 @@ Run("Salvage classifier rejects detached footprint without anchor", TestSalvageC
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier merges weak upper and strong lower set boundary", TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary);
+Run("Salvage classifier merges set body continuation rows", TestSalvageClassifierMergesSetBodyContinuationRows);
 Run("Salvage classifier caches DVR-style item anchors", TestSalvageClassifierCachesDvrStyleItemAnchors);
 Run("Salvage classifier splits stacked one tile items", TestSalvageClassifierSplitsStackedOneTileItems);
 Run("Salvage classifier splits stacked two tile footprints", TestSalvageClassifierSplitsStackedTwoTileFootprints);
@@ -682,19 +682,6 @@ static void TestDebugPackageScriptAppliesPackageRetention()
     AssertTrue(scriptSource.Contains("GoblinFarmer_Debug_*.zip", StringComparison.Ordinal), "debug package retention should target only GoblinFarmer debug ZIPs");
     AssertTrue(scriptSource.Contains("Debug package retention cleanup deleted:", StringComparison.Ordinal), "debug package retention should log deleted packages");
     AssertTrue(scriptSource.Contains("Debug package retention cleanup complete:", StringComparison.Ordinal), "debug package retention should log a cleanup summary");
-}
-
-static void TestProjectBrainScriptAppliesZipRetention()
-{
-    string repoRoot = FindRepositoryRootForTests();
-    string scriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-project-brain.ps1"));
-
-    AssertTrue(scriptSource.Contains("$ProjectBrainZipRetentionDays = 7", StringComparison.Ordinal), "Project Brain ZIP retention should be seven days");
-    AssertTrue(scriptSource.Contains("Invoke-ProjectBrainRetentionCleanup", StringComparison.Ordinal), "Project Brain export should invoke retention cleanup after creating a ZIP");
-    AssertTrue(scriptSource.Contains("GoblinFarmer_ProjectBrain_*.zip", StringComparison.Ordinal), "Project Brain retention should target only expected Project Brain ZIP names");
-    AssertTrue(scriptSource.Contains("Refusing Project Brain ZIP cleanup outside expected folder", StringComparison.Ordinal), "Project Brain retention should be scoped to the output folder");
-    AssertTrue(scriptSource.Contains("ProjectBrainRetentionCleanup deleted=", StringComparison.Ordinal), "Project Brain retention should log a cleanup summary");
-    AssertFalse(scriptSource.Contains("Get-ChildItem -LiteralPath $resolvedFolder -Filter \"*.zip\"", StringComparison.Ordinal), "Project Brain retention must not use a broad ZIP pattern");
 }
 
 static void TestDebugManagerAgeRetentionDeletesOldArtifacts()
@@ -4210,13 +4197,11 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
         "Cleanup Project.bat",
         "Cleanup Project Delete.bat",
         "Create Debug Package.bat",
-        "Create Project Brain.bat",
     ];
     string[] expectedActivePowerShellScripts =
     [
         "cleanup-project.ps1",
         "create-debug-package.ps1",
-        "create-project-brain.ps1",
         "debug-analysis-tools.ps1",
     ];
     string retiredEvidenceToken = "Goblin" + ("Re" + "play");
@@ -4352,12 +4337,14 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
         .Select(Path.GetFileName)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
         .ToArray()!;
-    AssertSequenceEqual(expectedBatchScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activeBatchScripts, "Scripts should expose the two package launchers plus the documented cleanup maintenance launcher");
-    AssertSequenceEqual(expectedActivePowerShellScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activePowerShellScripts, "Scripts should keep package scripts, direct debug-package helper, and cleanup maintenance script");
+    AssertSequenceEqual(expectedBatchScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activeBatchScripts, "Scripts should expose the debug package launcher plus the documented cleanup maintenance launchers");
+    AssertSequenceEqual(expectedActivePowerShellScripts.OrderBy(name => name, StringComparer.OrdinalIgnoreCase), activePowerShellScripts, "Scripts should keep the debug package script, direct debug-package helper, and cleanup maintenance script");
     foreach (string scriptName in expectedActivePowerShellScripts)
     {
         AssertTrue(File.Exists(Path.Combine(repoRoot, "Scripts", scriptName)), $"{scriptName} should exist under Scripts");
     }
+    AssertFalse(File.Exists(Path.Combine(repoRoot, "Scripts", "Create Project Brain.bat")), "Project Brain ZIP batch launcher should be removed");
+    AssertFalse(File.Exists(Path.Combine(repoRoot, "Scripts", "create-project-brain.ps1")), "Project Brain ZIP PowerShell generator should be removed");
     AssertTrue(projectSource.Contains("Scripts\\debug-analysis-tools.ps1", StringComparison.Ordinal), "debug-analysis-tools.ps1 should be copied to VS Debug and Release publish outputs");
     AssertFalse(projectSource.Contains("Scripts\\analyze-latest-debug-package.ps1", StringComparison.Ordinal), "archived optional package analyzer should not be published");
     AssertFalse(projectSource.Contains("Scripts\\build-goblin-tracker-timeline.ps1", StringComparison.Ordinal), "archived optional timeline helper should not be published");
@@ -5552,6 +5539,23 @@ static void TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary()
     AssertEqual("Set", target.Quality, "set quality should be derived from the lower cell of the merged footprint");
     AssertTrue(target.ConfirmationExpected, "merged set footprint should expect confirmation");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint" && candidate.Quality == "Set" && candidate.ConfirmationExpected), "lower green cell should be duplicate metadata, not an extra target");
+}
+
+static void TestSalvageClassifierMergesSetBodyContinuationRows()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticOneSlotSalvageItem(grid, 1, 1, highRarity: true);
+    PaintSyntheticSetQualityInCell(grid, 2, 1);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "adjacent set-looking lower body row should not become a second cached target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(1, target.Row, "set continuation should keep the top click target");
+    AssertEqual(2, target.FootprintRows, "set continuation should collapse to a legal two-row footprint");
+    AssertEqual("Set", target.Quality, "set continuation should preserve set quality");
+    AssertTrue(target.ConfirmationExpected, "set continuation should preserve expected confirmation");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "set continuation lower row should be a duplicate footprint diagnostic");
 }
 
 static void TestSalvageClassifierCachesDvrStyleItemAnchors()

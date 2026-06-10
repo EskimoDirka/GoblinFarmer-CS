@@ -37,17 +37,16 @@ Do not assume GitHub reflects the user's latest local state.
 - Include validation and next test steps in responses.
 - Do not commit or push automatically.
 
-## Project Brain Workflow
+## Project Brain Docs
 
-- Use `Scripts\Create Project Brain.bat` or `Scripts\create-project-brain.ps1` for AI-assisted context packages.
-- Project Brain ZIPs are generated output under `ProjectBrain` and must not be committed.
+- Use `Docs\ProjectBrain\*.md` directly as compact Codex context.
+- Project Brain ZIP generation has been retired; there is no active Project Brain batch or PowerShell generator.
 - Project Brain docs summarize and route context; they do not replace `Docs\Project_Status.md`.
-- The same PowerShell script can generate `Reports\Storage_Breakdown.md` with `-StorageBreakdownOnly`; this is report-only and must not delete files.
 
 ## Scripts Policy
 
-- Normal tracked user-facing package batch files under `Scripts` are limited to `Create Debug Package.bat` and `Create Project Brain.bat`.
-- Required backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`.
+- Normal tracked user-facing package batch file under `Scripts` is limited to `Create Debug Package.bat`.
+- Required backing script is `create-debug-package.ps1`.
 - `debug-analysis-tools.ps1` remains because `create-debug-package.ps1` directly loads it.
 - `Cleanup Project.bat`, `Cleanup Project Delete.bat`, and `cleanup-project.ps1` are documented maintenance-only exceptions for generated artifact cleanup. The dry-run launcher and PowerShell script must default to dry-run. The delete launcher must ask for `Y/N` before passing `-Delete`.
 - Retired/manual helpers are archived under `Docs\ScriptArchive\2026-06-09` and should not be reintroduced as active scripts without explicit approval.

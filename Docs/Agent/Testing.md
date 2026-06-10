@@ -47,7 +47,7 @@ Documentation-only changes may not need app runtime testing, but still validate 
 ## What To Report
 
 - Commands run and pass/fail status.
-- Debug package or Project Brain ZIP paths created when relevant.
+- Debug package paths created when relevant.
 - Whether real runtime deletion or package retention cleanup occurred.
 - What still needs live validation.
 - The next recommended test step.

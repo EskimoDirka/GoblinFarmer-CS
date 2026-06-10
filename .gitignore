@@ -435,7 +435,6 @@ DebugPackages/
 /ProjectBrain/
 Sessions/
 debug-screenshots/
-ChatGPT Uploads/
 GitHub Upload/
 GoblinFarmer.exe
 GoblinFarmerSetup-*.exe
@@ -462,8 +461,6 @@ Scripts/*
 Scripts/Local Tools/
 !Scripts/create-debug-package.ps1
 !Scripts/Create Debug Package.bat
-!Scripts/create-project-brain.ps1
-!Scripts/Create Project Brain.bat
 !Scripts/debug-analysis-tools.ps1
 !Scripts/cleanup-project.ps1
 !Scripts/Cleanup Project.bat

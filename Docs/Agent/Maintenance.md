@@ -4,8 +4,8 @@ Stable maintenance guidance for Codex. Current script policy and latest validati
 
 ## Scripts Folder Policy
 
-- Normal package launchers are `Scripts\Create Debug Package.bat` and `Scripts\Create Project Brain.bat`.
-- Required backing scripts are `Scripts\create-debug-package.ps1` and `Scripts\create-project-brain.ps1`.
+- Normal package launcher is `Scripts\Create Debug Package.bat`.
+- Required backing script is `Scripts\create-debug-package.ps1`.
 - `Scripts\debug-analysis-tools.ps1` remains because the debug package script loads it.
 - Cleanup scripts are maintenance-only exceptions: `Scripts\Cleanup Project.bat`, `Scripts\Cleanup Project Delete.bat`, and `Scripts\cleanup-project.ps1`.
 - Retired/manual scripts belong under `Docs\ScriptArchive` unless the user asks to restore them.
@@ -34,7 +34,6 @@ Do not trim source/docs first. `Images`, `Docs`, `Scripts`, `Config`, `Installer
 ## Retention Expectations
 
 - App/debug package workflow defaults may retain 20 debug packages unless explicitly changed.
-- Project Brain ZIPs are docs-only context packages and are pruned by `Scripts\create-project-brain.ps1` after package creation when matching `ProjectBrain\GoblinFarmer_ProjectBrain_*.zip` files are older than 7 days.
 - Salvage Inventory Replay artifacts live under `Debug\InventoryReplay\Salvage`, use 7-day age cleanup, and debug packages include only the newest bounded replay folders.
 - Cleanup script default retention can recommend 10 for local storage cleanup without changing app behavior.
 - Stable storage cleanup may use 5 debug packages only when the user agrees the run evidence is no longer needed.
@@ -48,7 +47,6 @@ Do not commit:
 - Installer output.
 - Portable ZIPs.
 - Debug packages.
-- Project Brain ZIPs, except for local handoff/use before the 7-day retention cleanup removes stale matching exports.
 - Reports generated for local review unless intentionally requested.
 - Logs, screenshots, replay captures, DecisionBundles, EncounterCaptures, GoblinEvidence runtime output.
 - Inventory Replay runtime crops and metadata.

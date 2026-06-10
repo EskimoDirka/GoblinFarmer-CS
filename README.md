@@ -214,15 +214,13 @@ If Teleport Next is accepted but no queued route target exists for the current r
 
 Debug Mode is off by default for normal release use. When enabled from Settings, it shows diagnostic controls and debug-only views such as the route state inspector and screenshot options, and it enables Keep Debug Screenshots by default until the user turns screenshot retention off. Visual Studio Debug runs force debug evidence internally, so those settings are not shown as editable options there. Success screenshots remain disabled unless `Debug.EnableSuccessScreenshots` is explicitly set to `true`.
 
-Debug and release artifacts keep evidence useful but bounded by default. VS Debug troubleshooting artifacts and release/debug-mode artifacts use a 7-day age-retention window, debug package ZIP count retention keeps the newest 20 matching packages by default, and Project Brain ZIP retention deletes matching docs-only exports older than 7 days. Success screenshots are excluded from release/export packages unless explicitly requested, failure screenshot groups and current-session `debug-screenshots` are capped to recent samples, and Goblin Evidence crops/event screenshots use their own count and package limits. Normal scanner events skip redundant root `GoblinEvidence_*` full/event images by default, DecisionBundles keep replay-ready Journal/Minimap crops and metadata without copying full evidence images by default, and debug ZIPs exclude old DecisionBundle full images plus Encounter/ManualCapture fullscreen images unless explicitly opted in. Successful Battle.net app-click launches do not create false failure screenshots for manual-play suspicion or brief post-launch Battle.net visibility. The package manifest reports included and excluded screenshot counts and sizes.
+Debug and release artifacts keep evidence useful but bounded by default. VS Debug troubleshooting artifacts and release/debug-mode artifacts use a 7-day age-retention window, and debug package ZIP count retention keeps the newest 20 matching packages by default. Success screenshots are excluded from release/export packages unless explicitly requested, failure screenshot groups and current-session `debug-screenshots` are capped to recent samples, and Goblin Evidence crops/event screenshots use their own count and package limits. Normal scanner events skip redundant root `GoblinEvidence_*` full/event images by default, DecisionBundles keep replay-ready Journal/Minimap crops and metadata without copying full evidence images by default, and debug ZIPs exclude old DecisionBundle full images plus Encounter/ManualCapture fullscreen images unless explicitly opted in. Successful Battle.net app-click launches do not create false failure screenshots for manual-play suspicion or brief post-launch Battle.net visibility. The package manifest reports included and excluded screenshot counts and sizes.
 
 For both VS Debug and Release troubleshooting, use the single ZIP export path: `Scripts\Create Debug Package.bat`, which launches `Scripts\create-debug-package.ps1`. The batch script self-discovers the runtime/package roots, writes the ZIP under `DebugPackages`, and includes the latest logs, manifests, route summaries, Goblin Tracker summaries, bounded screenshots, GoblinEvidence, replay-ready encounter captures, decision bundles, observation diagnostics, and root analysis files: `debug-package-analysis.txt`, `goblin-tracker-timeline.md`, and `goblin-evidence-health.txt`. Closing the VS Debug form is intentionally quiet and does not generate packages or loose review files.
 
-For AI-assisted development handoff context, `Scripts\Create Project Brain.bat` creates a timestamped docs-only ZIP under `ProjectBrain` from the allowlisted project instructions, README, and current status/reference docs when present. After creating a package, the script prunes only matching `GoblinFarmer_ProjectBrain_*.zip` files older than 7 days.
+For AI-assisted development context, Project Brain topic summaries live under `Docs\ProjectBrain`. They organize current context for Codex while keeping `Docs\Project_Status.md` as the source of truth. The former Project Brain ZIP generator has been retired.
 
-The tracked `Scripts` folder keeps `Create Debug Package.bat` and `Create Project Brain.bat` as the normal package launchers. Their backing scripts are `create-debug-package.ps1` and `create-project-brain.ps1`; `debug-analysis-tools.ps1` remains as a direct dependency of the debug package workflow. `Cleanup Project.bat`, `Cleanup Project Delete.bat`, and `cleanup-project.ps1` are maintenance-only exceptions for generated artifact cleanup. Older manual helpers are archived under `Docs\ScriptArchive\2026-06-09` for reference rather than active use.
-
-Project Brain topic summaries live under `Docs\ProjectBrain`. They organize current context for ChatGPT/Codex while keeping `Docs\Project_Status.md` as the source of truth.
+The tracked `Scripts` folder keeps `Create Debug Package.bat` as the normal package launcher. Its backing script is `create-debug-package.ps1`; `debug-analysis-tools.ps1` remains as a direct dependency of the debug package workflow. `Cleanup Project.bat`, `Cleanup Project Delete.bat`, and `cleanup-project.ps1` are maintenance-only exceptions for generated artifact cleanup. Older manual helpers are archived under `Docs\ScriptArchive\2026-06-09` for reference rather than active use.
 
 Release and Visual Studio Debug use a taller Goblin Tracker group so the evidence and Last Observation fields remain readable. Release-user launches keep diagnostic tabs hidden until Debug Mode is enabled.
 
@@ -238,7 +236,7 @@ Debug tooling includes:
 - Explicit/on-demand Goblin Replay fixture runner support for saved Journal/Minimap PNG detection tests, targeted multi-step stale-evidence fixtures, real capture folders, specific metadata files, capture prefixes, replay-ready DecisionBundle references, and template-scenario files synthesized from `Images\Goblin Evidence` plus optional `Images\Current Location` area resolution; replay is not wired into startup, live automation, or debug package creation.
 - Goblin Tracker count, counted-area summary, active combat time, and GPH in session summaries, runtime metadata, diagnostics, and debug package manifests.
 - Automation Observation Mode diagnostics for per-goblin Goblin Evidence setup, with manual template guidance under `Images\Goblin Evidence`; automatic goblin counting is a separate opt-in gate and defaults off.
-- Age-based debug artifact retention: 7 days for VS Debug troubleshooting folders and release/debug-mode artifacts, 7 days for matching Project Brain ZIPs, plus count-based debug package retention defaulting to the newest 20 ZIPs, GoblinEvidence retention under `Debug\GoblinEvidence` defaulting to the newest 250 files, and bounded ObservationDiagnostics crop samples in debug packages.
+- Age-based debug artifact retention: 7 days for VS Debug troubleshooting folders and release/debug-mode artifacts, plus count-based debug package retention defaulting to the newest 20 ZIPs, GoblinEvidence retention under `Debug\GoblinEvidence` defaulting to the newest 250 files, and bounded ObservationDiagnostics crop samples in debug packages.
 - Detailed launch, Start Game, teleport, repair, bulk/per-slot salvage timing, diagnostic-only post-salvage leftover warnings, Kadala timing, bounty, and Exit Game logs.
 
 Generate a debug package by double-clicking `Scripts\Create Debug Package.bat`. The batch creates one ZIP from the existing live runtime evidence. From the project root:
@@ -248,14 +246,6 @@ powershell -ExecutionPolicy Bypass -File .\Scripts\create-debug-package.ps1
 ```
 
 Debug packages include failure screenshots by default and include debug screenshots according to the active screenshot settings. Success screenshots are excluded from package ZIPs unless the script is run with `-IncludeSuccessScreenshots`; the manifest can still report how many success screenshots are available on disk. Goblin Evidence ObservationDiagnostics crops are limited to a recent sample, old DecisionBundle `evidence.*` full images are excluded by default, and Encounter/ManualCapture fullscreen images are excluded by default while their Journal/Minimap crops and metadata remain included for replay.
-
-The Project Brain script can also generate a paste-friendly storage report without deleting files:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\create-project-brain.ps1 -StorageBreakdownOnly
-```
-
-The report is written to `Reports\Storage_Breakdown.md` and highlights build output, debug packages, runtime evidence, logs, screenshots, installers/packages, and replay/capture storage before any separate cleanup decision.
 
 Generated artifact cleanup is dry-run by default:
 
@@ -313,9 +303,9 @@ Build from the project root:
 dotnet build GoblinFarmer.csproj
 ```
 
-## Local Source Uploads
+## Local Tools
 
-Local developer checkouts can keep private ChatGPT source-upload helpers under `Scripts\Local Tools\`. Those helpers and their timestamped ZIP output under `ChatGPT Uploads\` are intentionally ignored by Git; tracked package launchers remain limited to `Scripts\Create Debug Package.bat` and `Scripts\Create Project Brain.bat`, with `Scripts\Cleanup Project.bat` and `Scripts\Cleanup Project Delete.bat` as maintenance-only cleanup exceptions.
+Local developer checkouts can keep private helper scripts under `Scripts\Local Tools\`. That folder is intentionally ignored by Git; the tracked package launcher remains limited to `Scripts\Create Debug Package.bat`, with `Scripts\Cleanup Project.bat` and `Scripts\Cleanup Project Delete.bat` as maintenance-only cleanup exceptions.
 
 ## Release Build
 
@@ -361,7 +351,7 @@ See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a f
 - [Docs/Release_v1.3.md](Docs/Release_v1.3.md): ready-to-copy GitHub release notes.
 - [Docs/CombatProfiles.md](Docs/CombatProfiles.md): supported combat profiles and required skill setup.
 - [Docs/Project_Status.md](Docs/Project_Status.md): brief current release status, stable behavior, and next development plans.
-- [Docs/ProjectBrain/README.md](Docs/ProjectBrain/README.md): index for compact ChatGPT/Codex context summaries.
+- [Docs/ProjectBrain/README.md](Docs/ProjectBrain/README.md): index for compact Codex context summaries.
 - [Docs/TODO.md](Docs/TODO.md): development and validation backlog.
 - [Docs/History.md](Docs/History.md): historical package reviews, retired workflows, and backlog context.
 - [Docs/Release_Checklist.md](Docs/Release_Checklist.md): release validation checklist.

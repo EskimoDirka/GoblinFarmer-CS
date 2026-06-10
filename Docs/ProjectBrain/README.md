@@ -1,6 +1,6 @@
 # Project Brain Index
 
-Project Brain docs are compact topic summaries for ChatGPT/Codex context loading. They organize the current project state without replacing the source of truth.
+Project Brain docs are compact topic summaries for Codex context loading. They organize the current project state without replacing the source of truth.
 
 `Docs\Project_Status.md` remains the authoritative source for current release status, route logic, blocking rules, active issues, confirmed behavior, and next recommended tasks. If a Project Brain note conflicts with `Docs\Project_Status.md`, use `Docs\Project_Status.md`.
 

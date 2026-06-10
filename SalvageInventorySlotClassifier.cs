@@ -54,6 +54,8 @@ namespace GoblinFarmer
         private const int SetQualityAnchorPixels = 120;
         private const int SetQualityAnchorColoredFramePixels = 180;
         private const int SetQualityAnchorContentPixels = 80;
+        private const int SetQualityContinuationGreenPixels = 800;
+        private const int SetQualityContinuationSaturatedPixels = 900;
         private const int LegendaryQualityPixels = 320;
         private const int ItemTopBoundaryPixels = 350;
         private const int MaximumItemFootprintRows = 2;
@@ -289,7 +291,22 @@ namespace GoblinFarmer
                 return true;
             }
 
+            if (precedingRows == 1 &&
+                IsSetQualityContinuation(metrics[segmentStart, column], metrics[row, column]))
+            {
+                return false;
+            }
+
             return precedingRows == 1 && HasItemTopBoundary(metrics[segmentStart, column]);
+        }
+
+        private static bool IsSetQualityContinuation(
+            SalvageInventorySlotMetrics previous,
+            SalvageInventorySlotMetrics current)
+        {
+            return previous.GreenQualityPixels >= SetQualityPixels &&
+                current.GreenQualityPixels >= SetQualityContinuationGreenPixels &&
+                current.InnerSaturatedPixels >= SetQualityContinuationSaturatedPixels;
         }
 
         private static string RejectionReason(SalvageInventorySlotMetrics metrics)

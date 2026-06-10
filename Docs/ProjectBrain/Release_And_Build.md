@@ -59,4 +59,4 @@ The publish output goes to `artifacts\publish\GoblinFarmer`. Confirm executable 
 
 ## Generated Output Rules
 
-Do not commit generated executables, installer output, portable ZIPs, debug packages, Project Brain ZIPs, logs, screenshots, source-upload output, or retired upload folders. `artifacts\` and installer binaries are generated output.
+Do not commit generated executables, installer output, portable ZIPs, debug packages, logs, screenshots, source-upload output, retired upload folders, or any regenerated Project Brain ZIP artifacts. `artifacts\` and installer binaries are generated output.

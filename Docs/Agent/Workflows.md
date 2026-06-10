@@ -19,12 +19,11 @@ Stable workflow guidance for Codex. Current priorities and latest findings live 
 - Review package analysis files, logs, route summaries, Goblin Tracker summaries, GoblinEvidence, DecisionBundles, EncounterCaptures, ObservationDiagnostics, and JSONL events before changing code.
 - Do not create a second debug package workflow.
 
-## Project Brain Generation
+## Project Brain Docs
 
-- Use `Scripts\Create Project Brain.bat` or `Scripts\create-project-brain.ps1`.
-- Project Brain ZIPs are docs-only handoff packages under `ProjectBrain`.
-- The package should include `AGENTS.md`, `README.md`, `Docs\Project_Status.md`, `Docs\TODO.md` when present, `Docs\ProjectBrain\*.md` when present, and `Docs\Agent\*.md`.
-- Do not include runtime artifacts, screenshots, images, binaries, replay data, existing ZIPs, or installer output.
+- `Docs\ProjectBrain\*.md` remains available as compact Codex context.
+- Project Brain ZIP generation has been retired; read the markdown docs directly when useful.
+- `Docs\Project_Status.md` remains the source of truth when Project Brain summaries are stale.
 
 ## Cleanup Workflow
 
