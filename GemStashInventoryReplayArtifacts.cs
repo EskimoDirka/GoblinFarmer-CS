@@ -8,7 +8,9 @@ namespace GoblinFarmer
     {
         public const int RetentionDays = 7;
         public const string RelativeRoot = @"Debug\InventoryReplay\Stash";
+        public const string LogRelativeRoot = @"Debug\ReplayLogs";
         private const string FolderPrefix = "GemStashInventoryReplay_";
+        private static readonly object LogFileLock = new();
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             WriteIndented = true,
@@ -16,8 +18,10 @@ namespace GoblinFarmer
         };
 
         public static string RootDirectory => Path.Combine(DebugManager.BaseDirectory, "Debug", "InventoryReplay", "Stash");
+        public static string LogDirectory => Path.Combine(DebugManager.BaseDirectory, "Debug", "ReplayLogs");
+        public static string EventLogPath => Path.Combine(LogDirectory, "inventory-replay-events.jsonl");
 
-        public static void SaveScanArtifact(Bitmap inventoryGrid, Rectangle screenGrid, string phase, GemStashInventoryScanResult scan, double threshold)
+        public static void RecordScanLog(Rectangle screenGrid, string phase, GemStashInventoryScanResult scan, double threshold)
         {
             if (!AppSettings.Debug.DebugMode)
             {
@@ -26,27 +30,15 @@ namespace GoblinFarmer
 
             try
             {
-                Directory.CreateDirectory(RootDirectory);
-                SalvageInventoryReplayArtifacts.CleanupOldArtifacts(RootDirectory, TimeSpan.FromDays(RetentionDays), FolderPrefix);
-
                 DateTime nowUtc = DateTime.UtcNow;
-                string safePhase = MakeSafeName(phase);
-                string folderName = $"{FolderPrefix}{nowUtc:yyyyMMdd_HHmmssfff}_{safePhase}";
-                string artifactDirectory = Path.Combine(RootDirectory, folderName);
-                Directory.CreateDirectory(artifactDirectory);
-
-                string imagePath = Path.Combine(artifactDirectory, "inventory-grid.png");
-                inventoryGrid.Save(imagePath, System.Drawing.Imaging.ImageFormat.Png);
-
-                GemStashInventoryReplayMetadata metadata = new(
-                    ArtifactType: "GemStash",
+                GemStashInventoryReplayLogEvent logEvent = new(
+                    ArtifactType: "GemStashInventoryReplayLog",
                     SavedAtUtc: nowUtc,
                     Phase: phase,
                     ClassifierVersion: GemStashInventoryClassifier.ClassifierVersion,
                     Columns: InventoryGridLayout.Columns,
                     Rows: InventoryGridLayout.Rows,
                     ScreenGrid: new InventoryReplayRectangle(screenGrid.Left, screenGrid.Top, screenGrid.Width, screenGrid.Height),
-                    ImageFile: Path.GetFileName(imagePath),
                     Threshold: threshold,
                     TemplateNames: scan.TemplateNames.ToArray(),
                     InvalidTemplates: scan.InvalidTemplates.ToArray(),
@@ -55,13 +47,12 @@ namespace GoblinFarmer
                     Targets: scan.Targets.Select(GemStashInventoryReplayTarget.FromTarget).ToArray(),
                     Candidates: scan.Candidates.Select(GemStashInventoryReplayCandidate.FromCandidate).ToArray());
 
-                File.WriteAllText(Path.Combine(artifactDirectory, "metadata.json"), JsonSerializer.Serialize(metadata, JsonOptions));
-                SaveTemplates(artifactDirectory, scan);
-                AppLogger.Info($"GemStashInventoryReplayArtifactSaved phase={phase}; folder={artifactDirectory}; targetCount={scan.Targets.Count}; candidateCount={scan.Candidates.Count}; templateCount={scan.TemplateNames.Count}; invalidTemplateCount={scan.InvalidTemplates.Count}; classifierVersion={GemStashInventoryClassifier.ClassifierVersion}; retentionDays={RetentionDays}");
+                AppendJsonLine(EventLogPath, logEvent);
+                AppLogger.Info($"GemStashInventoryReplayLogRecorded phase={phase}; path={EventLogPath}; targetCount={scan.Targets.Count}; candidateCount={scan.Candidates.Count}; templateCount={scan.TemplateNames.Count}; invalidTemplateCount={scan.InvalidTemplates.Count}; classifierVersion={GemStashInventoryClassifier.ClassifierVersion}");
             }
             catch (Exception ex)
             {
-                AppLogger.Error($"GemStashInventoryReplayArtifactSaveFailed phase={phase}", ex);
+                AppLogger.Error($"GemStashInventoryReplayLogRecordFailed phase={phase}", ex);
             }
         }
 
@@ -172,6 +163,16 @@ namespace GoblinFarmer
             string safe = new(chars);
             return string.IsNullOrWhiteSpace(safe) ? "Scan" : safe;
         }
+
+        private static void AppendJsonLine<T>(string path, T value)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? DebugManager.BaseDirectory);
+            string line = JsonSerializer.Serialize(value, JsonOptions);
+            lock (LogFileLock)
+            {
+                File.AppendAllText(path, line + Environment.NewLine);
+            }
+        }
     }
 
     internal sealed record GemStashInventoryReplayRunResult(
@@ -191,6 +192,22 @@ namespace GoblinFarmer
         int Rows,
         InventoryReplayRectangle ScreenGrid,
         string ImageFile,
+        double Threshold,
+        IReadOnlyList<string> TemplateNames,
+        IReadOnlyList<string> InvalidTemplates,
+        int TargetCount,
+        int CandidateCount,
+        IReadOnlyList<GemStashInventoryReplayTarget> Targets,
+        IReadOnlyList<GemStashInventoryReplayCandidate> Candidates);
+
+    internal sealed record GemStashInventoryReplayLogEvent(
+        string ArtifactType,
+        DateTime SavedAtUtc,
+        string Phase,
+        string ClassifierVersion,
+        int Columns,
+        int Rows,
+        InventoryReplayRectangle ScreenGrid,
         double Threshold,
         IReadOnlyList<string> TemplateNames,
         IReadOnlyList<string> InvalidTemplates,

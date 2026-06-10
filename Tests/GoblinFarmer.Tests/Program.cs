@@ -4,6 +4,11 @@ using System.IO.Compression;
 using System.Text.Json;
 using GoblinFarmer;
 
+if (TryRunDebugPackageReplayCommand(args, out int debugPackageReplayExitCode))
+{
+    return debugPackageReplayExitCode;
+}
+
 if (TryRunInventoryReplayCommand(args, out int inventoryReplayExitCode))
 {
     return inventoryReplayExitCode;
@@ -90,6 +95,8 @@ Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsO
 Run("Debug package limits goblin evidence event screenshots", TestDebugPackageLimitsGoblinEvidenceEventScreenshots);
 Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
 Run("Debug package includes built-in analysis reports", TestDebugPackageIncludesBuiltInAnalysisReports);
+Run("Debug package includes reviewed OBS evidence when requested", TestDebugPackageIncludesReviewedObsEvidenceWhenRequested);
+Run("Debug package auto-aligns OBS review evidence by default", TestDebugPackageAutoAlignsObsReviewEvidenceByDefault);
 Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeepsTrueAreasSeparate);
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
@@ -135,6 +142,7 @@ Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierReje
 Run("Salvage classifier marks regular gems non-salvageable", TestSalvageClassifierMarksRegularGemsNonSalvageable);
 Run("Salvage classifier rejects stacked regular gems", TestSalvageClassifierRejectsStackedRegularGems);
 Run("Salvage classifier rejects stack-count gem columns", TestSalvageClassifierRejectsStackCountGemColumns);
+Run("Salvage classifier rejects tooltip-covered gem stacks", TestSalvageClassifierRejectsTooltipCoveredGemStacks);
 Run("Salvage classifier does not treat legendary boot lower halves as gems", TestSalvageClassifierDoesNotTreatLegendaryBootLowerHalvesAsGems);
 Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassifierAcceptsSetQualityLeftoverAnchor);
 Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
@@ -2244,6 +2252,150 @@ static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-scenario", StringComparison.Ordinal), "debug package creation should not invoke template-scenario replay");
 }
 
+static bool TryRunDebugPackageReplayCommand(string[] commandArgs, out int exitCode)
+{
+    exitCode = 0;
+    if (commandArgs.Length == 0 || !commandArgs[0].Equals("--debug-package-replay", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    if (commandArgs.Length == 1 ||
+        commandArgs.Any(arg => arg.Equals("--help", StringComparison.OrdinalIgnoreCase) || arg.Equals("-h", StringComparison.OrdinalIgnoreCase)))
+    {
+        PrintDebugPackageReplayCommandHelp();
+        exitCode = commandArgs.Length == 1 ? 1 : 0;
+        return true;
+    }
+
+    List<string> tempRoots = [];
+    try
+    {
+        Console.WriteLine("Debug Package Replay Harness");
+        Console.WriteLine("Mode: ExplicitOnDemand");
+        Console.WriteLine("WritesPersistentDebugFiles: False");
+        Console.WriteLine($"InputCount: {commandArgs.Length - 1}");
+
+        int failed = 0;
+        int totalReplayLogs = 0;
+        int totalReviewFrames = 0;
+        int totalImageScenarios = 0;
+        int totalTargets = 0;
+
+        for (int i = 1; i < commandArgs.Length; i++)
+        {
+            string input = Path.GetFullPath(commandArgs[i], FindRepositoryRootForTests());
+            string packageRoot = input;
+            if (File.Exists(input) && input.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                string tempRoot = Path.Combine(Path.GetTempPath(), $"GoblinFarmerDebugPackageReplay_{Guid.NewGuid():N}");
+                tempRoots.Add(tempRoot);
+                ZipFile.ExtractToDirectory(input, tempRoot);
+                packageRoot = tempRoot;
+            }
+
+            if (!Directory.Exists(packageRoot))
+            {
+                Console.WriteLine($"FAIL DEBUG_PACKAGE_REPLAY_LOAD reason=PackageMissing input=\"{input}\"");
+                failed++;
+                continue;
+            }
+
+            string reviewRoot = Path.Combine(packageRoot, "ReviewEvidence");
+            string replayLogRoot = Path.Combine(packageRoot, "Debug", "ReplayLogs");
+            int replayLogCount = Directory.Exists(replayLogRoot)
+                ? Directory.GetFiles(replayLogRoot, "*.jsonl", SearchOption.AllDirectories).Length
+                : 0;
+            int reviewFrameCount = Directory.Exists(reviewRoot)
+                ? Directory.GetFiles(reviewRoot, "*.png", SearchOption.AllDirectories).Length
+                : 0;
+            totalReplayLogs += replayLogCount;
+            totalReviewFrames += reviewFrameCount;
+
+            Console.WriteLine($"PASS DEBUG_PACKAGE_REPLAY_LOAD input=\"{input}\" root=\"{packageRoot}\" replayLogs={replayLogCount} reviewFrames={reviewFrameCount}");
+
+            foreach (string metadataPath in FindReviewEvidenceMetadataFiles(reviewRoot))
+            {
+                if (GemStashInventoryReplayArtifacts.IsGemStashReplayArtifact(metadataPath))
+                {
+                    GemStashInventoryReplayRunResult result = GemStashInventoryReplayArtifacts.RunReplayForHarness(metadataPath);
+                    string status = result.Loaded ? "PASS" : "FAIL";
+                    Console.WriteLine($"{status} DEBUG_PACKAGE_IMAGE_REPLAY type=GemStash reason={result.Reason} metadata=\"{metadataPath}\" image=\"{result.ImagePath}\" targets={result.TargetCount} candidates={result.CandidateCount}");
+                    if (!result.Loaded)
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    totalImageScenarios++;
+                    totalTargets += result.TargetCount;
+                }
+                else
+                {
+                    SalvageInventoryReplayRunResult result = SalvageInventoryReplayArtifacts.RunReplayForHarness(metadataPath);
+                    string status = result.Loaded ? "PASS" : "FAIL";
+                    Console.WriteLine($"{status} DEBUG_PACKAGE_IMAGE_REPLAY type=Salvage reason={result.Reason} metadata=\"{metadataPath}\" image=\"{result.ImagePath}\" targets={result.TargetCount} candidates={result.CandidateCount}");
+                    if (!result.Loaded)
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    totalImageScenarios++;
+                    totalTargets += result.TargetCount;
+                }
+            }
+        }
+
+        Console.WriteLine($"SUMMARY inputs={commandArgs.Length - 1} failed={failed} replayLogs={totalReplayLogs} reviewFrames={totalReviewFrames} imageScenarios={totalImageScenarios} targets={totalTargets}");
+        if (failed > 0)
+        {
+            Console.Error.WriteLine("FAIL Debug Package Replay completed with missing/invalid packages or scenarios.");
+            exitCode = 1;
+        }
+
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"FAIL Debug Package Replay command failed: {ex.Message}");
+        exitCode = 1;
+        return true;
+    }
+    finally
+    {
+        foreach (string tempRoot in tempRoots)
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+}
+
+static IReadOnlyList<string> FindReviewEvidenceMetadataFiles(string reviewRoot)
+{
+    if (string.IsNullOrWhiteSpace(reviewRoot) || !Directory.Exists(reviewRoot))
+    {
+        return [];
+    }
+
+    return Directory.GetFiles(reviewRoot, "metadata.json", SearchOption.AllDirectories)
+        .Where(path => !path.EndsWith(Path.Combine("ReviewEvidence", "manifest.json"), StringComparison.OrdinalIgnoreCase))
+        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
+static void PrintDebugPackageReplayCommandHelp()
+{
+    Console.WriteLine("Usage:");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --debug-package-replay \"DebugPackages\\GoblinFarmer_Debug_...zip\"");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --debug-package-replay \"ExpandedDebugPackageFolder\"");
+    Console.WriteLine();
+    Console.WriteLine("Debug package replay is explicit/on-demand only. It reads structured replay logs and curated ReviewEvidence images from a debug package without clicking, pressing keys, running live automation, or writing persistent debug files.");
+}
+
 static bool TryRunInventoryReplayCommand(string[] commandArgs, out int exitCode)
 {
     exitCode = 0;
@@ -3512,11 +3664,173 @@ static void TestDebugPackageIncludesBuiltInAnalysisReports()
     }
 }
 
+static void TestDebugPackageIncludesReviewedObsEvidenceWhenRequested()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string logs = Path.Combine(testRoot, "Logs");
+    string replayLogs = Path.Combine(testRoot, "Debug", "ReplayLogs");
+    string legacyReplay = Path.Combine(testRoot, "Debug", "InventoryReplay", "Salvage", "SalvageInventoryReplay_20260610_120000000_Legacy");
+    string manualEvidence = Path.Combine(testRoot, "Debug Evidence", "GemStashReview");
+    Directory.CreateDirectory(logs);
+    Directory.CreateDirectory(replayLogs);
+    Directory.CreateDirectory(legacyReplay);
+    Directory.CreateDirectory(manualEvidence);
+
+    try
+    {
+        DateTime sessionStart = DateTime.Now.AddMinutes(-5);
+        File.WriteAllLines(Path.Combine(testRoot, "session-info.txt"),
+        [
+            $"SessionStartLocal={sessionStart:O}",
+            $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
+            "GoblinCount=0",
+        ]);
+        File.WriteAllText(Path.Combine(logs, "GoblinFarmer.log"), "test log");
+        File.WriteAllText(Path.Combine(replayLogs, "inventory-replay-events.jsonl"), "{\"ArtifactType\":\"SalvageInventoryReplayLog\"}");
+        File.WriteAllText(Path.Combine(legacyReplay, "inventory-grid.png"), "legacy automatic replay image");
+        File.WriteAllText(Path.Combine(legacyReplay, "metadata.json"), "{}");
+        File.WriteAllText(Path.Combine(manualEvidence, "gem-stash-crop.png"), "manual reviewed crop");
+        string notesPath = Path.Combine(manualEvidence, "issue.md");
+        File.WriteAllText(notesPath, "# Gem stash issue\r\n\r\nIssue: reviewed OBS frame.");
+
+        string missingVideoPath = Path.Combine(testRoot, "Video Clip Review", "missing.mkv");
+        string scriptPath = FindDebugPackageScript();
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -RuntimeRoot \"{testRoot}\" -ReviewVideoPath \"{missingVideoPath}\" -ReviewTimestamp \"00:02:14.500=gem-stash-leftover\" -ReviewNotesPath \"{notesPath}\" -ReviewEvidenceFolder \"{manualEvidence}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start debug package script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed without a real review video. stdout={output}; stderr={error}");
+
+        string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? "";
+        AssertTrue(File.Exists(packagePath), "debug package zip should be created");
+
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        AssertTrue(ZipHasEntry(archive, "ReviewEvidence/manifest.json"), "review evidence manifest should be included");
+        AssertTrue(ZipHasEntry(archive, "ReviewEvidence/issue.md"), "review notes should be included as issue.md");
+        AssertTrue(ZipHasEntry(archive, "ReviewEvidence/crops/gem-stash-crop.png"), "manual reviewed crop should be included");
+        AssertTrue(ZipHasEntry(archive, "Debug/ReplayLogs/inventory-replay-events.jsonl"), "structured replay logs should be included");
+        AssertFalse(archive.Entries.Any(entry => NormalizeZipEntryPath(entry.FullName).Contains("Debug/InventoryReplay", StringComparison.OrdinalIgnoreCase)), "legacy automatic replay image folders should be excluded from debug packages");
+
+        string reviewManifest = ReadRequiredZipText(archive, "ReviewEvidence/manifest.json");
+        string packageManifest = ReadRequiredZipText(archive, "debug-package-manifest.txt");
+        string reviewIndex = ReadRequiredZipText(archive, "goblin-tracker-review.html");
+        AssertTrue(reviewManifest.Contains("Frame extraction skipped: review video missing", StringComparison.OrdinalIgnoreCase), "review manifest should record missing-video frame extraction skip");
+        AssertTrue(reviewManifest.Contains("\"VideoIncluded\"", StringComparison.OrdinalIgnoreCase) && reviewManifest.Contains("false", StringComparison.OrdinalIgnoreCase), "review manifest should state that full videos are not packaged");
+        AssertTrue(packageManifest.Contains("Review evidence included: True", StringComparison.OrdinalIgnoreCase), "package manifest should report review evidence inclusion");
+        AssertTrue(packageManifest.Contains("Replay log files included: 1", StringComparison.OrdinalIgnoreCase), "package manifest should report replay log inclusion");
+        AssertTrue(packageManifest.Contains("automatic replay screenshot folders are excluded", StringComparison.OrdinalIgnoreCase), "package manifest should document replay image folder exclusion");
+        AssertTrue(reviewIndex.Contains("ReviewEvidence/manifest.json", StringComparison.OrdinalIgnoreCase), "review index should link review evidence manifest");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
+    }
+}
+
+static void TestDebugPackageAutoAlignsObsReviewEvidenceByDefault()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string logs = Path.Combine(testRoot, "Logs");
+    string videoReview = Path.Combine(testRoot, "Video Clip Review");
+    Directory.CreateDirectory(logs);
+    Directory.CreateDirectory(videoReview);
+
+    try
+    {
+        DateTime sessionStart = DateTime.Now.AddMinutes(-5);
+        DateTime eventTime = sessionStart.AddSeconds(12);
+        File.WriteAllLines(Path.Combine(testRoot, "session-info.txt"),
+        [
+            $"SessionStartLocal={sessionStart:O}",
+            $"SessionStartUtc={sessionStart.ToUniversalTime():O}",
+            "GoblinCount=0",
+        ]);
+        File.WriteAllLines(Path.Combine(logs, "GoblinFarmer.log"),
+        [
+            $"[{eventTime:yyyy-MM-dd HH:mm:ss.fff}] SalvageActionableLeftoversRemain phase=PostSalvage; targetCount=2",
+        ]);
+
+        string videoPath = Path.Combine(videoReview, "obs-review-auto.mkv");
+        File.WriteAllText(videoPath, "fake video file for package selection test");
+        File.SetCreationTime(videoPath, sessionStart);
+        File.SetLastWriteTime(videoPath, sessionStart.AddSeconds(30));
+
+        string scriptPath = FindDebugPackageScript();
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -RuntimeRoot \"{testRoot}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start debug package script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed with default OBS review alignment. stdout={output}; stderr={error}");
+
+        string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? "";
+        AssertTrue(File.Exists(packagePath), "debug package zip should be created");
+
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        AssertTrue(ZipHasEntry(archive, "ReviewEvidence/manifest.json"), "default package should include review evidence manifest when an OBS video and matching log event exist");
+        AssertTrue(ZipHasEntry(archive, "ReviewEvidence/issue.md"), "default package should include auto-generated review issue notes");
+
+        string reviewManifest = ReadRequiredZipText(archive, "ReviewEvidence/manifest.json");
+        string packageManifest = ReadRequiredZipText(archive, "debug-package-manifest.txt");
+        string issueText = ReadRequiredZipText(archive, "ReviewEvidence/issue.md");
+        AssertTrue(reviewManifest.Contains("Auto review selected 1 log-aligned video frame", StringComparison.OrdinalIgnoreCase), "review manifest should report automatic log/video alignment");
+        AssertTrue(reviewManifest.Contains("salvage-actionable-leftovers-remain", StringComparison.OrdinalIgnoreCase), "review manifest should include the selected log event label");
+        AssertTrue(reviewManifest.Contains("SalvageActionableLeftoversRemain", StringComparison.OrdinalIgnoreCase), "review manifest should include the source log line");
+        AssertTrue(reviewManifest.Contains("VideoIncluded", StringComparison.OrdinalIgnoreCase) && reviewManifest.Contains("false", StringComparison.OrdinalIgnoreCase), "review manifest should record that the full video was excluded");
+        AssertTrue(packageManifest.Contains("Auto review evidence selected events: 1", StringComparison.OrdinalIgnoreCase), "root manifest should report auto-selected event count");
+        AssertTrue(issueText.Contains("Selected log-aligned timestamps", StringComparison.OrdinalIgnoreCase), "auto-generated issue notes should explain selected timestamps");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
+    }
+}
+
 static string ReadRequiredZipText(ZipArchive archive, string entryName)
 {
-    ZipArchiveEntry entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException($"{entryName} missing from debug package");
+    ZipArchiveEntry entry = archive.Entries.FirstOrDefault(entry =>
+        NormalizeZipEntryPath(entry.FullName).Equals(NormalizeZipEntryPath(entryName), StringComparison.OrdinalIgnoreCase)) ??
+        throw new InvalidOperationException($"{entryName} missing from debug package");
     using StreamReader reader = new(entry.Open());
     return reader.ReadToEnd();
+}
+
+static bool ZipHasEntry(ZipArchive archive, string entryName)
+{
+    string normalized = NormalizeZipEntryPath(entryName);
+    return archive.Entries.Any(entry => NormalizeZipEntryPath(entry.FullName).Equals(normalized, StringComparison.OrdinalIgnoreCase));
+}
+
+static string NormalizeZipEntryPath(string value)
+{
+    return value.Replace('\\', '/');
 }
 
 static string FindDebugPackageScript()
@@ -5388,6 +5702,41 @@ static void DrawSyntheticWeakGemFollowerCell(Bitmap bitmap, int row, int column)
     graphics.FillRectangle(count, cell.Left + 29, cell.Top + 42, 5, 13);
 }
 
+static void DrawSyntheticTooltipCoveredGemStackCell(Bitmap bitmap, int row, int column, Color color, string countText)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(12, 12, 10));
+    using SolidBrush gem = new(color);
+    using Pen highlight = new(Color.FromArgb(
+        Math.Min(255, color.R + 32),
+        Math.Min(255, color.G + 32),
+        Math.Min(255, color.B + 32)), 2);
+    using SolidBrush tooltipText = new(Color.FromArgb(58, 72, 150));
+    using SolidBrush count = new(Color.FromArgb(220, 220, 208));
+
+    graphics.FillRectangle(background, cell);
+    Point[] gemPoints =
+    [
+        new(cell.Left + 34, cell.Top + 8),
+        new(cell.Left + 58, cell.Top + 31),
+        new(cell.Left + 43, cell.Top + 60),
+        new(cell.Left + 10, cell.Top + 42),
+    ];
+    graphics.FillPolygon(gem, gemPoints);
+    graphics.DrawPolygon(highlight, gemPoints);
+
+    graphics.FillRectangle(tooltipText, cell.Left + 3, cell.Top + 22, cell.Width - 6, 5);
+    graphics.FillRectangle(tooltipText, cell.Left + 8, cell.Top + 36, cell.Width - 13, 5);
+
+    for (int i = 0; i < countText.Length; i++)
+    {
+        int left = cell.Left + 14 + (i * 9);
+        graphics.FillRectangle(count, left, cell.Top + 42, 5, 13);
+        graphics.FillRectangle(count, left + 1, cell.Top + 55, 5, 2);
+    }
+}
+
 static void DrawSyntheticLegendaryBootLowerHalf(Bitmap bitmap, int row, int column)
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
@@ -5750,6 +6099,33 @@ static void TestSalvageClassifierRejectsStackCountGemColumns()
     AssertTrue(
         weakFollower.Reason == "DetachedItemFootprint" || weakFollower.Reason == "NoItemFrameAnchor",
         "weak gem follower should stay diagnostic-only after gem-like neighbor filtering");
+}
+
+static void TestSalvageClassifierRejectsTooltipCoveredGemStacks()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+
+    DrawSyntheticTooltipCoveredGemStackCell(grid, 1, 1, Color.FromArgb(138, 95, 28), string.Empty);
+    DrawSyntheticTooltipCoveredGemStackCell(grid, 1, 2, Color.FromArgb(132, 90, 28), string.Empty);
+    DrawSyntheticTooltipCoveredGemStackCell(grid, 3, 1, Color.FromArgb(102, 54, 132), "1317");
+    DrawSyntheticTooltipCoveredGemStackCell(grid, 3, 2, Color.FromArgb(92, 48, 122), "266");
+    DrawSyntheticTooltipCoveredGemStackCell(grid, 5, 1, Color.FromArgb(30, 132, 62), "927");
+    DrawSyntheticTooltipCoveredGemStackCell(grid, 5, 2, Color.FromArgb(28, 116, 54), "156");
+    DrawSyntheticPaleSalvageItem(grid, 6, 4);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "tooltip-covered normal gem stacks should not become actionable salvage leftovers");
+    AssertEqual(6, result.Targets[0].Row, "real non-gem target should remain accepted next to tooltip-covered gem stacks");
+    AssertEqual(4, result.Targets[0].Column, "real non-gem target should remain accepted next to tooltip-covered gem stacks");
+
+    foreach ((int Row, int Column) cell in new[] { (1, 1), (1, 2), (3, 1), (3, 2), (5, 1), (5, 2) })
+    {
+        SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == cell.Row && candidate.Column == cell.Column);
+        AssertFalse(candidate.Accepted, $"tooltip-covered gem row {cell.Row} column {cell.Column} should be rejected");
+        AssertEqual("RegularGemNonSalvageable", candidate.Reason, $"tooltip-covered gem row {cell.Row} column {cell.Column} should use gem skip reason");
+        AssertEqual("RegularGem", candidate.Quality, $"tooltip-covered gem row {cell.Row} column {cell.Column} should expose RegularGem quality");
+    }
 }
 
 static void TestSalvageClassifierDoesNotTreatLegendaryBootLowerHalvesAsGems()
@@ -6266,18 +6642,27 @@ static void TestInventoryReplayCommandRemainsHarnessOnly()
     string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
     string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
 
+    AssertTrue(programSource.Contains("--debug-package-replay", StringComparison.Ordinal), "debug package replay command should live in the test harness CLI");
+    AssertTrue(programSource.Contains("ReviewEvidence", StringComparison.Ordinal), "debug package replay command should load curated review evidence only from package contents");
+    AssertTrue(programSource.Contains("ReplayLogs", StringComparison.Ordinal), "debug package replay command should read structured replay logs from package contents");
     AssertTrue(programSource.Contains("--inventory-replay", StringComparison.Ordinal), "inventory replay command should live in the test harness CLI");
     AssertTrue(programSource.Contains("RunReplayForHarness", StringComparison.Ordinal), "inventory replay command should call the explicit harness replay path");
     AssertTrue(programSource.Contains("GemStashInventoryReplayArtifacts.IsGemStashReplayArtifact", StringComparison.Ordinal), "inventory replay command should route gem stash artifacts explicitly");
     AssertTrue(programSource.Contains("WritesPersistentDebugFiles: False", StringComparison.Ordinal), "inventory replay command should declare that it does not write persistent debug files");
-    AssertTrue(imageRecognitionSource.Contains("SalvageInventoryReplayArtifacts.SaveScanArtifact", StringComparison.Ordinal), "live salvage scans should save bounded replay artifacts in debug mode");
-    AssertTrue(imageRecognitionSource.Contains("GemStashInventoryReplayArtifacts.SaveScanArtifact", StringComparison.Ordinal), "live gem stash scans should save bounded replay artifacts in debug mode");
-    AssertTrue(packageScript.Contains("MaxInventoryReplayArtifacts", StringComparison.Ordinal), "debug packages should bound inventory replay artifacts");
-    AssertTrue(packageScript.Contains("Debug\\InventoryReplay\\Salvage", StringComparison.Ordinal), "debug packages should include scoped inventory replay artifacts");
-    AssertTrue(packageScript.Contains("Debug\\InventoryReplay\\Stash", StringComparison.Ordinal), "debug packages should include scoped gem stash replay artifacts");
+    AssertTrue(imageRecognitionSource.Contains("SalvageInventoryReplayArtifacts.RecordScanLog", StringComparison.Ordinal), "live salvage scans should record structured replay logs instead of saving replay screenshots");
+    AssertTrue(imageRecognitionSource.Contains("GemStashInventoryReplayArtifacts.RecordScanLog", StringComparison.Ordinal), "live gem stash scans should record structured replay logs instead of saving replay screenshots");
+    AssertFalse(imageRecognitionSource.Contains("SaveScanArtifact", StringComparison.Ordinal), "live inventory scans should not call automatic replay screenshot writers");
+    AssertTrue(packageScript.Contains("ReviewEvidence", StringComparison.Ordinal), "debug packages should support curated review evidence");
+    AssertTrue(packageScript.Contains("ReviewVideoPath", StringComparison.Ordinal), "debug packages should accept reviewed OBS video paths for selected frame extraction");
+    AssertTrue(packageScript.Contains("Debug\\ReplayLogs", StringComparison.Ordinal), "debug packages should include structured replay logs");
+    AssertTrue(packageScript.Contains("automatic replay screenshot folders are excluded", StringComparison.Ordinal), "debug packages should document automatic replay screenshot exclusion");
+    AssertFalse(packageScript.Contains("MaxInventoryReplayArtifacts", StringComparison.Ordinal), "debug packages should no longer include bounded automatic inventory replay image folders");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--inventory-replay", StringComparison.Ordinal), "WinForms startup should not know about inventory replay command");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--debug-package-replay", StringComparison.Ordinal), "WinForms startup should not know about debug package replay command");
     AssertFalse(townSource.Contains("--inventory-replay", StringComparison.Ordinal), "town automation should not know about inventory replay command");
+    AssertFalse(townSource.Contains("--debug-package-replay", StringComparison.Ordinal), "town automation should not know about debug package replay command");
     AssertFalse(packageScript.Contains("dotnet run", StringComparison.Ordinal) && packageScript.Contains("--inventory-replay", StringComparison.Ordinal), "debug package creation should not invoke inventory replay");
+    AssertFalse(packageScript.Contains("dotnet run", StringComparison.Ordinal) && packageScript.Contains("--debug-package-replay", StringComparison.Ordinal), "debug package creation should not invoke debug package replay");
 }
 
 static void TestKadalaHotkeyUsesFasterCadenceAndTimingLogs()

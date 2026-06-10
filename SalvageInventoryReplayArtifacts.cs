@@ -9,7 +9,9 @@ namespace GoblinFarmer
         public const string ClassifierVersion = "SalvageGeometryV2";
         public const int RetentionDays = 7;
         public const string RelativeRoot = @"Debug\InventoryReplay\Salvage";
+        public const string LogRelativeRoot = @"Debug\ReplayLogs";
         private const string FolderPrefix = "SalvageInventoryReplay_";
+        private static readonly object LogFileLock = new();
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             WriteIndented = true,
@@ -17,8 +19,10 @@ namespace GoblinFarmer
         };
 
         public static string RootDirectory => Path.Combine(DebugManager.BaseDirectory, "Debug", "InventoryReplay", "Salvage");
+        public static string LogDirectory => Path.Combine(DebugManager.BaseDirectory, "Debug", "ReplayLogs");
+        public static string EventLogPath => Path.Combine(LogDirectory, "inventory-replay-events.jsonl");
 
-        public static void SaveScanArtifact(Bitmap inventoryGrid, Rectangle screenGrid, string phase, SalvageInventorySlotScanResult scan)
+        public static void RecordScanLog(Rectangle screenGrid, string phase, SalvageInventorySlotScanResult scan)
         {
             if (!AppSettings.Debug.DebugMode)
             {
@@ -27,37 +31,26 @@ namespace GoblinFarmer
 
             try
             {
-                Directory.CreateDirectory(RootDirectory);
-                CleanupOldArtifacts(RootDirectory, TimeSpan.FromDays(RetentionDays));
-
                 DateTime nowUtc = DateTime.UtcNow;
-                string safePhase = MakeSafeName(phase);
-                string folderName = $"{FolderPrefix}{nowUtc:yyyyMMdd_HHmmssfff}_{safePhase}";
-                string artifactDirectory = Path.Combine(RootDirectory, folderName);
-                Directory.CreateDirectory(artifactDirectory);
-
-                string imagePath = Path.Combine(artifactDirectory, "inventory-grid.png");
-                inventoryGrid.Save(imagePath, System.Drawing.Imaging.ImageFormat.Png);
-
-                SalvageInventoryReplayMetadata metadata = new(
+                SalvageInventoryReplayLogEvent logEvent = new(
+                    ArtifactType: "SalvageInventoryReplayLog",
                     SavedAtUtc: nowUtc,
                     Phase: phase,
                     ClassifierVersion: ClassifierVersion,
                     Columns: SalvageInventorySlotClassifier.Columns,
                     Rows: SalvageInventorySlotClassifier.Rows,
                     ScreenGrid: new SalvageInventoryReplayRectangle(screenGrid.Left, screenGrid.Top, screenGrid.Width, screenGrid.Height),
-                    ImageFile: Path.GetFileName(imagePath),
                     TargetCount: scan.Targets.Count,
                     CandidateCount: scan.Candidates.Count,
                     Targets: scan.Targets.Select(SalvageInventoryReplayTarget.FromTarget).ToArray(),
                     Candidates: scan.Candidates.Select(SalvageInventoryReplayCandidate.FromCandidate).ToArray());
 
-                File.WriteAllText(Path.Combine(artifactDirectory, "metadata.json"), JsonSerializer.Serialize(metadata, JsonOptions));
-                AppLogger.Info($"SalvageInventoryReplayArtifactSaved phase={phase}; folder={artifactDirectory}; targetCount={scan.Targets.Count}; candidateCount={scan.Candidates.Count}; classifierVersion={ClassifierVersion}; retentionDays={RetentionDays}");
+                AppendJsonLine(EventLogPath, logEvent);
+                AppLogger.Info($"SalvageInventoryReplayLogRecorded phase={phase}; path={EventLogPath}; targetCount={scan.Targets.Count}; candidateCount={scan.Candidates.Count}; classifierVersion={ClassifierVersion}");
             }
             catch (Exception ex)
             {
-                AppLogger.Error($"SalvageInventoryReplayArtifactSaveFailed phase={phase}", ex);
+                AppLogger.Error($"SalvageInventoryReplayLogRecordFailed phase={phase}", ex);
             }
         }
 
@@ -187,6 +180,16 @@ namespace GoblinFarmer
             string safe = new(chars);
             return string.IsNullOrWhiteSpace(safe) ? "Scan" : safe;
         }
+
+        private static void AppendJsonLine<T>(string path, T value)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? DebugManager.BaseDirectory);
+            string line = JsonSerializer.Serialize(value, JsonOptions);
+            lock (LogFileLock)
+            {
+                File.AppendAllText(path, line + Environment.NewLine);
+            }
+        }
     }
 
     internal sealed record SalvageInventoryReplayRunResult(
@@ -205,6 +208,19 @@ namespace GoblinFarmer
         int Rows,
         SalvageInventoryReplayRectangle ScreenGrid,
         string ImageFile,
+        int TargetCount,
+        int CandidateCount,
+        IReadOnlyList<SalvageInventoryReplayTarget> Targets,
+        IReadOnlyList<SalvageInventoryReplayCandidate> Candidates);
+
+    internal sealed record SalvageInventoryReplayLogEvent(
+        string ArtifactType,
+        DateTime SavedAtUtc,
+        string Phase,
+        string ClassifierVersion,
+        int Columns,
+        int Rows,
+        SalvageInventoryReplayRectangle ScreenGrid,
         int TargetCount,
         int CandidateCount,
         IReadOnlyList<SalvageInventoryReplayTarget> Targets,

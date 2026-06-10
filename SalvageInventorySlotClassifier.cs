@@ -115,6 +115,15 @@ namespace GoblinFarmer
                 }
             }
 
+            bool[,] liveGemStackLike = BuildLiveGemStackClusterMap(metrics, regularGemLike);
+            for (int row = 0; row < Rows; row++)
+            {
+                for (int column = 0; column < Columns; column++)
+                {
+                    regularGemLike[row, column] = regularGemLike[row, column] || liveGemStackLike[row, column];
+                }
+            }
+
             for (int row = 0; row < Rows; row++)
             {
                 for (int column = 0; column < Columns; column++)
@@ -440,6 +449,69 @@ namespace GoblinFarmer
                 (metrics.OrangeQualityPixels >= 250 ||
                     metrics.GreenQualityPixels >= 250 ||
                     metrics.RegularGemPixels >= 120);
+        }
+
+        private static bool[,] BuildLiveGemStackClusterMap(SalvageInventorySlotMetrics[,] metrics, bool[,] knownGemLike)
+        {
+            bool[,] candidates = new bool[Rows, Columns];
+            bool[,] supported = new bool[Rows, Columns];
+
+            for (int row = 0; row < Rows; row++)
+            {
+                for (int column = 0; column < Columns; column++)
+                {
+                    candidates[row, column] = knownGemLike[row, column] || IsLiveGemStackCandidate(metrics[row, column]);
+                }
+            }
+
+            for (int row = 0; row < Rows; row++)
+            {
+                for (int column = 0; column < Columns; column++)
+                {
+                    supported[row, column] = candidates[row, column] && HasGemStackClusterSupport(candidates, row, column);
+                }
+            }
+
+            return supported;
+        }
+
+        private static bool HasGemStackClusterSupport(bool[,] candidates, int row, int column)
+        {
+            return
+                (column > 0 && candidates[row, column - 1]) ||
+                (column + 1 < Columns && candidates[row, column + 1]) ||
+                (row > 0 && candidates[row - 1, column]) ||
+                (row + 1 < Rows && candidates[row + 1, column]);
+        }
+
+        private static bool IsLiveGemStackCandidate(SalvageInventorySlotMetrics metrics)
+        {
+            bool stackTextGem =
+                metrics.StackCountTextPixels >= 16 &&
+                metrics.TopFramePixels <= 100 &&
+                metrics.ColoredFramePixels >= 500 &&
+                metrics.ColoredFramePixels <= 1400 &&
+                metrics.InnerBrightPixels >= 350 &&
+                metrics.InnerSaturatedPixels >= 500;
+
+            bool tooltipCoveredTopGem =
+                metrics.StackCountTextPixels == 0 &&
+                metrics.TopFramePixels <= 20 &&
+                metrics.ColoredFramePixels >= 500 &&
+                metrics.ColoredFramePixels <= 900 &&
+                metrics.InnerBrightPixels >= 500 &&
+                metrics.InnerSaturatedPixels >= 550 &&
+                metrics.GreenQualityPixels < 120 &&
+                metrics.OrangeQualityPixels < 120;
+
+            bool emeraldStackGem =
+                metrics.GreenQualityPixels >= 700 &&
+                metrics.StackCountTextPixels >= 18 &&
+                metrics.TopFramePixels <= 80 &&
+                metrics.ColoredFramePixels >= 550 &&
+                metrics.InnerSaturatedPixels >= 650;
+
+            return stackTextGem || tooltipCoveredTopGem || emeraldStackGem;
         }
 
         private static SalvageInventorySlotMetrics MeasureSlot(Bitmap bitmap, Rectangle local)

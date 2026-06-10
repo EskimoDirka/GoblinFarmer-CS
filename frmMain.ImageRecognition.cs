@@ -796,7 +796,7 @@ namespace GoblinFarmer
         {
             DrawingPoint neutralPoint = PortScaleGamePoint(new DrawingPoint(1500, 650));
             SetCursorPos(neutralPoint.X, neutralPoint.Y);
-            Thread.Sleep(50);
+            Thread.Sleep(120);
         }
 
         private SalvageInventorySlotScanResult PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount, string phase)
@@ -804,7 +804,7 @@ namespace GoblinFarmer
             using Bitmap screenshot = PortCaptureInventoryGrid(out Rectangle grid);
 
             SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid);
-            SalvageInventoryReplayArtifacts.SaveScanArtifact(screenshot, grid, phase, scan);
+            SalvageInventoryReplayArtifacts.RecordScanLog(grid, phase, scan);
             if (updateRegularGemCandidateCount)
             {
                 portLastRegularGemCandidateCount = scan.Candidates.Count(candidate => candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase));
@@ -854,7 +854,7 @@ namespace GoblinFarmer
                 grid,
                 templates,
                 AppSettings.Stash.GemTemplateConfidence);
-            GemStashInventoryReplayArtifacts.SaveScanArtifact(screenshot, grid, phase, scan, AppSettings.Stash.GemTemplateConfidence);
+            GemStashInventoryReplayArtifacts.RecordScanLog(grid, phase, scan, AppSettings.Stash.GemTemplateConfidence);
 
             if (!logCandidates)
             {

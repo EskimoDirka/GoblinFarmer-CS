@@ -10,10 +10,14 @@ param(
     [int]$MaxGoblinEvidenceEventScreenshots = 3,
     [long]$MaxGoblinEvidenceEventScreenshotBytes = 1048576,
     [int]$MaxGoblinObservationDiagnosticCrops = 12,
-    [int]$MaxInventoryReplayArtifacts = 6,
+    [int]$MaxReviewEvidenceFrames = 12,
     [int]$DebugPackageRetentionCount = 20,
     [switch]$IncludeGoblinDecisionBundleFullImages,
-    [switch]$IncludeGoblinCaptureFullscreenImages
+    [switch]$IncludeGoblinCaptureFullscreenImages,
+    [string]$ReviewVideoPath = "",
+    [string[]]$ReviewTimestamp = @(),
+    [string]$ReviewNotesPath = "",
+    [string]$ReviewEvidenceFolder = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -850,6 +854,533 @@ function Copy-DebugScreenshotsToPackage {
     return $copied
 }
 
+function ConvertTo-SafeFileNamePart {
+    param(
+        [string]$Value,
+        [string]$Fallback
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $Fallback
+    }
+
+    $safe = -join ($Value.ToCharArray() | ForEach-Object {
+        if ([char]::IsLetterOrDigit($_)) { $_ } else { "_" }
+    })
+    $safe = $safe.Trim("_")
+    if ([string]::IsNullOrWhiteSpace($safe)) {
+        return $Fallback
+    }
+
+    return $safe
+}
+
+function Get-ReviewTimestampEntries {
+    param([string[]]$TimestampValues)
+
+    $entries = New-Object System.Collections.Generic.List[object]
+    $index = 0
+    foreach ($value in @($TimestampValues)) {
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            continue
+        }
+
+        $index++
+        $timestamp = $value
+        $label = "frame_$index"
+        $separatorIndex = $value.IndexOf("=")
+        if ($separatorIndex -ge 0) {
+            $timestamp = $value.Substring(0, $separatorIndex).Trim()
+            $labelValue = $value.Substring($separatorIndex + 1).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($labelValue)) {
+                $label = $labelValue
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($timestamp)) {
+            continue
+        }
+
+        [void]$entries.Add([pscustomobject]@{
+            Index = $index
+            Timestamp = $timestamp
+            Label = $label
+            FileName = "$(("{0:D2}" -f $index))_$(ConvertTo-SafeFileNamePart $timestamp "timestamp")_$(ConvertTo-SafeFileNamePart $label "review").png"
+        })
+    }
+
+    return $entries.ToArray()
+}
+
+function Find-FfmpegCommand {
+    $command = Get-Command ffmpeg -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $command = Get-Command ffmpeg.cmd -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    return ""
+}
+
+function Find-FfprobeCommand {
+    $command = Get-Command ffprobe -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $command = Get-Command ffprobe.cmd -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    return ""
+}
+
+function Get-VideoDurationSeconds {
+    param([string]$VideoPath)
+
+    $ffprobe = Find-FfprobeCommand
+    if ([string]::IsNullOrWhiteSpace($ffprobe) -or -not (Test-Path -LiteralPath $VideoPath -PathType Leaf)) {
+        return 0.0
+    }
+
+    try {
+        $output = & $ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $VideoPath 2>$null
+        $text = (@($output) | Select-Object -First 1).ToString()
+        $duration = 0.0
+        if ([double]::TryParse($text, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$duration)) {
+            return [Math]::Max(0.0, $duration)
+        }
+    }
+    catch {
+        return 0.0
+    }
+
+    return 0.0
+}
+
+function Try-ParseVideoStartFromName {
+    param(
+        [string]$FileName,
+        [ref]$StartTime
+    )
+
+    $match = [regex]::Match(
+        $FileName,
+        '(?<year>20\d{2})[.\-_](?<month>\d{2})[.\-_](?<day>\d{2})[\s_\-]+(?<hour>\d{2})[.\-_:](?<minute>\d{2})[.\-_:](?<second>\d{2})(?:[.\-_:](?<fraction>\d{1,3}))?')
+    if (-not $match.Success) {
+        return $false
+    }
+
+    try {
+        $fraction = if ($match.Groups["fraction"].Success) { $match.Groups["fraction"].Value.PadRight(3, '0').Substring(0, 3) } else { "000" }
+        $text = "$($match.Groups["year"].Value)-$($match.Groups["month"].Value)-$($match.Groups["day"].Value) $($match.Groups["hour"].Value):$($match.Groups["minute"].Value):$($match.Groups["second"].Value).$fraction"
+        $StartTime.Value = [DateTime]::ParseExact($text, "yyyy-MM-dd HH:mm:ss.fff", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeLocal)
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-ReviewVideoStartInfo {
+    param([System.IO.FileInfo]$VideoFile)
+
+    $durationSeconds = Get-VideoDurationSeconds $VideoFile.FullName
+    if ($durationSeconds -gt 0) {
+        return [pscustomobject]@{
+            Start = $VideoFile.LastWriteTime.AddSeconds(-1 * $durationSeconds)
+            Source = "LastWriteMinusFfprobeDuration"
+            DurationSeconds = $durationSeconds
+        }
+    }
+
+    $parsedStart = [DateTime]::MinValue
+    if (Try-ParseVideoStartFromName $VideoFile.Name ([ref]$parsedStart)) {
+        return [pscustomobject]@{
+            Start = $parsedStart
+            Source = "FilenameTimestamp"
+            DurationSeconds = 0.0
+        }
+    }
+
+    return [pscustomobject]@{
+        Start = $VideoFile.CreationTime
+        Source = "CreationTimeFallback"
+        DurationSeconds = 0.0
+    }
+}
+
+function Find-DefaultReviewVideo {
+    param(
+        [string[]]$RuntimeRoots,
+        [string]$SourceRoot
+    )
+
+    $folders = New-Object System.Collections.Generic.List[string]
+    Add-UniquePath $folders (Join-Path $SourceRoot "Video Clip Review")
+    foreach ($root in @($RuntimeRoots)) {
+        Add-UniquePath $folders (Join-Path $root "Video Clip Review")
+    }
+
+    $videos = foreach ($folder in $folders.ToArray()) {
+        if (Test-Path -LiteralPath $folder -PathType Container) {
+            Get-ChildItem -LiteralPath $folder -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -match '^\.(mkv|mp4|mov|avi|webm)$' }
+        }
+    }
+
+    return @($videos | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+}
+
+function Try-ParseLogLineTimestamp {
+    param(
+        [string]$Line,
+        [ref]$Timestamp
+    )
+
+    $match = [regex]::Match($Line, '^\[(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]')
+    if (-not $match.Success) {
+        return $false
+    }
+
+    try {
+        $Timestamp.Value = [DateTime]::ParseExact($match.Groups["timestamp"].Value, "yyyy-MM-dd HH:mm:ss.fff", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeLocal)
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Format-ReviewOffset {
+    param([double]$Seconds)
+
+    $safeSeconds = [Math]::Max(0.0, $Seconds)
+    $timeSpan = [TimeSpan]::FromSeconds($safeSeconds)
+    $totalHours = [Math]::Floor($timeSpan.TotalHours)
+    return "{0:00}:{1:00}:{2:00}.{3:000}" -f $totalHours, $timeSpan.Minutes, $timeSpan.Seconds, $timeSpan.Milliseconds
+}
+
+function Get-AutoReviewLogEvents {
+    param(
+        [System.IO.FileInfo]$LatestLog,
+        [DateTime]$VideoStart,
+        [double]$VideoDurationSeconds,
+        [int]$Limit
+    )
+
+    if ($null -eq $LatestLog -or -not (Test-Path -LiteralPath $LatestLog.FullName -PathType Leaf) -or $Limit -le 0) {
+        return @()
+    }
+
+    $patterns = @(
+        [pscustomobject]@{ Pattern = 'SalvageActionableLeftoversRemain'; Label = 'salvage-actionable-leftovers-remain'; Priority = 1 },
+        [pscustomobject]@{ Pattern = 'AutoStashGemLeftoversRemain'; Label = 'gem-stash-leftovers-remain'; Priority = 1 },
+        [pscustomobject]@{ Pattern = 'SalvageExpectedConfirmationMissing'; Label = 'salvage-confirmation-missing'; Priority = 1 },
+        [pscustomobject]@{ Pattern = 'UnexpectedException|WorkflowFailed|Workflow failed|Exception'; Label = 'workflow-exception'; Priority = 1 },
+        [pscustomobject]@{ Pattern = 'PostSalvageLeftoverWarning'; Label = 'post-salvage-leftover-warning'; Priority = 2 },
+        [pscustomobject]@{ Pattern = 'Auto gem stash summary'; Label = 'auto-gem-stash-summary'; Priority = 2 },
+        [pscustomobject]@{ Pattern = 'Auto gem stash failed|RecordStashFailure'; Label = 'auto-gem-stash-failure'; Priority = 2 },
+        [pscustomobject]@{ Pattern = 'Salvage inventory summary|Salvage completed|salvageSuccess=False'; Label = 'salvage-summary'; Priority = 3 },
+        [pscustomobject]@{ Pattern = 'Bulk salvage category'; Label = 'bulk-salvage-category'; Priority = 4 },
+        [pscustomobject]@{ Pattern = 'Gem stash candidate: .*accepted=True'; Label = 'gem-stash-accepted-candidate'; Priority = 4 }
+    )
+
+    $events = New-Object System.Collections.Generic.List[object]
+    $lineNumber = 0
+    foreach ($line in Get-Content -LiteralPath $LatestLog.FullName) {
+        $lineNumber++
+        $timestamp = [DateTime]::MinValue
+        if (-not (Try-ParseLogLineTimestamp $line ([ref]$timestamp))) {
+            continue
+        }
+
+        foreach ($patternInfo in $patterns) {
+            if ($line -notmatch $patternInfo.Pattern) {
+                continue
+            }
+
+            $offsetSeconds = ($timestamp - $VideoStart).TotalSeconds
+            $withinVideo = $offsetSeconds -ge -2.0 -and ($VideoDurationSeconds -le 0 -or $offsetSeconds -le ($VideoDurationSeconds + 2.0))
+            [void]$events.Add([pscustomobject]@{
+                Timestamp = $timestamp
+                OffsetSeconds = $offsetSeconds
+                OffsetText = Format-ReviewOffset $offsetSeconds
+                Label = $patternInfo.Label
+                Priority = $patternInfo.Priority
+                LineNumber = $lineNumber
+                Line = $line
+                WithinVideo = $withinVideo
+            })
+            break
+        }
+    }
+
+    $deduped = New-Object System.Collections.Generic.List[object]
+    foreach ($event in @($events | Where-Object { $_.WithinVideo } | Sort-Object Priority, Timestamp)) {
+        $tooClose = $false
+        foreach ($selected in $deduped) {
+            if ($selected.Label -eq $event.Label -and [Math]::Abs(($selected.Timestamp - $event.Timestamp).TotalSeconds) -lt 2.0) {
+                $tooClose = $true
+                break
+            }
+        }
+
+        if ($tooClose) {
+            continue
+        }
+
+        [void]$deduped.Add($event)
+        if ($deduped.Count -ge $Limit) {
+            break
+        }
+    }
+
+    return $deduped.ToArray()
+}
+
+function Get-AutoReviewEvidenceSelection {
+    param(
+        [string[]]$RuntimeRoots,
+        [string]$SourceRoot,
+        [System.IO.FileInfo]$LatestLog,
+        [int]$MaxReviewEvidenceFrames
+    )
+
+    $video = @(Find-DefaultReviewVideo $RuntimeRoots $SourceRoot | Select-Object -First 1)
+    if ($video.Count -eq 0) {
+        return [pscustomobject]@{
+            VideoPath = ""
+            TimestampArgs = @()
+            Status = "Auto review skipped: no OBS video found in Video Clip Review"
+            SourceLog = if ($null -ne $LatestLog) { $LatestLog.FullName } else { "none" }
+            VideoStartLocal = ""
+            VideoStartSource = ""
+            EventCount = 0
+            SelectedEvents = @()
+        }
+    }
+
+    $startInfo = Get-ReviewVideoStartInfo $video[0]
+    $events = @(Get-AutoReviewLogEvents $LatestLog $startInfo.Start $startInfo.DurationSeconds $MaxReviewEvidenceFrames)
+    $timestampArgs = @($events | ForEach-Object { "$($_.OffsetText)=$($_.Label)-line$($_.LineNumber)" })
+    $status = if ($events.Count -gt 0) {
+        "Auto review selected $($events.Count) log-aligned video frame(s)"
+    }
+    else {
+        "Auto review found OBS video but no high-value log events aligned to the estimated video window"
+    }
+
+    return [pscustomobject]@{
+        VideoPath = $video[0].FullName
+        TimestampArgs = $timestampArgs
+        Status = $status
+        SourceLog = if ($null -ne $LatestLog) { $LatestLog.FullName } else { "none" }
+        VideoStartLocal = $startInfo.Start.ToString("yyyy-MM-dd HH:mm:ss.fff zzz")
+        VideoStartSource = $startInfo.Source
+        EventCount = $events.Count
+        SelectedEvents = $events
+    }
+}
+
+function Add-ReviewEvidenceToPackage {
+    param(
+        [string]$StagingRoot,
+        [string]$ReviewVideoPath,
+        [string[]]$ReviewTimestamp,
+        [string]$ReviewNotesPath,
+        [string]$ReviewEvidenceFolder,
+        [int]$MaxReviewEvidenceFrames,
+        [string]$AutoReviewStatus = "",
+        [string]$AutoReviewSourceLog = "",
+        [string]$AutoReviewVideoStartLocal = "",
+        [string]$AutoReviewVideoStartSource = "",
+        [object[]]$AutoReviewEvents = @()
+    )
+
+    $timestampEntries = @(Get-ReviewTimestampEntries $ReviewTimestamp | Select-Object -First $MaxReviewEvidenceFrames)
+    $manualFolderProvided = -not [string]::IsNullOrWhiteSpace($ReviewEvidenceFolder)
+    $notesProvided = -not [string]::IsNullOrWhiteSpace($ReviewNotesPath)
+    $videoProvided = -not [string]::IsNullOrWhiteSpace($ReviewVideoPath)
+    $autoReviewProvided = -not [string]::IsNullOrWhiteSpace($AutoReviewStatus)
+    if (-not $manualFolderProvided -and -not $notesProvided -and -not $videoProvided -and $timestampEntries.Count -eq 0 -and -not $autoReviewProvided) {
+        return [pscustomobject]@{
+            Included = $false
+            Status = "Not requested"
+            FrameCount = 0
+            ManualFileCount = 0
+            TimestampCount = 0
+            ManifestPath = "none"
+            SourceVideo = "none"
+            Ffmpeg = "not requested"
+        }
+    }
+
+    $reviewRoot = Join-Path $StagingRoot "ReviewEvidence"
+    $framesRoot = Join-Path $reviewRoot "frames"
+    $cropsRoot = Join-Path $reviewRoot "crops"
+    New-Item -ItemType Directory -Path $reviewRoot -Force | Out-Null
+
+    $resolvedVideoPath = Resolve-FullPath $ReviewVideoPath
+    $videoExists = $videoProvided -and (Test-Path -LiteralPath $resolvedVideoPath -PathType Leaf)
+    $ffmpeg = Find-FfmpegCommand
+    $extractedFrames = New-Object System.Collections.Generic.List[object]
+    $statusParts = New-Object System.Collections.Generic.List[string]
+
+    if ($timestampEntries.Count -gt 0) {
+        if (-not $videoExists) {
+            [void]$statusParts.Add("Frame extraction skipped: review video missing")
+        }
+        elseif ([string]::IsNullOrWhiteSpace($ffmpeg)) {
+            [void]$statusParts.Add("Frame extraction skipped: ffmpeg unavailable")
+        }
+        else {
+            New-Item -ItemType Directory -Path $framesRoot -Force | Out-Null
+            foreach ($entry in $timestampEntries) {
+                $outputPath = Join-Path $framesRoot $entry.FileName
+                $exitCode = 0
+                $errorText = ""
+                try {
+                    & $ffmpeg -y -ss $entry.Timestamp -i $resolvedVideoPath -frames:v 1 $outputPath 2>$null | Out-Null
+                    $exitCode = $LASTEXITCODE
+                    if ($exitCode -ne 0 -or -not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
+                        $errorText = "ffmpeg exitCode=$exitCode"
+                    }
+                }
+                catch {
+                    $exitCode = -1
+                    $errorText = $_.Exception.Message
+                }
+
+                $relative = "ReviewEvidence/frames/$($entry.FileName)"
+                [void]$extractedFrames.Add([pscustomobject]@{
+                    Timestamp = $entry.Timestamp
+                    Label = $entry.Label
+                    File = if ([string]::IsNullOrWhiteSpace($errorText)) { $relative } else { "" }
+                    Status = if ([string]::IsNullOrWhiteSpace($errorText)) { "Extracted" } else { "Skipped" }
+                    Error = $errorText
+                })
+            }
+        }
+    }
+
+    $manualFiles = New-Object System.Collections.Generic.List[object]
+    if ($manualFolderProvided) {
+        $resolvedManualFolder = Resolve-FullPath $ReviewEvidenceFolder
+        if (Test-Path -LiteralPath $resolvedManualFolder -PathType Container) {
+            New-Item -ItemType Directory -Path $cropsRoot -Force | Out-Null
+            foreach ($file in Get-ChildItem -LiteralPath $resolvedManualFolder -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt|md|json)$' } |
+                Sort-Object FullName |
+                Select-Object -First 100) {
+                $relativeSource = $file.FullName.Substring($resolvedManualFolder.Length).TrimStart('\', '/')
+                $destination = Join-Path $cropsRoot $relativeSource
+                New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+                Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+                [void]$manualFiles.Add([pscustomobject]@{
+                    Source = $file.FullName
+                    File = (Get-PackageRelativePath $StagingRoot $destination)
+                })
+            }
+        }
+        else {
+            [void]$statusParts.Add("Manual evidence folder missing: $resolvedManualFolder")
+        }
+    }
+
+    $resolvedNotesPath = Resolve-FullPath $ReviewNotesPath
+    $issuePath = Join-Path $reviewRoot "issue.md"
+    if ($notesProvided -and (Test-Path -LiteralPath $resolvedNotesPath -PathType Leaf)) {
+        Copy-Item -LiteralPath $resolvedNotesPath -Destination $issuePath -Force
+    }
+    elseif ($manualFolderProvided -and (Test-Path -LiteralPath (Join-Path (Resolve-FullPath $ReviewEvidenceFolder) "issue.md") -PathType Leaf)) {
+        Copy-Item -LiteralPath (Join-Path (Resolve-FullPath $ReviewEvidenceFolder) "issue.md") -Destination $issuePath -Force
+    }
+    else {
+        $autoEventLines = @($AutoReviewEvents | ForEach-Object {
+            "- `$($_.OffsetText)` `$($_.Label)` line `$($_.LineNumber)`: $($_.Line)"
+        })
+        if ($autoEventLines.Count -eq 0) {
+            $autoEventLines = @("- none")
+        }
+
+        @(
+            "# Review Evidence",
+            "",
+            "Issue: auto-generated debug package review evidence",
+            "",
+            "Observed behavior: see selected log-aligned OBS frames and logs.",
+            "",
+            "Source video: $(if ($videoProvided) { $resolvedVideoPath } else { 'none' })",
+            "Source log: $(if ([string]::IsNullOrWhiteSpace($AutoReviewSourceLog)) { 'none' } else { $AutoReviewSourceLog })",
+            "Auto review status: $(if ([string]::IsNullOrWhiteSpace($AutoReviewStatus)) { 'not requested' } else { $AutoReviewStatus })",
+            "Estimated video start: $(if ([string]::IsNullOrWhiteSpace($AutoReviewVideoStartLocal)) { 'unknown' } else { $AutoReviewVideoStartLocal })",
+            "Estimated video start source: $(if ([string]::IsNullOrWhiteSpace($AutoReviewVideoStartSource)) { 'unknown' } else { $AutoReviewVideoStartSource })",
+            "",
+            "Selected log-aligned timestamps:",
+            $autoEventLines,
+            "",
+            "Planned fix: not supplied",
+            "",
+            "Implementation notes: not supplied"
+        ) | ForEach-Object { $_ } | Out-File -FilePath $issuePath -Encoding utf8
+    }
+
+    $status = if ($statusParts.Count -gt 0) { $statusParts -join "; " } else { "Included" }
+    $autoEventsForManifest = @($AutoReviewEvents | ForEach-Object {
+        [pscustomobject]@{
+            TimestampLocal = $_.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff zzz")
+            Offset = $_.OffsetText
+            OffsetSeconds = [Math]::Round([double]$_.OffsetSeconds, 3)
+            Label = $_.Label
+            Priority = $_.Priority
+            LineNumber = $_.LineNumber
+            Line = $_.Line
+        }
+    })
+    $manifest = [ordered]@{
+        SchemaVersion = 1
+        CreatedLocal = (Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")
+        SourceVideoPath = if ($videoProvided) { $resolvedVideoPath } else { "" }
+        SourceVideoName = if ($videoExists) { (Split-Path -Leaf $resolvedVideoPath) } else { "" }
+        VideoIncluded = $false
+        Ffmpeg = if ([string]::IsNullOrWhiteSpace($ffmpeg)) { "" } else { $ffmpeg }
+        TimestampCount = $timestampEntries.Count
+        MaxReviewEvidenceFrames = $MaxReviewEvidenceFrames
+        Frames = $extractedFrames
+        ManualEvidenceFolder = if ($manualFolderProvided) { Resolve-FullPath $ReviewEvidenceFolder } else { "" }
+        ManualFiles = $manualFiles
+        NotesPath = if ($notesProvided) { $resolvedNotesPath } else { "" }
+        IssueFile = "ReviewEvidence/issue.md"
+        Status = $status
+        AutoReviewStatus = $AutoReviewStatus
+        AutoReviewSourceLog = $AutoReviewSourceLog
+        AutoReviewVideoStartLocal = $AutoReviewVideoStartLocal
+        AutoReviewVideoStartSource = $AutoReviewVideoStartSource
+        AutoReviewEvents = $autoEventsForManifest
+    }
+    $manifestPath = Join-Path $reviewRoot "manifest.json"
+    $manifest | ConvertTo-Json -Depth 6 | Out-File -FilePath $manifestPath -Encoding utf8
+
+    return [pscustomobject]@{
+        Included = $true
+        Status = $status
+        FrameCount = @($extractedFrames | Where-Object { $_.Status -eq "Extracted" }).Count
+        ManualFileCount = $manualFiles.Count
+        TimestampCount = $timestampEntries.Count
+        ManifestPath = "ReviewEvidence/manifest.json"
+        SourceVideo = if ($videoProvided) { $resolvedVideoPath } else { "none" }
+        Ffmpeg = if ([string]::IsNullOrWhiteSpace($ffmpeg)) { "unavailable" } else { $ffmpeg }
+        AutoReviewStatus = $AutoReviewStatus
+        AutoReviewEventCount = @($AutoReviewEvents).Count
+    }
+}
+
 function Get-PackageFolderTotals {
     param([string]$StagingRoot)
 
@@ -1621,6 +2152,8 @@ function New-GoblinTrackerReviewIndex {
         "goblin-evidence-health.txt",
         "goblin-tracker-summary.txt",
         "debug-package-manifest.txt",
+        "ReviewEvidence\manifest.json",
+        "ReviewEvidence\issue.md",
         "route-failure-summary.txt",
         "debug-screenshot-manifest.txt",
         "session-info.txt"
@@ -1635,6 +2168,7 @@ function New-GoblinTrackerReviewIndex {
         Where-Object {
             $_.FullName.Replace('/', '\').IndexOf('\Logs\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and ($_.Extension -eq ".log" -or $_.Extension -eq ".txt") -or
             $_.FullName.Replace('/', '\').IndexOf('\Screenshots\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' -or
+            $_.FullName.Replace('/', '\').IndexOf('\ReviewEvidence\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp|md|json)$' -or
             $_.FullName.Replace('/', '\').IndexOf('\Debug\GoblinEvidence\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$'
         } |
         Sort-Object FullName |
@@ -1648,7 +2182,7 @@ function New-GoblinTrackerReviewIndex {
         "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#202124}li{margin:4px 0}code{background:#f6f8fa;padding:2px 4px}</style>",
         "</head><body>",
         "<h1>Goblin Tracker Review</h1>",
-        "<p>Open <code>goblin-tracker-summary.txt</code> first. This ZIP contains live runtime evidence only.</p>",
+        "<p>Open <code>goblin-tracker-summary.txt</code> first. Reviewed OBS frames, when requested, live under <code>ReviewEvidence/</code>.</p>",
         "<ul>",
         $links,
         "</ul>",
@@ -1698,9 +2232,9 @@ if ($MaxGoblinObservationDiagnosticCrops -lt 0) {
     Write-Warning "MaxGoblinObservationDiagnosticCrops must be at least 0. Using 0."
     $MaxGoblinObservationDiagnosticCrops = 0
 }
-if ($MaxInventoryReplayArtifacts -lt 0) {
-    Write-Warning "MaxInventoryReplayArtifacts must be at least 0. Using 0."
-    $MaxInventoryReplayArtifacts = 0
+if ($MaxReviewEvidenceFrames -lt 0) {
+    Write-Warning "MaxReviewEvidenceFrames must be at least 0. Using 0."
+    $MaxReviewEvidenceFrames = 0
 }
 
 $runtimeRootInfo = Resolve-RuntimeRoot $RuntimeRoot $PSScriptRoot
@@ -1734,9 +2268,13 @@ Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
 Write-Host "Max goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots"
 Write-Host "Max goblin evidence event screenshot bytes: $MaxGoblinEvidenceEventScreenshotBytes"
 Write-Host "Max goblin observation diagnostic crops: $MaxGoblinObservationDiagnosticCrops"
-Write-Host "Max inventory replay artifacts: $MaxInventoryReplayArtifacts"
+Write-Host "Max review evidence frames: $MaxReviewEvidenceFrames"
 Write-Host "Include goblin decision bundle full images: $($IncludeGoblinDecisionBundleFullImages.IsPresent)"
 Write-Host "Include goblin capture fullscreen images: $($IncludeGoblinCaptureFullscreenImages.IsPresent)"
+Write-Host "Review video path: $(if ([string]::IsNullOrWhiteSpace($ReviewVideoPath)) { 'none' } else { $ReviewVideoPath })"
+Write-Host "Review timestamp count: $(@($ReviewTimestamp).Count)"
+Write-Host "Review notes path: $(if ([string]::IsNullOrWhiteSpace($ReviewNotesPath)) { 'none' } else { $ReviewNotesPath })"
+Write-Host "Review evidence folder: $(if ([string]::IsNullOrWhiteSpace($ReviewEvidenceFolder)) { 'none' } else { $ReviewEvidenceFolder })"
 
 if (Test-Path -LiteralPath $stagingRoot) {
     Remove-Item -LiteralPath $stagingRoot -Recurse -Force
@@ -1804,23 +2342,22 @@ try {
 
     $screenshotFoldersList = New-Object System.Collections.Generic.List[string]
     $debugScreenshotFoldersList = New-Object System.Collections.Generic.List[string]
-    $inventoryReplayFoldersList = New-Object System.Collections.Generic.List[string]
-    $inventoryReplaySourceRootsList = New-Object System.Collections.Generic.List[string]
+    $replayLogFoldersList = New-Object System.Collections.Generic.List[string]
+    $replayLogSourceRootsList = New-Object System.Collections.Generic.List[string]
     $goblinEvidenceFoldersList = New-Object System.Collections.Generic.List[string]
     $goblinEvidenceSourceRootsList = New-Object System.Collections.Generic.List[string]
     foreach ($root in $packageRuntimeRoots) {
         Add-UniquePath $screenshotFoldersList (Join-Path $root "Screenshots")
         Add-UniquePath $debugScreenshotFoldersList (Join-Path $root "debug-screenshots")
-        Add-UniquePath $inventoryReplayFoldersList (Join-Path $root "Debug\InventoryReplay\Salvage")
-        Add-UniquePath $inventoryReplayFoldersList (Join-Path $root "Debug\InventoryReplay\Stash")
-        Add-UniquePath $inventoryReplaySourceRootsList (Join-Path $root "Debug")
+        Add-UniquePath $replayLogFoldersList (Join-Path $root "Debug\ReplayLogs")
+        Add-UniquePath $replayLogSourceRootsList (Join-Path $root "Debug")
         Add-UniquePath $goblinEvidenceFoldersList (Join-Path $root "Debug\GoblinEvidence")
         Add-UniquePath $goblinEvidenceSourceRootsList (Join-Path $root "Debug")
     }
     $screenshotFolders = $screenshotFoldersList.ToArray()
     $debugScreenshotFolders = $debugScreenshotFoldersList.ToArray()
-    $inventoryReplayFolders = $inventoryReplayFoldersList.ToArray()
-    $inventoryReplaySourceRoots = $inventoryReplaySourceRootsList.ToArray()
+    $replayLogFolders = $replayLogFoldersList.ToArray()
+    $replayLogSourceRoots = $replayLogSourceRootsList.ToArray()
     $goblinEvidenceFolders = $goblinEvidenceFoldersList.ToArray()
     $goblinEvidenceSourceRoots = $goblinEvidenceSourceRootsList.ToArray()
     $goblinEvidenceSourceTotals = Get-FolderFileTotals $goblinEvidenceFolders
@@ -1978,26 +2515,18 @@ try {
         Write-Host "Included debug screenshots: $debugScreenshotCount"
     }
 
-    Write-Step "Collecting inventory replay artifacts"
-    $inventoryReplayArtifactDirectories = foreach ($folder in $inventoryReplayFolders) {
+    Write-Step "Collecting replay logs"
+    $replayLogCandidates = foreach ($folder in $replayLogFolders) {
         if (Test-Path -LiteralPath $folder -PathType Container) {
-            Get-ChildItem -LiteralPath $folder -Directory -Filter "SalvageInventoryReplay_*" -ErrorAction SilentlyContinue
-            Get-ChildItem -LiteralPath $folder -Directory -Filter "GemStashInventoryReplay_*" -ErrorAction SilentlyContinue
+            Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -match '^\.(jsonl|json|txt)$' }
         }
     }
-    $selectedInventoryReplayArtifactDirectories = @($inventoryReplayArtifactDirectories |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First $MaxInventoryReplayArtifacts)
-    $selectedInventoryReplayFiles = @($selectedInventoryReplayArtifactDirectories |
-        ForEach-Object {
-            Get-ChildItem -LiteralPath $_.FullName -File -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.Extension -match '^\.(png|json)$' }
-        } |
+    $selectedReplayLogFiles = @($replayLogCandidates |
+        Where-Object { $_.LastWriteTime -ge $sessionStart -or $_.CreationTime -ge $sessionStart } |
         Sort-Object FullName)
-    $excludedInventoryReplayArtifacts = [Math]::Max(0, @($inventoryReplayArtifactDirectories).Count - $selectedInventoryReplayArtifactDirectories.Count)
-    $inventoryReplayFileCount = Copy-DebugScreenshotsToPackage $selectedInventoryReplayFiles $inventoryReplaySourceRoots (Join-Path $stagingRoot "Debug")
-    Write-Host "Included inventory replay artifacts: $($selectedInventoryReplayArtifactDirectories.Count) folders, $inventoryReplayFileCount files"
-    Write-Host "Excluded inventory replay artifacts: $excludedInventoryReplayArtifacts"
+    $replayLogFileCount = Copy-DebugScreenshotsToPackage $selectedReplayLogFiles $replayLogSourceRoots (Join-Path $stagingRoot "Debug")
+    Write-Host "Included replay log files: $replayLogFileCount"
 
     Write-Step "Collecting goblin evidence screenshots"
     $goblinEvidenceCandidates = foreach ($folder in $goblinEvidenceFolders) {
@@ -2143,6 +2672,35 @@ try {
     }
     $goblinEvidenceMissingTemplateInfo = Get-GoblinEvidenceMissingTemplateInfo $latestLog
 
+    Write-Step "Collecting review evidence"
+    $autoReviewSelection = Get-AutoReviewEvidenceSelection `
+        -RuntimeRoots $packageRuntimeRoots `
+        -SourceRoot $repoRoot `
+        -LatestLog $latestLog `
+        -MaxReviewEvidenceFrames $MaxReviewEvidenceFrames
+    $effectiveReviewVideoPath = $ReviewVideoPath
+    $effectiveReviewTimestamp = @($ReviewTimestamp)
+    if ([string]::IsNullOrWhiteSpace($effectiveReviewVideoPath) -and -not [string]::IsNullOrWhiteSpace($autoReviewSelection.VideoPath)) {
+        $effectiveReviewVideoPath = $autoReviewSelection.VideoPath
+    }
+    if ($effectiveReviewTimestamp.Count -eq 0 -and @($autoReviewSelection.TimestampArgs).Count -gt 0) {
+        $effectiveReviewTimestamp = @($autoReviewSelection.TimestampArgs)
+    }
+    Write-Host "Auto review evidence: status=$($autoReviewSelection.Status); video=$(if ([string]::IsNullOrWhiteSpace($autoReviewSelection.VideoPath)) { 'none' } else { $autoReviewSelection.VideoPath }); events=$($autoReviewSelection.EventCount); videoStart=$($autoReviewSelection.VideoStartLocal); videoStartSource=$($autoReviewSelection.VideoStartSource)"
+    $reviewEvidenceInfo = Add-ReviewEvidenceToPackage `
+        -StagingRoot $stagingRoot `
+        -ReviewVideoPath $effectiveReviewVideoPath `
+        -ReviewTimestamp $effectiveReviewTimestamp `
+        -ReviewNotesPath $ReviewNotesPath `
+        -ReviewEvidenceFolder $ReviewEvidenceFolder `
+        -MaxReviewEvidenceFrames $MaxReviewEvidenceFrames `
+        -AutoReviewStatus $autoReviewSelection.Status `
+        -AutoReviewSourceLog $autoReviewSelection.SourceLog `
+        -AutoReviewVideoStartLocal $autoReviewSelection.VideoStartLocal `
+        -AutoReviewVideoStartSource $autoReviewSelection.VideoStartSource `
+        -AutoReviewEvents $autoReviewSelection.SelectedEvents
+    Write-Host "Review evidence: included=$($reviewEvidenceInfo.Included); status=$($reviewEvidenceInfo.Status); frames=$($reviewEvidenceInfo.FrameCount); manualFiles=$($reviewEvidenceInfo.ManualFileCount); manifest=$($reviewEvidenceInfo.ManifestPath)"
+
     Write-Step "Generating route failure summary"
     $routeFailureSummaryPath = Join-Path $stagingRoot "route-failure-summary.txt"
     New-RouteFailureSummary $latestLog $routeFailureSummaryPath
@@ -2257,7 +2815,19 @@ try {
             "Goblin encounter/manual capture fullscreen package policy: excluded by default; $excludedGoblinCaptureFullscreenImages excluded; excludedSize=$(Format-ByteSize $excludedGoblinCaptureFullscreenImageBytes) ($excludedGoblinCaptureFullscreenImageBytes bytes); Journal/Minimap crops and metadata are kept",
             "Goblin evidence event screenshot package policy: most recent $MaxGoblinEvidenceEventScreenshots included when <= $MaxGoblinEvidenceEventScreenshotBytes bytes; $excludedGoblinEvidenceEventScreenshots excluded; $oversizedGoblinEvidenceEventScreenshots oversized",
             "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
-            "Inventory replay package policy: most recent $MaxInventoryReplayArtifacts salvage/stash replay folders included; $excludedInventoryReplayArtifacts excluded",
+            "Inventory replay package policy: automatic replay screenshot folders are excluded; structured replay logs are included from Debug\ReplayLogs",
+            "Replay log files included: $replayLogFileCount",
+            "Review evidence package policy: selected OBS frames only; full videos are excluded by default; maxReviewEvidenceFrames=$MaxReviewEvidenceFrames",
+            "Review evidence included: $($reviewEvidenceInfo.Included)",
+            "Review evidence status: $($reviewEvidenceInfo.Status)",
+            "Review evidence source video: $($reviewEvidenceInfo.SourceVideo)",
+            "Review evidence ffmpeg: $($reviewEvidenceInfo.Ffmpeg)",
+            "Auto review evidence status: $($reviewEvidenceInfo.AutoReviewStatus)",
+            "Auto review evidence selected events: $($reviewEvidenceInfo.AutoReviewEventCount)",
+            "Review evidence timestamps requested: $($reviewEvidenceInfo.TimestampCount)",
+            "Review evidence frames included: $($reviewEvidenceInfo.FrameCount)",
+            "Review evidence manual files included: $($reviewEvidenceInfo.ManualFileCount)",
+            "Review evidence manifest: $($reviewEvidenceInfo.ManifestPath)",
             "Failure screenshot package policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; includedSize=$failureScreenshotSizeDisplay ($failureScreenshotSizeBytes bytes); excludedSize=$excludedFailureScreenshotSizeDisplay ($excludedFailureScreenshotSizeBytes bytes); availableSize=$availableFailureScreenshotSizeDisplay ($availableFailureScreenshotSizeBytes bytes)",
             "Debug screenshot package policy: most recent $MaxDebugScreenshots files included from current session",
             $goblinEvidenceSourceSummaryLine,
@@ -2300,6 +2870,14 @@ try {
             "- Normal debug screenshots included: $($normalScreenshots.Count)",
             "- Debug screenshots included: $debugScreenshotCount",
             "- Debug screenshots package limit: $MaxDebugScreenshots",
+            "- Replay log files included: $replayLogFileCount",
+            "- Review evidence included: $($reviewEvidenceInfo.Included)",
+            "- Review evidence status: $($reviewEvidenceInfo.Status)",
+            "- Auto review evidence status: $($reviewEvidenceInfo.AutoReviewStatus)",
+            "- Auto review evidence selected events: $($reviewEvidenceInfo.AutoReviewEventCount)",
+            "- Review evidence frames included: $($reviewEvidenceInfo.FrameCount)",
+            "- Review evidence manual files included: $($reviewEvidenceInfo.ManualFileCount)",
+            "- Review evidence manifest: $($reviewEvidenceInfo.ManifestPath)",
             "- Goblin evidence screenshots included: $goblinEvidenceScreenshotCount",
             "- Goblin evidence full images excluded: $excludedGoblinEvidenceFullImages",
             "- Goblin decision bundle full evidence images excluded: $excludedGoblinDecisionBundleFullEvidenceImages",
@@ -2311,8 +2889,6 @@ try {
             "- Goblin evidence event screenshots oversized: $oversizedGoblinEvidenceEventScreenshots",
             "- Goblin observation diagnostic crops included: $($selectedGoblinObservationDiagnosticCrops.Count)",
             "- Goblin observation diagnostic crops excluded: $excludedGoblinObservationDiagnosticCrops",
-            "- Inventory replay artifacts included: $($selectedInventoryReplayArtifactDirectories.Count) folders, $inventoryReplayFileCount files",
-            "- Inventory replay artifacts excluded: $excludedInventoryReplayArtifacts",
             "- All discovered screenshots: $($allScreenshots.Count)",
             "- Current-session screenshots: $($sessionScreenshots.Count)",
             "- Excluded stale screenshots: $excludedStaleScreenshots",
@@ -2354,7 +2930,9 @@ try {
             "- Debug\GoblinEvidence\EncounterCaptures and ManualCaptures *_Fullscreen images are excluded by default; replay-ready *_Metadata.txt, *_Journal.png, and *_Minimap.png are kept",
             "- Debug/GoblinEvidence/GoblinEvidence_* event screenshots are limited to MaxGoblinEvidenceEventScreenshots newest files and MaxGoblinEvidenceEventScreenshotBytes",
             "- Debug/GoblinEvidence/ObservationDiagnostics image crops are limited to MaxGoblinObservationDiagnosticCrops newest files",
-            "- Debug/InventoryReplay/Salvage and Debug/InventoryReplay/Stash replay folders are limited to MaxInventoryReplayArtifacts newest folders",
+            "- Debug/InventoryReplay/Salvage and Debug/InventoryReplay/Stash replay image folders are excluded by default; use ReviewEvidence frames/crops for image replay",
+            "- Debug/ReplayLogs structured replay logs are copied when present for the current session",
+            "- ReviewEvidence includes only selected OBS frames and manually supplied evidence; full video files are not copied by default",
             "- bin folders are not copied",
             "- obj folders are not copied",
             "- source files are not copied except selected docs and manifest inputs",
@@ -2431,9 +3009,11 @@ Write-Host "Success screenshots: $($successScreenshots.Count)"
 Write-Host "Diagnostic screenshots: $($diagnosticScreenshots.Count)"
 Write-Host "Normal screenshots:  $($normalScreenshots.Count)"
 Write-Host "Debug screenshots:   $debugScreenshotCount (limit $MaxDebugScreenshots)"
+Write-Host "Replay logs:         $replayLogFileCount files included"
 Write-Host "Evidence screenshots:$goblinEvidenceScreenshotCount"
 Write-Host "Observation crops:   $($selectedGoblinObservationDiagnosticCrops.Count) included; $excludedGoblinObservationDiagnosticCrops excluded"
-Write-Host "Inventory replay:    $($selectedInventoryReplayArtifactDirectories.Count) folders included; $excludedInventoryReplayArtifacts excluded"
+Write-Host "Review evidence:     included=$($reviewEvidenceInfo.Included); frames=$($reviewEvidenceInfo.FrameCount); manualFiles=$($reviewEvidenceInfo.ManualFileCount)"
+Write-Host "Auto review:         status=$($reviewEvidenceInfo.AutoReviewStatus); events=$($reviewEvidenceInfo.AutoReviewEventCount)"
 Write-Host "Stale screenshots:   $excludedStaleScreenshots excluded"
 Write-Host "Debug screenshots on:$($debugSkipInfo.AppSettingsDebugScreenshots)"
 Write-Host "Keep screenshots on: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"

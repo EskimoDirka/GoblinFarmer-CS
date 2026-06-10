@@ -432,6 +432,8 @@ FodyWeavers.xsd
 # GoblinFarmer runtime/debug artifacts
 Screenshots/
 DebugPackages/
+/Video Clip Review/
+/Debug Evidence/
 /ProjectBrain/
 Sessions/
 debug-screenshots/

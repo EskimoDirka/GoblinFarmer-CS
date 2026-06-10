@@ -6,6 +6,6 @@ rem This is the single intentional review package workflow; app shutdown stays q
 powershell.exe ^
   -NoProfile ^
   -ExecutionPolicy Bypass ^
-  -File "%~dp0create-debug-package.ps1"
+  -File "%~dp0create-debug-package.ps1" %*
 
 pause

@@ -13,8 +13,12 @@ Use `Scripts\Create Debug Package.bat` to create the supported review ZIP. Usefu
 - `goblin-tracker-summary.txt`
 - `goblin-tracker-review.html`
 - latest logs, route summaries, session metadata, screenshots, and structured JSONL events
+- `Debug\ReplayLogs\*.jsonl` when inventory replay metadata was recorded
+- `ReviewEvidence\manifest.json`, `ReviewEvidence\issue.md`, and selected reviewed OBS frames/crops when review evidence parameters were supplied
 
 Do not create alternate debug package generators without explicit approval.
+
+Reviewed OBS evidence should be folded into the normal debug package, not a separate package format. By default, `Scripts\Create Debug Package.bat` attempts to find the newest `Video Clip Review` recording, align high-value log events to video offsets, and extract selected frames into `ReviewEvidence`. Pass selected timestamps and notes to `Scripts\create-debug-package.ps1` using `-ReviewVideoPath`, `-ReviewTimestamp`, `-ReviewNotesPath`, and optional `-ReviewEvidenceFolder` when the automatic alignment misses something. Full video files remain outside ZIPs by default.
 
 ## Useful Logs And Evidence
 
@@ -39,20 +43,21 @@ Do not create alternate debug package generators without explicit approval.
 
 - Goblin Replay is explicit/on-demand only.
 - Use focused harness inputs: metadata file, capture prefix, capture folder, DecisionBundle folder, or a small scenario file.
-- Inventory Replay for salvage is explicit/on-demand only through the test harness `--inventory-replay` command. It loads saved `Debug\InventoryReplay\Salvage\SalvageInventoryReplay_*\metadata.json` artifacts and reruns the production salvage classifier without clicking or pressing keys.
+- Package replay is explicit/on-demand only through the test harness `--debug-package-replay` command. It loads structured replay logs and curated `ReviewEvidence` images from a debug package ZIP/folder without clicking or pressing keys.
+- Inventory Replay classifier loaders remain available for curated image evidence, but live Debug Mode inventory scans should record structured JSONL under `Debug\ReplayLogs` instead of writing automatic replay screenshot folders.
 - Replay must not run during startup, VS Debug startup, scanner execution, route workflows, package creation, form close, or automated live testing.
-- Replay validates policy and saved-frame recognition, not real-time scanner timing, sound playback, mouse click-through, or Diablo focus behavior.
+- Log-only replay validates recorded policy/workflow decisions. Image-recognition replay requires curated frames/crops from `ReviewEvidence`; logs alone cannot validate pixel classifier changes. Replay still does not validate real-time scanner timing, sound playback, mouse click-through, or Diablo focus behavior.
 
 ## Salvage Diagnostics
 
 - Salvage inventory targets must be one column wide and one or two rows tall. Any `footprintRows` value above 2 is a classifier bug.
 - Weak upper cells attached to lower green/set pixels should remain one two-row target unless the upper cell has its own convincing item boundary. If Inventory Replay shows lower-row set targets after the upper cell was clicked successfully, suspect stale cache splitting before changing confirmation timing.
-- Normal gems must stay `RegularGemNonSalvageable`, including stack-count gem cells and amber topaz/ruby-like bodies with no item top boundary. Stack-count evidence alone is not enough; require gem color-family evidence so lower halves of set/legendary items do not become gem skips. If Diablo shows `You cannot salvage this item` and replay points at left-column gem stacks, inspect `regularGemPixels`, `stackCountTextPixels`, amber/orange metrics, and whether a gem-like strong cell anchored an adjacent weak footprint before loosening item anchors.
+- Normal gems must stay `RegularGemNonSalvageable`, including stack-count gem cells, tooltip-covered live gem-stack clusters, and amber topaz/ruby-like bodies with no item top boundary. Stack-count evidence alone is not enough for lower-half gear; keep the top-boundary and cluster-support checks so lower halves of set/legendary items do not become gem skips. If Diablo shows `You cannot salvage this item` or final salvage fails with only gems visible, replay the saved crop and inspect `regularGemPixels`, `stackCountTextPixels`, amber/orange metrics, supported gem-stack clustering, and whether a gem-like strong cell anchored an adjacent weak footprint before loosening item anchors.
 - Gem stashing accepts exact template matches first, then `GemColorMatched` fallback for strong normal-gem color cells when valid gem templates are loaded. If stash opens but no gems move, compare `bestTemplate`, `confidence`, threshold, and whether candidates are below threshold despite obvious gem color in the replay crop.
 - Salvage scans should move the cursor away from the inventory before capture. If a replay crop contains tooltip text/stat lines over the grid, treat false left-column targets as hover contamination before loosening classifier thresholds.
 - Missing confirmation for a set/legendary target should verify the cached target with a fresh classifier scan before failing. `StaleCachedTargetSkippedAfterRescan` means the target was already gone and the final leftover/recovery scan should decide completion.
 - `PostSalvageLeftoverWarning` is still diagnostic and non-clicking. Accepted non-gem targets found by the final scan can trigger bounded recovery rescans from fresh classifier output; rejected or unknown warning candidates must not be clicked.
-- In Debug Mode, salvage scans should save inventory replay crops and metadata under `Debug\InventoryReplay\Salvage` with `SalvageInventoryReplayArtifactSaved`.
+- In Debug Mode, salvage and gem-stash scans should record structured replay metadata under `Debug\ReplayLogs` with `SalvageInventoryReplayLogRecorded` or `GemStashInventoryReplayLogRecorded`. Automatic `inventory-grid.png` replay folders should not be created by normal runtime scans.
 
 ## Notification Latency
 
