@@ -494,6 +494,15 @@ namespace GoblinFarmer
                 metrics.InnerBrightPixels >= 350 &&
                 metrics.InnerSaturatedPixels >= 500;
 
+            bool denseStackTextGem =
+                metrics.StackCountTextPixels >= 70 &&
+                metrics.TopFramePixels <= 100 &&
+                metrics.ColoredFramePixels >= 1200 &&
+                metrics.ColoredFramePixels <= 2200 &&
+                metrics.InnerBrightPixels >= 550 &&
+                metrics.InnerSaturatedPixels >= 650 &&
+                metrics.RegularGemPixels >= 30;
+
             bool tooltipCoveredTopGem =
                 metrics.StackCountTextPixels == 0 &&
                 metrics.TopFramePixels <= 20 &&
@@ -511,7 +520,7 @@ namespace GoblinFarmer
                 metrics.ColoredFramePixels >= 550 &&
                 metrics.InnerSaturatedPixels >= 650;
 
-            return stackTextGem || tooltipCoveredTopGem || emeraldStackGem;
+            return stackTextGem || denseStackTextGem || tooltipCoveredTopGem || emeraldStackGem;
         }
 
         private static SalvageInventorySlotMetrics MeasureSlot(Bitmap bitmap, Rectangle local)

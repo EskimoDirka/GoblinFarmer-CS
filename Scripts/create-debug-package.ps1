@@ -3014,6 +3014,18 @@ Write-Host "Evidence screenshots:$goblinEvidenceScreenshotCount"
 Write-Host "Observation crops:   $($selectedGoblinObservationDiagnosticCrops.Count) included; $excludedGoblinObservationDiagnosticCrops excluded"
 Write-Host "Review evidence:     included=$($reviewEvidenceInfo.Included); frames=$($reviewEvidenceInfo.FrameCount); manualFiles=$($reviewEvidenceInfo.ManualFileCount)"
 Write-Host "Auto review:         status=$($reviewEvidenceInfo.AutoReviewStatus); events=$($reviewEvidenceInfo.AutoReviewEventCount)"
+$reviewVideoSummaryPath = if ($null -ne $reviewEvidenceInfo -and -not [string]::IsNullOrWhiteSpace($reviewEvidenceInfo.SourceVideo) -and $reviewEvidenceInfo.SourceVideo -ne "none") { $reviewEvidenceInfo.SourceVideo } else { "" }
+if (-not [string]::IsNullOrWhiteSpace($reviewVideoSummaryPath) -and (Test-Path -LiteralPath $reviewVideoSummaryPath -PathType Leaf)) {
+    $reviewVideoFile = Get-Item -LiteralPath $reviewVideoSummaryPath
+    $reviewVideoDurationSeconds = Get-VideoDurationSeconds $reviewVideoFile.FullName
+    $reviewVideoDurationDisplay = if ($reviewVideoDurationSeconds -gt 0) { ([TimeSpan]::FromSeconds($reviewVideoDurationSeconds)).ToString("hh\:mm\:ss") } else { "unknown" }
+    Write-Host "Video Clip Review:   $($reviewVideoFile.FullName)"
+    Write-Host "Review video info:   duration=$reviewVideoDurationDisplay; size=$(Format-ByteSize $reviewVideoFile.Length); modified=$($reviewVideoFile.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
+}
+else {
+    Write-Host "Video Clip Review:   none"
+    Write-Host "Review video info:   none"
+}
 Write-Host "Stale screenshots:   $excludedStaleScreenshots excluded"
 Write-Host "Debug screenshots on:$($debugSkipInfo.AppSettingsDebugScreenshots)"
 Write-Host "Keep screenshots on: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"

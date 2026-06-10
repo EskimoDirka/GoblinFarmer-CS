@@ -330,12 +330,14 @@ namespace GoblinFarmer
             string goblinType,
             string evidenceSignature = "",
             double evidenceConfidence = 0,
-            string evidenceImagePath = "")
+            string evidenceImagePath = "",
+            string evidenceNotes = "")
         {
             string observationSource = PortNormalizeGoblinObservationSource(source);
             PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea(observationSource);
             if (observationSource.Equals("Journal", StringComparison.OrdinalIgnoreCase))
             {
+                areaResult = PortApplyJournalEvidenceAreaFromNotes(areaResult, evidenceNotes, "ObservationCandidate");
                 areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, DateTime.UtcNow, "ObservationCandidate");
             }
 
@@ -519,6 +521,50 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return wouldCount;
+        }
+
+        private PortGoblinTrackerAreaResolution PortApplyJournalEvidenceAreaFromNotes(
+            PortGoblinTrackerAreaResolution areaResult,
+            string evidenceNotes,
+            string reason)
+        {
+            string journalArea = PortGoblinEvidenceNoteValue(evidenceNotes, "JournalArea");
+            if (string.IsNullOrWhiteSpace(journalArea))
+            {
+                return areaResult;
+            }
+
+            GoblinAreaResolution resolvedJournalArea = GoblinAreaResolver.Resolve(journalArea);
+            if (!resolvedJournalArea.Resolved)
+            {
+                AppLogger.Info(
+                    "GoblinTracker: JournalEvidenceAreaIgnored " +
+                    $"reason={PortLogField(reason)} " +
+                    $"journalArea={PortLogField(PortDisplayLocation(journalArea))} " +
+                    "ignoredReason=Unresolved");
+                return areaResult;
+            }
+
+            if (string.Equals(resolvedJournalArea.AreaKey, areaResult.Area.AreaKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return areaResult;
+            }
+
+            AppLogger.Info(
+                "GoblinTracker: JournalEvidenceAreaApplied " +
+                $"reason={PortLogField(reason)} " +
+                $"originalAreaKey={PortLogField(PortDisplayLocation(areaResult.Area.AreaKey))} " +
+                $"journalAreaKey={PortLogField(PortDisplayLocation(resolvedJournalArea.AreaKey))} " +
+                $"journalDisplayLocation={PortLogField(PortDisplayLocation(resolvedJournalArea.DisplayLocation))}");
+
+            return areaResult with
+            {
+                Area = resolvedJournalArea,
+                AmbiguityGroup = string.IsNullOrWhiteSpace(areaResult.AmbiguityGroup)
+                    ? "JournalEvidenceArea"
+                    : areaResult.AmbiguityGroup,
+                DisambiguationReason = "JournalEvidenceArea",
+            };
         }
 
         private PortGoblinTrackerAreaResolution PortApplyJournalMinimapAreaOverride(

@@ -100,6 +100,7 @@ namespace GoblinFarmer
             SetDiabloStatus(diabloRunning ? "Running" : "Not Running");
             PortUpdateDiabloRuntimeMonitor(diabloRunning);
             PortUpdateSessionStats();
+            PortUpdateObsStatusDisplay();
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateDiagnosticOverlay(diabloRunning);
         }

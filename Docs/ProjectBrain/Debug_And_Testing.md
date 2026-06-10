@@ -10,6 +10,7 @@ Source of truth: `Docs\Project_Status.md`, `README.md`, `Docs\TODO.md`, and `AGE
 - Form close must stay quiet and must not trigger debug package creation.
 - Debug packages write under `DebugPackages`.
 - Debug package retention keeps the newest 20 matching `GoblinFarmer_Debug_*.zip` files by default. Startup cleanup and the batch package script both enforce the count.
+- The package script auto-selects the newest recording under `Video Clip Review` when possible, writes selected OBS review frames under `ReviewEvidence`, and prints the selected video path, duration, size, and modified time in the final PowerShell summary.
 
 ## Useful Debug Package Contents
 
@@ -106,6 +107,7 @@ Recommended cleanup order: run dry-run first, prune `bin`/`obj` and test build o
 
 - Treat every user live-test run as a VS Debug run unless the user explicitly says otherwise.
 - Review the latest named/provided debug package and live-test notes before changing code.
+- VS Debug includes an `OBS` status group under `Settings` that reports recording Start Time, Status, and End Time from the local auto-record log/process state. This is display-only and does not control OBS.
 - For Goblin Tracker next tests, list route-specific scenarios in official route order first, then general reset, stale evidence, display, classification, package, and documentation checks.
 - Use VS Debug `Capture` only when image-recognition evidence is visibly needed.
 - Use automatic decision bundles and encounter captures for normal Goblin Tracker debugging.

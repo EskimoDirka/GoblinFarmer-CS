@@ -1728,7 +1728,7 @@ namespace GoblinFarmer
                 if (forceObservation)
                 {
                     AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=True; reason=EvidenceCooldownObservationOnly; type={candidate.Type}; source={candidate.Source}; goblinType={PortLogField(candidate.GoblinType)}; cooldownSeconds={GoblinEvidenceCooldown.TotalSeconds:0}");
-                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence);
+                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, evidenceNotes: candidate.Notes);
                 }
 
                 return;
@@ -1745,7 +1745,7 @@ namespace GoblinFarmer
 
             DebugManager.Session.RecordGoblinEvidence(evidenceEvent);
             AppLogger.Info($"GoblinEvidence: Type={candidate.Type}; Confidence={candidate.Confidence:0.00}; Source={candidate.Source}; Screenshot={PortLogField(PortDisplayLocation(screenshotPath))}; Notes={PortLogField(candidate.Notes)}");
-            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath);
+            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath, candidate.Notes);
         }
 
         private static string PortResolveDebugPackageRuntimeRoot()

@@ -31,6 +31,7 @@ Run("VS Debug/dev profile suppresses first-run setup and forces internal debug d
 Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectRootConfigPreferred);
 Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
 Run("VS Debug startup requests Diablo auto-record monitor", TestVsDebugStartupRequestsDiabloAutoRecordMonitor);
+Run("VS Debug form shows OBS recording status", TestVsDebugFormShowsObsRecordingStatus);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -119,6 +120,7 @@ Run("Goblin VS Debug simulation area list covers route and blocked areas", TestG
 Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDecisionTraceLogsCountStaleBlockAndDuplicate);
 Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLiveEvidenceOnly);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
+Run("Goblin journal evidence area reaches observation count path", TestGoblinJournalEvidenceAreaReachesObservationCountPath);
 Run("Goblin automatic count reliability requires killed or minimap confirmation", TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmation);
 Run("Goblin auto-count source variant suppression uses recent last-seen state", TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState);
 Run("Goblin PF multi-count duplicate bypass stays bounded", TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded);
@@ -143,6 +145,7 @@ Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierReje
 Run("Salvage classifier marks regular gems non-salvageable", TestSalvageClassifierMarksRegularGemsNonSalvageable);
 Run("Salvage classifier rejects stacked regular gems", TestSalvageClassifierRejectsStackedRegularGems);
 Run("Salvage classifier rejects stack-count gem columns", TestSalvageClassifierRejectsStackCountGemColumns);
+Run("Salvage classifier rejects dense stack-count gem clusters", TestSalvageClassifierRejectsDenseStackCountGemClusters);
 Run("Salvage classifier rejects tooltip-covered gem stacks", TestSalvageClassifierRejectsTooltipCoveredGemStacks);
 Run("Salvage classifier does not treat legendary boot lower halves as gems", TestSalvageClassifierDoesNotTreatLegendaryBootLowerHalvesAsGems);
 Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassifierAcceptsSetQualityLeftoverAnchor);
@@ -429,6 +432,28 @@ static void TestVsDebugStartupRequestsDiabloAutoRecordMonitor()
         AssertTrue(localScriptSource.Contains("CloseMainWindow()", StringComparison.Ordinal), "auto-record script should close OBS when the monitor launched it");
         AssertTrue(localScriptSource.Contains("OBS left running because it was not launched by this monitor.", StringComparison.Ordinal), "auto-record script should avoid closing a manually opened OBS instance");
     }
+}
+
+static void TestVsDebugFormShowsObsRecordingStatus()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
+    string formSource = File.ReadAllText(Path.Combine(repoRoot, "Form1.cs"));
+
+    AssertTrue(releaseSource.Contains("Name = \"grpObsStatus\"", StringComparison.Ordinal), "VS Debug form should create an OBS status group");
+    AssertTrue(releaseSource.Contains("Text = \"OBS\"", StringComparison.Ordinal), "OBS status group should be labeled OBS");
+    AssertTrue(releaseSource.Contains("Start Time:", StringComparison.Ordinal), "OBS status group should display recording start time");
+    AssertTrue(releaseSource.Contains("Status:", StringComparison.Ordinal), "OBS status group should display recording status");
+    AssertTrue(releaseSource.Contains("End Time:", StringComparison.Ordinal), "OBS status group should display recording end time");
+    AssertTrue(releaseSource.Contains("OBS recording started", StringComparison.Ordinal), "OBS status should use recording-start log entries for Start Time");
+    AssertTrue(releaseSource.Contains("OBS recording stopped", StringComparison.Ordinal), "OBS status should use recording-stop log entries for End Time");
+    AssertTrue(releaseSource.Contains("status = \"recording\"", StringComparison.Ordinal), "OBS status should report recording");
+    AssertTrue(releaseSource.Contains("status = \"not recording\"", StringComparison.Ordinal), "OBS status should report not recording");
+    AssertTrue(releaseSource.Contains("status = \"starting\"", StringComparison.Ordinal), "OBS status should report starting");
+    AssertTrue(releaseSource.Contains("status = \"stopping\"", StringComparison.Ordinal), "OBS status should report stopping");
+    AssertTrue(releaseSource.Contains("status = \"closed\"", StringComparison.Ordinal), "OBS status should report closed");
+    AssertTrue(releaseSource.Contains("portSettingsGroup.Bottom + 10", StringComparison.Ordinal), "OBS status group should sit underneath the Settings group");
+    AssertTrue(formSource.Contains("PortUpdateObsStatusDisplay();", StringComparison.Ordinal), "OBS status should refresh from the normal form status timer");
 }
 
 static void TestMissingDiabloPathKeepsStartupInSetupRequired()
@@ -727,6 +752,8 @@ static void TestDebugPackageScriptAppliesPackageRetention()
     AssertTrue(scriptSource.Contains("GoblinFarmer_Debug_*.zip", StringComparison.Ordinal), "debug package retention should target only GoblinFarmer debug ZIPs");
     AssertTrue(scriptSource.Contains("Debug package retention cleanup deleted:", StringComparison.Ordinal), "debug package retention should log deleted packages");
     AssertTrue(scriptSource.Contains("Debug package retention cleanup complete:", StringComparison.Ordinal), "debug package retention should log a cleanup summary");
+    AssertTrue(scriptSource.Contains("Video Clip Review:", StringComparison.Ordinal), "debug package summary should show the selected Video Clip Review file");
+    AssertTrue(scriptSource.Contains("Review video info:", StringComparison.Ordinal), "debug package summary should show selected video duration/size/modified details");
 }
 
 static void TestDebugManagerAgeRetentionDeletesOldArtifacts()
@@ -4784,6 +4811,22 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(evidenceSource.Contains("clearedAutoCountEncounters", StringComparison.Ordinal), "evidence-state reset logs should report auto-count encounter clearing");
 }
 
+static void TestGoblinJournalEvidenceAreaReachesObservationCountPath()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
+
+    AssertTrue(evidenceSource.Contains("evidenceNotes: candidate.Notes", StringComparison.Ordinal), "cooldown observation refresh should pass candidate notes into the observation path");
+    AssertTrue(evidenceSource.Contains("PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath, candidate.Notes)", StringComparison.Ordinal), "normal evidence recording should pass candidate notes into the observation path");
+    AssertTrue(sessionStatsSource.Contains("string evidenceNotes = \"\"", StringComparison.Ordinal), "observation path should accept evidence notes");
+    AssertTrue(observeMethod.Contains("PortApplyJournalEvidenceAreaFromNotes(areaResult, evidenceNotes, \"ObservationCandidate\")", StringComparison.Ordinal), "journal evidence should apply its resolved JournalArea before count decisions");
+    AssertTrue(sessionStatsSource.Contains("PortGoblinEvidenceNoteValue(evidenceNotes, \"JournalArea\")", StringComparison.Ordinal), "journal area handoff should use the existing evidence-note parser");
+    AssertTrue(sessionStatsSource.Contains("GoblinTracker: JournalEvidenceAreaApplied", StringComparison.Ordinal), "journal area handoff should log explicit diagnostics when applied");
+    AssertTrue(observeMethod.IndexOf("PortApplyJournalEvidenceAreaFromNotes", StringComparison.Ordinal) < observeMethod.IndexOf("PortApplyJournalMinimapAreaOverride", StringComparison.Ordinal), "journal evidence area should be applied before the existing minimap channel override");
+}
+
 static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmation()
 {
     AssertFalse(
@@ -5712,6 +5755,29 @@ static void DrawSyntheticRegularGemStackCell(Bitmap bitmap, int row, int column,
     }
 }
 
+static void DrawSyntheticDenseStackCountGemCell(Bitmap bitmap, int row, int column, Color color)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(16, 14, 12));
+    using SolidBrush gem = new(color);
+    using Pen highlight = new(Color.FromArgb(
+        Math.Min(255, color.R + 55),
+        Math.Min(255, color.G + 55),
+        Math.Min(255, color.B + 55)), 4);
+    using SolidBrush count = new(Color.FromArgb(232, 232, 218));
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillEllipse(gem, cell.Left + 8, cell.Top + 7, cell.Width - 16, cell.Height - 13);
+    graphics.DrawEllipse(highlight, cell.Left + 8, cell.Top + 7, cell.Width - 16, cell.Height - 13);
+    for (int i = 0; i < 8; i++)
+    {
+        int left = cell.Left + 5 + (i * 7);
+        graphics.FillRectangle(count, left, cell.Top + 42, 5, 13);
+        graphics.FillRectangle(count, left + 1, cell.Top + 55, 5, 2);
+    }
+}
+
 static void DrawSyntheticWeakGemFollowerCell(Bitmap bitmap, int row, int column)
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
@@ -6125,6 +6191,29 @@ static void TestSalvageClassifierRejectsStackCountGemColumns()
     AssertTrue(
         weakFollower.Reason == "DetachedItemFootprint" || weakFollower.Reason == "NoItemFrameAnchor",
         "weak gem follower should stay diagnostic-only after gem-like neighbor filtering");
+}
+
+static void TestSalvageClassifierRejectsDenseStackCountGemClusters()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticDenseStackCountGemCell(grid, 1, 1, Color.FromArgb(138, 95, 28));
+    DrawSyntheticDenseStackCountGemCell(grid, 1, 2, Color.FromArgb(138, 95, 28));
+    DrawSyntheticRegularGemStackCell(grid, 2, 2, Color.FromArgb(185, 190, 198), "77");
+    DrawSyntheticPaleSalvageItem(grid, 6, 4);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "dense live gem-stack cells should not become salvage targets when a real item remains");
+    AssertEqual(6, result.Targets[0].Row, "real non-gem target should remain accepted");
+    AssertEqual(4, result.Targets[0].Column, "real non-gem target should remain accepted");
+    foreach ((int Row, int Column) cell in new[] { (1, 1), (1, 2), (2, 2) })
+    {
+        SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == cell.Row && candidate.Column == cell.Column);
+        AssertFalse(candidate.Accepted, $"dense stack-count gem row {cell.Row} column {cell.Column} should be rejected");
+        AssertEqual("RegularGemNonSalvageable", candidate.Reason, $"dense stack-count gem row {cell.Row} column {cell.Column} should use the gem skip reason");
+        AssertEqual("RegularGem", candidate.Quality, $"dense stack-count gem row {cell.Row} column {cell.Column} should expose RegularGem quality");
+        AssertTrue(candidate.Metrics.StackCountTextPixels >= 70 || candidate.Metrics.RegularGemPixels >= 220, $"dense stack-count gem row {cell.Row} column {cell.Column} should expose stack or gem metrics");
+    }
 }
 
 static void TestSalvageClassifierRejectsTooltipCoveredGemStacks()
