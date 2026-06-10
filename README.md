@@ -14,7 +14,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Diablo launch detection and Start Game handling with stable-button verification, click acceptance checks, and manual-click recovery.
 - Route-aware Teleport Next workflow for the configured farming path.
 - Hotkey route blocking for known unsafe or incorrect location transitions.
-- Make New Game, Exit Game, repair, salvage, and town workflow helpers. Salvage uses a single cached inventory scan per open salvage UI cycle, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable, then clicks grouped top-cell item anchors with confirmation-aware handling for set and legendary-style targets.
+- Make New Game, Exit Game, repair, salvage, and town workflow helpers. Salvage uses a fast cached inventory scan with bounded recovery rescans when accepted leftovers remain, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable, then clicks one-column item anchors with legal one- or two-row footprints and confirmation-aware handling for set and legendary-style targets.
 - Monk, Demon Hunter, and Witch Doctor combat support.
 - Location-aware Goblin Tracker with automatic evidence-based counting, per-area duplicate protection, active-combat-time GPH, live UI stats, accepted-count notifications, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and one batch-driven debug package workflow for VS Debug and Release.
@@ -102,7 +102,7 @@ Journal matches validate the goblin-name portion of the template, ignore upper/h
 
 Accepted-count notifications are no-activate and click-through so they do not steal focus or block route clicks. Rainbow Goblin automatic counts use a distinct alert message and local Windows alert sound.
 
-Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, notification latency traces through `GoblinLatencyTrace`, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, manual recognition-capture paths, and salvage bulk/category/cache/timing diagnostics with `cacheMode=SingleInventoryScan`, item footprint metadata, regular-gem skip metrics, and expected-confirmation results.
+Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, notification latency traces through `GoblinLatencyTrace`, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, manual recognition-capture paths, and salvage bulk/category/cache/timing diagnostics with item footprint metadata, bounded recovery-rescan state, regular-gem skip metrics, expected-confirmation results, and inventory replay artifact paths in Debug Mode.
 
 Goblin Replay is an explicit developer/test harness for feeding saved Journal/Minimap PNG fixtures, including real-style encounter/manual capture folders, through the shared Goblin Evidence matcher and stale-location policy without Diablo running. It is on-demand only and is not part of normal app startup, VS Debug startup, live scanning, combat, route, town, or debug package workflows. Real capture evidence can be replayed from the repository root with:
 
@@ -112,6 +112,12 @@ dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --g
 dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-prefix --templates ".\Images\Goblin Evidence" "D:\Path\To\CapturePrefix"
 dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-decision-bundle --templates ".\Images\Goblin Evidence" "D:\Path\To\DecisionBundles\gdt-xxxxxxxx"
 dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-scenario --templates ".\Images\Goblin Evidence" "D:\Path\To\Scenario.txt"
+```
+
+Salvage Inventory Replay is also explicit/on-demand. Debug Mode salvage scans save bounded inventory-grid crops and metadata under `Debug\InventoryReplay\Salvage`, and the classifier can be replayed without clicking Diablo:
+
+```powershell
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --inventory-replay "D:\Path\To\SalvageInventoryReplay_...\metadata.json"
 ```
 
 Capture folders should contain `_Metadata.txt`, `_Journal.png`, and/or `_Minimap.png` files. Metadata and prefix commands target one specific older capture inside a shared `EncounterCaptures` or `ManualCaptures` folder without copying files. New DecisionBundles are replay-ready by default because they contain `decision-trace.txt`, local metadata, and local Journal/Minimap crop frames. Older DecisionBundles that only have `decision-trace.txt` plus fullscreen `evidence.png` still report the available evidence and explain that crop-accurate replay is not possible from that bundle alone. Scenario files synthesize temporary crop frames from `Images\Goblin Evidence` templates and can resolve area context from `Images\Current Location` title templates with `Location=...`. They can model small action sequences such as `Scan`, `NewGame`, `ResetStats`, and `Wait`. Example scenario lines:

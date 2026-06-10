@@ -759,16 +759,16 @@ namespace GoblinFarmer
 
         private DrawingPoint? PortFirstFilledInventorySlot()
         {
-            List<SalvageInventorySlotTarget> slots = PortFilledInventorySlots();
+            List<SalvageInventorySlotTarget> slots = PortFilledInventorySlots("FirstFilledSlotProbe");
             return slots.Count == 0 ? null : slots[0].ScreenPoint;
         }
 
-        private List<SalvageInventorySlotTarget> PortFilledInventorySlots()
+        private List<SalvageInventorySlotTarget> PortFilledInventorySlots(string phase)
         {
-            return PortScanSalvageInventorySlots(logCandidates: true, updateRegularGemCandidateCount: true).Targets.ToList();
+            return PortScanSalvageInventorySlots(logCandidates: true, updateRegularGemCandidateCount: true, phase).Targets.ToList();
         }
 
-        private SalvageInventorySlotScanResult PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount)
+        private SalvageInventorySlotScanResult PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount, string phase)
         {
             if (!PortTryGetDiabloRect(out RECT rect))
             {
@@ -783,6 +783,7 @@ namespace GoblinFarmer
             }
 
             SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid);
+            SalvageInventoryReplayArtifacts.SaveScanArtifact(screenshot, grid, phase, scan);
             if (updateRegularGemCandidateCount)
             {
                 portLastRegularGemCandidateCount = scan.Candidates.Count(candidate => candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase));

@@ -10,6 +10,7 @@ param(
     [int]$MaxGoblinEvidenceEventScreenshots = 3,
     [long]$MaxGoblinEvidenceEventScreenshotBytes = 1048576,
     [int]$MaxGoblinObservationDiagnosticCrops = 12,
+    [int]$MaxInventoryReplayArtifacts = 6,
     [int]$DebugPackageRetentionCount = 20,
     [switch]$IncludeGoblinDecisionBundleFullImages,
     [switch]$IncludeGoblinCaptureFullscreenImages
@@ -1697,6 +1698,10 @@ if ($MaxGoblinObservationDiagnosticCrops -lt 0) {
     Write-Warning "MaxGoblinObservationDiagnosticCrops must be at least 0. Using 0."
     $MaxGoblinObservationDiagnosticCrops = 0
 }
+if ($MaxInventoryReplayArtifacts -lt 0) {
+    Write-Warning "MaxInventoryReplayArtifacts must be at least 0. Using 0."
+    $MaxInventoryReplayArtifacts = 0
+}
 
 $runtimeRootInfo = Resolve-RuntimeRoot $RuntimeRoot $PSScriptRoot
 $repoRoot = $runtimeRootInfo.SourceRoot
@@ -1729,6 +1734,7 @@ Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
 Write-Host "Max goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots"
 Write-Host "Max goblin evidence event screenshot bytes: $MaxGoblinEvidenceEventScreenshotBytes"
 Write-Host "Max goblin observation diagnostic crops: $MaxGoblinObservationDiagnosticCrops"
+Write-Host "Max inventory replay artifacts: $MaxInventoryReplayArtifacts"
 Write-Host "Include goblin decision bundle full images: $($IncludeGoblinDecisionBundleFullImages.IsPresent)"
 Write-Host "Include goblin capture fullscreen images: $($IncludeGoblinCaptureFullscreenImages.IsPresent)"
 
@@ -1798,16 +1804,22 @@ try {
 
     $screenshotFoldersList = New-Object System.Collections.Generic.List[string]
     $debugScreenshotFoldersList = New-Object System.Collections.Generic.List[string]
+    $inventoryReplayFoldersList = New-Object System.Collections.Generic.List[string]
+    $inventoryReplaySourceRootsList = New-Object System.Collections.Generic.List[string]
     $goblinEvidenceFoldersList = New-Object System.Collections.Generic.List[string]
     $goblinEvidenceSourceRootsList = New-Object System.Collections.Generic.List[string]
     foreach ($root in $packageRuntimeRoots) {
         Add-UniquePath $screenshotFoldersList (Join-Path $root "Screenshots")
         Add-UniquePath $debugScreenshotFoldersList (Join-Path $root "debug-screenshots")
+        Add-UniquePath $inventoryReplayFoldersList (Join-Path $root "Debug\InventoryReplay\Salvage")
+        Add-UniquePath $inventoryReplaySourceRootsList (Join-Path $root "Debug")
         Add-UniquePath $goblinEvidenceFoldersList (Join-Path $root "Debug\GoblinEvidence")
         Add-UniquePath $goblinEvidenceSourceRootsList (Join-Path $root "Debug")
     }
     $screenshotFolders = $screenshotFoldersList.ToArray()
     $debugScreenshotFolders = $debugScreenshotFoldersList.ToArray()
+    $inventoryReplayFolders = $inventoryReplayFoldersList.ToArray()
+    $inventoryReplaySourceRoots = $inventoryReplaySourceRootsList.ToArray()
     $goblinEvidenceFolders = $goblinEvidenceFoldersList.ToArray()
     $goblinEvidenceSourceRoots = $goblinEvidenceSourceRootsList.ToArray()
     $goblinEvidenceSourceTotals = Get-FolderFileTotals $goblinEvidenceFolders
@@ -1964,6 +1976,26 @@ try {
     else {
         Write-Host "Included debug screenshots: $debugScreenshotCount"
     }
+
+    Write-Step "Collecting inventory replay artifacts"
+    $inventoryReplayArtifactDirectories = foreach ($folder in $inventoryReplayFolders) {
+        if (Test-Path -LiteralPath $folder -PathType Container) {
+            Get-ChildItem -LiteralPath $folder -Directory -Filter "SalvageInventoryReplay_*" -ErrorAction SilentlyContinue
+        }
+    }
+    $selectedInventoryReplayArtifactDirectories = @($inventoryReplayArtifactDirectories |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First $MaxInventoryReplayArtifacts)
+    $selectedInventoryReplayFiles = @($selectedInventoryReplayArtifactDirectories |
+        ForEach-Object {
+            Get-ChildItem -LiteralPath $_.FullName -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -match '^\.(png|json)$' }
+        } |
+        Sort-Object FullName)
+    $excludedInventoryReplayArtifacts = [Math]::Max(0, @($inventoryReplayArtifactDirectories).Count - $selectedInventoryReplayArtifactDirectories.Count)
+    $inventoryReplayFileCount = Copy-DebugScreenshotsToPackage $selectedInventoryReplayFiles $inventoryReplaySourceRoots (Join-Path $stagingRoot "Debug")
+    Write-Host "Included inventory replay artifacts: $($selectedInventoryReplayArtifactDirectories.Count) folders, $inventoryReplayFileCount files"
+    Write-Host "Excluded inventory replay artifacts: $excludedInventoryReplayArtifacts"
 
     Write-Step "Collecting goblin evidence screenshots"
     $goblinEvidenceCandidates = foreach ($folder in $goblinEvidenceFolders) {
@@ -2223,6 +2255,7 @@ try {
             "Goblin encounter/manual capture fullscreen package policy: excluded by default; $excludedGoblinCaptureFullscreenImages excluded; excludedSize=$(Format-ByteSize $excludedGoblinCaptureFullscreenImageBytes) ($excludedGoblinCaptureFullscreenImageBytes bytes); Journal/Minimap crops and metadata are kept",
             "Goblin evidence event screenshot package policy: most recent $MaxGoblinEvidenceEventScreenshots included when <= $MaxGoblinEvidenceEventScreenshotBytes bytes; $excludedGoblinEvidenceEventScreenshots excluded; $oversizedGoblinEvidenceEventScreenshots oversized",
             "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
+            "Inventory replay package policy: most recent $MaxInventoryReplayArtifacts salvage replay folders included; $excludedInventoryReplayArtifacts excluded",
             "Failure screenshot package policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; includedSize=$failureScreenshotSizeDisplay ($failureScreenshotSizeBytes bytes); excludedSize=$excludedFailureScreenshotSizeDisplay ($excludedFailureScreenshotSizeBytes bytes); availableSize=$availableFailureScreenshotSizeDisplay ($availableFailureScreenshotSizeBytes bytes)",
             "Debug screenshot package policy: most recent $MaxDebugScreenshots files included from current session",
             $goblinEvidenceSourceSummaryLine,
@@ -2276,6 +2309,8 @@ try {
             "- Goblin evidence event screenshots oversized: $oversizedGoblinEvidenceEventScreenshots",
             "- Goblin observation diagnostic crops included: $($selectedGoblinObservationDiagnosticCrops.Count)",
             "- Goblin observation diagnostic crops excluded: $excludedGoblinObservationDiagnosticCrops",
+            "- Inventory replay artifacts included: $($selectedInventoryReplayArtifactDirectories.Count) folders, $inventoryReplayFileCount files",
+            "- Inventory replay artifacts excluded: $excludedInventoryReplayArtifacts",
             "- All discovered screenshots: $($allScreenshots.Count)",
             "- Current-session screenshots: $($sessionScreenshots.Count)",
             "- Excluded stale screenshots: $excludedStaleScreenshots",
@@ -2317,6 +2352,7 @@ try {
             "- Debug\GoblinEvidence\EncounterCaptures and ManualCaptures *_Fullscreen images are excluded by default; replay-ready *_Metadata.txt, *_Journal.png, and *_Minimap.png are kept",
             "- Debug/GoblinEvidence/GoblinEvidence_* event screenshots are limited to MaxGoblinEvidenceEventScreenshots newest files and MaxGoblinEvidenceEventScreenshotBytes",
             "- Debug/GoblinEvidence/ObservationDiagnostics image crops are limited to MaxGoblinObservationDiagnosticCrops newest files",
+            "- Debug/InventoryReplay/Salvage replay folders are limited to MaxInventoryReplayArtifacts newest folders",
             "- bin folders are not copied",
             "- obj folders are not copied",
             "- source files are not copied except selected docs and manifest inputs",
@@ -2395,6 +2431,7 @@ Write-Host "Normal screenshots:  $($normalScreenshots.Count)"
 Write-Host "Debug screenshots:   $debugScreenshotCount (limit $MaxDebugScreenshots)"
 Write-Host "Evidence screenshots:$goblinEvidenceScreenshotCount"
 Write-Host "Observation crops:   $($selectedGoblinObservationDiagnosticCrops.Count) included; $excludedGoblinObservationDiagnosticCrops excluded"
+Write-Host "Inventory replay:    $($selectedInventoryReplayArtifactDirectories.Count) folders included; $excludedInventoryReplayArtifacts excluded"
 Write-Host "Stale screenshots:   $excludedStaleScreenshots excluded"
 Write-Host "Debug screenshots on:$($debugSkipInfo.AppSettingsDebugScreenshots)"
 Write-Host "Keep screenshots on: $($debugSkipInfo.AppSettingsKeepDebugScreenshots)"

@@ -39,8 +39,15 @@ Do not create alternate debug package generators without explicit approval.
 
 - Goblin Replay is explicit/on-demand only.
 - Use focused harness inputs: metadata file, capture prefix, capture folder, DecisionBundle folder, or a small scenario file.
+- Inventory Replay for salvage is explicit/on-demand only through the test harness `--inventory-replay` command. It loads saved `Debug\InventoryReplay\Salvage\SalvageInventoryReplay_*\metadata.json` artifacts and reruns the production salvage classifier without clicking or pressing keys.
 - Replay must not run during startup, VS Debug startup, scanner execution, route workflows, package creation, form close, or automated live testing.
 - Replay validates policy and saved-frame recognition, not real-time scanner timing, sound playback, mouse click-through, or Diablo focus behavior.
+
+## Salvage Diagnostics
+
+- Salvage inventory targets must be one column wide and one or two rows tall. Any `footprintRows` value above 2 is a classifier bug.
+- `PostSalvageLeftoverWarning` is still diagnostic and non-clicking. Accepted non-gem targets found by the final scan can trigger bounded recovery rescans from fresh classifier output; rejected or unknown warning candidates must not be clicked.
+- In Debug Mode, salvage scans should save inventory replay crops and metadata under `Debug\InventoryReplay\Salvage` with `SalvageInventoryReplayArtifactSaved`.
 
 ## Notification Latency
 

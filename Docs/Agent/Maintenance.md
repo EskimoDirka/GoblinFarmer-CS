@@ -35,6 +35,7 @@ Do not trim source/docs first. `Images`, `Docs`, `Scripts`, `Config`, `Installer
 
 - App/debug package workflow defaults may retain 20 debug packages unless explicitly changed.
 - Project Brain ZIPs are docs-only context packages and are pruned by `Scripts\create-project-brain.ps1` after package creation when matching `ProjectBrain\GoblinFarmer_ProjectBrain_*.zip` files are older than 7 days.
+- Salvage Inventory Replay artifacts live under `Debug\InventoryReplay\Salvage`, use 7-day age cleanup, and debug packages include only the newest bounded replay folders.
 - Cleanup script default retention can recommend 10 for local storage cleanup without changing app behavior.
 - Stable storage cleanup may use 5 debug packages only when the user agrees the run evidence is no longer needed.
 - Do not add new artifact producers without a retention and package-size policy.
@@ -50,6 +51,7 @@ Do not commit:
 - Project Brain ZIPs, except for local handoff/use before the 7-day retention cleanup removes stale matching exports.
 - Reports generated for local review unless intentionally requested.
 - Logs, screenshots, replay captures, DecisionBundles, EncounterCaptures, GoblinEvidence runtime output.
+- Inventory Replay runtime crops and metadata.
 - Source-upload folders or `GitHub Upload` copies.
 
 Tracked `Config\AppSettings.json` should remain sanitized. Private paths and toggles belong in ignored `Config\AppSettings.local.json`.

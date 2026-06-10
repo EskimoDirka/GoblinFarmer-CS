@@ -55,6 +55,8 @@ namespace GoblinFarmer
         private const int SetQualityAnchorColoredFramePixels = 180;
         private const int SetQualityAnchorContentPixels = 80;
         private const int LegendaryQualityPixels = 320;
+        private const int ItemTopBoundaryPixels = 350;
+        private const int MaximumItemFootprintRows = 2;
 
         private sealed record ItemFootprint(
             int StartRow,
@@ -213,18 +215,61 @@ namespace GoblinFarmer
                         row++;
                     }
 
-                    int rows = row - startRow;
-                    string quality = ResolveQuality(metrics, startRow, column, rows);
-                    footprints.Add(new ItemFootprint(
-                        startRow,
-                        column,
-                        rows,
-                        quality,
-                        QualityRequiresConfirmation(quality)));
+                    int endRowExclusive = row;
+                    AddLegalFootprints(footprints, metrics, startRow, endRowExclusive, column);
                 }
             }
 
             return footprints;
+        }
+
+        private static void AddLegalFootprints(
+            List<ItemFootprint> footprints,
+            SalvageInventorySlotMetrics[,] metrics,
+            int startRow,
+            int endRowExclusive,
+            int column)
+        {
+            int segmentStart = startRow;
+            for (int row = startRow + 1; row < endRowExclusive; row++)
+            {
+                if (!HasItemTopBoundary(metrics[row, column]))
+                {
+                    continue;
+                }
+
+                AddLegalFootprintSegment(footprints, metrics, segmentStart, row, column);
+                segmentStart = row;
+            }
+
+            AddLegalFootprintSegment(footprints, metrics, segmentStart, endRowExclusive, column);
+        }
+
+        private static void AddLegalFootprintSegment(
+            List<ItemFootprint> footprints,
+            SalvageInventorySlotMetrics[,] metrics,
+            int startRow,
+            int endRowExclusive,
+            int column)
+        {
+            int row = startRow;
+            while (row < endRowExclusive)
+            {
+                int rows = Math.Min(MaximumItemFootprintRows, endRowExclusive - row);
+                string quality = ResolveQuality(metrics, row, column, rows);
+                footprints.Add(new ItemFootprint(
+                    row,
+                    column,
+                    rows,
+                    quality,
+                    QualityRequiresConfirmation(quality)));
+                row += rows;
+            }
+        }
+
+        private static bool HasItemTopBoundary(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.TopFramePixels >= ItemTopBoundaryPixels;
         }
 
         private static string RejectionReason(SalvageInventorySlotMetrics metrics)

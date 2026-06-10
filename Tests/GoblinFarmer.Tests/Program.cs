@@ -4,6 +4,11 @@ using System.IO.Compression;
 using System.Text.Json;
 using GoblinFarmer;
 
+if (TryRunInventoryReplayCommand(args, out int inventoryReplayExitCode))
+{
+    return inventoryReplayExitCode;
+}
+
 if (TryRunGoblinReplayCaptureCommand(args, out int replayCommandExitCode))
 {
     return replayCommandExitCode;
@@ -125,17 +130,23 @@ Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObs
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
 Run("Salvage loop handles expected confirmation failures", TestSalvageLoopHandlesExpectedConfirmationFailures);
-Run("Salvage post-complete leftover warning is diagnostic only", TestSalvagePostCompleteLeftoverWarningDiagnosticOnly);
+Run("Salvage post-complete actionable leftovers trigger bounded recovery", TestSalvagePostCompleteActionableLeftoversTriggerBoundedRecovery);
 Run("Bulk salvage uses blue/yellow category buttons only", TestBulkSalvageUsesBlueYellowCategoryButtonsOnly);
 Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierRejectsTexturedEmptyCells);
 Run("Salvage classifier marks regular gems non-salvageable", TestSalvageClassifierMarksRegularGemsNonSalvageable);
 Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassifierAcceptsSetQualityLeftoverAnchor);
 Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
+Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier caches DVR-style item anchors", TestSalvageClassifierCachesDvrStyleItemAnchors);
-Run("Salvage classifier deduplicates multi-slot footprints", TestSalvageClassifierDeduplicatesMultiSlotFootprints);
+Run("Salvage classifier splits stacked one tile items", TestSalvageClassifierSplitsStackedOneTileItems);
+Run("Salvage classifier splits stacked two tile footprints", TestSalvageClassifierSplitsStackedTwoTileFootprints);
+Run("Salvage classifier splits overlong occupied runs", TestSalvageClassifierSplitsOverlongOccupiedRuns);
 Run("Salvage classifier derives quality from full footprint", TestSalvageClassifierDerivesQualityFromFullFootprint);
 Run("Salvage classifier flags high rarity confirmation targets", TestSalvageClassifierFlagsHighRarityConfirmationTargets);
+Run("Inventory replay loads saved salvage crop", TestInventoryReplayLoadsSavedSalvageCrop);
+Run("Inventory replay retention is scoped and age based", TestInventoryReplayRetentionIsScopedAndAgeBased);
+Run("Inventory replay command remains harness only", TestInventoryReplayCommandRemainsHarnessOnly);
 Run("Kadala hotkey uses faster cadence and timing logs", TestKadalaHotkeyUsesFasterCadenceAndTimingLogs);
 Run("Teleport Next no-route state notifies user", TestTeleportNextNoRouteStateNotifiesUser);
 Run("Goblin area detection disambiguates PF false positives from route context", TestGoblinAreaDetectionDisambiguatesPandemoniumFalsePositivesFromRouteContext);
@@ -2231,6 +2242,76 @@ static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-prefix", StringComparison.Ordinal), "debug package creation should not invoke prefix replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-decision-bundle", StringComparison.Ordinal), "debug package creation should not invoke decision-bundle replay");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1")).Contains("--goblin-replay-scenario", StringComparison.Ordinal), "debug package creation should not invoke template-scenario replay");
+}
+
+static bool TryRunInventoryReplayCommand(string[] commandArgs, out int exitCode)
+{
+    exitCode = 0;
+    if (commandArgs.Length == 0 || !commandArgs[0].Equals("--inventory-replay", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    if (commandArgs.Length == 1 ||
+        commandArgs.Any(arg => arg.Equals("--help", StringComparison.OrdinalIgnoreCase) || arg.Equals("-h", StringComparison.OrdinalIgnoreCase)))
+    {
+        PrintInventoryReplayCommandHelp();
+        exitCode = commandArgs.Length == 1 ? 1 : 0;
+        return true;
+    }
+
+    try
+    {
+        Console.WriteLine("Inventory Replay Salvage Harness");
+        Console.WriteLine("Mode: ExplicitOnDemand");
+        Console.WriteLine("WritesPersistentDebugFiles: False");
+        Console.WriteLine($"InputCount: {commandArgs.Length - 1}");
+
+        int failed = 0;
+        int totalTargets = 0;
+        for (int i = 1; i < commandArgs.Length; i++)
+        {
+            string input = Path.GetFullPath(commandArgs[i], FindRepositoryRootForTests());
+            SalvageInventoryReplayRunResult result = SalvageInventoryReplayArtifacts.RunReplayForHarness(input);
+            string status = result.Loaded ? "PASS" : "FAIL";
+            Console.WriteLine($"{status} INVENTORY_REPLAY_LOAD reason={result.Reason} input=\"{input}\" image=\"{result.ImagePath}\" targets={result.TargetCount} candidates={result.CandidateCount}");
+            if (!result.Loaded)
+            {
+                failed++;
+                continue;
+            }
+
+            totalTargets += result.TargetCount;
+            foreach (SalvageInventoryReplayTarget target in result.Targets)
+            {
+                Console.WriteLine($"TARGET row={target.Row} column={target.Column} footprintRows={target.FootprintRows} quality={target.Quality} confirmationExpected={target.ConfirmationExpected} screenPoint={target.ScreenPoint.X},{target.ScreenPoint.Y}");
+            }
+        }
+
+        Console.WriteLine($"SUMMARY inputs={commandArgs.Length - 1} failed={failed} targets={totalTargets}");
+        if (failed > 0)
+        {
+            Console.Error.WriteLine("FAIL Inventory Replay completed with missing/invalid artifacts.");
+            exitCode = 1;
+        }
+
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"FAIL Inventory Replay command failed: {ex.Message}");
+        exitCode = 1;
+        return true;
+    }
+}
+
+static void PrintInventoryReplayCommandHelp()
+{
+    Console.WriteLine("Usage:");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --inventory-replay \"Debug\\InventoryReplay\\Salvage\\SalvageInventoryReplay_...\"");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --inventory-replay \"Debug\\InventoryReplay\\Salvage\\SalvageInventoryReplay_...\\metadata.json\"");
+    Console.WriteLine();
+    Console.WriteLine("Inventory replay is explicit/on-demand only. It runs the production salvage inventory classifier against saved inventory-grid crops and never clicks, presses keys, or runs live automation.");
 }
 
 static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitCode)
@@ -5152,12 +5233,39 @@ static void DrawSyntheticTwoSlotSalvageItem(
     graphics.FillRectangle(blue, bottom.Left + 24, bottom.Top + 16, 15, 26);
 }
 
+static void DrawSyntheticOneSlotSalvageItem(Bitmap bitmap, int row, int column, bool highRarity = false)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    Color frameColor = highRarity ? Color.FromArgb(55, 178, 48) : Color.FromArgb(234, 122, 13);
+    Color iconColor = highRarity ? Color.FromArgb(54, 138, 42) : Color.FromArgb(112, 86, 58);
+    using Pen frame = new(frameColor, 5);
+    using SolidBrush background = new(highRarity ? Color.FromArgb(22, 48, 20) : Color.FromArgb(34, 27, 18));
+    using SolidBrush icon = new(iconColor);
+    using SolidBrush blue = new(Color.FromArgb(60, 150, 255));
+    using SolidBrush strongTopFrame = new(highRarity ? Color.FromArgb(70, 210, 60) : Color.FromArgb(245, 143, 22));
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillRectangle(strongTopFrame, cell.Left + 4, cell.Top + 2, cell.Width - 8, 10);
+    graphics.DrawRectangle(frame, cell.Left + 3, cell.Top + 4, cell.Width - 7, cell.Height - 8);
+    graphics.FillEllipse(icon, cell.Left + 16, cell.Top + 18, 36, 32);
+    graphics.FillRectangle(blue, cell.Left + 25, cell.Top + 24, 16, 22);
+}
+
 static void PaintSyntheticSetQualityInCell(Bitmap bitmap, int row, int column)
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
     using Graphics graphics = Graphics.FromImage(bitmap);
     using SolidBrush setBrush = new(Color.FromArgb(55, 178, 48));
     graphics.FillRectangle(setBrush, cell.Left + 8, cell.Top + 10, cell.Width - 16, cell.Height - 20);
+}
+
+static void PaintSyntheticSetQualityInCellBodyOnly(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush setBrush = new(Color.FromArgb(55, 178, 48));
+    graphics.FillRectangle(setBrush, cell.Left + 8, cell.Top + 24, cell.Width - 16, cell.Height - 34);
 }
 
 static void DrawSyntheticRegularGem(Bitmap bitmap, int row, int column, Color color)
@@ -5232,7 +5340,7 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     AssertTrue(townSource.Contains("confirmationScans=", StringComparison.Ordinal), "salvage should log confirmation scan counts for timing diagnosis");
     AssertTrue(townSource.Contains("PortSalvagePostSlotDelayMs = 35", StringComparison.Ordinal), "salvage post-slot delay should be short but explicit");
     AssertTrue(townSource.Contains("PortSafeSalvageSlotClick", StringComparison.Ordinal), "salvage slot clicks should use the faster slot-only safe click helper");
-    AssertTrue(townSource.Contains("List<SalvageInventorySlotTarget> cachedSlots = PortFilledInventorySlots()", StringComparison.Ordinal), "salvage should scan inventory once and cache structured salvage targets");
+    AssertTrue(townSource.Contains("List<SalvageInventorySlotTarget> cachedSlots = PortFilledInventorySlots(phase)", StringComparison.Ordinal), "salvage should scan inventory once and cache structured salvage targets");
     AssertFalse(townSource.Contains("slot = PortFirstFilledInventorySlot()", StringComparison.Ordinal), "salvage should not rescan inventory after each slot");
     AssertTrue(townSource.Contains("cacheMode=SingleInventoryScan", StringComparison.Ordinal), "salvage timing should identify the single-scan cache mode");
     AssertTrue(townSource.Contains("cachedSlotCount=", StringComparison.Ordinal), "salvage should log the cached slot count");
@@ -5274,19 +5382,26 @@ static void TestSalvageLoopHandlesExpectedConfirmationFailures()
     AssertTrue(townSource.Contains("noPromptSalvages++", StringComparison.Ordinal), "no-prompt salvage targets should continue without failing when no dialog appears");
 }
 
-static void TestSalvagePostCompleteLeftoverWarningDiagnosticOnly()
+static void TestSalvagePostCompleteActionableLeftoversTriggerBoundedRecovery()
 {
     string repoRoot = FindRepositoryRootForTests();
     string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
     string imageRecognitionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ImageRecognition.cs"));
-    string warningMethod = ExtractMethodBody(townSource, "private void PortLogPostSalvageLeftoverWarning");
+    string warningMethod = ExtractMethodBody(townSource, "private int PortLogPostSalvageLeftoverWarning");
 
     AssertTrue(townSource.Contains("PortLogPostSalvageLeftoverWarning(phase)", StringComparison.Ordinal), "salvage should run a final diagnostic leftover scan after completion or skip");
     AssertTrue(townSource.Contains("PostSalvageLeftoverWarning", StringComparison.Ordinal), "final leftover diagnostics should use the requested warning token");
     AssertTrue(townSource.Contains("diagnosticOnly=True", StringComparison.Ordinal), "post-salvage leftover warning should declare that it is diagnostic-only");
+    AssertTrue(townSource.Contains("acceptedTargetsRemaining", StringComparison.Ordinal), "post-salvage scan should report accepted actionable leftovers");
+    AssertTrue(townSource.Contains("postSalvageActionableLeftovers", StringComparison.Ordinal), "salvage summary should report post-salvage actionable leftovers");
+    AssertTrue(townSource.Contains("PortSalvageRecoveryRescanLimit = 2", StringComparison.Ordinal), "accepted non-gem leftovers should trigger bounded recovery rescans");
+    AssertTrue(townSource.Contains("Salvage recovery rescan", StringComparison.Ordinal), "accepted non-gem leftovers should log recovery rescans");
+    AssertTrue(townSource.Contains("RecoveryRescan", StringComparison.Ordinal), "recovery scans should identify their cache mode");
+    AssertTrue(townSource.Contains("SalvageActionableLeftoversRemain", StringComparison.Ordinal), "accepted non-gem leftovers should capture a failure screenshot if recovery is exhausted");
+    AssertTrue(townSource.Contains("RecordSalvageFailure(\"Salvage incomplete: actionable leftovers remain after recovery rescans\")", StringComparison.Ordinal), "accepted non-gem leftovers should fail visibly after bounded recovery is exhausted");
     AssertTrue(townSource.Contains("rejectedReasons=", StringComparison.Ordinal), "post-salvage leftover warning should summarize rejected reasons");
     AssertTrue(townSource.Contains("likely=LikelyNonGem", StringComparison.Ordinal) || townSource.Contains("LikelyNonGem", StringComparison.Ordinal), "post-salvage warning should classify likely non-gems");
-    AssertTrue(imageRecognitionSource.Contains("PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount)", StringComparison.Ordinal), "post-salvage warning should reuse the salvage inventory scan without disturbing cached target counts");
+    AssertTrue(imageRecognitionSource.Contains("PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount, string phase)", StringComparison.Ordinal), "post-salvage warning should reuse the salvage inventory scan without disturbing cached target counts");
     AssertFalse(warningMethod.Contains("PortSafeSalvageSlotClick", StringComparison.Ordinal), "post-salvage leftover warning must not click candidates");
     AssertFalse(warningMethod.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "post-salvage leftover warning must not accept confirmations");
 }
@@ -5429,7 +5544,35 @@ static void TestSalvageClassifierCachesDvrStyleItemAnchors()
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "second row of a two-slot item should be collapsed");
 }
 
-static void TestSalvageClassifierDeduplicatesMultiSlotFootprints()
+static void TestSalvageClassifierCachesOneTileItems()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticOneSlotSalvageItem(grid, 2, 4);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "one-tile item should produce one salvage target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(2, target.Row, "one-tile item should keep its row");
+    AssertEqual(4, target.Column, "one-tile item should keep its column");
+    AssertEqual(1, target.FootprintRows, "one-tile item should report a one-row footprint");
+}
+
+static void TestSalvageClassifierSplitsStackedOneTileItems()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticOneSlotSalvageItem(grid, 1, 1);
+    DrawSyntheticOneSlotSalvageItem(grid, 2, 1);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(2, result.Targets.Count, "two stacked one-tile items with top boundaries should produce two targets");
+    AssertTrue(result.Targets.Select(target => target.Row).SequenceEqual(new[] { 1, 2 }), "stacked one-tile targets should keep both occupied rows");
+    AssertTrue(result.Targets.All(target => target.Column == 1), "stacked one-tile targets should stay in one column");
+    AssertTrue(result.Targets.All(target => target.FootprintRows == 1), "stacked one-tile targets should never merge into a two-row footprint");
+}
+
+static void TestSalvageClassifierSplitsStackedTwoTileFootprints()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
     DrawSyntheticTwoSlotSalvageItem(grid, 1, 1);
@@ -5437,21 +5580,40 @@ static void TestSalvageClassifierDeduplicatesMultiSlotFootprints()
 
     SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
 
-    AssertEqual(1, result.Targets.Count, "one contiguous vertical footprint should produce one click anchor, not duplicate row targets");
-    SalvageInventorySlotTarget target = result.Targets[0];
-    AssertEqual(1, target.Row, "contiguous vertical footprint should click the top row only");
-    AssertEqual(4, target.FootprintRows, "contiguous vertical footprint should report the complete footprint size");
-    AssertEqual(1, result.Targets.Count(target => target.Column == 1), "duplicate row targets cannot be emitted for the same connected footprint");
+    AssertEqual(2, result.Targets.Count, "stacked two-tile items should produce two legal targets, not one four-row footprint");
+    AssertTrue(result.Targets.Select(target => target.Row).SequenceEqual(new[] { 1, 3 }), "stacked two-tile items should target each top cell");
+    AssertTrue(result.Targets.All(target => target.Column == 1), "stacked two-tile targets should stay in one column");
+    AssertTrue(result.Targets.All(target => target.FootprintRows == 2), "stacked two-tile items should report only legal two-row footprints");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "first lower footprint should be rejected");
-    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 3 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "middle connected footprint row should be rejected");
-    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 4 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "last connected footprint row should be rejected");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 4 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "second lower footprint should be rejected");
+    AssertFalse(result.Candidates.Any(candidate => candidate.FootprintRows > 2), "candidate diagnostics must not expose impossible 3+ row footprints");
+}
+
+static void TestSalvageClassifierSplitsOverlongOccupiedRuns()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    for (int row = 1; row <= 4; row++)
+    {
+        DrawSyntheticDetachedFootprintWithoutAnchor(grid, row, 2);
+    }
+
+    DrawSyntheticOneSlotSalvageItem(grid, 1, 2);
+    PaintSyntheticSetQualityInCell(grid, 4, 2);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(2, result.Targets.Count, "four-row occupied run should split into two legal targets");
+    AssertTrue(result.Targets.Select(target => target.Row).SequenceEqual(new[] { 1, 3 }), "overlong run should split into two-row chunks");
+    AssertTrue(result.Targets.All(target => target.FootprintRows <= 2), "overlong run should never expose 3+ row footprints");
+    AssertFalse(result.Candidates.Any(candidate => candidate.FootprintRows > 2), "overlong diagnostics should never expose 3+ row footprints");
+    AssertTrue(result.Targets.Any(target => target.Row == 3 && target.Quality == "Set" && target.ConfirmationExpected), "quality should derive from the split lower footprint");
 }
 
 static void TestSalvageClassifierDerivesQualityFromFullFootprint()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
     DrawSyntheticTwoSlotSalvageItem(grid, 1, 1, weakTopAnchor: true);
-    PaintSyntheticSetQualityInCell(grid, 2, 1);
+    PaintSyntheticSetQualityInCellBodyOnly(grid, 2, 1);
 
     SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
 
@@ -5476,6 +5638,104 @@ static void TestSalvageClassifierFlagsHighRarityConfirmationTargets()
     AssertEqual("Set", target.Quality, "green high-rarity synthetic item should be classified as set quality");
     AssertTrue(target.ConfirmationExpected, "set-quality salvage targets should expect a confirmation prompt");
     AssertTrue(result.Candidates.Any(candidate => candidate.Accepted && candidate.ConfirmationExpected && candidate.Quality == "Set"), "candidate diagnostics should expose confirmation expectation");
+}
+
+static void TestInventoryReplayLoadsSavedSalvageCrop()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerInventoryReplay_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        using Bitmap grid = CreateSyntheticSalvageGrid();
+        DrawSyntheticOneSlotSalvageItem(grid, 1, 1);
+        DrawSyntheticTwoSlotSalvageItem(grid, 3, 2, highRarity: true);
+        Rectangle screenGrid = new(2000, 700, grid.Width, grid.Height);
+        SalvageInventorySlotScanResult direct = SalvageInventorySlotClassifier.Scan(grid, screenGrid);
+        string imagePath = Path.Combine(root, "inventory-grid.png");
+        grid.Save(imagePath, System.Drawing.Imaging.ImageFormat.Png);
+        SalvageInventoryReplayMetadata metadata = new(
+            DateTime.UtcNow,
+            "SyntheticReplay",
+            SalvageInventoryReplayArtifacts.ClassifierVersion,
+            SalvageInventorySlotClassifier.Columns,
+            SalvageInventorySlotClassifier.Rows,
+            new SalvageInventoryReplayRectangle(screenGrid.Left, screenGrid.Top, screenGrid.Width, screenGrid.Height),
+            "inventory-grid.png",
+            direct.Targets.Count,
+            direct.Candidates.Count,
+            direct.Targets.Select(SalvageInventoryReplayTarget.FromTarget).ToArray(),
+            direct.Candidates.Select(SalvageInventoryReplayCandidate.FromCandidate).ToArray());
+        File.WriteAllText(Path.Combine(root, "metadata.json"), JsonSerializer.Serialize(metadata));
+
+        SalvageInventoryReplayRunResult replay = SalvageInventoryReplayArtifacts.RunReplayForHarness(root);
+
+        AssertTrue(replay.Loaded, "inventory replay should load a saved artifact folder");
+        AssertEqual(direct.Targets.Count, replay.TargetCount, "inventory replay should use production classifier target count");
+        AssertTrue(replay.Targets.Select(target => (target.Row, target.Column, target.FootprintRows, target.Quality)).SequenceEqual(
+            direct.Targets.Select(target => (target.Row, target.Column, target.FootprintRows, target.Quality))),
+            "inventory replay targets should match direct classifier output");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestInventoryReplayRetentionIsScopedAndAgeBased()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerInventoryReplayRetention_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        string oldArtifact = Path.Combine(root, "SalvageInventoryReplay_20260101_000000000_Old");
+        string newArtifact = Path.Combine(root, "SalvageInventoryReplay_20260609_000000000_New");
+        string unrelated = Path.Combine(root, "UnrelatedReplay_20260101_000000000_Old");
+        Directory.CreateDirectory(oldArtifact);
+        Directory.CreateDirectory(newArtifact);
+        Directory.CreateDirectory(unrelated);
+        File.WriteAllText(Path.Combine(oldArtifact, "metadata.json"), "{}");
+        File.WriteAllText(Path.Combine(newArtifact, "metadata.json"), "{}");
+        File.WriteAllText(Path.Combine(unrelated, "metadata.json"), "{}");
+        Directory.SetLastWriteTimeUtc(oldArtifact, DateTime.UtcNow - TimeSpan.FromDays(8));
+        Directory.SetLastWriteTimeUtc(newArtifact, DateTime.UtcNow - TimeSpan.FromDays(1));
+        Directory.SetLastWriteTimeUtc(unrelated, DateTime.UtcNow - TimeSpan.FromDays(8));
+
+        CleanupResult result = SalvageInventoryReplayArtifacts.CleanupOldArtifacts(root, TimeSpan.FromDays(7));
+
+        AssertEqual(2, result.Scanned, "inventory replay retention should scan only expected artifact folder names");
+        AssertEqual(1, result.Deleted, "inventory replay retention should delete only old matching artifacts");
+        AssertFalse(Directory.Exists(oldArtifact), "old matching artifact should be deleted");
+        AssertTrue(Directory.Exists(newArtifact), "new matching artifact should be retained");
+        AssertTrue(Directory.Exists(unrelated), "unrelated folders should not be deleted");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestInventoryReplayCommandRemainsHarnessOnly()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string programSource = File.ReadAllText(Path.Combine(repoRoot, "Tests", "GoblinFarmer.Tests", "Program.cs"));
+    string imageRecognitionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ImageRecognition.cs"));
+    string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
+
+    AssertTrue(programSource.Contains("--inventory-replay", StringComparison.Ordinal), "inventory replay command should live in the test harness CLI");
+    AssertTrue(programSource.Contains("RunReplayForHarness", StringComparison.Ordinal), "inventory replay command should call the explicit harness replay path");
+    AssertTrue(programSource.Contains("WritesPersistentDebugFiles: False", StringComparison.Ordinal), "inventory replay command should declare that it does not write persistent debug files");
+    AssertTrue(imageRecognitionSource.Contains("SalvageInventoryReplayArtifacts.SaveScanArtifact", StringComparison.Ordinal), "live salvage scans should save bounded replay artifacts in debug mode");
+    AssertTrue(packageScript.Contains("MaxInventoryReplayArtifacts", StringComparison.Ordinal), "debug packages should bound inventory replay artifacts");
+    AssertTrue(packageScript.Contains("Debug\\InventoryReplay\\Salvage", StringComparison.Ordinal), "debug packages should include scoped inventory replay artifacts");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--inventory-replay", StringComparison.Ordinal), "WinForms startup should not know about inventory replay command");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs")).Contains("--inventory-replay", StringComparison.Ordinal), "town automation should not know about inventory replay command");
+    AssertFalse(packageScript.Contains("dotnet run", StringComparison.Ordinal) && packageScript.Contains("--inventory-replay", StringComparison.Ordinal), "debug package creation should not invoke inventory replay");
 }
 
 static void TestKadalaHotkeyUsesFasterCadenceAndTimingLogs()
