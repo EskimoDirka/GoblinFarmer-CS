@@ -30,6 +30,7 @@ Run("Default AppSettings path/debug profile are launch-surface neutral", TestApp
 Run("VS Debug/dev profile suppresses first-run setup and forces internal debug defaults", TestVsDebugDevProfileDefaults);
 Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectRootConfigPreferred);
 Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
+Run("VS Debug startup requests Diablo auto-record monitor", TestVsDebugStartupRequestsDiabloAutoRecordMonitor);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -402,6 +403,31 @@ static void TestVsDebugProjectLocalConfigPreferred()
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+}
+
+static void TestVsDebugStartupRequestsDiabloAutoRecordMonitor()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string programSource = File.ReadAllText(Path.Combine(repoRoot, "Program.cs"));
+    string localToolStartupSource = File.ReadAllText(Path.Combine(repoRoot, "LocalToolStartup.cs"));
+
+    AssertTrue(programSource.Contains("LocalToolStartup.StartVsDebugDiabloAutoRecordMonitor();", StringComparison.Ordinal), "app startup should request the VS Debug local auto-record monitor");
+    AssertTrue(localToolStartupSource.Contains("if (!AppSettings.IsVsDebugProfile)", StringComparison.Ordinal), "auto-record monitor launch must be guarded to VS Debug profile only");
+    AssertTrue(localToolStartupSource.Contains("Auto Record Diablo.ps1", StringComparison.Ordinal), "auto-record monitor should target the ignored local OBS script");
+    AssertTrue(localToolStartupSource.Contains("Scripts\\Local Tools\\Auto Record Diablo.ps1", StringComparison.Ordinal), "auto-record monitor should resolve the expected local script path");
+    AssertTrue(localToolStartupSource.Contains("CreateNoWindow = true", StringComparison.Ordinal), "auto-record monitor should launch PowerShell without a visible console window");
+    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorSkipped: reason=ScriptMissing", StringComparison.Ordinal), "missing local script should be a logged skip, not a startup failure");
+    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorLaunchRequested", StringComparison.Ordinal), "successful launch requests should be logged for diagnostics");
+
+    string localScriptPath = Path.Combine(repoRoot, "Scripts", "Local Tools", "Auto Record Diablo.ps1");
+    if (File.Exists(localScriptPath))
+    {
+        string localScriptSource = File.ReadAllText(localScriptPath);
+        AssertTrue(localScriptSource.Contains("StopRecord", StringComparison.Ordinal), "auto-record script should stop OBS recording after Diablo closes");
+        AssertTrue(localScriptSource.Contains("$script:obsLaunchedByMonitor", StringComparison.Ordinal), "auto-record script should track whether it launched OBS");
+        AssertTrue(localScriptSource.Contains("CloseMainWindow()", StringComparison.Ordinal), "auto-record script should close OBS when the monitor launched it");
+        AssertTrue(localScriptSource.Contains("OBS left running because it was not launched by this monitor.", StringComparison.Ordinal), "auto-record script should avoid closing a manually opened OBS instance");
     }
 }
 

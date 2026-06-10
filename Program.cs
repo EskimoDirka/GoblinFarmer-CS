@@ -17,6 +17,7 @@ namespace GoblinFarmer
             DebugManager.CleanupOldSessionSummaries(AppSettings.Debug.SessionSummaryRetentionCount);
             DebugManager.CleanupOldDebugPackages(AppSettings.Debug.DebugPackageRetentionCount);
             DebugManager.CleanupOldGoblinEvidence(AppSettings.Debug.GoblinEvidenceRetentionCount);
+            LocalToolStartup.StartVsDebugDiabloAutoRecordMonitor();
 
             Application.Run(new frmMain());
         }
