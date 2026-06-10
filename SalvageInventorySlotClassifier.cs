@@ -354,7 +354,26 @@ namespace GoblinFarmer
                 return "Legendary";
             }
 
+            for (int row = topRow; row < Rows && row < topRow + footprintRows; row++)
+            {
+                if (IsConservativeConfirmationFootprint(metrics[row, column]))
+                {
+                    return "Legendary";
+                }
+            }
+
             return "Normal";
+        }
+
+        private static bool IsConservativeConfirmationFootprint(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.StackCountTextPixels >= 18 &&
+                metrics.RegularGemPixels < 120 &&
+                metrics.GreenQualityPixels < 250 &&
+                metrics.OrangeQualityPixels < 250 &&
+                metrics.ColoredFramePixels >= 900 &&
+                metrics.InnerBrightPixels >= 600 &&
+                metrics.InnerSaturatedPixels >= 450;
         }
 
         private static bool QualityRequiresConfirmation(string quality)
@@ -400,15 +419,6 @@ namespace GoblinFarmer
         {
             if (metrics.RegularGemPixels >= 300 ||
                 (metrics.RegularGemPixels >= 220 && metrics.InnerSaturatedPixels >= 500))
-            {
-                return true;
-            }
-
-            bool stackCountGem =
-                metrics.StackCountTextPixels >= 18 &&
-                metrics.ColoredFramePixels >= 700 &&
-                metrics.InnerSaturatedPixels >= 450;
-            if (stackCountGem)
             {
                 return true;
             }

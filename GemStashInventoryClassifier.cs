@@ -22,6 +22,11 @@ namespace GoblinFarmer
         string Template,
         double Confidence);
 
+    internal sealed record GemStashInventorySlotMetrics(
+        int RegularGemPixels,
+        int StackCountTextPixels,
+        int InnerSaturatedPixels);
+
     internal sealed record GemStashInventoryScanResult(
         IReadOnlyList<GemStashInventorySlotTarget> Targets,
         IReadOnlyList<GemStashInventorySlotCandidate> Candidates,
@@ -58,7 +63,7 @@ namespace GoblinFarmer
 
     internal static class GemStashInventoryClassifier
     {
-        public const string ClassifierVersion = "GemStashTemplateV1";
+        public const string ClassifierVersion = "GemStashTemplateColorV2";
 
         private sealed record LoadedTemplate(string Name, Mat Mat) : IDisposable
         {
@@ -160,12 +165,17 @@ namespace GoblinFarmer
                         }
                     }
 
-                    bool accepted = bestConfidence >= threshold;
+                    GemStashInventorySlotMetrics metrics = MeasureSlot(inventoryGrid, local);
+                    bool templateAccepted = bestConfidence >= threshold;
+                    bool colorAccepted = loadedTemplates.Count > 0 && IsGemColorFallback(metrics, bestConfidence);
+                    bool accepted = templateAccepted || colorAccepted;
                     string reason = loadedTemplates.Count == 0
                         ? "NoValidGemTemplates"
-                        : accepted
+                        : templateAccepted
                             ? "GemTemplateMatched"
-                            : "BelowThreshold";
+                            : colorAccepted
+                                ? "GemColorMatched"
+                                : "BelowThreshold";
                     candidates.Add(new GemStashInventorySlotCandidate(
                         row + 1,
                         column + 1,
@@ -196,6 +206,81 @@ namespace GoblinFarmer
             Cv2.MatchTemplate(slot, template, result, TemplateMatchModes.CCoeffNormed);
             Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out _);
             return maxVal;
+        }
+
+        private static bool IsGemColorFallback(GemStashInventorySlotMetrics metrics, double bestConfidence)
+        {
+            if (bestConfidence < 0.25)
+            {
+                return false;
+            }
+
+            return metrics.RegularGemPixels >= 180 ||
+                (metrics.RegularGemPixels >= 120 &&
+                    metrics.StackCountTextPixels >= 18 &&
+                    metrics.InnerSaturatedPixels >= 450);
+        }
+
+        private static GemStashInventorySlotMetrics MeasureSlot(Bitmap bitmap, Rectangle local)
+        {
+            int innerLeft = local.Left + Math.Max(1, (int)Math.Round(local.Width * 0.18));
+            int innerTop = local.Top + Math.Max(1, (int)Math.Round(local.Height * 0.18));
+            int innerRight = local.Left + Math.Min(local.Width - 1, (int)Math.Round(local.Width * 0.82));
+            int innerBottom = local.Top + Math.Min(local.Height - 1, (int)Math.Round(local.Height * 0.82));
+            int regularGemPixels = 0;
+            int stackCountTextPixels = 0;
+            int innerSaturatedPixels = 0;
+
+            for (int y = local.Top; y < local.Bottom && y < bitmap.Height; y++)
+            {
+                for (int x = local.Left; x < local.Right && x < bitmap.Width; x++)
+                {
+                    Color color = bitmap.GetPixel(x, y);
+                    int brightness = Math.Max(color.R, Math.Max(color.G, color.B));
+                    int darkness = Math.Min(color.R, Math.Min(color.G, color.B));
+                    int saturation = brightness - darkness;
+                    int gray = (color.R + color.G + color.B) / 3;
+                    bool inner = x >= innerLeft && x < innerRight && y >= innerTop && y < innerBottom;
+                    bool stackTextBand =
+                        y >= local.Top + (int)Math.Round(local.Height * 0.48) &&
+                        y < local.Bottom - 3 &&
+                        x >= local.Left + 4 &&
+                        x < local.Right - 4;
+
+                    if (inner)
+                    {
+                        if (brightness > 30 && saturation > 45)
+                        {
+                            innerSaturatedPixels++;
+                        }
+
+                        bool emerald = color.G >= 125 && color.R <= 105 && color.B <= 120 && color.G >= color.R + 30 && color.G >= color.B + 25;
+                        bool ruby = color.R >= 140 && color.G <= 95 && color.B <= 105 && color.R >= color.G + 45 && color.R >= color.B + 45;
+                        bool amethyst = color.R >= 95 &&
+                            color.B >= 125 &&
+                            color.G <= 95 &&
+                            color.R >= color.G + 25 &&
+                            color.B >= color.G + 35 &&
+                            Math.Abs(color.R - color.B) <= 70;
+                        bool topaz = color.R >= 150 &&
+                            color.G >= 120 &&
+                            color.B <= 95 &&
+                            Math.Abs(color.R - color.G) <= 90;
+                        bool diamond = brightness >= 150 && saturation <= 45;
+                        if (emerald || ruby || amethyst || topaz || diamond)
+                        {
+                            regularGemPixels++;
+                        }
+                    }
+
+                    if (stackTextBand && brightness >= 145 && saturation <= 90 && gray >= 120)
+                    {
+                        stackCountTextPixels++;
+                    }
+                }
+            }
+
+            return new GemStashInventorySlotMetrics(regularGemPixels, stackCountTextPixels, innerSaturatedPixels);
         }
     }
 }

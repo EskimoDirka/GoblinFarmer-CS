@@ -135,6 +135,7 @@ Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierReje
 Run("Salvage classifier marks regular gems non-salvageable", TestSalvageClassifierMarksRegularGemsNonSalvageable);
 Run("Salvage classifier rejects stacked regular gems", TestSalvageClassifierRejectsStackedRegularGems);
 Run("Salvage classifier rejects stack-count gem columns", TestSalvageClassifierRejectsStackCountGemColumns);
+Run("Salvage classifier does not treat legendary boot lower halves as gems", TestSalvageClassifierDoesNotTreatLegendaryBootLowerHalvesAsGems);
 Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassifierAcceptsSetQualityLeftoverAnchor);
 Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
@@ -152,6 +153,7 @@ Run("Salvage loop verifies expected confirmation misses before failure", TestSal
 Run("Inventory replay loads saved salvage crop", TestInventoryReplayLoadsSavedSalvageCrop);
 Run("Gem stash classifier matches synthetic gem templates", TestGemStashClassifierMatchesSyntheticGemTemplates);
 Run("Gem stash classifier rejects below threshold", TestGemStashClassifierRejectsBelowThreshold);
+Run("Gem stash classifier accepts live-style gem color fallback", TestGemStashClassifierAcceptsLiveStyleGemColorFallback);
 Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
 Run("Gem stash travel wait happens after stash coordinate click", TestGemStashTravelWaitHappensAfterStashCoordinateClick);
@@ -5386,6 +5388,36 @@ static void DrawSyntheticWeakGemFollowerCell(Bitmap bitmap, int row, int column)
     graphics.FillRectangle(count, cell.Left + 29, cell.Top + 42, 5, 13);
 }
 
+static void DrawSyntheticLegendaryBootLowerHalf(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(44, 28, 12));
+    using Pen frame = new(Color.FromArgb(156, 86, 26), 5);
+    using SolidBrush bootDark = new(Color.FromArgb(88, 82, 68));
+    using SolidBrush bootLight = new(Color.FromArgb(146, 116, 78));
+    using SolidBrush highlight = new(Color.FromArgb(170, 140, 100));
+
+    graphics.FillRectangle(background, cell);
+    graphics.DrawLine(frame, cell.Left + 4, cell.Top + 5, cell.Left + 4, cell.Bottom - 5);
+    graphics.DrawLine(frame, cell.Right - 5, cell.Top + 5, cell.Right - 5, cell.Bottom - 5);
+    graphics.DrawLine(frame, cell.Left + 7, cell.Bottom - 5, cell.Right - 8, cell.Bottom - 5);
+    graphics.FillPolygon(bootDark, [
+        new Point(cell.Left + 18, cell.Top + 12),
+        new Point(cell.Left + 48, cell.Top + 10),
+        new Point(cell.Left + 55, cell.Top + 52),
+        new Point(cell.Left + 12, cell.Top + 56),
+    ]);
+    graphics.FillPolygon(bootLight, [
+        new Point(cell.Left + 25, cell.Top + 15),
+        new Point(cell.Left + 45, cell.Top + 17),
+        new Point(cell.Left + 48, cell.Top + 49),
+        new Point(cell.Left + 22, cell.Top + 51),
+    ]);
+    graphics.FillRectangle(highlight, cell.Left + 28, cell.Top + 42, 5, 12);
+    graphics.FillRectangle(highlight, cell.Left + 38, cell.Top + 42, 5, 12);
+}
+
 static Bitmap CreateSyntheticGemTemplate(Color color)
 {
     Bitmap template = new(24, 24);
@@ -5720,6 +5752,27 @@ static void TestSalvageClassifierRejectsStackCountGemColumns()
         "weak gem follower should stay diagnostic-only after gem-like neighbor filtering");
 }
 
+static void TestSalvageClassifierDoesNotTreatLegendaryBootLowerHalvesAsGems()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    for (int column = 6; column <= 10; column++)
+    {
+        DrawSyntheticLegendaryBootLowerHalf(grid, 6, column);
+    }
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(5, result.Targets.Count, "legendary boot lower halves should remain actionable salvage targets instead of gem skips");
+    for (int column = 6; column <= 10; column++)
+    {
+        SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == 6 && candidate.Column == column);
+        AssertTrue(candidate.Accepted, $"legendary boot lower half column {column} should be accepted");
+        AssertFalse(candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase), $"legendary boot lower half column {column} should not be rejected as a gem");
+        AssertEqual("Legendary", candidate.Quality, $"legendary boot lower half column {column} should use confirmation-aware high-rarity handling");
+        AssertTrue(candidate.ConfirmationExpected, $"legendary boot lower half column {column} should expect a confirmation prompt");
+    }
+}
+
 static void TestSalvageClassifierUsesTopCellForWeakTopFootprint()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
@@ -5991,7 +6044,7 @@ static void TestGemStashClassifierRejectsBelowThreshold()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
     using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(190, 32, 42));
-    DrawSyntheticGemForTemplate(grid, 1, 1, template);
+    DrawSyntheticLegendaryBootLowerHalf(grid, 1, 1);
     string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashThreshold_{Guid.NewGuid():N}");
     try
     {
@@ -6005,8 +6058,43 @@ static void TestGemStashClassifierRejectsBelowThreshold()
             [new GemStashTemplate("Ruby", templatePath)],
             1.01);
 
-        AssertEqual(0, result.Targets.Count, "threshold above possible confidence should reject all gem targets");
-        AssertTrue(result.Candidates.Any(candidate => candidate.BestTemplate == "Ruby" && candidate.Reason == "BelowThreshold"), "below-threshold gem match should be diagnostic-only");
+        AssertEqual(0, result.Targets.Count, "threshold above possible confidence should reject non-gem targets");
+        AssertTrue(result.Candidates.Any(candidate => candidate.BestTemplate == "Ruby" && candidate.Reason == "BelowThreshold"), "below-threshold non-gem match should be diagnostic-only");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestGemStashClassifierAcceptsLiveStyleGemColorFallback()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashColorFallback_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        using Bitmap grid = CreateSyntheticSalvageGrid();
+        using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(210, 170, 40));
+        DrawSyntheticRegularGemStackCell(grid, 1, 1, Color.FromArgb(210, 170, 40), "727");
+        DrawSyntheticRegularGemStackCell(grid, 2, 1, Color.FromArgb(185, 190, 198), "584");
+        DrawSyntheticLegendaryBootLowerHalf(grid, 6, 6);
+
+        string templatePath = Path.Combine(root, "Marquise Topaz.png");
+        template.Save(templatePath, System.Drawing.Imaging.ImageFormat.Png);
+
+        GemStashInventoryScanResult result = GemStashInventoryClassifier.Scan(
+            grid,
+            new Rectangle(0, 0, grid.Width, grid.Height),
+            [new GemStashTemplate("Marquise Topaz", templatePath)],
+            0.99);
+
+        AssertTrue(result.Targets.Any(target => target.Row == 1 && target.Column == 1), "live-style stack-count topaz should be accepted by gem color fallback below strict template threshold");
+        AssertTrue(result.Targets.Any(target => target.Row == 2 && target.Column == 1), "live-style stack-count diamond should be accepted by gem color fallback below strict template threshold");
+        AssertFalse(result.Targets.Any(target => target.Row == 6 && target.Column == 6), "legendary boot lower half should not be accepted by gem stash color fallback");
+        AssertTrue(result.Candidates.Any(candidate => candidate.Row == 1 && candidate.Column == 1 && candidate.Reason == "GemColorMatched"), "fallback gem candidate should expose GemColorMatched diagnostics");
     }
     finally
     {
