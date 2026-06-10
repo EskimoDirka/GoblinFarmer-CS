@@ -765,9 +765,14 @@ namespace GoblinFarmer
 
         private List<SalvageInventorySlotTarget> PortFilledInventorySlots()
         {
+            return PortScanSalvageInventorySlots(logCandidates: true, updateRegularGemCandidateCount: true).Targets.ToList();
+        }
+
+        private SalvageInventorySlotScanResult PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount)
+        {
             if (!PortTryGetDiabloRect(out RECT rect))
             {
-                return [];
+                return new SalvageInventorySlotScanResult([], []);
             }
 
             Rectangle grid = PortScaleReferenceRectangle(new Rectangle(1864, 725, 687, 423), rect);
@@ -778,7 +783,16 @@ namespace GoblinFarmer
             }
 
             SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid);
-            portLastRegularGemCandidateCount = scan.Candidates.Count(candidate => candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase));
+            if (updateRegularGemCandidateCount)
+            {
+                portLastRegularGemCandidateCount = scan.Candidates.Count(candidate => candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!logCandidates)
+            {
+                return scan;
+            }
+
             foreach (SalvageInventorySlotCandidateDiagnostic candidate in scan.Candidates)
             {
                 AppLogger.Info(
@@ -805,7 +819,7 @@ namespace GoblinFarmer
                     "cacheMode=SingleInventoryScan");
             }
 
-            return scan.Targets.ToList();
+            return scan;
         }
 
         private PortScanRegionManager PortScanRegions => portScanRegionManager ??= PortCreateScanRegionManager();

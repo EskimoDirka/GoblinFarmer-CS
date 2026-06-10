@@ -30,6 +30,7 @@ Run("Configured valid Diablo path wins over discovery", TestConfiguredValidDiabl
 Run("DebugManager profile helpers separate VS, release debug, and normal release", TestDebugManagerProfileHelpers);
 Run("DebugManager retention cleanup only deletes matching artifacts", TestDebugManagerRetentionCleanupFilters);
 Run("Debug package script applies 20 package retention", TestDebugPackageScriptAppliesPackageRetention);
+Run("Project Brain script applies 7-day ZIP retention", TestProjectBrainScriptAppliesZipRetention);
 Run("DebugManager age retention deletes old debug artifacts", TestDebugManagerAgeRetentionDeletesOldArtifacts);
 Run("GoblinEvidence retention keeps newest 250 files", TestGoblinEvidenceRetentionKeepsNewest250Files);
 Run("GoblinEvidence retention breaks timestamp ties by filename", TestGoblinEvidenceRetentionBreaksTimestampTiesByFilename);
@@ -124,9 +125,12 @@ Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObs
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
 Run("Salvage loop handles expected confirmation failures", TestSalvageLoopHandlesExpectedConfirmationFailures);
+Run("Salvage post-complete leftover warning is diagnostic only", TestSalvagePostCompleteLeftoverWarningDiagnosticOnly);
 Run("Bulk salvage uses blue/yellow category buttons only", TestBulkSalvageUsesBlueYellowCategoryButtonsOnly);
 Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierRejectsTexturedEmptyCells);
 Run("Salvage classifier marks regular gems non-salvageable", TestSalvageClassifierMarksRegularGemsNonSalvageable);
+Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassifierAcceptsSetQualityLeftoverAnchor);
+Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier caches DVR-style item anchors", TestSalvageClassifierCachesDvrStyleItemAnchors);
 Run("Salvage classifier deduplicates multi-slot footprints", TestSalvageClassifierDeduplicatesMultiSlotFootprints);
@@ -665,6 +669,19 @@ static void TestDebugPackageScriptAppliesPackageRetention()
     AssertTrue(scriptSource.Contains("GoblinFarmer_Debug_*.zip", StringComparison.Ordinal), "debug package retention should target only GoblinFarmer debug ZIPs");
     AssertTrue(scriptSource.Contains("Debug package retention cleanup deleted:", StringComparison.Ordinal), "debug package retention should log deleted packages");
     AssertTrue(scriptSource.Contains("Debug package retention cleanup complete:", StringComparison.Ordinal), "debug package retention should log a cleanup summary");
+}
+
+static void TestProjectBrainScriptAppliesZipRetention()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string scriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-project-brain.ps1"));
+
+    AssertTrue(scriptSource.Contains("$ProjectBrainZipRetentionDays = 7", StringComparison.Ordinal), "Project Brain ZIP retention should be seven days");
+    AssertTrue(scriptSource.Contains("Invoke-ProjectBrainRetentionCleanup", StringComparison.Ordinal), "Project Brain export should invoke retention cleanup after creating a ZIP");
+    AssertTrue(scriptSource.Contains("GoblinFarmer_ProjectBrain_*.zip", StringComparison.Ordinal), "Project Brain retention should target only expected Project Brain ZIP names");
+    AssertTrue(scriptSource.Contains("Refusing Project Brain ZIP cleanup outside expected folder", StringComparison.Ordinal), "Project Brain retention should be scoped to the output folder");
+    AssertTrue(scriptSource.Contains("ProjectBrainRetentionCleanup deleted=", StringComparison.Ordinal), "Project Brain retention should log a cleanup summary");
+    AssertFalse(scriptSource.Contains("Get-ChildItem -LiteralPath $resolvedFolder -Filter \"*.zip\"", StringComparison.Ordinal), "Project Brain retention must not use a broad ZIP pattern");
 }
 
 static void TestDebugManagerAgeRetentionDeletesOldArtifacts()
@@ -5174,6 +5191,34 @@ static void DrawSyntheticRegularGem(Bitmap bitmap, int row, int column, Color co
     graphics.DrawPolygon(highlight, gemPoints);
 }
 
+static void DrawSyntheticSetQualityLeftoverAnchor(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(16, 20, 15));
+    using Pen setFrame = new(Color.FromArgb(48, 132, 40), 5);
+    using SolidBrush mutedSetAccent = new(Color.FromArgb(42, 98, 36));
+
+    graphics.FillRectangle(background, cell);
+    graphics.DrawLine(setFrame, cell.Left + 5, cell.Top + 5, cell.Right - 6, cell.Top + 5);
+    graphics.DrawLine(setFrame, cell.Left + 5, cell.Top + 5, cell.Left + 5, cell.Bottom - 6);
+    graphics.DrawLine(setFrame, cell.Right - 6, cell.Top + 5, cell.Right - 6, cell.Bottom - 6);
+    graphics.FillRectangle(mutedSetAccent, cell.Left + 18, cell.Top + 24, 30, 16);
+}
+
+static void DrawSyntheticDetachedFootprintWithoutAnchor(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(12, 13, 12));
+    using SolidBrush grayFootprint = new(Color.FromArgb(72, 72, 70));
+    using SolidBrush coloredFootprint = new(Color.FromArgb(92, 48, 24));
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillEllipse(grayFootprint, cell.Left + 14, cell.Top + 14, cell.Width - 28, cell.Height - 28);
+    graphics.FillRectangle(coloredFootprint, cell.Left + 29, cell.Top + 30, 10, 10);
+}
+
 static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -5229,6 +5274,23 @@ static void TestSalvageLoopHandlesExpectedConfirmationFailures()
     AssertTrue(townSource.Contains("noPromptSalvages++", StringComparison.Ordinal), "no-prompt salvage targets should continue without failing when no dialog appears");
 }
 
+static void TestSalvagePostCompleteLeftoverWarningDiagnosticOnly()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string imageRecognitionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ImageRecognition.cs"));
+    string warningMethod = ExtractMethodBody(townSource, "private void PortLogPostSalvageLeftoverWarning");
+
+    AssertTrue(townSource.Contains("PortLogPostSalvageLeftoverWarning(phase)", StringComparison.Ordinal), "salvage should run a final diagnostic leftover scan after completion or skip");
+    AssertTrue(townSource.Contains("PostSalvageLeftoverWarning", StringComparison.Ordinal), "final leftover diagnostics should use the requested warning token");
+    AssertTrue(townSource.Contains("diagnosticOnly=True", StringComparison.Ordinal), "post-salvage leftover warning should declare that it is diagnostic-only");
+    AssertTrue(townSource.Contains("rejectedReasons=", StringComparison.Ordinal), "post-salvage leftover warning should summarize rejected reasons");
+    AssertTrue(townSource.Contains("likely=LikelyNonGem", StringComparison.Ordinal) || townSource.Contains("LikelyNonGem", StringComparison.Ordinal), "post-salvage warning should classify likely non-gems");
+    AssertTrue(imageRecognitionSource.Contains("PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount)", StringComparison.Ordinal), "post-salvage warning should reuse the salvage inventory scan without disturbing cached target counts");
+    AssertFalse(warningMethod.Contains("PortSafeSalvageSlotClick", StringComparison.Ordinal), "post-salvage leftover warning must not click candidates");
+    AssertFalse(warningMethod.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "post-salvage leftover warning must not accept confirmations");
+}
+
 static void TestBulkSalvageUsesBlueYellowCategoryButtonsOnly()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -5257,6 +5319,35 @@ static void TestBulkSalvageUsesBlueYellowCategoryButtonsOnly()
     AssertTrue(salvageCoordinates.Contains("Salvage All Yellow", StringComparison.Ordinal), "yellow bulk coordinate should be persisted in salvage coordinates file");
     AssertTrue(appSettingsSource.Contains("settings.Repair.EnableBulkCategorySalvage = true", StringComparison.Ordinal), "VS Debug defaults should enable bulk category salvage");
     AssertTrue(appSettingsJson.Contains("\"EnableBulkCategorySalvage\": false", StringComparison.Ordinal), "release config should keep bulk category salvage disabled by default");
+}
+
+static void TestSalvageClassifierAcceptsSetQualityLeftoverAnchor()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticSetQualityLeftoverAnchor(grid, 2, 3);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "set-quality leftover anchor should be cached as an actionable salvage target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(2, target.Row, "set-quality leftover target should preserve the item row");
+    AssertEqual(3, target.Column, "set-quality leftover target should preserve the item column");
+    AssertEqual("Set", target.Quality, "green leftover target should be classified as set quality");
+    AssertTrue(target.ConfirmationExpected, "set-quality leftover target should expect a confirmation prompt");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 3 && candidate.Accepted && candidate.Reason == "ItemAnchor"), "set-quality leftover cell should be accepted as an item anchor");
+}
+
+static void TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticDetachedFootprintWithoutAnchor(grid, 3, 4);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(0, result.Targets.Count, "detached footprint without a valid item anchor should not be cached");
+    SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == 3 && candidate.Column == 4);
+    AssertFalse(candidate.Accepted, "detached footprint cell should be rejected");
+    AssertEqual("DetachedItemFootprint", candidate.Reason, "detached footprint should expose the existing rejection reason");
 }
 
 static void TestSalvageClassifierRejectsTexturedEmptyCells()

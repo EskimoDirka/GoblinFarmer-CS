@@ -188,6 +188,7 @@ namespace GoblinFarmer
                 AddWorkflowStep("First filled inventory slot not found");
                 AddWorkflowStep("Salvage skipped: no filled inventory slots found.");
                 AppLogger.Info($"Salvage inventory scan: phase={PortLogField(phase)}; cachedSlotCount=0; regularGemSkips=0; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
+                PortLogPostSalvageLeftoverWarning(phase);
                 if (closeAfterSalvage)
                 {
                     PortPressEscapeForAutomation();
@@ -295,6 +296,8 @@ namespace GoblinFarmer
                 }
             }
 
+            PortLogPostSalvageLeftoverWarning(phase);
+
             if (closeAfterSalvage)
             {
                 PortPressEscapeForAutomation();
@@ -305,6 +308,141 @@ namespace GoblinFarmer
             AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; salvageSuccess=True; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
+        }
+
+        private void PortLogPostSalvageLeftoverWarning(string phase)
+        {
+            Stopwatch leftoverScanPerf = Stopwatch.StartNew();
+            SalvageInventorySlotScanResult scan = PortScanSalvageInventorySlots(logCandidates: false, updateRegularGemCandidateCount: false);
+            leftoverScanPerf.Stop();
+
+            List<SalvageInventorySlotCandidateDiagnostic> occupiedCandidates = scan.Candidates
+                .Where(PortLooksOccupiedAfterSalvage)
+                .ToList();
+            if (occupiedCandidates.Count == 0)
+            {
+                return;
+            }
+
+            List<(SalvageInventorySlotCandidateDiagnostic Candidate, string Kind)> classifiedCandidates = occupiedCandidates
+                .Select(candidate => (Candidate: candidate, Kind: PortClassifyPostSalvageLeftoverCandidate(candidate)))
+                .ToList();
+            int nonGemCandidates = classifiedCandidates.Count(candidate => candidate.Kind.Equals("LikelyNonGem", StringComparison.OrdinalIgnoreCase));
+            int likelyGemCandidates = classifiedCandidates.Count(candidate => candidate.Kind.Equals("LikelyGem", StringComparison.OrdinalIgnoreCase));
+            int unknownCandidates = classifiedCandidates.Count(candidate => candidate.Kind.Equals("Unknown", StringComparison.OrdinalIgnoreCase));
+            if (nonGemCandidates == 0 && unknownCandidates == 0)
+            {
+                return;
+            }
+
+            string rejectedReasons = string.Join(
+                ",",
+                classifiedCandidates
+                    .Where(candidate => !candidate.Candidate.Accepted)
+                    .GroupBy(candidate => candidate.Candidate.Reason, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => $"{group.Key}:{group.Count()}"));
+            if (string.IsNullOrWhiteSpace(rejectedReasons))
+            {
+                rejectedReasons = "None";
+            }
+
+            AppLogger.Info(
+                "PostSalvageLeftoverWarning " +
+                $"phase={PortLogField(phase)}; " +
+                $"occupiedCandidates={occupiedCandidates.Count}; " +
+                $"nonGemCandidates={nonGemCandidates}; " +
+                $"likelyGemCandidates={likelyGemCandidates}; " +
+                $"unknownCandidates={unknownCandidates}; " +
+                $"rejectedReasons={PortLogField(rejectedReasons)}; " +
+                $"acceptedTargetsRemaining={scan.Targets.Count}; " +
+                $"scanMs={leftoverScanPerf.ElapsedMilliseconds}; " +
+                "diagnosticOnly=True");
+
+            foreach ((SalvageInventorySlotCandidateDiagnostic candidate, string kind) in classifiedCandidates)
+            {
+                if (kind.Equals("LikelyGem", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                AppLogger.Info(
+                    "PostSalvageLeftoverWarning candidate: " +
+                    $"phase={PortLogField(phase)}; " +
+                    $"row={candidate.Row}; " +
+                    $"column={candidate.Column}; " +
+                    $"screenPoint={FormatPoint(candidate.ScreenPoint)}; " +
+                    $"accepted={candidate.Accepted}; " +
+                    $"reason={PortLogField(candidate.Reason)}; " +
+                    $"likely={PortLogField(kind)}; " +
+                    $"quality={PortLogField(candidate.Quality)}; " +
+                    $"confirmationExpected={candidate.ConfirmationExpected}; " +
+                    $"footprintRows={candidate.FootprintRows}; " +
+                    $"confidence={candidate.Metrics.Confidence:0.000}; " +
+                    $"meanBrightness={candidate.Metrics.MeanBrightness:0.0}; " +
+                    $"brightnessStdDev={candidate.Metrics.BrightnessStdDev:0.0}; " +
+                    $"innerMeanBrightness={candidate.Metrics.InnerMeanBrightness:0.0}; " +
+                    $"coloredFramePixels={candidate.Metrics.ColoredFramePixels}; " +
+                    $"topFramePixels={candidate.Metrics.TopFramePixels}; " +
+                    $"innerBrightPixels={candidate.Metrics.InnerBrightPixels}; " +
+                    $"innerSaturatedPixels={candidate.Metrics.InnerSaturatedPixels}; " +
+                    $"greenQualityPixels={candidate.Metrics.GreenQualityPixels}; " +
+                    $"orangeQualityPixels={candidate.Metrics.OrangeQualityPixels}; " +
+                    $"regularGemPixels={candidate.Metrics.RegularGemPixels}; " +
+                    "diagnosticOnly=True");
+            }
+        }
+
+        private static bool PortLooksOccupiedAfterSalvage(SalvageInventorySlotCandidateDiagnostic candidate)
+        {
+            if (candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (candidate.Accepted || candidate.Reason.Equals("DuplicateMultiSlotFootprint", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            SalvageInventorySlotMetrics metrics = candidate.Metrics;
+            if (candidate.Reason.Equals("DetachedItemFootprint", StringComparison.OrdinalIgnoreCase))
+            {
+                return metrics.InnerBrightPixels >= 350 ||
+                    metrics.ColoredFramePixels >= 120 ||
+                    metrics.GreenQualityPixels >= 60 ||
+                    metrics.OrangeQualityPixels >= 60;
+            }
+
+            return metrics.Confidence >= 0.50 &&
+                (metrics.ColoredFramePixels >= 350 ||
+                    metrics.InnerBrightPixels >= 200 ||
+                    metrics.InnerSaturatedPixels >= 250 ||
+                    metrics.GreenQualityPixels >= 60 ||
+                    metrics.OrangeQualityPixels >= 80);
+        }
+
+        private static string PortClassifyPostSalvageLeftoverCandidate(SalvageInventorySlotCandidateDiagnostic candidate)
+        {
+            if (candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase) ||
+                candidate.Quality.Equals("RegularGem", StringComparison.OrdinalIgnoreCase))
+            {
+                return "LikelyGem";
+            }
+
+            SalvageInventorySlotMetrics metrics = candidate.Metrics;
+            if (candidate.Accepted ||
+                candidate.Quality.Equals("Set", StringComparison.OrdinalIgnoreCase) ||
+                candidate.Quality.Equals("Legendary", StringComparison.OrdinalIgnoreCase) ||
+                metrics.GreenQualityPixels >= 60 ||
+                metrics.OrangeQualityPixels >= 80 ||
+                metrics.ColoredFramePixels >= 450 ||
+                (metrics.ColoredFramePixels >= 250 && metrics.InnerSaturatedPixels >= 180))
+            {
+                return "LikelyNonGem";
+            }
+
+            return "Unknown";
         }
 
         private IReadOnlyList<PortSalvageBulkCategory> PortBulkSalvageCategories()

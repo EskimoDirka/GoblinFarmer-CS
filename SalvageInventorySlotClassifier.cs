@@ -50,7 +50,10 @@ namespace GoblinFarmer
         private const int WeakFootprintInnerBrightPixels = 250;
         private const int WeakFootprintColoredFramePixels = 100;
         private const int WeakFootprintInnerSaturatedPixels = 45;
-        private const int SetQualityPixels = 220;
+        private const int SetQualityPixels = 180;
+        private const int SetQualityAnchorPixels = 120;
+        private const int SetQualityAnchorColoredFramePixels = 180;
+        private const int SetQualityAnchorContentPixels = 80;
         private const int LegendaryQualityPixels = 320;
 
         private sealed record ItemFootprint(
@@ -92,13 +95,15 @@ namespace GoblinFarmer
                         screenGrid.Left + local.Left + (slotWidth / 2),
                         screenGrid.Top + local.Top + (slotHeight / 2));
                     strongItemLike[row, column] =
-                        slotMetrics.ColoredFramePixels >= MinimumColoredFramePixels &&
-                        slotMetrics.InnerBrightPixels >= MinimumInnerBrightPixels &&
-                        slotMetrics.InnerSaturatedPixels >= MinimumInnerSaturatedPixels;
+                        (slotMetrics.ColoredFramePixels >= MinimumColoredFramePixels &&
+                            slotMetrics.InnerBrightPixels >= MinimumInnerBrightPixels &&
+                            slotMetrics.InnerSaturatedPixels >= MinimumInnerSaturatedPixels) ||
+                        IsSetQualityAnchor(slotMetrics);
                     weakFootprintLike[row, column] =
-                        slotMetrics.InnerBrightPixels >= WeakFootprintInnerBrightPixels &&
-                        (slotMetrics.InnerSaturatedPixels >= WeakFootprintInnerSaturatedPixels ||
-                            slotMetrics.ColoredFramePixels >= WeakFootprintColoredFramePixels);
+                        (slotMetrics.InnerBrightPixels >= WeakFootprintInnerBrightPixels &&
+                            (slotMetrics.InnerSaturatedPixels >= WeakFootprintInnerSaturatedPixels ||
+                                slotMetrics.ColoredFramePixels >= WeakFootprintColoredFramePixels)) ||
+                        IsSetQualityFootprint(slotMetrics);
                     regularGemLike[row, column] = IsRegularGem(slotMetrics);
                 }
             }
@@ -273,6 +278,31 @@ namespace GoblinFarmer
                 quality.Equals("Legendary", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsSetQualityAnchor(SalvageInventorySlotMetrics metrics)
+        {
+            if (metrics.GreenQualityPixels < SetQualityAnchorPixels)
+            {
+                return false;
+            }
+
+            if (metrics.ColoredFramePixels < SetQualityAnchorColoredFramePixels)
+            {
+                return false;
+            }
+
+            return metrics.InnerBrightPixels >= SetQualityAnchorContentPixels ||
+                metrics.InnerSaturatedPixels >= SetQualityAnchorContentPixels ||
+                metrics.TopFramePixels >= SetQualityAnchorContentPixels;
+        }
+
+        private static bool IsSetQualityFootprint(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.GreenQualityPixels >= SetQualityAnchorPixels &&
+                (metrics.InnerBrightPixels >= SetQualityAnchorContentPixels ||
+                    metrics.InnerSaturatedPixels >= SetQualityAnchorContentPixels ||
+                    metrics.ColoredFramePixels >= WeakFootprintColoredFramePixels);
+        }
+
         private static bool IsRegularGem(SalvageInventorySlotMetrics metrics)
         {
             if (metrics.RegularGemPixels < 220)
@@ -349,7 +379,10 @@ namespace GoblinFarmer
                             innerSaturatedPixels++;
                         }
 
-                        if (color.G >= 70 && color.G >= color.R + 20 && color.G >= color.B + 15)
+                        if (color.G >= 55 &&
+                            color.G >= color.R + 12 &&
+                            color.G >= color.B + 8 &&
+                            saturation >= 18)
                         {
                             greenQualityPixels++;
                         }

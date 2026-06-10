@@ -18,6 +18,7 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $zipName = "GoblinFarmer_ProjectBrain_$timestamp.zip"
 $zipPath = Join-Path $outputRoot $zipName
 $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) "GoblinFarmer_ProjectBrain_$timestamp"
+$ProjectBrainZipRetentionDays = 7
 
 $explicitSourceFiles = @(
     "AGENTS.md",
@@ -312,6 +313,46 @@ function Copy-ProjectBrainFile {
     return $true
 }
 
+function Invoke-ProjectBrainRetentionCleanup {
+    param(
+        [string]$Folder,
+        [int]$RetentionDays
+    )
+
+    if ($RetentionDays -lt 1) {
+        throw "Project Brain ZIP retention days must be one or greater."
+    }
+
+    if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
+        Write-Host "ProjectBrainRetentionCleanup deleted=0 retained=0 retentionDays=$RetentionDays folder=$Folder"
+        return
+    }
+
+    $resolvedFolder = [System.IO.Path]::GetFullPath($Folder)
+    $expectedFolder = [System.IO.Path]::GetFullPath($outputRoot)
+    if (-not [string]::Equals($resolvedFolder.TrimEnd('\'), $expectedFolder.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing Project Brain ZIP cleanup outside expected folder: $resolvedFolder"
+    }
+
+    $cutoff = (Get-Date).AddDays(-$RetentionDays)
+    $packages = @(Get-ChildItem -LiteralPath $resolvedFolder -Filter "GoblinFarmer_ProjectBrain_*.zip" -File -ErrorAction SilentlyContinue)
+    $deleted = 0
+    $retained = 0
+
+    foreach ($package in $packages) {
+        if ($package.LastWriteTime -lt $cutoff) {
+            Write-Host "ProjectBrainRetentionCleanup deletedPath=$($package.FullName)"
+            Remove-Item -LiteralPath $package.FullName -Force
+            $deleted++
+        }
+        else {
+            $retained++
+        }
+    }
+
+    Write-Host "ProjectBrainRetentionCleanup deleted=$deleted retained=$retained retentionDays=$RetentionDays folder=$resolvedFolder"
+}
+
 if ($StorageBreakdownOnly) {
     Write-StorageBreakdownReport
     exit 0
@@ -403,6 +444,8 @@ try {
     $zipInfo = Get-Item -LiteralPath $zipPath
     Write-Host "Final ZIP size: $(Format-FileSize -Bytes $zipInfo.Length)"
     Write-Host "Final ZIP path: $($zipInfo.FullName)"
+
+    Invoke-ProjectBrainRetentionCleanup -Folder $outputRoot -RetentionDays $ProjectBrainZipRetentionDays
 
     if ($WriteStorageBreakdown) {
         Write-StorageBreakdownReport
