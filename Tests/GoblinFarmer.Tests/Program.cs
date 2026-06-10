@@ -138,12 +138,14 @@ Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassif
 Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
+Run("Salvage classifier merges weak upper and strong lower set boundary", TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary);
 Run("Salvage classifier caches DVR-style item anchors", TestSalvageClassifierCachesDvrStyleItemAnchors);
 Run("Salvage classifier splits stacked one tile items", TestSalvageClassifierSplitsStackedOneTileItems);
 Run("Salvage classifier splits stacked two tile footprints", TestSalvageClassifierSplitsStackedTwoTileFootprints);
 Run("Salvage classifier splits overlong occupied runs", TestSalvageClassifierSplitsOverlongOccupiedRuns);
 Run("Salvage classifier derives quality from full footprint", TestSalvageClassifierDerivesQualityFromFullFootprint);
 Run("Salvage classifier flags high rarity confirmation targets", TestSalvageClassifierFlagsHighRarityConfirmationTargets);
+Run("Salvage loop verifies expected confirmation misses before failure", TestSalvageLoopVerifiesExpectedConfirmationMissBeforeFailure);
 Run("Inventory replay loads saved salvage crop", TestInventoryReplayLoadsSavedSalvageCrop);
 Run("Inventory replay retention is scoped and age based", TestInventoryReplayRetentionIsScopedAndAgeBased);
 Run("Inventory replay command remains harness only", TestInventoryReplayCommandRemainsHarnessOnly);
@@ -5376,10 +5378,28 @@ static void TestSalvageLoopHandlesExpectedConfirmationFailures()
     AssertTrue(townSource.Contains("retryAttempted", StringComparison.Ordinal), "confirmation-expected salvage should retry once before failing");
     AssertTrue(townSource.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "confirmation-expected salvage should accept the confirmation when found");
     AssertTrue(townSource.Contains("target.ConfirmationExpected && !confirmationFound", StringComparison.Ordinal), "missing expected confirmation should be handled separately from no-prompt items");
+    AssertTrue(townSource.Contains("PortCachedSalvageTargetStillActionable", StringComparison.Ordinal), "missing expected confirmation should verify the cached target still exists before failing");
     AssertTrue(townSource.Contains("RecordSalvageFailure(\"Salvage failed: expected confirmation not found\")", StringComparison.Ordinal), "missing expected confirmation should record a salvage failure");
     AssertTrue(townSource.Contains("PortCaptureFailureScreenshot(\"SalvageExpectedConfirmationMissing\", \"Salvage\")", StringComparison.Ordinal), "missing expected confirmation should capture diagnostics");
     AssertTrue(townSource.Contains("salvageSuccess=False", StringComparison.Ordinal), "missing expected confirmation should not be logged as salvage success");
     AssertTrue(townSource.Contains("noPromptSalvages++", StringComparison.Ordinal), "no-prompt salvage targets should continue without failing when no dialog appears");
+}
+
+static void TestSalvageLoopVerifiesExpectedConfirmationMissBeforeFailure()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string verificationMethod = ExtractMethodBody(townSource, "private bool PortCachedSalvageTargetStillActionable");
+
+    AssertTrue(townSource.Contains("StaleCachedTargetSkippedAfterRescan", StringComparison.Ordinal), "stale cached expected-confirmation targets should be skipped after a verification rescan");
+    AssertTrue(townSource.Contains("Salvage expected-confirmation verification:", StringComparison.Ordinal), "expected-confirmation verification should be logged");
+    AssertTrue(townSource.Contains("targetStillActionable=False", StringComparison.Ordinal), "stale-cache skip diagnostics should report when the target is gone");
+    AssertTrue(townSource.Contains("staleCachedTargetsSkipped", StringComparison.Ordinal), "salvage summaries should report stale cached target skips");
+    AssertTrue(townSource.IndexOf("PortCachedSalvageTargetStillActionable", StringComparison.Ordinal) < townSource.IndexOf("RecordSalvageFailure(\"Salvage failed: expected confirmation not found\")", StringComparison.Ordinal), "verification should happen before expected-confirmation failure recording");
+    AssertTrue(verificationMethod.Contains("PortScanSalvageInventorySlots", StringComparison.Ordinal), "verification should use a fresh production classifier scan");
+    AssertTrue(verificationMethod.Contains("target.Row >= candidate.Row", StringComparison.Ordinal), "verification should consider targets covering the stale cached row");
+    AssertTrue(verificationMethod.Contains("target.Row < candidate.Row + candidate.FootprintRows", StringComparison.Ordinal), "verification should match full legal footprints, not only exact top rows");
+    AssertTrue(verificationMethod.Contains("cacheMode=ExpectedConfirmationVerificationRescan", StringComparison.Ordinal), "verification logs should identify the rescan mode");
 }
 
 static void TestSalvagePostCompleteActionableLeftoversTriggerBoundedRecovery()
@@ -5514,6 +5534,24 @@ static void TestSalvageClassifierUsesTopCellForWeakTopFootprint()
     AssertEqual(1, target.Column, "weak top footprint should keep the same column");
     AssertEqual(2, target.FootprintRows, "two-slot footprint should report both occupied rows");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "lower footprint should still be rejected as duplicate");
+}
+
+static void TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticTwoSlotSalvageItem(grid, 1, 1, weakTopAnchor: true);
+    PaintSyntheticSetQualityInCell(grid, 2, 1);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "weak upper cell plus strong lower set pixels should remain one two-row item");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(1, target.Row, "merged set footprint should click the upper cell");
+    AssertEqual(1, target.Column, "merged set footprint should keep the item column");
+    AssertEqual(2, target.FootprintRows, "merged set footprint should report two legal rows");
+    AssertEqual("Set", target.Quality, "set quality should be derived from the lower cell of the merged footprint");
+    AssertTrue(target.ConfirmationExpected, "merged set footprint should expect confirmation");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint" && candidate.Quality == "Set" && candidate.ConfirmationExpected), "lower green cell should be duplicate metadata, not an extra target");
 }
 
 static void TestSalvageClassifierCachesDvrStyleItemAnchors()

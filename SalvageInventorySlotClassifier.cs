@@ -233,7 +233,7 @@ namespace GoblinFarmer
             int segmentStart = startRow;
             for (int row = startRow + 1; row < endRowExclusive; row++)
             {
-                if (!HasItemTopBoundary(metrics[row, column]))
+                if (!ShouldStartNewFootprint(metrics, segmentStart, row, column))
                 {
                     continue;
                 }
@@ -270,6 +270,26 @@ namespace GoblinFarmer
         private static bool HasItemTopBoundary(SalvageInventorySlotMetrics metrics)
         {
             return metrics.TopFramePixels >= ItemTopBoundaryPixels;
+        }
+
+        private static bool ShouldStartNewFootprint(
+            SalvageInventorySlotMetrics[,] metrics,
+            int segmentStart,
+            int row,
+            int column)
+        {
+            if (!HasItemTopBoundary(metrics[row, column]))
+            {
+                return false;
+            }
+
+            int precedingRows = row - segmentStart;
+            if (precedingRows >= MaximumItemFootprintRows)
+            {
+                return true;
+            }
+
+            return precedingRows == 1 && HasItemTopBoundary(metrics[segmentStart, column]);
         }
 
         private static string RejectionReason(SalvageInventorySlotMetrics metrics)

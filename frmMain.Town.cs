@@ -215,6 +215,7 @@ namespace GoblinFarmer
             int expectedConfirmationMisses = 0;
             int regularGemSkips = 0;
             int recoveryPasses = 0;
+            int staleCachedTargetsSkipped = 0;
             int acceptedTargetsRemaining;
             while (true)
             {
@@ -270,6 +271,26 @@ namespace GoblinFarmer
                         confirmedSalvages++;
                         outcome = "Confirmed";
                     }
+                    else if (target.ConfirmationExpected &&
+                        !PortCachedSalvageTargetStillActionable(target, phase, recoveryPasses, out int verificationTargets, out long verificationScanMs))
+                    {
+                        staleCachedTargetsSkipped++;
+                        outcome = "StaleCachedTargetSkippedAfterRescan";
+                        AppLogger.Info(
+                            "Salvage expected-confirmation stale cache verification: " +
+                            $"phase={PortLogField(phase)}; " +
+                            $"recoveryPass={recoveryPasses}; " +
+                            $"row={target.Row}; " +
+                            $"column={target.Column}; " +
+                            $"screenPoint={FormatPoint(target.ScreenPoint)}; " +
+                            $"footprintRows={target.FootprintRows}; " +
+                            $"quality={PortLogField(target.Quality)}; " +
+                            $"confirmationExpected={target.ConfirmationExpected}; " +
+                            $"targetStillActionable=False; " +
+                            $"freshAcceptedTargets={verificationTargets}; " +
+                            $"scanMs={verificationScanMs}; " +
+                            "outcome=StaleCachedTargetSkippedAfterRescan");
+                    }
                     else
                     {
                         confirmationMisses++;
@@ -286,17 +307,22 @@ namespace GoblinFarmer
                     }
 
                     PortSleep(token, PortSalvagePostSlotDelayMs);
-                    AppLogger.Info($"Salvage timing: slotIndex={cachedSlotAttempts}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; recoveryPass={recoveryPasses}; row={target.Row}; column={target.Column}; screenPoint={FormatPoint(target.ScreenPoint)}; footprintRows={target.FootprintRows}; quality={PortLogField(target.Quality)}; confirmationExpected={target.ConfirmationExpected}; slotClickSent={slotClickSent}; retryAttempted={retryAttempted}; retryClickSent={retryClickSent}; confirmationFound={confirmationFound}; enterSent={enterSent}; outcome={PortLogField(outcome)}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs=0; cacheMode=SingleInventoryScan; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+                    AppLogger.Info($"Salvage timing: slotIndex={cachedSlotAttempts}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; recoveryPass={recoveryPasses}; row={target.Row}; column={target.Column}; screenPoint={FormatPoint(target.ScreenPoint)}; footprintRows={target.FootprintRows}; quality={PortLogField(target.Quality)}; confirmationExpected={target.ConfirmationExpected}; slotClickSent={slotClickSent}; retryAttempted={retryAttempted}; retryClickSent={retryClickSent}; confirmationFound={confirmationFound}; enterSent={enterSent}; outcome={PortLogField(outcome)}; confirmationWaitMs={confirmationWaitMs}; confirmationScans={confirmationScans}; nextSlotScanMs=0; cacheMode=SingleInventoryScan; staleCachedTargetsSkipped={staleCachedTargetsSkipped}; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
 
                     if (token.IsCancellationRequested)
                     {
                         return false;
                     }
 
+                    if (outcome.Equals("StaleCachedTargetSkippedAfterRescan", StringComparison.OrdinalIgnoreCase))
+                    {
+                        break;
+                    }
+
                     if (target.ConfirmationExpected && !confirmationFound)
                     {
                         DebugManager.Session.RecordSalvageFailure("Salvage failed: expected confirmation not found");
-                        AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+                        AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; staleCachedTargetsSkipped={staleCachedTargetsSkipped}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
                         PortCaptureFailureScreenshot("SalvageExpectedConfirmationMissing", "Salvage");
                         return false;
                     }
@@ -311,7 +337,7 @@ namespace GoblinFarmer
                 if (recoveryPasses >= PortSalvageRecoveryRescanLimit)
                 {
                     DebugManager.Session.RecordSalvageFailure("Salvage incomplete: actionable leftovers remain after recovery rescans");
-                    AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; acceptedTargetsRemaining={acceptedTargetsRemaining}; postSalvageActionableLeftovers={acceptedTargetsRemaining}; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+                    AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; staleCachedTargetsSkipped={staleCachedTargetsSkipped}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; acceptedTargetsRemaining={acceptedTargetsRemaining}; postSalvageActionableLeftovers={acceptedTargetsRemaining}; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
                     PortCaptureFailureScreenshot("SalvageActionableLeftoversRemain", "Salvage");
                     return false;
                 }
@@ -326,7 +352,7 @@ namespace GoblinFarmer
                 if (cachedSlots.Count == 0)
                 {
                     DebugManager.Session.RecordSalvageFailure("Salvage incomplete: recovery rescan found no actionable targets after warning");
-                    AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount=0; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; acceptedTargetsRemaining={acceptedTargetsRemaining}; postSalvageActionableLeftovers={acceptedTargetsRemaining}; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+                    AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount=0; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; staleCachedTargetsSkipped={staleCachedTargetsSkipped}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; acceptedTargetsRemaining={acceptedTargetsRemaining}; postSalvageActionableLeftovers={acceptedTargetsRemaining}; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
                     PortCaptureFailureScreenshot("SalvageActionableLeftoversRemain", "Salvage");
                     return false;
                 }
@@ -339,9 +365,50 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep(slotsClicked == 0 ? "Salvage skipped: no salvageable filled inventory slots found." : $"Salvage completed: {slotsClicked} slots clicked");
-            AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; acceptedTargetsRemaining={acceptedTargetsRemaining}; postSalvageActionableLeftovers={acceptedTargetsRemaining}; salvageSuccess=True; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+            AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; staleCachedTargetsSkipped={staleCachedTargetsSkipped}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; acceptedTargetsRemaining={acceptedTargetsRemaining}; postSalvageActionableLeftovers={acceptedTargetsRemaining}; salvageSuccess=True; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
+        }
+
+        private bool PortCachedSalvageTargetStillActionable(
+            SalvageInventorySlotTarget target,
+            string phase,
+            int recoveryPass,
+            out int freshAcceptedTargets,
+            out long scanMs)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            SalvageInventorySlotScanResult scan = PortScanSalvageInventorySlots(
+                logCandidates: true,
+                updateRegularGemCandidateCount: false,
+                $"{phase}ExpectedConfirmationVerify");
+            sw.Stop();
+            scanMs = sw.ElapsedMilliseconds;
+            freshAcceptedTargets = scan.Targets.Count(candidate => !candidate.Quality.Equals("RegularGem", StringComparison.OrdinalIgnoreCase));
+            SalvageInventorySlotTarget? coveringTarget = scan.Targets.FirstOrDefault(candidate =>
+                !candidate.Quality.Equals("RegularGem", StringComparison.OrdinalIgnoreCase) &&
+                candidate.Column == target.Column &&
+                target.Row >= candidate.Row &&
+                target.Row < candidate.Row + candidate.FootprintRows);
+            bool stillActionable = coveringTarget != null;
+            AppLogger.Info(
+                "Salvage expected-confirmation verification: " +
+                $"phase={PortLogField(phase)}; " +
+                $"verificationPhase={PortLogField($"{phase}ExpectedConfirmationVerify")}; " +
+                $"recoveryPass={recoveryPass}; " +
+                $"row={target.Row}; " +
+                $"column={target.Column}; " +
+                $"screenPoint={FormatPoint(target.ScreenPoint)}; " +
+                $"footprintRows={target.FootprintRows}; " +
+                $"quality={PortLogField(target.Quality)}; " +
+                $"freshAcceptedTargets={freshAcceptedTargets}; " +
+                $"targetStillActionable={stillActionable}; " +
+                $"freshCoveringRow={(coveringTarget == null ? "None" : coveringTarget.Row.ToString())}; " +
+                $"freshCoveringFootprintRows={(coveringTarget == null ? "None" : coveringTarget.FootprintRows.ToString())}; " +
+                $"freshCoveringQuality={PortLogField(coveringTarget?.Quality ?? "None")}; " +
+                $"scanMs={scanMs}; " +
+                "cacheMode=ExpectedConfirmationVerificationRescan");
+            return stillActionable;
         }
 
         private int PortLogPostSalvageLeftoverWarning(string phase)

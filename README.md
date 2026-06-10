@@ -14,7 +14,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Diablo launch detection and Start Game handling with stable-button verification, click acceptance checks, and manual-click recovery.
 - Route-aware Teleport Next workflow for the configured farming path.
 - Hotkey route blocking for known unsafe or incorrect location transitions.
-- Make New Game, Exit Game, repair, salvage, and town workflow helpers. Salvage uses a fast cached inventory scan with bounded recovery rescans when accepted leftovers remain, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable, then clicks one-column item anchors with legal one- or two-row footprints and confirmation-aware handling for set and legendary-style targets.
+- Make New Game, Exit Game, repair, salvage, and town workflow helpers. Salvage uses a fast cached inventory scan with bounded recovery rescans when accepted leftovers remain, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable, then clicks one-column item anchors with legal one- or two-row footprints and confirmation-aware handling for set and legendary-style targets. If a cached set/legendary target no longer shows a confirmation, salvage verifies the target with a fresh scan before treating it as a real failure.
 - Monk, Demon Hunter, and Witch Doctor combat support.
 - Location-aware Goblin Tracker with automatic evidence-based counting, per-area duplicate protection, active-combat-time GPH, live UI stats, accepted-count notifications, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and one batch-driven debug package workflow for VS Debug and Release.

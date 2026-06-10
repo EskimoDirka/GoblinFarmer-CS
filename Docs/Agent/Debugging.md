@@ -46,6 +46,8 @@ Do not create alternate debug package generators without explicit approval.
 ## Salvage Diagnostics
 
 - Salvage inventory targets must be one column wide and one or two rows tall. Any `footprintRows` value above 2 is a classifier bug.
+- Weak upper cells attached to lower green/set pixels should remain one two-row target unless the upper cell has its own convincing item boundary. If Inventory Replay shows lower-row set targets after the upper cell was clicked successfully, suspect stale cache splitting before changing confirmation timing.
+- Missing confirmation for a set/legendary target should verify the cached target with a fresh classifier scan before failing. `StaleCachedTargetSkippedAfterRescan` means the target was already gone and the final leftover/recovery scan should decide completion.
 - `PostSalvageLeftoverWarning` is still diagnostic and non-clicking. Accepted non-gem targets found by the final scan can trigger bounded recovery rescans from fresh classifier output; rejected or unknown warning candidates must not be clicked.
 - In Debug Mode, salvage scans should save inventory replay crops and metadata under `Debug\InventoryReplay\Salvage` with `SalvageInventoryReplayArtifactSaved`.
 
