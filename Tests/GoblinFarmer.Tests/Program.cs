@@ -133,9 +133,12 @@ Run("Salvage post-complete actionable leftovers trigger bounded recovery", TestS
 Run("Bulk salvage uses blue/yellow category buttons only", TestBulkSalvageUsesBlueYellowCategoryButtonsOnly);
 Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierRejectsTexturedEmptyCells);
 Run("Salvage classifier marks regular gems non-salvageable", TestSalvageClassifierMarksRegularGemsNonSalvageable);
+Run("Salvage classifier rejects stacked regular gems", TestSalvageClassifierRejectsStackedRegularGems);
+Run("Salvage classifier rejects stack-count gem columns", TestSalvageClassifierRejectsStackCountGemColumns);
 Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassifierAcceptsSetQualityLeftoverAnchor);
 Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
+Run("Salvage classifier accepts pale legendary boot-like items", TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier merges weak upper and strong lower set boundary", TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary);
 Run("Salvage classifier merges set body continuation rows", TestSalvageClassifierMergesSetBodyContinuationRows);
@@ -151,6 +154,7 @@ Run("Gem stash classifier matches synthetic gem templates", TestGemStashClassifi
 Run("Gem stash classifier rejects below threshold", TestGemStashClassifierRejectsBelowThreshold);
 Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
+Run("Gem stash travel wait happens after stash coordinate click", TestGemStashTravelWaitHappensAfterStashCoordinateClick);
 Run("Inventory replay loads saved gem stash crop", TestInventoryReplayLoadsSavedGemStashCrop);
 Run("Inventory replay retention is scoped and age based", TestInventoryReplayRetentionIsScopedAndAgeBased);
 Run("Inventory replay command remains harness only", TestInventoryReplayCommandRemainsHarnessOnly);
@@ -5213,15 +5217,15 @@ static void DrawSyntheticTwoSlotSalvageItem(
     Rectangle top = SyntheticSalvageSlotRect(topRow, column);
     Rectangle bottom = SyntheticSalvageSlotRect(topRow + 1, column);
     using Graphics graphics = Graphics.FromImage(bitmap);
-    Color frameColor = highRarity ? Color.FromArgb(55, 178, 48) : Color.FromArgb(234, 122, 13);
-    Color iconColor = highRarity ? Color.FromArgb(54, 138, 42) : Color.FromArgb(112, 86, 58);
+    Color frameColor = highRarity ? Color.FromArgb(52, 118, 42) : Color.FromArgb(234, 122, 13);
+    Color iconColor = highRarity ? Color.FromArgb(50, 104, 40) : Color.FromArgb(112, 86, 58);
     using Pen frame = new(frameColor, 5);
     using Pen weakTopFrame = new(Color.FromArgb(126, 70, 21), 2);
     using SolidBrush icon = new(iconColor);
     using SolidBrush blue = new(Color.FromArgb(60, 150, 255));
     using SolidBrush topBackground = new(highRarity ? Color.FromArgb(22, 48, 20) : Color.FromArgb(34, 27, 18));
     using SolidBrush bottomBackground = new(highRarity ? Color.FromArgb(23, 52, 21) : Color.FromArgb(38, 30, 19));
-    using SolidBrush strongTopFrame = new(highRarity ? Color.FromArgb(70, 210, 60) : Color.FromArgb(245, 143, 22));
+    using SolidBrush strongTopFrame = new(highRarity ? Color.FromArgb(58, 124, 48) : Color.FromArgb(245, 143, 22));
     using Font font = new(FontFamily.GenericSansSerif, 30, FontStyle.Bold, GraphicsUnit.Pixel);
 
     graphics.FillRectangle(topBackground, top);
@@ -5252,13 +5256,13 @@ static void DrawSyntheticOneSlotSalvageItem(Bitmap bitmap, int row, int column, 
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
     using Graphics graphics = Graphics.FromImage(bitmap);
-    Color frameColor = highRarity ? Color.FromArgb(55, 178, 48) : Color.FromArgb(234, 122, 13);
-    Color iconColor = highRarity ? Color.FromArgb(54, 138, 42) : Color.FromArgb(112, 86, 58);
+    Color frameColor = highRarity ? Color.FromArgb(52, 118, 42) : Color.FromArgb(234, 122, 13);
+    Color iconColor = highRarity ? Color.FromArgb(50, 104, 40) : Color.FromArgb(112, 86, 58);
     using Pen frame = new(frameColor, 5);
     using SolidBrush background = new(highRarity ? Color.FromArgb(22, 48, 20) : Color.FromArgb(34, 27, 18));
     using SolidBrush icon = new(iconColor);
     using SolidBrush blue = new(Color.FromArgb(60, 150, 255));
-    using SolidBrush strongTopFrame = new(highRarity ? Color.FromArgb(70, 210, 60) : Color.FromArgb(245, 143, 22));
+    using SolidBrush strongTopFrame = new(highRarity ? Color.FromArgb(58, 124, 48) : Color.FromArgb(245, 143, 22));
 
     graphics.FillRectangle(background, cell);
     graphics.FillRectangle(strongTopFrame, cell.Left + 4, cell.Top + 2, cell.Width - 8, 10);
@@ -5267,11 +5271,32 @@ static void DrawSyntheticOneSlotSalvageItem(Bitmap bitmap, int row, int column, 
     graphics.FillRectangle(blue, cell.Left + 25, cell.Top + 24, 16, 22);
 }
 
+static void DrawSyntheticPaleSalvageItem(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(24, 20, 16));
+    using SolidBrush frame = new(Color.FromArgb(96, 58, 28));
+    using SolidBrush mutedBody = new(Color.FromArgb(86, 58, 38));
+    using SolidBrush icon = new(Color.FromArgb(118, 88, 56));
+    using SolidBrush shadow = new(Color.FromArgb(76, 58, 42));
+    using SolidBrush highlight = new(Color.FromArgb(142, 118, 82));
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillRectangle(mutedBody, cell.Left + 11, cell.Top + 13, cell.Width - 22, cell.Height - 22);
+    graphics.FillRectangle(frame, cell.Left + 4, cell.Top + 8, 6, cell.Height - 16);
+    graphics.FillRectangle(frame, cell.Right - 10, cell.Top + 8, 6, cell.Height - 16);
+    graphics.FillRectangle(frame, cell.Left + 12, cell.Bottom - 12, cell.Width - 24, 6);
+    graphics.FillEllipse(shadow, cell.Left + 15, cell.Top + 19, 38, 34);
+    graphics.FillEllipse(icon, cell.Left + 18, cell.Top + 16, 32, 31);
+    graphics.FillRectangle(highlight, cell.Left + 37, cell.Top + 17, 8, 10);
+}
+
 static void PaintSyntheticSetQualityInCell(Bitmap bitmap, int row, int column)
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
     using Graphics graphics = Graphics.FromImage(bitmap);
-    using SolidBrush setBrush = new(Color.FromArgb(55, 178, 48));
+    using SolidBrush setBrush = new(Color.FromArgb(52, 118, 42));
     graphics.FillRectangle(setBrush, cell.Left + 8, cell.Top + 10, cell.Width - 16, cell.Height - 20);
 }
 
@@ -5279,7 +5304,7 @@ static void PaintSyntheticSetQualityInCellBodyOnly(Bitmap bitmap, int row, int c
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
     using Graphics graphics = Graphics.FromImage(bitmap);
-    using SolidBrush setBrush = new(Color.FromArgb(55, 178, 48));
+    using SolidBrush setBrush = new(Color.FromArgb(52, 118, 42));
     graphics.FillRectangle(setBrush, cell.Left + 8, cell.Top + 24, cell.Width - 16, cell.Height - 34);
 }
 
@@ -5312,6 +5337,53 @@ static void DrawSyntheticRegularGem(Bitmap bitmap, int row, int column, Color co
     graphics.FillPolygon(shadow, shadowPoints);
     graphics.FillPolygon(gem, gemPoints);
     graphics.DrawPolygon(highlight, gemPoints);
+}
+
+static void DrawSyntheticRegularGemStackCell(Bitmap bitmap, int row, int column, Color color, string countText)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(14, 13, 11));
+    using SolidBrush gem = new(color);
+    using Pen highlight = new(Color.FromArgb(
+        Math.Min(255, color.R + 50),
+        Math.Min(255, color.G + 50),
+        Math.Min(255, color.B + 50)), 3);
+    using SolidBrush count = new(Color.FromArgb(230, 230, 218));
+
+    graphics.FillRectangle(background, cell);
+    Point[] gemPoints =
+    [
+        new(cell.Left + 34, cell.Top + 7),
+        new(cell.Left + 60, cell.Top + 31),
+        new(cell.Left + 43, cell.Top + 61),
+        new(cell.Left + 9, cell.Top + 41),
+    ];
+    graphics.FillPolygon(gem, gemPoints);
+    graphics.DrawPolygon(highlight, gemPoints);
+
+    for (int i = 0; i < countText.Length; i++)
+    {
+        int left = cell.Left + 18 + (i * 9);
+        graphics.FillRectangle(count, left, cell.Top + 42, 5, 13);
+        graphics.FillRectangle(count, left + 1, cell.Top + 55, 5, 2);
+    }
+}
+
+static void DrawSyntheticWeakGemFollowerCell(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(16, 16, 15));
+    using SolidBrush mutedBody = new(Color.FromArgb(72, 80, 88));
+    using SolidBrush coloredAccent = new(Color.FromArgb(78, 124, 150));
+    using SolidBrush count = new(Color.FromArgb(230, 230, 218));
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillEllipse(mutedBody, cell.Left + 13, cell.Top + 9, 42, 46);
+    graphics.FillRectangle(coloredAccent, cell.Left + 27, cell.Top + 25, 10, 16);
+    graphics.FillRectangle(count, cell.Left + 19, cell.Top + 42, 5, 13);
+    graphics.FillRectangle(count, cell.Left + 29, cell.Top + 42, 5, 13);
 }
 
 static Bitmap CreateSyntheticGemTemplate(Color color)
@@ -5379,6 +5451,7 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     string imageRecognitionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ImageRecognition.cs"));
 
     AssertTrue(townSource.Contains("PortSalvageConfirmationTimeoutMs = 100", StringComparison.Ordinal), "salvage confirmation wait should be bounded below the previous 160ms fast probe");
+    AssertTrue(townSource.Contains("PortSetAppStatus(\"Salvaging Inventory\")", StringComparison.Ordinal), "shared repair-flow salvage path should update app status while salvaging");
     AssertTrue(townSource.Contains("PortSalvageConfirmationFastAttempts = 3", StringComparison.Ordinal), "salvage should use fewer fast confirmation scans in the common no-dialog case");
     AssertTrue(townSource.Contains("PortSalvageConfirmationFastDelayMs = 30", StringComparison.Ordinal), "salvage confirmation scan spacing should stay short but explicit");
     AssertTrue(townSource.Contains("PortWaitForSalvageConfirmationFast", StringComparison.Ordinal), "salvage should use a fast confirmation probe instead of the repair polling wait helper");
@@ -5404,9 +5477,12 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     AssertTrue(townSource.Contains("Salvage timing summary:", StringComparison.Ordinal), "salvage should log a summary timing line");
     AssertTrue(imageRecognitionSource.Contains("Salvage cache candidate:", StringComparison.Ordinal), "salvage cache should log each candidate decision");
     AssertTrue(imageRecognitionSource.Contains("SalvageInventorySlotClassifier.Scan", StringComparison.Ordinal), "salvage should use the stricter item-anchor classifier");
+    AssertTrue(imageRecognitionSource.Contains("PortMoveCursorAwayFromInventoryForScan", StringComparison.Ordinal), "salvage scans should move the cursor away from inventory to avoid tooltip-contaminated crops");
+    AssertTrue(imageRecognitionSource.IndexOf("PortMoveCursorAwayFromInventoryForScan()", StringComparison.Ordinal) < imageRecognitionSource.IndexOf("graphics.CopyFromScreen(grid.Left, grid.Top", StringComparison.Ordinal), "inventory capture should clear hover tooltips before copying the grid");
     AssertTrue(imageRecognitionSource.Contains("quality=", StringComparison.Ordinal), "salvage cache diagnostics should include target quality");
     AssertTrue(imageRecognitionSource.Contains("footprintRows=", StringComparison.Ordinal), "salvage cache diagnostics should include collapsed footprint size");
     AssertTrue(imageRecognitionSource.Contains("regularGemPixels=", StringComparison.Ordinal), "salvage cache diagnostics should include regular gem color metrics");
+    AssertTrue(imageRecognitionSource.Contains("stackCountTextPixels=", StringComparison.Ordinal), "salvage cache diagnostics should include stack-count text metrics for gem rejection");
     AssertTrue(imageRecognitionSource.Contains("portLastRegularGemCandidateCount", StringComparison.Ordinal), "salvage cache should remember the retained regular gem count for summary diagnostics");
     AssertFalse(imageRecognitionSource.Contains("blankLike = mean.Val0 < 18.0 && stdDev.Val0 < 10.0", StringComparison.Ordinal), "salvage should not use broad whole-cell blank detection");
 }
@@ -5564,6 +5640,86 @@ static void TestSalvageClassifierMarksRegularGemsNonSalvageable()
     }
 }
 
+static void TestSalvageClassifierRejectsStackedRegularGems()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticRegularGem(grid, 1, 1, Color.FromArgb(210, 170, 40));
+    DrawSyntheticRegularGem(grid, 2, 1, Color.FromArgb(185, 190, 198));
+    DrawSyntheticRegularGem(grid, 3, 1, Color.FromArgb(130, 42, 165));
+    DrawSyntheticRegularGem(grid, 4, 1, Color.FromArgb(190, 32, 42));
+    DrawSyntheticRegularGem(grid, 5, 1, Color.FromArgb(30, 185, 80));
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(0, result.Targets.Count, "stacked one-tile regular gems should not merge into salvage item footprints");
+    for (int row = 1; row <= 5; row++)
+    {
+        SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == row && candidate.Column == 1);
+        AssertFalse(candidate.Accepted, $"stacked regular gem row {row} should be rejected");
+        AssertEqual("RegularGemNonSalvageable", candidate.Reason, $"stacked regular gem row {row} should use the non-salvageable reason");
+        AssertEqual("RegularGem", candidate.Quality, $"stacked regular gem row {row} should expose RegularGem quality");
+        AssertEqual(0, candidate.FootprintRows, $"stacked regular gem row {row} should not be part of an item footprint");
+    }
+}
+
+static void TestSalvageClassifierRejectsStackCountGemColumns()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    Color[] colors =
+    [
+        Color.FromArgb(138, 95, 28),
+        Color.FromArgb(98, 126, 166),
+        Color.FromArgb(128, 42, 150),
+        Color.FromArgb(138, 45, 30),
+        Color.FromArgb(32, 158, 78),
+    ];
+
+    for (int row = 1; row <= colors.Length; row++)
+    {
+        DrawSyntheticRegularGemStackCell(grid, row, 1, colors[row - 1], row == 1 ? string.Empty : "77");
+        DrawSyntheticRegularGemStackCell(grid, row, 2, colors[row - 1], row == 1 ? string.Empty : "12");
+    }
+
+    DrawSyntheticRegularGemStackCell(grid, 1, 3, colors[0], string.Empty);
+    DrawSyntheticWeakGemFollowerCell(grid, 2, 3);
+    DrawSyntheticPaleSalvageItem(grid, 6, 4);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "stack-count normal gems should be skipped while a real non-gem item remains salvageable");
+    AssertEqual(6, result.Targets[0].Row, "real non-gem target should remain accepted after stack-count gem rejection");
+    AssertEqual(4, result.Targets[0].Column, "real non-gem target should remain accepted after stack-count gem rejection");
+    for (int row = 1; row <= colors.Length; row++)
+    {
+        for (int column = 1; column <= 2; column++)
+        {
+            SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == row && candidate.Column == column);
+            AssertFalse(candidate.Accepted, $"stack-count gem row {row} column {column} should be rejected");
+            AssertEqual("RegularGemNonSalvageable", candidate.Reason, $"stack-count gem row {row} column {column} should use the non-salvageable reason");
+            AssertEqual("RegularGem", candidate.Quality, $"stack-count gem row {row} column {column} should expose RegularGem quality");
+            AssertEqual(0, candidate.FootprintRows, $"stack-count gem row {row} column {column} should not be part of an item footprint");
+            if (row == 1)
+            {
+                AssertTrue(candidate.Metrics.TopFramePixels <= 100, $"top-row amber gem row {row} column {column} should not look like an item top boundary");
+                AssertTrue(candidate.Metrics.OrangeQualityPixels >= 250, $"top-row amber gem row {row} column {column} should expose amber gem body metrics");
+            }
+            else
+            {
+                AssertTrue(
+                    candidate.Metrics.StackCountTextPixels >= 18 ||
+                    candidate.Metrics.RegularGemPixels >= 220,
+                    $"stack-count gem row {row} column {column} should expose stack-count or regular-gem metrics");
+            }
+        }
+    }
+
+    SalvageInventorySlotCandidateDiagnostic weakFollower = result.Candidates.Single(candidate => candidate.Row == 2 && candidate.Column == 3);
+    AssertFalse(weakFollower.Accepted, "weak gem follower should not become an item target just because the cell above has strong gem color");
+    AssertTrue(
+        weakFollower.Reason == "DetachedItemFootprint" || weakFollower.Reason == "NoItemFrameAnchor",
+        "weak gem follower should stay diagnostic-only after gem-like neighbor filtering");
+}
+
 static void TestSalvageClassifierUsesTopCellForWeakTopFootprint()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
@@ -5654,6 +5810,21 @@ static void TestSalvageClassifierCachesOneTileItems()
     AssertEqual(2, target.Row, "one-tile item should keep its row");
     AssertEqual(4, target.Column, "one-tile item should keep its column");
     AssertEqual(1, target.FootprintRows, "one-tile item should report a one-row footprint");
+}
+
+static void TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticPaleSalvageItem(grid, 2, 10);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "pale boot-like legendary leftovers should not be mistaken for regular gems");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(2, target.Row, "pale item target should keep the occupied row");
+    AssertEqual(10, target.Column, "pale item target should keep the occupied column");
+    AssertEqual(1, target.FootprintRows, "pale one-tile item should report a one-row footprint");
+    AssertFalse(result.Candidates.Single(candidate => candidate.Row == 2 && candidate.Column == 10).Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase), "pale item should not use the regular gem rejection reason");
 }
 
 static void TestSalvageClassifierSplitsStackedOneTileItems()
@@ -5858,6 +6029,9 @@ static void TestGemStashSettingsAndAssetSeparationAreWired()
     AssertTrue(appSettingsSource.Contains("public StashSettings Stash { get; set; } = new();", StringComparison.Ordinal), "settings model should expose a separate Stash group");
     AssertTrue(appSettingsSource.Contains("settings.Stash.EnableAutoGemStash = true", StringComparison.Ordinal), "VS Debug defaults should enable gem stashing");
     AssertTrue(appSettingsJson.Contains("\"EnableAutoGemStash\": false", StringComparison.Ordinal), "release config should keep gem stashing disabled by default");
+    AssertTrue(appSettingsSource.Contains("public int TravelToStashWaitMs { get; set; } = 3000;", StringComparison.Ordinal), "stash travel wait should default to 3 seconds");
+    AssertTrue(appSettingsJson.Contains("\"TravelToStashWaitMs\": 3000", StringComparison.Ordinal), "release config should carry the 3-second stash travel wait");
+    AssertTrue(appSettingsSource.Contains("TravelToStashWaitMs = Math.Clamp(TravelToStashWaitMs, 0, 10000);", StringComparison.Ordinal), "stash travel wait should be configurable and normalized");
     AssertTrue(automationSource.Contains("Img(\"Gems\", \"Gem Coordinates.txt\")", StringComparison.Ordinal), "gem stash coordinates should be read from Images\\Gems");
     AssertTrue(townSource.Contains("PortGemStashTemplateDirectory()", StringComparison.Ordinal), "town workflow should use gem template directory helper");
     AssertTrue(townSource.Contains("return Img(\"Gems\")", StringComparison.Ordinal), "gem stash template directory should resolve to Images\\Gems");
@@ -5879,6 +6053,29 @@ static void TestGemStashTownFlowIsNonFatalAfterSalvage()
     AssertTrue(stashMethod.Contains("GemCoordinatesMissing", StringComparison.Ordinal), "missing gem coordinates should skip safely");
     AssertTrue(stashMethod.Contains("NoGemTemplates", StringComparison.Ordinal), "missing gem templates should skip safely");
     AssertTrue(stashMethod.Contains("RecordStashFailure", StringComparison.Ordinal), "real stash failures should be recorded diagnostically");
+}
+
+static void TestGemStashTravelWaitHappensAfterStashCoordinateClick()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string stashMethod = ExtractMethodBody(townSource, "private PortGemStashResult PortAutoStashGems");
+    string closeMethod = ExtractMethodBody(townSource, "private void PortCloseTownUiAfterSalvage");
+
+    int travelClickIndex = stashMethod.IndexOf("bool stashTravelClickSent = PortSafeLeftClick(stashPoint);", StringComparison.Ordinal);
+    int travelWaitIndex = stashMethod.IndexOf("PortSleep(token, AppSettings.Stash.TravelToStashWaitMs);", StringComparison.Ordinal);
+    int openClickIndex = stashMethod.IndexOf("bool stashOpenClickSent = PortSafeLeftClick(stashPoint);", StringComparison.Ordinal);
+    int openWaitIndex = stashMethod.IndexOf("PortWaitForGemStashUiSignal", StringComparison.Ordinal);
+
+    AssertTrue(travelClickIndex >= 0, "stash flow should click the stash coordinate as the travel click");
+    AssertTrue(travelWaitIndex > travelClickIndex, "3-second stash travel wait should happen after the stash-coordinate click");
+    AssertTrue(openClickIndex > travelWaitIndex, "stash should be clicked/opened only after the travel wait");
+    AssertTrue(openWaitIndex > openClickIndex, "stash UI wait should happen after the stash-open click");
+    AssertFalse(stashMethod.Substring(0, travelClickIndex).Contains("TravelToStashWaitMs", StringComparison.Ordinal), "3-second travel wait should not occur before the stash-coordinate click");
+    AssertTrue(stashMethod.Contains("Auto gem stash travel wait", StringComparison.Ordinal), "stash travel wait should be logged separately from stash open wait");
+    AssertTrue(stashMethod.Contains("stashOpenClickSent", StringComparison.Ordinal), "stash flow should log the second stash-open click separately");
+    AssertEqual(1, closeMethod.Split("PortPressEscapeForAutomation();", StringSplitOptions.None).Length - 1, "post-salvage close should press Escape exactly once");
+    AssertTrue(closeMethod.Contains("TownUiClosedForStash escapePresses=1", StringComparison.Ordinal), "post-salvage close should log exactly one Escape before stash");
 }
 
 static void TestInventoryReplayLoadsSavedGemStashCrop()

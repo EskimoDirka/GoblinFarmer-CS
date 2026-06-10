@@ -770,6 +770,7 @@ namespace GoblinFarmer
 
         private Bitmap PortCaptureInventoryGrid(out Rectangle grid)
         {
+            PortMoveCursorAwayFromInventoryForScan();
             if (!PortTryGetDiabloRect(out RECT rect))
             {
                 grid = Rectangle.Empty;
@@ -789,6 +790,13 @@ namespace GoblinFarmer
             }
 
             return screenshot;
+        }
+
+        private void PortMoveCursorAwayFromInventoryForScan()
+        {
+            DrawingPoint neutralPoint = PortScaleGamePoint(new DrawingPoint(1500, 650));
+            SetCursorPos(neutralPoint.X, neutralPoint.Y);
+            Thread.Sleep(50);
         }
 
         private SalvageInventorySlotScanResult PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount, string phase)
@@ -830,6 +838,7 @@ namespace GoblinFarmer
                     $"greenQualityPixels={candidate.Metrics.GreenQualityPixels}; " +
                     $"orangeQualityPixels={candidate.Metrics.OrangeQualityPixels}; " +
                     $"regularGemPixels={candidate.Metrics.RegularGemPixels}; " +
+                    $"stackCountTextPixels={candidate.Metrics.StackCountTextPixels}; " +
                     "cacheMode=SingleInventoryScan");
             }
 

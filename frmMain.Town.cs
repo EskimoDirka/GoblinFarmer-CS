@@ -125,6 +125,7 @@ namespace GoblinFarmer
 
         private bool PortSalvageInventoryFromOpenBlacksmith(CancellationToken token, bool closeAfterSalvage)
         {
+            PortSetAppStatus("Salvaging Inventory");
             AddWorkflowStep("Salvaging");
             PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Tab", new DrawingPoint(683, 638))));
             if (!PortWaitForImageInDiablo(Img("Salvage", "Salvage Button.png"), token, 20000, PortVendorUiConfidence))
@@ -197,8 +198,7 @@ namespace GoblinFarmer
                 PortLogPostSalvageLeftoverWarning(phase);
                 if (closeAfterSalvage)
                 {
-                    PortPressEscapeForAutomation();
-                    PortSleep(token, 350);
+                    PortCloseTownUiAfterSalvage(token, phase);
                 }
 
                 PortCaptureSuccessScreenshot("Salvage", "SalvageSkippedNoFilledSlots");
@@ -365,14 +365,20 @@ namespace GoblinFarmer
 
             if (closeAfterSalvage)
             {
-                PortPressEscapeForAutomation();
-                PortSleep(token, 350);
+                PortCloseTownUiAfterSalvage(token, phase);
             }
 
             AddWorkflowStep(slotsClicked == 0 ? "Salvage skipped: no salvageable filled inventory slots found." : $"Salvage completed: {slotsClicked} slots clicked");
             AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; staleCachedTargetsSkipped={staleCachedTargetsSkipped}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; acceptedTargetsRemaining={acceptedTargetsRemaining}; postSalvageActionableLeftovers={acceptedTargetsRemaining}; salvageSuccess=True; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
+        }
+
+        private void PortCloseTownUiAfterSalvage(CancellationToken token, string phase)
+        {
+            PortPressEscapeForAutomation();
+            PortSleep(token, 350);
+            AppLogger.Info($"TownUiClosedForStash escapePresses=1; phase={PortLogField(phase)}; settleMs=350");
         }
 
         private bool PortCachedSalvageTargetStillActionable(
@@ -496,6 +502,7 @@ namespace GoblinFarmer
                     $"greenQualityPixels={candidate.Metrics.GreenQualityPixels}; " +
                     $"orangeQualityPixels={candidate.Metrics.OrangeQualityPixels}; " +
                     $"regularGemPixels={candidate.Metrics.RegularGemPixels}; " +
+                    $"stackCountTextPixels={candidate.Metrics.StackCountTextPixels}; " +
                     "diagnosticOnly=True");
             }
 
@@ -860,8 +867,8 @@ namespace GoblinFarmer
             }
 
             DrawingPoint stashPoint = PortScaleGamePoint(portGemStashCoords.GetValueOrDefault("Stash Coordinates", new DrawingPoint(287, 471)));
-            bool stashClickSent = PortSafeLeftClick(stashPoint);
-            if (!stashClickSent)
+            bool stashTravelClickSent = PortSafeLeftClick(stashPoint);
+            if (!stashTravelClickSent)
             {
                 DebugManager.Session.RecordStashFailure("Gem stash failed: stash click unsafe");
                 AppLogger.Info($"Auto gem stash failed: reason=UnsafeStashClick; screenPoint={FormatPoint(stashPoint)}");
@@ -869,8 +876,25 @@ namespace GoblinFarmer
                 return new PortGemStashResult("UnsafeStashClick", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
             }
 
+            AddWorkflowStep("Moving to stash");
+            AppLogger.Info($"Auto gem stash travel wait: stashTravelClickSent={stashTravelClickSent}; screenPoint={FormatPoint(stashPoint)}; travelWaitMs={AppSettings.Stash.TravelToStashWaitMs}");
+            PortSleep(token, AppSettings.Stash.TravelToStashWaitMs);
+            if (token.IsCancellationRequested)
+            {
+                return new PortGemStashResult("Cancelled", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            bool stashOpenClickSent = PortSafeLeftClick(stashPoint);
+            if (!stashOpenClickSent)
+            {
+                DebugManager.Session.RecordStashFailure("Gem stash failed: stash open click unsafe");
+                AppLogger.Info($"Auto gem stash failed: reason=UnsafeStashOpenClick; screenPoint={FormatPoint(stashPoint)}");
+                PortCaptureFailureScreenshot("GemStashUnsafeStashOpenClick", "Stash");
+                return new PortGemStashResult("UnsafeStashOpenClick", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
             bool stashVisible = PortWaitForGemStashUiSignal(token, out string stashSignal, out long stashWaitMs);
-            AppLogger.Info($"Auto gem stash open wait: stashClickSent={stashClickSent}; stashSignal={PortLogField(stashSignal)}; stashVisible={stashVisible}; waitMs={stashWaitMs}; configuredWaitMs={AppSettings.Stash.OpenStashWaitMs}");
+            AppLogger.Info($"Auto gem stash open wait: stashTravelClickSent={stashTravelClickSent}; stashOpenClickSent={stashOpenClickSent}; stashSignal={PortLogField(stashSignal)}; stashVisible={stashVisible}; waitMs={stashWaitMs}; configuredWaitMs={AppSettings.Stash.OpenStashWaitMs}; travelWaitMs={AppSettings.Stash.TravelToStashWaitMs}");
             if (token.IsCancellationRequested)
             {
                 return new PortGemStashResult("Cancelled", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);

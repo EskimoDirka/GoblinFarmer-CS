@@ -14,7 +14,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Diablo launch detection and Start Game handling with stable-button verification, click acceptance checks, and manual-click recovery.
 - Route-aware Teleport Next workflow for the configured farming path.
 - Hotkey route blocking for known unsafe or incorrect location transitions.
-- Make New Game, Exit Game, repair, salvage, gem stashing, and town workflow helpers. Salvage uses a fast cached inventory scan with bounded recovery rescans when accepted leftovers remain, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable, then clicks one-column item anchors with legal one- or two-row footprints and confirmation-aware handling for set and legendary-style targets. Auto gem stashing is separate under `Images\Gems`, defaults off in release config, defaults on in VS Debug for validation, skips safely when assets are missing, and right-clicks only accepted gem-template matches.
+- Make New Game, Exit Game, repair, salvage, gem stashing, and town workflow helpers. Salvage uses a fast cached inventory scan with bounded recovery rescans when accepted leftovers remain, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable including stack-count and amber body gem shapes, then clicks one-column item anchors with legal one- or two-row footprints and confirmation-aware handling for set and legendary-style targets. Auto gem stashing is separate under `Images\Gems`, defaults off in release config, defaults on in VS Debug for validation, skips safely when assets are missing, waits after the stash-coordinate travel click before opening stash, and right-clicks only accepted gem-template matches.
 - Monk, Demon Hunter, and Witch Doctor combat support.
 - Location-aware Goblin Tracker with automatic evidence-based counting, per-area duplicate protection, active-combat-time GPH, live UI stats, accepted-count notifications, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and one batch-driven debug package workflow for VS Debug and Release.
@@ -264,9 +264,11 @@ Highlights:
 
 - Added blue/yellow bulk salvage behind `Repair.EnableBulkCategorySalvage`.
 - Added confirmation-aware set/legendary leftover salvage with stale cached target verification.
-- Added normal-gem exclusion during salvage for Emerald, Ruby, Amethyst, Topaz, and Diamond.
+- Added normal-gem exclusion during salvage for Emerald, Ruby, Amethyst, Topaz, and Diamond, including stack-count gems and amber topaz/ruby-like cells that could otherwise look like legal item footprints.
+- Added tooltip-safe salvage scans and pale-item support so hover text does not become a recovery target and pale legendary-style leftovers are not rejected as gems.
 - Added gated normal-gem auto-stashing behind `Stash.EnableAutoGemStash`.
 - Added separated `Images\Gems` support for gem templates and gem stash coordinates.
+- Added `Stash.TravelToStashWaitMs`, defaulting to 3000 ms, so auto-stash waits after the stash-coordinate movement click before opening stash.
 - Added explicit Inventory Replay support for salvage and gem-stash scans.
 - Added bounded debug-package inclusion for Inventory Replay artifacts.
 
@@ -275,8 +277,9 @@ Quality improvements:
 - Salvage uses legal one- or two-row item footprints and rejects textured empty cells.
 - Salvage performs bounded recovery rescans when accepted non-gem leftovers remain.
 - Auto gem stashing safely skips when assets or coordinates are missing.
+- Auto gem stashing keeps the single post-salvage Escape close and does not send a second Escape before stash.
 - Auto gem stashing right-clicks only accepted production gem-template matches.
-- Debug logs include salvage category color metrics, gem-skip diagnostics, gem-stash candidate decisions, and replay artifact paths.
+- Debug logs include salvage category color metrics, gem-skip diagnostics such as `regularGemPixels` and `stackCountTextPixels`, gem-stash candidate decisions, and replay artifact paths.
 - Synchronized release version metadata and installer EXE metadata for v1.5.
 
 Version details:

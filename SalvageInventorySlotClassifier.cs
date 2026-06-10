@@ -14,6 +14,7 @@ namespace GoblinFarmer
         int GreenQualityPixels,
         int OrangeQualityPixels,
         int RegularGemPixels,
+        int StackCountTextPixels,
         double Confidence);
 
     internal sealed record SalvageInventorySlotCandidateDiagnostic(
@@ -47,6 +48,9 @@ namespace GoblinFarmer
         private const int MinimumColoredFramePixels = 450;
         private const int MinimumInnerBrightPixels = 250;
         private const int MinimumInnerSaturatedPixels = 220;
+        private const int MinimumPaleItemColoredFramePixels = 800;
+        private const int MinimumPaleItemInnerBrightPixels = 800;
+        private const int MinimumPaleItemInnerSaturatedPixels = 100;
         private const int WeakFootprintInnerBrightPixels = 250;
         private const int WeakFootprintColoredFramePixels = 100;
         private const int WeakFootprintInnerSaturatedPixels = 45;
@@ -100,6 +104,7 @@ namespace GoblinFarmer
                         (slotMetrics.ColoredFramePixels >= MinimumColoredFramePixels &&
                             slotMetrics.InnerBrightPixels >= MinimumInnerBrightPixels &&
                             slotMetrics.InnerSaturatedPixels >= MinimumInnerSaturatedPixels) ||
+                        IsPaleItemAnchor(slotMetrics) ||
                         IsSetQualityAnchor(slotMetrics);
                     weakFootprintLike[row, column] =
                         (slotMetrics.InnerBrightPixels >= WeakFootprintInnerBrightPixels &&
@@ -115,8 +120,8 @@ namespace GoblinFarmer
                 for (int column = 0; column < Columns; column++)
                 {
                     bool adjacentStrong =
-                        (row > 0 && strongItemLike[row - 1, column]) ||
-                        (row + 1 < Rows && strongItemLike[row + 1, column]);
+                        (row > 0 && strongItemLike[row - 1, column] && !regularGemLike[row - 1, column]) ||
+                        (row + 1 < Rows && strongItemLike[row + 1, column] && !regularGemLike[row + 1, column]);
                     occupied[row, column] =
                         !regularGemLike[row, column] &&
                         (strongItemLike[row, column] || (weakFootprintLike[row, column] && adjacentStrong));
@@ -375,6 +380,14 @@ namespace GoblinFarmer
                 metrics.TopFramePixels >= SetQualityAnchorContentPixels;
         }
 
+        private static bool IsPaleItemAnchor(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.ColoredFramePixels >= MinimumPaleItemColoredFramePixels &&
+                metrics.InnerBrightPixels >= MinimumPaleItemInnerBrightPixels &&
+                metrics.InnerSaturatedPixels >= MinimumPaleItemInnerSaturatedPixels &&
+                !IsRegularGem(metrics);
+        }
+
         private static bool IsSetQualityFootprint(SalvageInventorySlotMetrics metrics)
         {
             return metrics.GreenQualityPixels >= SetQualityAnchorPixels &&
@@ -385,18 +398,38 @@ namespace GoblinFarmer
 
         private static bool IsRegularGem(SalvageInventorySlotMetrics metrics)
         {
-            if (metrics.RegularGemPixels < 220)
+            if (metrics.RegularGemPixels >= 300 ||
+                (metrics.RegularGemPixels >= 220 && metrics.InnerSaturatedPixels >= 500))
             {
-                return false;
+                return true;
             }
 
-            if (metrics.TopFramePixels >= 220)
+            bool stackCountGem =
+                metrics.StackCountTextPixels >= 18 &&
+                metrics.ColoredFramePixels >= 700 &&
+                metrics.InnerSaturatedPixels >= 450;
+            if (stackCountGem)
             {
-                return false;
+                return true;
             }
 
-            return metrics.ColoredFramePixels < 1500 ||
-                metrics.RegularGemPixels >= metrics.ColoredFramePixels * 0.80;
+            bool amberGemBody =
+                metrics.TopFramePixels <= 100 &&
+                metrics.OrangeQualityPixels >= 250 &&
+                metrics.ColoredFramePixels >= 1200 &&
+                metrics.InnerBrightPixels >= 750 &&
+                metrics.InnerSaturatedPixels >= 750;
+            if (amberGemBody)
+            {
+                return true;
+            }
+
+            return metrics.StackCountTextPixels >= 18 &&
+                metrics.ColoredFramePixels >= 900 &&
+                metrics.InnerSaturatedPixels >= 700 &&
+                (metrics.OrangeQualityPixels >= 250 ||
+                    metrics.GreenQualityPixels >= 250 ||
+                    metrics.RegularGemPixels >= 120);
         }
 
         private static SalvageInventorySlotMetrics MeasureSlot(Bitmap bitmap, Rectangle local)
@@ -419,6 +452,7 @@ namespace GoblinFarmer
             int greenQualityPixels = 0;
             int orangeQualityPixels = 0;
             int regularGemPixels = 0;
+            int stackCountTextPixels = 0;
 
             for (int y = local.Top; y < local.Bottom && y < bitmap.Height; y++)
             {
@@ -431,6 +465,12 @@ namespace GoblinFarmer
                     int gray = (color.R + color.G + color.B) / 3;
                     bool colored = brightness >= 70 && saturation >= 45;
                     bool inner = x >= innerLeft && x < innerRight && y >= innerTop && y < innerBottom;
+                    bool stackTextBand =
+                        y >= local.Top + (int)Math.Round(local.Height * 0.48) &&
+                        y < local.Bottom - 3 &&
+                        x >= local.Left + 4 &&
+                        x < local.Right - 4;
+                    bool lightStackText = brightness >= 145 && saturation <= 90 && gray >= 120;
 
                     brightnessSum += gray;
                     brightnessSquares += (long)gray * gray;
@@ -494,6 +534,11 @@ namespace GoblinFarmer
                             regularGemPixels++;
                         }
                     }
+
+                    if (stackTextBand && lightStackText)
+                    {
+                        stackCountTextPixels++;
+                    }
                 }
             }
 
@@ -519,6 +564,7 @@ namespace GoblinFarmer
                 greenQualityPixels,
                 orangeQualityPixels,
                 regularGemPixels,
+                stackCountTextPixels,
                 confidence);
         }
     }

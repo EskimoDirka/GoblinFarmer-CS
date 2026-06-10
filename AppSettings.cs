@@ -1185,6 +1185,8 @@ namespace GoblinFarmer
                 $"Repair.EnableBulkCategorySalvage={Repair.EnableBulkCategorySalvage}; " +
                 $"Stash.EnableAutoGemStash={Stash.EnableAutoGemStash}; " +
                 $"Stash.GemTemplateConfidence={Stash.GemTemplateConfidence:0.00}; " +
+                $"Stash.TravelToStashWaitMs={Stash.TravelToStashWaitMs}; " +
+                $"Stash.OpenStashWaitMs={Stash.OpenStashWaitMs}; " +
                 $"Teleport.TeleportConfirmationTimeoutMs={Teleport.TeleportConfirmationTimeoutMs}; " +
                 $"Teleport.TeleportRetryCount={Teleport.TeleportRetryCount}; " +
                 $"Bounty.PollIntervalMs={Bounty.PollIntervalMs}; " +
@@ -1490,6 +1492,7 @@ namespace GoblinFarmer
         {
             public bool EnableAutoGemStash { get; set; } = false;
             public double GemTemplateConfidence { get; set; } = 0.78;
+            public int TravelToStashWaitMs { get; set; } = 3000;
             public int OpenStashWaitMs { get; set; } = 1200;
             public int StashTabSettleMs { get; set; } = 250;
             public int PostGemClickDelayMs { get; set; } = 45;
@@ -1498,6 +1501,7 @@ namespace GoblinFarmer
             public void Normalize()
             {
                 GemTemplateConfidence = Math.Clamp(GemTemplateConfidence, 0.50, 0.99);
+                TravelToStashWaitMs = Math.Clamp(TravelToStashWaitMs, 0, 10000);
                 OpenStashWaitMs = Math.Clamp(OpenStashWaitMs, 100, 5000);
                 StashTabSettleMs = Math.Clamp(StashTabSettleMs, 50, 2000);
                 PostGemClickDelayMs = Math.Clamp(PostGemClickDelayMs, 0, 500);
