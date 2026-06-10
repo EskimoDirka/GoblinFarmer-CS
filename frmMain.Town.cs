@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
@@ -19,9 +20,17 @@ namespace GoblinFarmer
         private const int PortSalvagePostSlotDelayMs = 35;
         private const int PortSalvageSlotClickSettleMs = 35;
         private const int PortSalvageSlotClickHoldMs = 20;
+        private const int PortBulkSalvagePromptTimeoutMs = 900;
+        private const int PortBulkSalvagePromptClearTimeoutMs = 900;
+        private const int PortBulkSalvageSettleMs = 250;
+        private const int PortBulkSalvageButtonSampleSize = 44;
+        private const int PortBulkSalvageActivePixelThreshold = 90;
 
         private sealed record PortRepairReadinessResult(bool VendorPanelAlreadyVisible, bool VendorPanelBecameVisible, bool NewTristramConfirmed, long ReadinessElapsedMs, long PostArrivalWaitMs);
         private sealed record PortBlacksmithOpenResult(bool Opened, int Attempts, long ElapsedMs, long WorkflowElapsedMs);
+        private sealed record PortSalvageBulkCategory(string Name, string CoordinateName, Func<Color, bool> ActiveColorPredicate);
+        private sealed record PortBulkSalvageColorSample(bool Active, int ActivePixels, int SampledPixels, double ActiveRatio);
+        private sealed record PortBulkSalvageResult(string Category, string Outcome, bool ClickSent, bool PromptFound, bool EnterSent, bool PromptCleared, PortBulkSalvageColorSample ColorSample, long ElapsedMs);
 
         private bool PortRepairGearFromOpenBlacksmith(CancellationToken token, bool closeAfterRepair, Stopwatch repairWorkflow, out long repairMenuOpenedWorkflowElapsedMs)
         {
@@ -121,6 +130,56 @@ namespace GoblinFarmer
             AddWorkflowStep("Inventory open requested: skipped");
             AddWorkflowStep("Inventory open confirmed via vendor/salvage UI");
             AddWorkflowStep("Inventory not required because vendor/salvage UI is open");
+
+            if (AppSettings.Repair.EnableBulkCategorySalvage)
+            {
+                return PortBulkSalvageCategoriesAndLeftovers(token, closeAfterSalvage);
+            }
+
+            return PortSalvageInventoryTargetsFromSingleScan(token, closeAfterSalvage, "PerSlotOnly", Stopwatch.StartNew());
+        }
+
+        private bool PortBulkSalvageCategoriesAndLeftovers(CancellationToken token, bool closeAfterSalvage)
+        {
+            AddWorkflowStep("Detecting bulk salvage categories");
+            Stopwatch salvagePerf = Stopwatch.StartNew();
+            List<PortBulkSalvageResult> bulkResults = [];
+            foreach (PortSalvageBulkCategory category in PortBulkSalvageCategories())
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                bulkResults.Add(PortTryBulkSalvageCategory(category, token));
+            }
+
+            AppLogger.Info(
+                "Bulk salvage summary: " +
+                $"enabled=True; " +
+                $"categoriesAttempted={bulkResults.Count}; " +
+                $"categoriesConfirmed={bulkResults.Count(result => result.Outcome.Equals("Confirmed", StringComparison.OrdinalIgnoreCase))}; " +
+                $"inactiveCategories={bulkResults.Count(result => result.Outcome.Equals("InactiveCategoryButton", StringComparison.OrdinalIgnoreCase))}; " +
+                $"promptFailures={bulkResults.Count(result => result.Outcome.Equals("PromptMissingAfterActiveClick", StringComparison.OrdinalIgnoreCase) || result.Outcome.Equals("PromptDidNotClear", StringComparison.OrdinalIgnoreCase))}; " +
+                $"unsafeClicks={bulkResults.Count(result => result.Outcome.Equals("UnsafeClick", StringComparison.OrdinalIgnoreCase))}; " +
+                $"elapsedMs={salvagePerf.ElapsedMilliseconds}");
+
+            if (bulkResults.Any(result =>
+                result.Outcome.Equals("PromptMissingAfterActiveClick", StringComparison.OrdinalIgnoreCase) ||
+                result.Outcome.Equals("PromptDidNotClear", StringComparison.OrdinalIgnoreCase) ||
+                result.Outcome.Equals("UnsafeClick", StringComparison.OrdinalIgnoreCase)))
+            {
+                DebugManager.Session.RecordSalvageFailure("Salvage failed: bulk category salvage did not complete safely");
+                PortCaptureFailureScreenshot("BulkSalvageCategoryFailed", "Salvage");
+                return false;
+            }
+
+            AddWorkflowStep("Scanning salvage leftovers");
+            return PortSalvageInventoryTargetsFromSingleScan(token, closeAfterSalvage, "PostBulkLeftoverScan", salvagePerf);
+        }
+
+        private bool PortSalvageInventoryTargetsFromSingleScan(CancellationToken token, bool closeAfterSalvage, string phase, Stopwatch salvagePerf)
+        {
             Stopwatch inventoryScanPerf = Stopwatch.StartNew();
             List<SalvageInventorySlotTarget> cachedSlots = PortFilledInventorySlots();
             inventoryScanPerf.Stop();
@@ -128,7 +187,7 @@ namespace GoblinFarmer
             {
                 AddWorkflowStep("First filled inventory slot not found");
                 AddWorkflowStep("Salvage skipped: no filled inventory slots found.");
-                AppLogger.Info($"Salvage inventory scan: cachedSlotCount=0; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
+                AppLogger.Info($"Salvage inventory scan: phase={PortLogField(phase)}; cachedSlotCount=0; regularGemSkips=0; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
                 if (closeAfterSalvage)
                 {
                     PortPressEscapeForAutomation();
@@ -140,17 +199,18 @@ namespace GoblinFarmer
             }
 
             AddWorkflowStep($"Cached salvage slots: {cachedSlots.Count}");
-            AppLogger.Info($"Salvage inventory scan: cachedSlotCount={cachedSlots.Count}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
-            PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Button", new DrawingPoint(215, 382))));
+            AppLogger.Info($"Salvage inventory scan: phase={PortLogField(phase)}; cachedSlotCount={cachedSlots.Count}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
+            bool salvageButtonClickSent = PortSafeLeftClick(PortScaleGamePoint(portSalvageCoords.GetValueOrDefault("Salvage Button", new DrawingPoint(215, 382))));
+            AppLogger.Info($"Salvage mode selected: phase={PortLogField(phase)}; salvageButtonClickSent={salvageButtonClickSent}");
             PortSleep(token, 150);
 
-            Stopwatch salvagePerf = Stopwatch.StartNew();
             int cachedSlotAttempts = 0;
             int slotsClicked = 0;
             int confirmedSalvages = 0;
             int noPromptSalvages = 0;
             int confirmationMisses = 0;
             int expectedConfirmationMisses = 0;
+            int regularGemSkips = 0;
             for (int i = 0; i < cachedSlots.Count && i < 60; i++)
             {
                 if (token.IsCancellationRequested)
@@ -160,6 +220,14 @@ namespace GoblinFarmer
 
                 Stopwatch slotPerf = Stopwatch.StartNew();
                 SalvageInventorySlotTarget target = cachedSlots[i];
+                if (target.Quality.Equals("RegularGem", StringComparison.OrdinalIgnoreCase))
+                {
+                    regularGemSkips++;
+                    cachedSlotAttempts++;
+                    AppLogger.Info($"Salvage timing: slotIndex={cachedSlotAttempts}; cachedSlotIndex={i + 1}; cachedSlotCount={cachedSlots.Count}; row={target.Row}; column={target.Column}; screenPoint={FormatPoint(target.ScreenPoint)}; footprintRows={target.FootprintRows}; quality={PortLogField(target.Quality)}; confirmationExpected={target.ConfirmationExpected}; slotClickSent=False; retryAttempted=False; retryClickSent=False; confirmationFound=False; enterSent=False; outcome=RegularGemSkipped; confirmationWaitMs=0; confirmationScans=0; nextSlotScanMs=0; cacheMode=SingleInventoryScan; slotElapsedMs={slotPerf.ElapsedMilliseconds}; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}");
+                    continue;
+                }
+
                 bool slotClickSent = PortSafeSalvageSlotClick(target.ScreenPoint);
                 cachedSlotAttempts++;
                 if (slotClickSent)
@@ -221,7 +289,7 @@ namespace GoblinFarmer
                 if (target.ConfirmationExpected && !confirmationFound)
                 {
                     DebugManager.Session.RecordSalvageFailure("Salvage failed: expected confirmation not found");
-                    AppLogger.Info($"Salvage timing summary: slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+                    AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
                     PortCaptureFailureScreenshot("SalvageExpectedConfirmationMissing", "Salvage");
                     return false;
                 }
@@ -233,10 +301,178 @@ namespace GoblinFarmer
                 PortSleep(token, 350);
             }
 
-            AddWorkflowStep(slotsClicked == 0 ? "Salvage skipped: no filled inventory slots found." : $"Salvage completed: {slotsClicked} slots clicked");
-            AppLogger.Info($"Salvage timing summary: slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; salvageSuccess=True; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
+            AddWorkflowStep(slotsClicked == 0 ? "Salvage skipped: no salvageable filled inventory slots found." : $"Salvage completed: {slotsClicked} slots clicked");
+            AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={cachedSlots.Count}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; salvageSuccess=True; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
             PortCaptureSuccessScreenshot("Salvage", "SalvageComplete");
             return true;
+        }
+
+        private IReadOnlyList<PortSalvageBulkCategory> PortBulkSalvageCategories()
+        {
+            return
+            [
+                new("Blue", "Salvage All Blue", PortBulkSalvageBlueActiveColor),
+                new("Yellow", "Salvage All Yellow", PortBulkSalvageYellowActiveColor),
+            ];
+        }
+
+        private PortBulkSalvageResult PortTryBulkSalvageCategory(PortSalvageBulkCategory category, CancellationToken token)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            DrawingPoint referencePoint = portSalvageCoords.GetValueOrDefault(category.CoordinateName, category.Name.Equals("Blue", StringComparison.OrdinalIgnoreCase)
+                ? new DrawingPoint(424, 382)
+                : new DrawingPoint(511, 382));
+            DrawingPoint screenPoint = PortScaleGamePoint(referencePoint);
+            PortBulkSalvageColorSample colorSample = PortSampleBulkSalvageButton(screenPoint, category.ActiveColorPredicate);
+            if (!colorSample.Active)
+            {
+                PortBulkSalvageResult inactive = new(category.Name, "InactiveCategoryButton", false, false, false, true, colorSample, sw.ElapsedMilliseconds);
+                PortLogBulkSalvageResult(inactive, screenPoint);
+                return inactive;
+            }
+
+            bool clickSent = PortSafeLeftClick(screenPoint);
+            if (!clickSent)
+            {
+                PortBulkSalvageResult unsafeClick = new(category.Name, "UnsafeClick", false, false, false, false, colorSample, sw.ElapsedMilliseconds);
+                PortLogBulkSalvageResult(unsafeClick, screenPoint);
+                return unsafeClick;
+            }
+
+            bool promptFound = PortWaitForSalvageConfirmationWithBudget(
+                token,
+                PortBulkSalvagePromptTimeoutMs,
+                PortSalvageExpectedConfirmationAttempts,
+                PortSalvageExpectedConfirmationDelayMs,
+                out long promptWaitMs,
+                out int promptScans);
+            if (!promptFound)
+            {
+                PortBulkSalvageResult missingPrompt = new(category.Name, "PromptMissingAfterActiveClick", true, false, false, false, colorSample, sw.ElapsedMilliseconds);
+                PortLogBulkSalvageResult(missingPrompt, screenPoint, promptWaitMs, promptScans);
+                return missingPrompt;
+            }
+
+            PortPressKey(PortVkReturn);
+            bool promptCleared = PortWaitForSalvageConfirmationCleared(token, PortBulkSalvagePromptClearTimeoutMs);
+            PortSleep(token, PortBulkSalvageSettleMs);
+            PortBulkSalvageResult result = new(
+                category.Name,
+                promptCleared ? "Confirmed" : "PromptDidNotClear",
+                true,
+                true,
+                true,
+                promptCleared,
+                colorSample,
+                sw.ElapsedMilliseconds);
+            PortLogBulkSalvageResult(result, screenPoint, promptWaitMs, promptScans);
+            return result;
+        }
+
+        private void PortLogBulkSalvageResult(PortBulkSalvageResult result, DrawingPoint screenPoint, long promptWaitMs = 0, int promptScans = 0)
+        {
+            AppLogger.Info(
+                "Bulk salvage category: " +
+                $"category={PortLogField(result.Category)}; " +
+                $"outcome={PortLogField(result.Outcome)}; " +
+                $"screenPoint={FormatPoint(screenPoint)}; " +
+                $"active={result.ColorSample.Active}; " +
+                $"activePixels={result.ColorSample.ActivePixels}; " +
+                $"sampledPixels={result.ColorSample.SampledPixels}; " +
+                $"activeRatio={result.ColorSample.ActiveRatio:0.000}; " +
+                $"clickSent={result.ClickSent}; " +
+                $"promptFound={result.PromptFound}; " +
+                $"enterSent={result.EnterSent}; " +
+                $"promptCleared={result.PromptCleared}; " +
+                $"promptWaitMs={promptWaitMs}; " +
+                $"promptScans={promptScans}; " +
+                $"elapsedMs={result.ElapsedMs}");
+        }
+
+        private PortBulkSalvageColorSample PortSampleBulkSalvageButton(DrawingPoint centerPoint, Func<Color, bool> activeColorPredicate)
+        {
+            if (!PortTryGetDiabloRect(out RECT rect))
+            {
+                return new(false, 0, 0, 0);
+            }
+
+            int half = PortBulkSalvageButtonSampleSize / 2;
+            Rectangle sample = Rectangle.FromLTRB(
+                centerPoint.X - half,
+                centerPoint.Y - half,
+                centerPoint.X + half,
+                centerPoint.Y + half);
+            Rectangle diablo = Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+            sample = Rectangle.Intersect(sample, diablo);
+            sample = Rectangle.Intersect(sample, SystemInformation.VirtualScreen);
+            if (sample.Width <= 0 || sample.Height <= 0)
+            {
+                return new(false, 0, 0, 0);
+            }
+
+            using Bitmap screenshot = new(sample.Width, sample.Height);
+            using (Graphics graphics = Graphics.FromImage(screenshot))
+            {
+                graphics.CopyFromScreen(sample.Left, sample.Top, 0, 0, screenshot.Size);
+            }
+
+            int activePixels = 0;
+            int sampledPixels = 0;
+            for (int y = 0; y < screenshot.Height; y++)
+            {
+                for (int x = 0; x < screenshot.Width; x++)
+                {
+                    Color color = screenshot.GetPixel(x, y);
+                    sampledPixels++;
+                    if (activeColorPredicate(color))
+                    {
+                        activePixels++;
+                    }
+                }
+            }
+
+            double ratio = sampledPixels == 0 ? 0 : activePixels / (double)sampledPixels;
+            return new(activePixels >= PortBulkSalvageActivePixelThreshold, activePixels, sampledPixels, ratio);
+        }
+
+        private static bool PortBulkSalvageBlueActiveColor(Color color)
+        {
+            return color.B >= 95 &&
+                color.B >= color.R + 28 &&
+                color.B >= color.G + 16 &&
+                color.G >= 35;
+        }
+
+        private static bool PortBulkSalvageYellowActiveColor(Color color)
+        {
+            return color.R >= 95 &&
+                color.G >= 75 &&
+                color.B <= 95 &&
+                Math.Abs(color.R - color.G) <= 70 &&
+                color.R >= color.B + 35 &&
+                color.G >= color.B + 25;
+        }
+
+        private bool PortWaitForSalvageConfirmationCleared(CancellationToken token, int timeoutMs)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            string confirmationImage = Img("Salvage", "Salvage Confirmation Button.png");
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                if (!PortImageVisibleInDiablo(confirmationImage, PortVendorUiConfidence))
+                {
+                    return true;
+                }
+
+                PortSleep(token, PortSalvageConfirmationFastDelayMs);
+            }
+
+            return false;
         }
 
         private bool PortSafeSalvageSlotClick(DrawingPoint point)

@@ -124,7 +124,9 @@ Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObs
 Run("Goblin manual no-fresh gate preserves blocked area priority", TestGoblinManualNoFreshGatePreservesBlockedAreaPriority);
 Run("Salvage loop uses bounded confirmation wait and timing logs", TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs);
 Run("Salvage loop handles expected confirmation failures", TestSalvageLoopHandlesExpectedConfirmationFailures);
+Run("Bulk salvage uses blue/yellow category buttons only", TestBulkSalvageUsesBlueYellowCategoryButtonsOnly);
 Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierRejectsTexturedEmptyCells);
+Run("Salvage classifier marks regular gems non-salvageable", TestSalvageClassifierMarksRegularGemsNonSalvageable);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier caches DVR-style item anchors", TestSalvageClassifierCachesDvrStyleItemAnchors);
 Run("Salvage classifier deduplicates multi-slot footprints", TestSalvageClassifierDeduplicatesMultiSlotFootprints);
@@ -5141,6 +5143,37 @@ static void PaintSyntheticSetQualityInCell(Bitmap bitmap, int row, int column)
     graphics.FillRectangle(setBrush, cell.Left + 8, cell.Top + 10, cell.Width - 16, cell.Height - 20);
 }
 
+static void DrawSyntheticRegularGem(Bitmap bitmap, int row, int column, Color color)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush shadow = new(Color.FromArgb(18, 18, 18));
+    using SolidBrush gem = new(color);
+    using Pen highlight = new(Color.FromArgb(
+        Math.Min(255, color.R + 45),
+        Math.Min(255, color.G + 45),
+        Math.Min(255, color.B + 45)), 2);
+
+    Point[] shadowPoints =
+    [
+        new(cell.Left + 34, cell.Top + 15),
+        new(cell.Left + 52, cell.Top + 35),
+        new(cell.Left + 34, cell.Top + 55),
+        new(cell.Left + 16, cell.Top + 35),
+    ];
+    Point[] gemPoints =
+    [
+        new(cell.Left + 34, cell.Top + 12),
+        new(cell.Left + 55, cell.Top + 35),
+        new(cell.Left + 34, cell.Top + 58),
+        new(cell.Left + 13, cell.Top + 35),
+    ];
+
+    graphics.FillPolygon(shadow, shadowPoints);
+    graphics.FillPolygon(gem, gemPoints);
+    graphics.DrawPolygon(highlight, gemPoints);
+}
+
 static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -5165,12 +5198,18 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     AssertTrue(townSource.Contains("Salvage timing: slotIndex=", StringComparison.Ordinal), "salvage should log per-slot timing");
     AssertTrue(townSource.Contains("confirmationMisses=", StringComparison.Ordinal), "salvage summary should report confirmation misses");
     AssertTrue(townSource.Contains("expectedConfirmationMisses=", StringComparison.Ordinal), "salvage summary should report missed expected confirmations");
+    AssertTrue(townSource.Contains("regularGemSkips=", StringComparison.Ordinal), "salvage summary should report regular gem skips");
+    AssertTrue(townSource.Contains("retainedRegularGemCount=", StringComparison.Ordinal), "salvage summary should report retained regular gem count");
+    AssertTrue(townSource.Contains("phase=", StringComparison.Ordinal), "salvage summary should identify the salvage phase");
+    AssertTrue(townSource.Contains("RegularGemSkipped", StringComparison.Ordinal), "regular gems should be skipped by the leftover salvage loop");
     AssertTrue(townSource.Contains("salvageSuccess=", StringComparison.Ordinal), "salvage summary should report the final success state");
     AssertTrue(townSource.Contains("Salvage timing summary:", StringComparison.Ordinal), "salvage should log a summary timing line");
     AssertTrue(imageRecognitionSource.Contains("Salvage cache candidate:", StringComparison.Ordinal), "salvage cache should log each candidate decision");
     AssertTrue(imageRecognitionSource.Contains("SalvageInventorySlotClassifier.Scan", StringComparison.Ordinal), "salvage should use the stricter item-anchor classifier");
     AssertTrue(imageRecognitionSource.Contains("quality=", StringComparison.Ordinal), "salvage cache diagnostics should include target quality");
     AssertTrue(imageRecognitionSource.Contains("footprintRows=", StringComparison.Ordinal), "salvage cache diagnostics should include collapsed footprint size");
+    AssertTrue(imageRecognitionSource.Contains("regularGemPixels=", StringComparison.Ordinal), "salvage cache diagnostics should include regular gem color metrics");
+    AssertTrue(imageRecognitionSource.Contains("portLastRegularGemCandidateCount", StringComparison.Ordinal), "salvage cache should remember the retained regular gem count for summary diagnostics");
     AssertFalse(imageRecognitionSource.Contains("blankLike = mean.Val0 < 18.0 && stdDev.Val0 < 10.0", StringComparison.Ordinal), "salvage should not use broad whole-cell blank detection");
 }
 
@@ -5190,6 +5229,36 @@ static void TestSalvageLoopHandlesExpectedConfirmationFailures()
     AssertTrue(townSource.Contains("noPromptSalvages++", StringComparison.Ordinal), "no-prompt salvage targets should continue without failing when no dialog appears");
 }
 
+static void TestBulkSalvageUsesBlueYellowCategoryButtonsOnly()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string portedAutomationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string appSettingsJson = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+    string salvageCoordinates = File.ReadAllText(Path.Combine(repoRoot, "Images", "Salvage", "Salvage Coordinates.txt"));
+
+    AssertTrue(townSource.Contains("AppSettings.Repair.EnableBulkCategorySalvage", StringComparison.Ordinal), "bulk salvage should be gated by repair settings");
+    AssertTrue(townSource.Contains("PortBulkSalvageCategoriesAndLeftovers", StringComparison.Ordinal), "enabled bulk salvage should hand off to category-first flow");
+    AssertTrue(townSource.Contains("new(\"Blue\", \"Salvage All Blue\", PortBulkSalvageBlueActiveColor)", StringComparison.Ordinal), "bulk salvage should include blue category button");
+    AssertTrue(townSource.Contains("new(\"Yellow\", \"Salvage All Yellow\", PortBulkSalvageYellowActiveColor)", StringComparison.Ordinal), "bulk salvage should include yellow category button");
+    AssertFalse(townSource.Contains("Salvage All White", StringComparison.Ordinal), "v1 bulk salvage should not include a white category path");
+    AssertTrue(townSource.Contains("PortBulkSalvageBlueActiveColor", StringComparison.Ordinal), "blue category must use active-color detection");
+    AssertTrue(townSource.Contains("PortBulkSalvageYellowActiveColor", StringComparison.Ordinal), "yellow category must use active-color detection");
+    AssertTrue(townSource.Contains("InactiveCategoryButton", StringComparison.Ordinal), "inactive category buttons should be skipped and logged");
+    AssertTrue(townSource.Contains("PromptMissingAfterActiveClick", StringComparison.Ordinal), "active category clicks with no prompt should fail explicitly");
+    AssertTrue(townSource.Contains("PromptDidNotClear", StringComparison.Ordinal), "bulk confirmation prompt clear failures should be reported");
+    AssertTrue(townSource.Contains("UnsafeClick", StringComparison.Ordinal), "unsafe bulk button clicks should fail explicitly");
+    AssertTrue(townSource.Contains("PortWaitForSalvageConfirmationCleared", StringComparison.Ordinal), "bulk salvage should verify the confirmation prompt clears");
+    AssertTrue(townSource.Contains("\"PostBulkLeftoverScan\"", StringComparison.Ordinal), "bulk salvage should rescan leftovers after category salvage");
+    AssertTrue(portedAutomationSource.Contains("[\"Salvage All Blue\"] = new(424, 382)", StringComparison.Ordinal), "blue bulk coordinate default should be available");
+    AssertTrue(portedAutomationSource.Contains("[\"Salvage All Yellow\"] = new(511, 382)", StringComparison.Ordinal), "yellow bulk coordinate default should be available");
+    AssertTrue(salvageCoordinates.Contains("Salvage All Blue", StringComparison.Ordinal), "blue bulk coordinate should be persisted in salvage coordinates file");
+    AssertTrue(salvageCoordinates.Contains("Salvage All Yellow", StringComparison.Ordinal), "yellow bulk coordinate should be persisted in salvage coordinates file");
+    AssertTrue(appSettingsSource.Contains("settings.Repair.EnableBulkCategorySalvage = true", StringComparison.Ordinal), "VS Debug defaults should enable bulk category salvage");
+    AssertTrue(appSettingsJson.Contains("\"EnableBulkCategorySalvage\": false", StringComparison.Ordinal), "release config should keep bulk category salvage disabled by default");
+}
+
 static void TestSalvageClassifierRejectsTexturedEmptyCells()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
@@ -5202,6 +5271,28 @@ static void TestSalvageClassifierRejectsTexturedEmptyCells()
     AssertEqual(0, result.Targets.Count, "textured empty cells should not be cached as salvage targets");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 1 && candidate.Column == 2 && !candidate.Accepted), "textured empty top-row cell should be rejected");
     AssertTrue(result.Candidates.Any(candidate => candidate.Reason == "NoItemFrameAnchor" || candidate.Reason == "NoItemIconAnchor"), "empty rejection should expose a metric reason");
+}
+
+static void TestSalvageClassifierMarksRegularGemsNonSalvageable()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticRegularGem(grid, 1, 1, Color.FromArgb(30, 185, 80));
+    DrawSyntheticRegularGem(grid, 1, 2, Color.FromArgb(190, 32, 42));
+    DrawSyntheticRegularGem(grid, 1, 3, Color.FromArgb(130, 42, 165));
+    DrawSyntheticRegularGem(grid, 1, 4, Color.FromArgb(210, 170, 40));
+    DrawSyntheticRegularGem(grid, 1, 5, Color.FromArgb(185, 190, 198));
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(0, result.Targets.Count, "normal gems should not be emitted as salvage targets");
+    for (int column = 1; column <= 5; column++)
+    {
+        SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == 1 && candidate.Column == column);
+        AssertFalse(candidate.Accepted, $"regular gem column {column} should be rejected");
+        AssertEqual("RegularGemNonSalvageable", candidate.Reason, $"regular gem column {column} should use the non-salvageable reason");
+        AssertEqual("RegularGem", candidate.Quality, $"regular gem column {column} should expose RegularGem quality");
+        AssertTrue(candidate.Metrics.RegularGemPixels >= 90, $"regular gem column {column} should expose gem color metrics");
+    }
 }
 
 static void TestSalvageClassifierUsesTopCellForWeakTopFootprint()

@@ -4,6 +4,12 @@
 ========== Salvage Button ==========
 215, 382
 
+========== Salvage All Blue ==========
+424, 382
+
+========== Salvage All Yellow ==========
+511, 382
+
 ========== Stash Coordinates ==========
 287, 471
 

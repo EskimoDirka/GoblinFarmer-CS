@@ -13,6 +13,7 @@ namespace GoblinFarmer
         int InnerSaturatedPixels,
         int GreenQualityPixels,
         int OrangeQualityPixels,
+        int RegularGemPixels,
         double Confidence);
 
     internal sealed record SalvageInventorySlotCandidateDiagnostic(
@@ -75,6 +76,7 @@ namespace GoblinFarmer
 
             bool[,] strongItemLike = new bool[Rows, Columns];
             bool[,] weakFootprintLike = new bool[Rows, Columns];
+            bool[,] regularGemLike = new bool[Rows, Columns];
             bool[,] occupied = new bool[Rows, Columns];
             SalvageInventorySlotMetrics[,] metrics = new SalvageInventorySlotMetrics[Rows, Columns];
             DrawingPoint[,] points = new DrawingPoint[Rows, Columns];
@@ -97,6 +99,7 @@ namespace GoblinFarmer
                         slotMetrics.InnerBrightPixels >= WeakFootprintInnerBrightPixels &&
                         (slotMetrics.InnerSaturatedPixels >= WeakFootprintInnerSaturatedPixels ||
                             slotMetrics.ColoredFramePixels >= WeakFootprintColoredFramePixels);
+                    regularGemLike[row, column] = IsRegularGem(slotMetrics);
                 }
             }
 
@@ -107,7 +110,9 @@ namespace GoblinFarmer
                     bool adjacentStrong =
                         (row > 0 && strongItemLike[row - 1, column]) ||
                         (row + 1 < Rows && strongItemLike[row + 1, column]);
-                    occupied[row, column] = strongItemLike[row, column] || (weakFootprintLike[row, column] && adjacentStrong);
+                    occupied[row, column] =
+                        !regularGemLike[row, column] &&
+                        (strongItemLike[row, column] || (weakFootprintLike[row, column] && adjacentStrong));
                 }
             }
 
@@ -134,7 +139,12 @@ namespace GoblinFarmer
                     int footprintRows = 0;
                     string quality = "None";
                     bool confirmationExpected = false;
-                    if (footprint == null)
+                    if (regularGemLike[row, column])
+                    {
+                        reason = "RegularGemNonSalvageable";
+                        quality = "RegularGem";
+                    }
+                    else if (footprint == null)
                     {
                         reason = RejectionReason(slotMetrics);
                     }
@@ -263,6 +273,22 @@ namespace GoblinFarmer
                 quality.Equals("Legendary", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsRegularGem(SalvageInventorySlotMetrics metrics)
+        {
+            if (metrics.RegularGemPixels < 220)
+            {
+                return false;
+            }
+
+            if (metrics.TopFramePixels >= 220)
+            {
+                return false;
+            }
+
+            return metrics.ColoredFramePixels < 1500 ||
+                metrics.RegularGemPixels >= metrics.ColoredFramePixels * 0.80;
+        }
+
         private static SalvageInventorySlotMetrics MeasureSlot(Bitmap bitmap, Rectangle local)
         {
             int innerLeft = local.Left + Math.Max(1, (int)Math.Round(local.Width * 0.18));
@@ -282,6 +308,7 @@ namespace GoblinFarmer
             int innerSaturatedPixels = 0;
             int greenQualityPixels = 0;
             int orangeQualityPixels = 0;
+            int regularGemPixels = 0;
 
             for (int y = local.Top; y < local.Bottom && y < bitmap.Height; y++)
             {
@@ -335,6 +362,24 @@ namespace GoblinFarmer
                         {
                             orangeQualityPixels++;
                         }
+
+                        bool emerald = color.G >= 125 && color.R <= 105 && color.B <= 120 && color.G >= color.R + 30 && color.G >= color.B + 25;
+                        bool ruby = color.R >= 140 && color.G <= 95 && color.B <= 105 && color.R >= color.G + 45 && color.R >= color.B + 45;
+                        bool amethyst = color.R >= 95 &&
+                            color.B >= 125 &&
+                            color.G <= 95 &&
+                            color.R >= color.G + 25 &&
+                            color.B >= color.G + 35 &&
+                            Math.Abs(color.R - color.B) <= 70;
+                        bool topaz = color.R >= 150 &&
+                            color.G >= 120 &&
+                            color.B <= 95 &&
+                            Math.Abs(color.R - color.G) <= 90;
+                        bool diamond = brightness >= 150 && saturation <= 45;
+                        if (emerald || ruby || amethyst || topaz || diamond)
+                        {
+                            regularGemPixels++;
+                        }
                     }
                 }
             }
@@ -360,6 +405,7 @@ namespace GoblinFarmer
                 innerSaturatedPixels,
                 greenQualityPixels,
                 orangeQualityPixels,
+                regularGemPixels,
                 confidence);
         }
     }

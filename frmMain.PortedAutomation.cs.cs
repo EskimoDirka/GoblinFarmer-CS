@@ -170,6 +170,7 @@ namespace GoblinFarmer
         private Label? portSplashLabel;
         private System.Windows.Forms.Timer? portSplashTimer;
         private PortScanRegionManager? portScanRegionManager;
+        private int portLastRegularGemCandidateCount;
 
         private Dictionary<string, DrawingPoint> portRepairCoords = new(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, DrawingPoint> portSalvageCoords = new(StringComparer.OrdinalIgnoreCase);
@@ -1605,6 +1606,8 @@ namespace GoblinFarmer
             {
                 ["Salvage Tab"] = new(683, 638),
                 ["Salvage Button"] = new(215, 382),
+                ["Salvage All Blue"] = new(424, 382),
+                ["Salvage All Yellow"] = new(511, 382),
             });
             portLeaveGamePoint = PortParseSingleCoordinate(Img("Leave Game", "Leave Game Button Coordinates.txt"), new(326, 639));
         }

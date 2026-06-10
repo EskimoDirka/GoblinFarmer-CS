@@ -532,6 +532,7 @@ namespace GoblinFarmer
 
             ApplyDebugDefaultsProfile();
             settings.GoblinTracker.EnableDecisionTrace = true;
+            settings.Repair.EnableBulkCategorySalvage = true;
 
             string? projectRoot = TryResolveProjectRoot();
             if (!string.IsNullOrWhiteSpace(projectRoot))
@@ -1179,6 +1180,7 @@ namespace GoblinFarmer
                 $"UI.NotificationPosition={UI.NotificationPosition}; " +
                 $"Repair.PostArrivalSettleDelayMs={Repair.PostArrivalSettleDelayMs}; " +
                 $"Repair.RepairMenuPollingIntervalMs={Repair.RepairMenuPollingIntervalMs}; " +
+                $"Repair.EnableBulkCategorySalvage={Repair.EnableBulkCategorySalvage}; " +
                 $"Teleport.TeleportConfirmationTimeoutMs={Teleport.TeleportConfirmationTimeoutMs}; " +
                 $"Teleport.TeleportRetryCount={Teleport.TeleportRetryCount}; " +
                 $"Bounty.PollIntervalMs={Bounty.PollIntervalMs}; " +
@@ -1466,6 +1468,7 @@ namespace GoblinFarmer
         {
             public int PostArrivalSettleDelayMs { get; set; } = 50;
             public int RepairMenuPollingIntervalMs { get; set; } = 75;
+            public bool EnableBulkCategorySalvage { get; set; } = false;
 
             public void Normalize()
             {

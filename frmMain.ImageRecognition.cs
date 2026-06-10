@@ -778,6 +778,7 @@ namespace GoblinFarmer
             }
 
             SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid);
+            portLastRegularGemCandidateCount = scan.Candidates.Count(candidate => candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase));
             foreach (SalvageInventorySlotCandidateDiagnostic candidate in scan.Candidates)
             {
                 AppLogger.Info(
@@ -800,6 +801,7 @@ namespace GoblinFarmer
                     $"innerSaturatedPixels={candidate.Metrics.InnerSaturatedPixels}; " +
                     $"greenQualityPixels={candidate.Metrics.GreenQualityPixels}; " +
                     $"orangeQualityPixels={candidate.Metrics.OrangeQualityPixels}; " +
+                    $"regularGemPixels={candidate.Metrics.RegularGemPixels}; " +
                     "cacheMode=SingleInventoryScan");
             }
 
