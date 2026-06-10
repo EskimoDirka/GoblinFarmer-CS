@@ -49,9 +49,15 @@ namespace GoblinFarmer
         private const int WeakFootprintInnerBrightPixels = 250;
         private const int WeakFootprintColoredFramePixels = 100;
         private const int WeakFootprintInnerSaturatedPixels = 45;
-        private const int NewAnchorTopFramePixels = 600;
         private const int SetQualityPixels = 220;
         private const int LegendaryQualityPixels = 320;
+
+        private sealed record ItemFootprint(
+            int StartRow,
+            int Column,
+            int Rows,
+            string Quality,
+            bool ConfirmationExpected);
 
         public static SalvageInventorySlotScanResult Scan(Bitmap inventoryGrid, Rectangle screenGrid)
         {
@@ -105,6 +111,16 @@ namespace GoblinFarmer
                 }
             }
 
+            Dictionary<(int Row, int Column), ItemFootprint> footprintsByCell = [];
+            List<ItemFootprint> footprints = BuildFootprints(occupied, metrics);
+            foreach (ItemFootprint footprint in footprints)
+            {
+                for (int row = footprint.StartRow; row < footprint.StartRow + footprint.Rows; row++)
+                {
+                    footprintsByCell[(row, footprint.Column)] = footprint;
+                }
+            }
+
             List<SalvageInventorySlotTarget> targets = [];
             List<SalvageInventorySlotCandidateDiagnostic> diagnostics = [];
             for (int row = 0; row < Rows; row++)
@@ -112,28 +128,30 @@ namespace GoblinFarmer
                 for (int column = 0; column < Columns; column++)
                 {
                     SalvageInventorySlotMetrics slotMetrics = metrics[row, column];
+                    footprintsByCell.TryGetValue((row, column), out ItemFootprint? footprint);
                     bool accepted = false;
                     string reason;
                     int footprintRows = 0;
                     string quality = "None";
                     bool confirmationExpected = false;
-                    if (!occupied[row, column])
+                    if (footprint == null)
                     {
                         reason = RejectionReason(slotMetrics);
                     }
-                    else if (row > 0 &&
-                        occupied[row - 1, column] &&
-                        slotMetrics.TopFramePixels < NewAnchorTopFramePixels)
+                    else if (row != footprint.StartRow)
                     {
                         reason = "DuplicateMultiSlotFootprint";
+                        footprintRows = footprint.Rows;
+                        quality = footprint.Quality;
+                        confirmationExpected = footprint.ConfirmationExpected;
                     }
                     else
                     {
                         accepted = true;
                         reason = "ItemAnchor";
-                        footprintRows = CountFootprintRows(occupied, metrics, row, column);
-                        quality = ResolveQuality(metrics, row, column, footprintRows);
-                        confirmationExpected = QualityRequiresConfirmation(quality);
+                        footprintRows = footprint.Rows;
+                        quality = footprint.Quality;
+                        confirmationExpected = footprint.ConfirmationExpected;
                         targets.Add(new SalvageInventorySlotTarget(
                             row + 1,
                             column + 1,
@@ -160,6 +178,40 @@ namespace GoblinFarmer
             return new SalvageInventorySlotScanResult(targets, diagnostics);
         }
 
+        private static List<ItemFootprint> BuildFootprints(bool[,] occupied, SalvageInventorySlotMetrics[,] metrics)
+        {
+            List<ItemFootprint> footprints = [];
+            for (int column = 0; column < Columns; column++)
+            {
+                int row = 0;
+                while (row < Rows)
+                {
+                    if (!occupied[row, column])
+                    {
+                        row++;
+                        continue;
+                    }
+
+                    int startRow = row;
+                    while (row < Rows && occupied[row, column])
+                    {
+                        row++;
+                    }
+
+                    int rows = row - startRow;
+                    string quality = ResolveQuality(metrics, startRow, column, rows);
+                    footprints.Add(new ItemFootprint(
+                        startRow,
+                        column,
+                        rows,
+                        quality,
+                        QualityRequiresConfirmation(quality)));
+                }
+            }
+
+            return footprints;
+        }
+
         private static string RejectionReason(SalvageInventorySlotMetrics metrics)
         {
             if (metrics.InnerBrightPixels >= WeakFootprintInnerBrightPixels &&
@@ -180,26 +232,6 @@ namespace GoblinFarmer
             }
 
             return "InsufficientItemColor";
-        }
-
-        private static int CountFootprintRows(
-            bool[,] occupied,
-            SalvageInventorySlotMetrics[,] metrics,
-            int topRow,
-            int column)
-        {
-            int rows = 0;
-            for (int row = topRow; row < Rows && occupied[row, column]; row++)
-            {
-                if (row > topRow && metrics[row, column].TopFramePixels >= NewAnchorTopFramePixels)
-                {
-                    break;
-                }
-
-                rows++;
-            }
-
-            return Math.Max(1, rows);
         }
 
         private static string ResolveQuality(SalvageInventorySlotMetrics[,] metrics, int topRow, int column, int footprintRows)

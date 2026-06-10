@@ -128,6 +128,7 @@ Run("Salvage classifier rejects textured empty cells", TestSalvageClassifierReje
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier caches DVR-style item anchors", TestSalvageClassifierCachesDvrStyleItemAnchors);
 Run("Salvage classifier deduplicates multi-slot footprints", TestSalvageClassifierDeduplicatesMultiSlotFootprints);
+Run("Salvage classifier derives quality from full footprint", TestSalvageClassifierDerivesQualityFromFullFootprint);
 Run("Salvage classifier flags high rarity confirmation targets", TestSalvageClassifierFlagsHighRarityConfirmationTargets);
 Run("Kadala hotkey uses faster cadence and timing logs", TestKadalaHotkeyUsesFasterCadenceAndTimingLogs);
 Run("Teleport Next no-route state notifies user", TestTeleportNextNoRouteStateNotifiesUser);
@@ -5132,6 +5133,14 @@ static void DrawSyntheticTwoSlotSalvageItem(
     graphics.FillRectangle(blue, bottom.Left + 24, bottom.Top + 16, 15, 26);
 }
 
+static void PaintSyntheticSetQualityInCell(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush setBrush = new(Color.FromArgb(55, 178, 48));
+    graphics.FillRectangle(setBrush, cell.Left + 8, cell.Top + 10, cell.Width - 16, cell.Height - 20);
+}
+
 static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -5246,10 +5255,31 @@ static void TestSalvageClassifierDeduplicatesMultiSlotFootprints()
 
     SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
 
-    AssertEqual(2, result.Targets.Count, "two stacked two-slot items should produce two click anchors, not four footprint cells");
-    AssertTrue(result.Targets.Select(target => target.Row).SequenceEqual(new[] { 1, 3 }), "multi-slot footprints should click the top cell of each item");
+    AssertEqual(1, result.Targets.Count, "one contiguous vertical footprint should produce one click anchor, not duplicate row targets");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(1, target.Row, "contiguous vertical footprint should click the top row only");
+    AssertEqual(4, target.FootprintRows, "contiguous vertical footprint should report the complete footprint size");
+    AssertEqual(1, result.Targets.Count(target => target.Column == 1), "duplicate row targets cannot be emitted for the same connected footprint");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "first lower footprint should be rejected");
-    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 4 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "second lower footprint should be rejected");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 3 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "middle connected footprint row should be rejected");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 4 && candidate.Column == 1 && !candidate.Accepted && candidate.Reason == "DuplicateMultiSlotFootprint"), "last connected footprint row should be rejected");
+}
+
+static void TestSalvageClassifierDerivesQualityFromFullFootprint()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticTwoSlotSalvageItem(grid, 1, 1, weakTopAnchor: true);
+    PaintSyntheticSetQualityInCell(grid, 2, 1);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "full-footprint quality test should produce one target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(1, target.Row, "quality from lower footprint should not move the click target off the top cell");
+    AssertEqual(2, target.FootprintRows, "quality should be derived from the complete two-row footprint");
+    AssertEqual("Set", target.Quality, "set quality should be derived from the full footprint, not only the top cell");
+    AssertTrue(target.ConfirmationExpected, "confirmation expectation should be derived from the full footprint quality");
+    AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 1 && !candidate.Accepted && candidate.Quality == "Set" && candidate.ConfirmationExpected), "duplicate footprint diagnostics should carry full-footprint quality and confirmation metadata");
 }
 
 static void TestSalvageClassifierFlagsHighRarityConfirmationTargets()
