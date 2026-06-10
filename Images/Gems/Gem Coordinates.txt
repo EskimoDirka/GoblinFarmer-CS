@@ -1,0 +1,5 @@
+========== Stash Coordinates ==========
+287, 471
+
+========== Gem Stash Tab Coordinates ==========
+692, 356
