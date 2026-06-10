@@ -2,6 +2,28 @@
 
 Release notes are maintained manually. Before publishing a build or creating a GitHub Release, update the next release section with the user-facing changes worth publishing.
 
+## v1.5
+
+GoblinFarmer v1.5 focuses on town workflow reliability: faster salvage, confirmation-safe set/legendary handling, explicit Inventory Replay diagnostics, and a gated normal-gem auto-stash workflow.
+
+### Highlights
+
+- Added blue/yellow bulk salvage behind `Repair.EnableBulkCategorySalvage`; release defaults disabled and VS Debug defaults enabled for validation.
+- Added confirmation-aware leftover salvage for set and legendary-style items, with stale cached target verification before failing.
+- Added normal-gem exclusion in salvage so Emerald, Ruby, Amethyst, Topaz, and Diamond are treated as non-salvageable.
+- Added `Stash.EnableAutoGemStash` for normal gem stashing after successful repair/salvage; release defaults disabled and VS Debug defaults enabled.
+- Added separated `Images\Gems` asset guidance for gem templates and gem stash coordinates.
+- Added explicit Inventory Replay support for salvage and gem stash scans using production classifiers only.
+- Added bounded debug-package inclusion for Inventory Replay artifacts.
+
+### Quality Improvements
+
+- Salvage classifier now emits only legal one- or two-row item footprints and rejects textured empty cells.
+- Salvage performs bounded recovery rescans when accepted non-gem leftovers remain.
+- Auto gem stashing safely skips when gem assets or coordinates are missing, and right-clicks only accepted gem-template matches.
+- Debug logs now include salvage category/button color metrics, per-slot gem skip diagnostics, gem-stash candidate decisions, and replay artifact paths.
+- Synchronized release version metadata and installer EXE metadata for v1.5.
+
 ## v1.4
 
 GoblinFarmer v1.4 is focused on Goblin Tracker automatic-count readiness, Observation Mode diagnostics, Witch Doctor input reliability, startup validation, and package-size hardening.

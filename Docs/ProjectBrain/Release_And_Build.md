@@ -1,14 +1,14 @@
 # Release And Build
 
-Source of truth: `README.md`, `Docs\Release_Checklist.md`, `Docs\Release_v1.4.md`, and `Docs\Project_Status.md`.
+Source of truth: `README.md`, `Docs\Release_Checklist.md`, `Docs\Release_v1.5.md`, and `Docs\Project_Status.md`.
 
 Do not infer a new release status from this summary. Use the current source docs for release decisions.
 
 ## Current Release Context
 
-- Current release line in `Docs\Project_Status.md`: `v1.4.0`.
-- v1.4 focuses on Goblin Tracker automatic-count readiness, Observation Mode diagnostics, Witch Doctor input reliability, startup validation, and package-size hardening.
-- Existing release notes live in `Docs\Release_v1.4.md`.
+- Current release line in `Docs\Project_Status.md`: `v1.5.0`.
+- v1.5 focuses on salvage reliability, Inventory Replay, and gated normal-gem auto-stashing.
+- Existing release notes live in `Docs\Release_v1.5.md`.
 
 ## Build From Source
 
@@ -29,10 +29,10 @@ Requirements from README:
 Release versioning starts in `GoblinFarmer.csproj`:
 
 ```xml
-<Version>1.4.0</Version>
-<AssemblyVersion>1.4.0.0</AssemblyVersion>
-<FileVersion>1.4.0.0</FileVersion>
-<InformationalVersion>1.4.0</InformationalVersion>
+<Version>1.5.0</Version>
+<AssemblyVersion>1.5.0.0</AssemblyVersion>
+<FileVersion>1.5.0.0</FileVersion>
+<InformationalVersion>1.5.0</InformationalVersion>
 ```
 
 Publish from Visual Studio with the `GoblinFarmerRelease` profile or run the equivalent command:
@@ -46,7 +46,7 @@ The publish output goes to `artifacts\publish\GoblinFarmer`. Confirm executable 
 ## Installer Workflow
 
 - Compile `Installer\GoblinFarmer.iss` only after `artifacts\publish\GoblinFarmer\GoblinFarmer.exe` exists.
-- If Inno Setup is installed, v1.4 expects `artifacts\installer\GoblinFarmerSetup-1.4.0.exe`.
+- If Inno Setup is installed, v1.5 expects `artifacts\installer\GoblinFarmerSetup-1.5.0.exe`.
 - The installer target is `%LOCALAPPDATA%\Programs\GoblinFarmer`.
 - The installer should show the install directory, create a Start Menu shortcut, and optionally create a desktop shortcut.
 

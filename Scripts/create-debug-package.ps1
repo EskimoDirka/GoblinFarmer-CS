@@ -1812,6 +1812,7 @@ try {
         Add-UniquePath $screenshotFoldersList (Join-Path $root "Screenshots")
         Add-UniquePath $debugScreenshotFoldersList (Join-Path $root "debug-screenshots")
         Add-UniquePath $inventoryReplayFoldersList (Join-Path $root "Debug\InventoryReplay\Salvage")
+        Add-UniquePath $inventoryReplayFoldersList (Join-Path $root "Debug\InventoryReplay\Stash")
         Add-UniquePath $inventoryReplaySourceRootsList (Join-Path $root "Debug")
         Add-UniquePath $goblinEvidenceFoldersList (Join-Path $root "Debug\GoblinEvidence")
         Add-UniquePath $goblinEvidenceSourceRootsList (Join-Path $root "Debug")
@@ -1981,6 +1982,7 @@ try {
     $inventoryReplayArtifactDirectories = foreach ($folder in $inventoryReplayFolders) {
         if (Test-Path -LiteralPath $folder -PathType Container) {
             Get-ChildItem -LiteralPath $folder -Directory -Filter "SalvageInventoryReplay_*" -ErrorAction SilentlyContinue
+            Get-ChildItem -LiteralPath $folder -Directory -Filter "GemStashInventoryReplay_*" -ErrorAction SilentlyContinue
         }
     }
     $selectedInventoryReplayArtifactDirectories = @($inventoryReplayArtifactDirectories |
@@ -1988,7 +1990,7 @@ try {
         Select-Object -First $MaxInventoryReplayArtifacts)
     $selectedInventoryReplayFiles = @($selectedInventoryReplayArtifactDirectories |
         ForEach-Object {
-            Get-ChildItem -LiteralPath $_.FullName -File -ErrorAction SilentlyContinue |
+            Get-ChildItem -LiteralPath $_.FullName -File -Recurse -ErrorAction SilentlyContinue |
                 Where-Object { $_.Extension -match '^\.(png|json)$' }
         } |
         Sort-Object FullName)
@@ -2255,7 +2257,7 @@ try {
             "Goblin encounter/manual capture fullscreen package policy: excluded by default; $excludedGoblinCaptureFullscreenImages excluded; excludedSize=$(Format-ByteSize $excludedGoblinCaptureFullscreenImageBytes) ($excludedGoblinCaptureFullscreenImageBytes bytes); Journal/Minimap crops and metadata are kept",
             "Goblin evidence event screenshot package policy: most recent $MaxGoblinEvidenceEventScreenshots included when <= $MaxGoblinEvidenceEventScreenshotBytes bytes; $excludedGoblinEvidenceEventScreenshots excluded; $oversizedGoblinEvidenceEventScreenshots oversized",
             "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
-            "Inventory replay package policy: most recent $MaxInventoryReplayArtifacts salvage replay folders included; $excludedInventoryReplayArtifacts excluded",
+            "Inventory replay package policy: most recent $MaxInventoryReplayArtifacts salvage/stash replay folders included; $excludedInventoryReplayArtifacts excluded",
             "Failure screenshot package policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; includedSize=$failureScreenshotSizeDisplay ($failureScreenshotSizeBytes bytes); excludedSize=$excludedFailureScreenshotSizeDisplay ($excludedFailureScreenshotSizeBytes bytes); availableSize=$availableFailureScreenshotSizeDisplay ($availableFailureScreenshotSizeBytes bytes)",
             "Debug screenshot package policy: most recent $MaxDebugScreenshots files included from current session",
             $goblinEvidenceSourceSummaryLine,
@@ -2352,7 +2354,7 @@ try {
             "- Debug\GoblinEvidence\EncounterCaptures and ManualCaptures *_Fullscreen images are excluded by default; replay-ready *_Metadata.txt, *_Journal.png, and *_Minimap.png are kept",
             "- Debug/GoblinEvidence/GoblinEvidence_* event screenshots are limited to MaxGoblinEvidenceEventScreenshots newest files and MaxGoblinEvidenceEventScreenshotBytes",
             "- Debug/GoblinEvidence/ObservationDiagnostics image crops are limited to MaxGoblinObservationDiagnosticCrops newest files",
-            "- Debug/InventoryReplay/Salvage replay folders are limited to MaxInventoryReplayArtifacts newest folders",
+            "- Debug/InventoryReplay/Salvage and Debug/InventoryReplay/Stash replay folders are limited to MaxInventoryReplayArtifacts newest folders",
             "- bin folders are not copied",
             "- obj folders are not copied",
             "- source files are not copied except selected docs and manifest inputs",

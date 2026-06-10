@@ -32,6 +32,7 @@ namespace GoblinFarmer
         private sealed record PortSalvageBulkCategory(string Name, string CoordinateName, Func<Color, bool> ActiveColorPredicate);
         private sealed record PortBulkSalvageColorSample(bool Active, int ActivePixels, int SampledPixels, double ActiveRatio);
         private sealed record PortBulkSalvageResult(string Category, string Outcome, bool ClickSent, bool PromptFound, bool EnterSent, bool PromptCleared, PortBulkSalvageColorSample ColorSample, long ElapsedMs);
+        private sealed record PortGemStashResult(string Outcome, int InitialTargets, int SlotsClicked, int RecoveryPasses, int RemainingTargets, long ElapsedMs);
 
         private bool PortRepairGearFromOpenBlacksmith(CancellationToken token, bool closeAfterRepair, Stopwatch repairWorkflow, out long repairMenuOpenedWorkflowElapsedMs)
         {
@@ -107,6 +108,10 @@ namespace GoblinFarmer
                     DebugManager.Session.RecordSalvageFailure("Salvage failed during repair flow");
                     return PortWorkflowFailed("Salvaging");
                 }
+
+                AddWorkflowStep("Checking inventory for gem stashing");
+                PortGemStashResult stashResult = PortAutoStashGems(token);
+                AppLogger.Info($"Auto gem stash repair-flow result: outcome={PortLogField(stashResult.Outcome)}; initialTargets={stashResult.InitialTargets}; slotsClicked={stashResult.SlotsClicked}; recoveryPasses={stashResult.RecoveryPasses}; remainingTargets={stashResult.RemainingTargets}; elapsedMs={stashResult.ElapsedMs}");
 
                 AddWorkflowStep("Repair flow completed");
                 completed = true;
@@ -810,6 +815,234 @@ namespace GoblinFarmer
             }
 
             return PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true);
+        }
+
+        private PortGemStashResult PortAutoStashGems(CancellationToken token)
+        {
+            Stopwatch stashPerf = Stopwatch.StartNew();
+            if (!AppSettings.Stash.EnableAutoGemStash)
+            {
+                AddWorkflowStep("Gem stashing skipped: disabled");
+                AppLogger.Info("Auto gem stash skipped: enabled=False");
+                return new PortGemStashResult("Disabled", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            string gemFolder = PortGemStashTemplateDirectory();
+            if (!Directory.Exists(gemFolder))
+            {
+                AddWorkflowStep("Gem stashing skipped: Images\\Gems missing");
+                AppLogger.Info($"Auto gem stash skipped: reason=GemFolderMissing; folder={PortLogField(gemFolder)}");
+                return new PortGemStashResult("GemFolderMissing", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            if (!portGemStashCoordinateFilePresent)
+            {
+                AddWorkflowStep("Gem stashing skipped: coordinates missing");
+                AppLogger.Info($"Auto gem stash skipped: reason=GemCoordinatesMissing; path={PortLogField(Img("Gems", "Gem Coordinates.txt"))}");
+                return new PortGemStashResult("GemCoordinatesMissing", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            IReadOnlyList<GemStashTemplate> templates = GemStashTemplateCatalog.Load(gemFolder);
+            if (templates.Count == 0)
+            {
+                AddWorkflowStep("Gem stashing skipped: no gem templates");
+                AppLogger.Info($"Auto gem stash skipped: reason=NoGemTemplates; folder={PortLogField(gemFolder)}");
+                return new PortGemStashResult("NoGemTemplates", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            AddWorkflowStep("Opening stash for gem stashing");
+            if (!ActivateDiabloWindow())
+            {
+                DebugManager.Session.RecordStashFailure("Gem stash failed: Diablo activation failed");
+                AppLogger.Info("Auto gem stash failed: reason=DiabloActivationFailed");
+                PortCaptureFailureScreenshot("GemStashActivationFailed", "Stash");
+                return new PortGemStashResult("DiabloActivationFailed", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            DrawingPoint stashPoint = PortScaleGamePoint(portGemStashCoords.GetValueOrDefault("Stash Coordinates", new DrawingPoint(287, 471)));
+            bool stashClickSent = PortSafeLeftClick(stashPoint);
+            if (!stashClickSent)
+            {
+                DebugManager.Session.RecordStashFailure("Gem stash failed: stash click unsafe");
+                AppLogger.Info($"Auto gem stash failed: reason=UnsafeStashClick; screenPoint={FormatPoint(stashPoint)}");
+                PortCaptureFailureScreenshot("GemStashUnsafeStashClick", "Stash");
+                return new PortGemStashResult("UnsafeStashClick", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            bool stashVisible = PortWaitForGemStashUiSignal(token, out string stashSignal, out long stashWaitMs);
+            AppLogger.Info($"Auto gem stash open wait: stashClickSent={stashClickSent}; stashSignal={PortLogField(stashSignal)}; stashVisible={stashVisible}; waitMs={stashWaitMs}; configuredWaitMs={AppSettings.Stash.OpenStashWaitMs}");
+            if (token.IsCancellationRequested)
+            {
+                return new PortGemStashResult("Cancelled", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            if (!stashVisible && !stashSignal.Equals("SettleOnlyNoStashTemplate", StringComparison.OrdinalIgnoreCase))
+            {
+                DebugManager.Session.RecordStashFailure("Gem stash failed: stash UI confirmation missing");
+                AppLogger.Info($"Auto gem stash failed: reason=StashUiConfirmationMissing; stashSignal={PortLogField(stashSignal)}; waitMs={stashWaitMs}");
+                PortCaptureFailureScreenshot("GemStashUiConfirmationMissing", "Stash");
+                PortPressEscapeForAutomation();
+                return new PortGemStashResult("StashUiConfirmationMissing", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            DrawingPoint tabPoint = PortScaleGamePoint(portGemStashCoords.GetValueOrDefault("Gem Stash Tab Coordinates", new DrawingPoint(680, 701)));
+            bool tabClickSent = PortSafeLeftClick(tabPoint);
+            if (!tabClickSent)
+            {
+                DebugManager.Session.RecordStashFailure("Gem stash failed: gem tab click unsafe");
+                AppLogger.Info($"Auto gem stash failed: reason=UnsafeGemTabClick; screenPoint={FormatPoint(tabPoint)}");
+                PortCaptureFailureScreenshot("GemStashUnsafeGemTabClick", "Stash");
+                PortPressEscapeForAutomation();
+                return new PortGemStashResult("UnsafeGemTabClick", 0, 0, 0, 0, stashPerf.ElapsedMilliseconds);
+            }
+
+            PortSleep(token, AppSettings.Stash.StashTabSettleMs);
+            GemStashInventoryScanResult scan = PortScanGemStashInventorySlots(logCandidates: true, "InitialGemStashScan");
+            int initialTargets = scan.Targets.Count;
+            int slotsClicked = 0;
+            int recoveryPasses = 0;
+            int remainingTargets = initialTargets;
+            string outcome = "NoGemsFound";
+            if (initialTargets > 0)
+            {
+                outcome = PortClickGemStashTargets(scan.Targets, token, ref slotsClicked)
+                    ? "ClickedInitialTargets"
+                    : "Cancelled";
+                PortSleep(token, AppSettings.Stash.PostGemClickDelayMs);
+            }
+
+            while (!token.IsCancellationRequested)
+            {
+                GemStashInventoryScanResult finalScan = PortScanGemStashInventorySlots(logCandidates: false, recoveryPasses == 0 ? "FinalGemStashCheck" : $"GemStashRecoveryPass{recoveryPasses}FinalCheck");
+                remainingTargets = finalScan.Targets.Count;
+                if (remainingTargets == 0)
+                {
+                    outcome = initialTargets == 0 ? "NoGemsFound" : "Complete";
+                    break;
+                }
+
+                if (recoveryPasses >= AppSettings.Stash.RecoveryRescanLimit)
+                {
+                    DebugManager.Session.RecordStashFailure("Gem stash incomplete: matched gems remain after recovery rescans");
+                    AppLogger.Info($"AutoStashGemLeftoversRemain remainingTargets={remainingTargets}; recoveryPasses={recoveryPasses}; recoveryLimit={AppSettings.Stash.RecoveryRescanLimit}; slotsClicked={slotsClicked}; initialTargets={initialTargets}; elapsedMs={stashPerf.ElapsedMilliseconds}");
+                    PortCaptureFailureScreenshot("AutoStashGemLeftoversRemain", "Stash");
+                    outcome = "GemLeftoversRemain";
+                    break;
+                }
+
+                recoveryPasses++;
+                AddWorkflowStep($"Gem stash recovery rescan {recoveryPasses}: {remainingTargets} gems");
+                AppLogger.Info($"Auto gem stash recovery rescan: recoveryPass={recoveryPasses}; remainingTargets={remainingTargets}; recoveryLimit={AppSettings.Stash.RecoveryRescanLimit}");
+                if (!PortClickGemStashTargets(finalScan.Targets, token, ref slotsClicked))
+                {
+                    outcome = "Cancelled";
+                    break;
+                }
+
+                PortSleep(token, AppSettings.Stash.PostGemClickDelayMs);
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                outcome = "Cancelled";
+            }
+
+            PortPressEscapeForAutomation();
+            PortSleep(token, 250);
+            AddWorkflowStep(outcome.Equals("Complete", StringComparison.OrdinalIgnoreCase)
+                ? $"Gem stashing completed: {slotsClicked} slots clicked"
+                : $"Gem stashing skipped/result: {outcome}");
+            AppLogger.Info($"Auto gem stash summary: outcome={PortLogField(outcome)}; enabled=True; initialTargets={initialTargets}; slotsClicked={slotsClicked}; recoveryPasses={recoveryPasses}; remainingTargets={remainingTargets}; templateCount={templates.Count}; threshold={AppSettings.Stash.GemTemplateConfidence:0.000}; elapsedMs={stashPerf.ElapsedMilliseconds}; stashTabClickSent={tabClickSent}");
+            if (!outcome.Equals("GemLeftoversRemain", StringComparison.OrdinalIgnoreCase) && !outcome.Equals("Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                PortCaptureSuccessScreenshot("Stash", "GemStashComplete");
+            }
+
+            return new PortGemStashResult(outcome, initialTargets, slotsClicked, recoveryPasses, remainingTargets, stashPerf.ElapsedMilliseconds);
+        }
+
+        private bool PortClickGemStashTargets(IReadOnlyList<GemStashInventorySlotTarget> targets, CancellationToken token, ref int slotsClicked)
+        {
+            for (int i = 0; i < targets.Count && i < 60; i++)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                GemStashInventorySlotTarget target = targets[i];
+                bool clickSent = PortSafeRightClick(target.ScreenPoint);
+                if (clickSent)
+                {
+                    slotsClicked++;
+                }
+
+                AppLogger.Info(
+                    "Gem stash timing: " +
+                    $"slotIndex={i + 1}; " +
+                    $"targetCount={targets.Count}; " +
+                    $"row={target.Row}; " +
+                    $"column={target.Column}; " +
+                    $"screenPoint={FormatPoint(target.ScreenPoint)}; " +
+                    $"template={PortLogField(target.Template)}; " +
+                    $"confidence={target.Confidence:0.000}; " +
+                    $"rightClickSent={clickSent}; " +
+                    $"postClickDelayMs={AppSettings.Stash.PostGemClickDelayMs}");
+                PortSleep(token, AppSettings.Stash.PostGemClickDelayMs);
+            }
+
+            return true;
+        }
+
+        private bool PortWaitForGemStashUiSignal(CancellationToken token, out string signal, out long elapsedMs)
+        {
+            signal = "";
+            Stopwatch sw = Stopwatch.StartNew();
+            string[] templates = Directory.Exists(PortGemStashTemplateDirectory())
+                ? Directory.GetFiles(PortGemStashTemplateDirectory(), "*.png", SearchOption.TopDirectoryOnly)
+                    .Where(path => Path.GetFileNameWithoutExtension(path).Contains("stash", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                : [];
+
+            if (templates.Length == 0)
+            {
+                PortSleep(token, AppSettings.Stash.OpenStashWaitMs);
+                elapsedMs = sw.ElapsedMilliseconds;
+                signal = "SettleOnlyNoStashTemplate";
+                return true;
+            }
+
+            while (sw.ElapsedMilliseconds < AppSettings.Stash.OpenStashWaitMs)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    elapsedMs = sw.ElapsedMilliseconds;
+                    signal = "Cancelled";
+                    return false;
+                }
+
+                foreach (string template in templates)
+                {
+                    if (PortImageVisibleInDiablo(template, PortVendorUiConfidence))
+                    {
+                        elapsedMs = sw.ElapsedMilliseconds;
+                        signal = Path.GetFileNameWithoutExtension(template);
+                        return true;
+                    }
+                }
+
+                PortSleep(token, AppSettings.Repair.RepairMenuPollingIntervalMs);
+            }
+
+            elapsedMs = sw.ElapsedMilliseconds;
+            signal = "StashTemplateTimeout";
+            return false;
+        }
+
+        private static string PortGemStashTemplateDirectory()
+        {
+            return Img("Gems");
         }
 
         /// <summary>

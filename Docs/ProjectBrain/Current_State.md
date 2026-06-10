@@ -6,25 +6,26 @@ Source of truth: `Docs\Project_Status.md`. This file is a short context-loading 
 
 GoblinFarmer is a personal Windows Forms automation project for Diablo III farming workflows. It includes Battle.net/Diablo launch support, route-aware teleporting, combat helpers, town automation, Goblin Tracker evidence recognition, and diagnostic packaging.
 
-Current release line: `v1.4.0`.
+Current release line: `v1.5.0`.
 
-Current focus: Goblin Tracker full automatic counting readiness in VS Debug, with recent post-validation cleanup complete for Sim Count ordering/coverage, salvage cache behavior, and debug package retention.
+Current focus: v1.5 release readiness for salvage reliability, Inventory Replay, and gem auto-stashing, with ongoing Goblin Tracker validation.
 
 ## Stable Behavior
 
-- Battle.net/Diablo launch, Start Game, Make New Game, route teleporting, interrupted teleport recovery, repair/salvage, Kadala timing, and Witch Doctor combat are stable enough for ongoing monitoring.
+- Battle.net/Diablo launch, Start Game, Make New Game, route teleporting, interrupted teleport recovery, repair/salvage, gem stashing, Kadala timing, and Witch Doctor combat are stable enough for ongoing monitoring.
 - Release and VS Debug Goblin Tracker layouts keep evidence and Last Observation fields readable.
 - Debug packages are created only through `Scripts\Create Debug Package.bat`.
 - Project Brain markdown docs remain available directly under `Docs\ProjectBrain`; ZIP generation has been retired.
 - Form close is intentionally quiet and does not create debug packages, replay evidence, screenshots, or reports.
 - Runtime/debug artifacts are bounded by retention policy and are not source files.
-- Notification latency, stale journal suppression, Last Observation persistence, Sim Count expansion, salvage single-scan caching, and debug package retention are stable after the latest live validation pass.
+- Notification latency, stale journal suppression, Last Observation persistence, Sim Count expansion, salvage single-scan caching, Inventory Replay, and debug package retention are stable after the latest validation pass.
 - VS Debug `Sim Count` keeps `Current Area` pinned first, then alphabetizes the centralized area list while preserving existing count/block/duplicate behavior.
 - Tracked `Config\AppSettings.json` must stay sanitized; private VS Debug settings belong in ignored `Config\AppSettings.local.json`.
 
 ## Active Development Focus
 
 - Continue validating automatic Goblin Tracker counts during normal VS Debug use.
+- Live-validate gem auto-stashing after adding `Images\Gems` templates and gem stash coordinates.
 - Use live testing for real detection misses, reset behavior, distinct alerts/sound, and cases where replay output does not match package evidence.
 - Use explicit Goblin Replay for suspicious stale-location or count-policy cases that can be modeled from saved Journal/Minimap/current-location evidence.
 - Use VS Debug `Sim Count` for deterministic duplicate, blocked-area, countable-area, and area-limit policy checks.

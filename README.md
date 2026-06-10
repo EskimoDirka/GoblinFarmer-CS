@@ -14,7 +14,7 @@ This is a personal automation project, not an official Blizzard product. Use it 
 - Diablo launch detection and Start Game handling with stable-button verification, click acceptance checks, and manual-click recovery.
 - Route-aware Teleport Next workflow for the configured farming path.
 - Hotkey route blocking for known unsafe or incorrect location transitions.
-- Make New Game, Exit Game, repair, salvage, and town workflow helpers. Salvage uses a fast cached inventory scan with bounded recovery rescans when accepted leftovers remain, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable, then clicks one-column item anchors with legal one- or two-row footprints and confirmation-aware handling for set and legendary-style targets. If a cached set/legendary target no longer shows a confirmation, salvage verifies the target with a fresh scan before treating it as a real failure.
+- Make New Game, Exit Game, repair, salvage, gem stashing, and town workflow helpers. Salvage uses a fast cached inventory scan with bounded recovery rescans when accepted leftovers remain, can run a gated blue/yellow bulk category pass when enabled, skips normal gems as non-salvageable, then clicks one-column item anchors with legal one- or two-row footprints and confirmation-aware handling for set and legendary-style targets. Auto gem stashing is separate under `Images\Gems`, defaults off in release config, defaults on in VS Debug for validation, skips safely when assets are missing, and right-clicks only accepted gem-template matches.
 - Monk, Demon Hunter, and Witch Doctor combat support.
 - Location-aware Goblin Tracker with automatic evidence-based counting, per-area duplicate protection, active-combat-time GPH, live UI stats, accepted-count notifications, and reset support.
 - Debug Mode with diagnostic panes, screenshot controls, route state inspection, and one batch-driven debug package workflow for VS Debug and Release.
@@ -25,10 +25,10 @@ This is a personal automation project, not an official Blizzard product. Use it 
 
 ## Installation
 
-For the v1.4 installer, use:
+For the v1.5 installer, use:
 
 ```text
-GoblinFarmerSetup-1.4.0.exe
+GoblinFarmerSetup-1.5.0.exe
 ```
 
 The installer places GoblinFarmer under:
@@ -102,7 +102,7 @@ Journal matches validate the goblin-name portion of the template, ignore upper/h
 
 Accepted-count notifications are no-activate and click-through so they do not steal focus or block route clicks. Rainbow Goblin automatic counts use a distinct alert message and local Windows alert sound.
 
-Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, notification latency traces through `GoblinLatencyTrace`, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, manual recognition-capture paths, and salvage bulk/category/cache/timing diagnostics with item footprint metadata, bounded recovery-rescan state, regular-gem skip metrics, expected-confirmation results, and inventory replay artifact paths in Debug Mode.
+Debug logs include Last Observation update/clear/preserve state, Observation Mode configuration, scanner start/stop with a 500ms interval, scan attempts/skips, scan-stage timing summaries through `GoblinEvidenceTimingSummary`, candidate checks with match points, calibrated Journal/Minimap scan regions, journal freshness/name/history diagnostics, minimap color diagnostics, automatic-count accepted/suppressed decisions, notification latency traces through `GoblinLatencyTrace`, structured `GoblinDecisionTrace` lines, structured JSONL Goblin Tracker events, route-button cancellation/start diagnostics, encounter-capture paths, manual recognition-capture paths, salvage bulk/category/cache/timing diagnostics, gem-stash candidate/timing summaries, and inventory replay artifact paths in Debug Mode.
 
 Goblin Replay is an explicit developer/test harness for feeding saved Journal/Minimap PNG fixtures, including real-style encounter/manual capture folders, through the shared Goblin Evidence matcher and stale-location policy without Diablo running. It is on-demand only and is not part of normal app startup, VS Debug startup, live scanning, combat, route, town, or debug package workflows. Real capture evidence can be replayed from the repository root with:
 
@@ -114,10 +114,11 @@ dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --g
 dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --goblin-replay-scenario --templates ".\Images\Goblin Evidence" "D:\Path\To\Scenario.txt"
 ```
 
-Salvage Inventory Replay is also explicit/on-demand. Debug Mode salvage scans save bounded inventory-grid crops and metadata under `Debug\InventoryReplay\Salvage`, and the classifier can be replayed without clicking Diablo:
+Inventory Replay is also explicit/on-demand. Debug Mode salvage and gem-stash scans save bounded inventory-grid crops and metadata under `Debug\InventoryReplay`, and the classifiers can be replayed without clicking Diablo:
 
 ```powershell
 dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --inventory-replay "D:\Path\To\SalvageInventoryReplay_...\metadata.json"
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -- --inventory-replay "D:\Path\To\GemStashInventoryReplay_...\metadata.json"
 ```
 
 Capture folders should contain `_Metadata.txt`, `_Journal.png`, and/or `_Minimap.png` files. Metadata and prefix commands target one specific older capture inside a shared `EncounterCaptures` or `ManualCaptures` folder without copying files. New DecisionBundles are replay-ready by default because they contain `decision-trace.txt`, local metadata, and local Journal/Minimap crop frames. Older DecisionBundles that only have `decision-trace.txt` plus fullscreen `evidence.png` still report the available evidence and explain that crop-accurate replay is not possible from that bundle alone. Scenario files synthesize temporary crop frames from `Images\Goblin Evidence` templates and can resolve area context from `Images\Current Location` title templates with `Location=...`. They can model small action sequences such as `Scan`, `NewGame`, `ResetStats`, and `Wait`. Example scenario lines:
@@ -255,39 +256,38 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\cleanup-project.ps
 
 Real deletion requires `-Delete`. `Scripts\Cleanup Project Delete.bat` is a confirmation-gated launcher for the default delete mode: generated build outputs plus debug package retention pruning. Use direct PowerShell with `-RuntimeArtifacts` only for disposable runtime logs/screenshots/evidence/replay captures, and `-PruneOldInstallers` only when older installers should be removed while keeping the latest installer. The cleanup report is written to `Reports\Cleanup_Report.md`.
 
-## Release v1.4
+## Release v1.5
 
-GoblinFarmer v1.4 is focused on Goblin Tracker automatic-count readiness, Observation Mode diagnostics, Witch Doctor input reliability, startup validation, and package-size hardening.
+GoblinFarmer v1.5 is focused on town workflow reliability: faster salvage, confirmation-safe set/legendary handling, explicit Inventory Replay diagnostics, and gated normal-gem auto-stashing.
 
 Highlights:
 
-- Added Goblin Tracker Automation Observation Mode for Journal and Minimap evidence.
-- Added gated automatic Goblin Tracker counting that requires Observation Mode and Auto Goblin Count to both be enabled.
-- Retired the physical `X` Goblin Tracker hotkey and added a VS Debug `Capture` button for image-recognition troubleshooting snapshots.
-- Hardened automatic counting with fresh-evidence gating, stale journal protection, blocked-area suppression, and per-area duplicate limits.
-- Added two-count exceptions for Pandemonium Fortress Level 1, Pandemonium Fortress Level 2, and Stinging Winds.
-- Improved Last Observation diagnostics and accepted-count display behavior.
-- Added Witch Doctor mouse-wheel plus cursor-change left-click combat input.
-- Improved startup path validation and Diablo III auto-discovery.
-- Reduced default debug package size from Goblin Evidence and screenshot artifacts.
+- Added blue/yellow bulk salvage behind `Repair.EnableBulkCategorySalvage`.
+- Added confirmation-aware set/legendary leftover salvage with stale cached target verification.
+- Added normal-gem exclusion during salvage for Emerald, Ruby, Amethyst, Topaz, and Diamond.
+- Added gated normal-gem auto-stashing behind `Stash.EnableAutoGemStash`.
+- Added separated `Images\Gems` support for gem templates and gem stash coordinates.
+- Added explicit Inventory Replay support for salvage and gem-stash scans.
+- Added bounded debug-package inclusion for Inventory Replay artifacts.
 
 Quality improvements:
 
-- Added bounded Goblin Evidence diagnostics and clearer scanner/candidate logs.
-- Preserved automatic Goblin Tracker debug artifacts while making the manual `Capture` button supplemental only.
-- Improved Reset Stats/New Game cleanup for Goblin Tracker observation and duplicate state.
-- Improved salvage timing diagnostics, per-slot speed, and gated blue/yellow bulk salvage validation support.
-- Synchronized release version metadata and installer EXE metadata for v1.4.
+- Salvage uses legal one- or two-row item footprints and rejects textured empty cells.
+- Salvage performs bounded recovery rescans when accepted non-gem leftovers remain.
+- Auto gem stashing safely skips when assets or coordinates are missing.
+- Auto gem stashing right-clicks only accepted production gem-template matches.
+- Debug logs include salvage category color metrics, gem-skip diagnostics, gem-stash candidate decisions, and replay artifact paths.
+- Synchronized release version metadata and installer EXE metadata for v1.5.
 
 Version details:
 
-- App title: `GoblinFarmer v1.4.0`
-- EXE `FileVersion`: `1.4.0.0`
-- EXE `ProductVersion`: `1.4.0`
-- Installer version: `1.4.0`
-- Expected installer artifact: `GoblinFarmerSetup-1.4.0.exe`
+- App title: `GoblinFarmer v1.5.0`
+- EXE `FileVersion`: `1.5.0.0`
+- EXE `ProductVersion`: `1.5.0`
+- Installer version: `1.5.0`
+- Expected installer artifact: `GoblinFarmerSetup-1.5.0.exe`
 
-See [Docs/Release_v1.4.md](Docs/Release_v1.4.md) for ready-to-copy GitHub release notes.
+See [Docs/Release_v1.5.md](Docs/Release_v1.5.md) for ready-to-copy GitHub release notes.
 
 ## Build From Source
 
@@ -312,10 +312,10 @@ Local developer checkouts can keep private helper scripts under `Scripts\Local T
 Release versioning starts in `GoblinFarmer.csproj`. Before publishing a new release, update:
 
 ```xml
-<Version>1.4.0</Version>
-<AssemblyVersion>1.4.0.0</AssemblyVersion>
-<FileVersion>1.4.0.0</FileVersion>
-<InformationalVersion>1.4.0</InformationalVersion>
+<Version>1.5.0</Version>
+<AssemblyVersion>1.5.0.0</AssemblyVersion>
+<FileVersion>1.5.0.0</FileVersion>
+<InformationalVersion>1.5.0</InformationalVersion>
 ```
 
 Then publish the self-contained Windows build. Use Visual Studio with the `GoblinFarmerRelease` publish profile, or run the equivalent command from the project root:
@@ -339,7 +339,7 @@ Manual release flow:
 1. Update version metadata in `GoblinFarmer.csproj`.
 2. Update `Docs\Project_Status.md`, `README.md`, and release notes/checklists for the changes being shipped.
 3. Publish from Visual Studio or run the `dotnet publish` command above, then upload assets manually.
-4. Confirm the installer name and version, such as `GoblinFarmerSetup-1.4.0.exe`.
+4. Confirm the installer name and version, such as `GoblinFarmerSetup-1.5.0.exe`.
 5. For major app milestones, create a GitHub Release, then confirm the release uses the notes from the matching `Docs/Release_v*.md` file and includes the installer asset when available.
 
 See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a final build.
@@ -347,7 +347,8 @@ See [Docs/Release_Checklist.md](Docs/Release_Checklist.md) before publishing a f
 ## Project Docs
 
 - [CHANGELOG.md](CHANGELOG.md): user-facing release history.
-- [Docs/Release_v1.4.md](Docs/Release_v1.4.md): ready-to-copy GitHub release notes.
+- [Docs/Release_v1.5.md](Docs/Release_v1.5.md): ready-to-copy GitHub release notes.
+- [Docs/Release_v1.4.md](Docs/Release_v1.4.md): previous GitHub release notes.
 - [Docs/Release_v1.3.md](Docs/Release_v1.3.md): ready-to-copy GitHub release notes.
 - [Docs/CombatProfiles.md](Docs/CombatProfiles.md): supported combat profiles and required skill setup.
 - [Docs/Project_Status.md](Docs/Project_Status.md): brief current release status, stable behavior, and next development plans.

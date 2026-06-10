@@ -19,4 +19,4 @@ Project Brain docs are compact topic summaries for Codex context loading. They o
 - `Docs\TODO.md`: open validation items and future work.
 - `README.md`: high-level user-facing behavior and build/release instructions.
 - `AGENTS.md`: required agent workflow and repository rules.
-- `Docs\Release_Checklist.md` and `Docs\Release_v1.4.md`: release-specific validation and notes.
+- `Docs\Release_Checklist.md` and `Docs\Release_v1.5.md`: release-specific validation and notes.

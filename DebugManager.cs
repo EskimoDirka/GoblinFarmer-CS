@@ -729,6 +729,7 @@ namespace GoblinFarmer
                 builder.AppendLine($"- Battle.net launch failures: {snapshot.BattleNetLaunchFailures}");
                 builder.AppendLine($"- Repair failures: {snapshot.RepairFailures}");
                 builder.AppendLine($"- Salvage failures: {snapshot.SalvageFailures}");
+                builder.AppendLine($"- Stash failures: {snapshot.StashFailures}");
                 builder.AppendLine($"- Workflow cancellations: {snapshot.WorkflowCancellations}");
                 builder.AppendLine($"- Unexpected exceptions: {snapshot.UnexpectedExceptions}");
                 builder.AppendLine($"- Combat/farming active time: {snapshot.CombatActiveTime:hh\\:mm\\:ss}");
@@ -853,6 +854,7 @@ namespace GoblinFarmer
         private int battleNetLaunchFailures;
         private int repairFailures;
         private int salvageFailures;
+        private int stashFailures;
         private int workflowCancellations;
         private int unexpectedExceptions;
         private string lastKnownIssue = "";
@@ -889,6 +891,7 @@ namespace GoblinFarmer
         public void RecordBattleNetLaunchFailure(string issue) => RecordIssueAndIncrement(ref battleNetLaunchFailures, issue);
         public void RecordRepairFailure(string issue) => RecordIssueAndIncrement(ref repairFailures, issue);
         public void RecordSalvageFailure(string issue) => RecordIssueAndIncrement(ref salvageFailures, issue);
+        public void RecordStashFailure(string issue) => RecordIssueAndIncrement(ref stashFailures, issue);
         public void RecordWorkflowCancellation(string issue) => RecordIssueAndIncrement(ref workflowCancellations, issue);
         public void RecordUnexpectedException(string issue) => RecordIssueAndIncrement(ref unexpectedExceptions, issue);
 
@@ -1052,6 +1055,7 @@ namespace GoblinFarmer
                     Volatile.Read(ref battleNetLaunchFailures),
                     Volatile.Read(ref repairFailures),
                     Volatile.Read(ref salvageFailures),
+                    Volatile.Read(ref stashFailures),
                     Volatile.Read(ref workflowCancellations),
                     Volatile.Read(ref unexpectedExceptions),
                     activeTime,
@@ -1112,6 +1116,7 @@ namespace GoblinFarmer
         int BattleNetLaunchFailures,
         int RepairFailures,
         int SalvageFailures,
+        int StashFailures,
         int WorkflowCancellations,
         int UnexpectedExceptions,
         TimeSpan CombatActiveTime,

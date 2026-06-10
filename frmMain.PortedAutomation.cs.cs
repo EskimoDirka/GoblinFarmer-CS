@@ -174,6 +174,8 @@ namespace GoblinFarmer
 
         private Dictionary<string, DrawingPoint> portRepairCoords = new(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, DrawingPoint> portSalvageCoords = new(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, DrawingPoint> portGemStashCoords = new(StringComparer.OrdinalIgnoreCase);
+        private bool portGemStashCoordinateFilePresent;
         private DrawingPoint portLeaveGamePoint = new(326, 639);
         private readonly DrawingPoint portMapRightClickPoint = new(1272, 594);
 
@@ -1608,6 +1610,13 @@ namespace GoblinFarmer
                 ["Salvage Button"] = new(215, 382),
                 ["Salvage All Blue"] = new(424, 382),
                 ["Salvage All Yellow"] = new(511, 382),
+            });
+            string gemCoordinatesPath = Img("Gems", "Gem Coordinates.txt");
+            portGemStashCoordinateFilePresent = File.Exists(gemCoordinatesPath);
+            portGemStashCoords = PortParseNamedCoordinates(gemCoordinatesPath, new()
+            {
+                ["Stash Coordinates"] = new(287, 471),
+                ["Gem Stash Tab Coordinates"] = new(680, 701),
             });
             portLeaveGamePoint = PortParseSingleCoordinate(Img("Leave Game", "Leave Game Button Coordinates.txt"), new(326, 639));
         }

@@ -1044,6 +1044,7 @@ namespace GoblinFarmer
                 $"BattleNetLaunchFailures={diagnosticsSnapshot.BattleNetLaunchFailures}; " +
                 $"RepairFailures={diagnosticsSnapshot.RepairFailures}; " +
                 $"SalvageFailures={diagnosticsSnapshot.SalvageFailures}; " +
+                $"StashFailures={diagnosticsSnapshot.StashFailures}; " +
                 $"WorkflowCancellations={diagnosticsSnapshot.WorkflowCancellations}; " +
                 $"UnexpectedExceptions={diagnosticsSnapshot.UnexpectedExceptions}; " +
                 $"CombatActiveTime={diagnosticsSnapshot.CombatActiveTime:hh\\:mm\\:ss}");

@@ -768,19 +768,32 @@ namespace GoblinFarmer
             return PortScanSalvageInventorySlots(logCandidates: true, updateRegularGemCandidateCount: true, phase).Targets.ToList();
         }
 
-        private SalvageInventorySlotScanResult PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount, string phase)
+        private Bitmap PortCaptureInventoryGrid(out Rectangle grid)
         {
             if (!PortTryGetDiabloRect(out RECT rect))
             {
-                return new SalvageInventorySlotScanResult([], []);
+                grid = Rectangle.Empty;
+                return new Bitmap(1, 1);
             }
 
-            Rectangle grid = PortScaleReferenceRectangle(new Rectangle(1864, 725, 687, 423), rect);
-            using Bitmap screenshot = new(grid.Width, grid.Height);
+            grid = PortScaleReferenceRectangle(InventoryGridLayout.ReferenceRectangle, rect);
+            if (grid.Width <= 0 || grid.Height <= 0)
+            {
+                return new Bitmap(1, 1);
+            }
+
+            Bitmap screenshot = new(grid.Width, grid.Height);
             using (Graphics graphics = Graphics.FromImage(screenshot))
             {
                 graphics.CopyFromScreen(grid.Left, grid.Top, 0, 0, screenshot.Size);
             }
+
+            return screenshot;
+        }
+
+        private SalvageInventorySlotScanResult PortScanSalvageInventorySlots(bool logCandidates, bool updateRegularGemCandidateCount, string phase)
+        {
+            using Bitmap screenshot = PortCaptureInventoryGrid(out Rectangle grid);
 
             SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid);
             SalvageInventoryReplayArtifacts.SaveScanArtifact(screenshot, grid, phase, scan);
@@ -817,6 +830,43 @@ namespace GoblinFarmer
                     $"greenQualityPixels={candidate.Metrics.GreenQualityPixels}; " +
                     $"orangeQualityPixels={candidate.Metrics.OrangeQualityPixels}; " +
                     $"regularGemPixels={candidate.Metrics.RegularGemPixels}; " +
+                    "cacheMode=SingleInventoryScan");
+            }
+
+            return scan;
+        }
+
+        private GemStashInventoryScanResult PortScanGemStashInventorySlots(bool logCandidates, string phase)
+        {
+            using Bitmap screenshot = PortCaptureInventoryGrid(out Rectangle grid);
+            IReadOnlyList<GemStashTemplate> templates = GemStashTemplateCatalog.Load(PortGemStashTemplateDirectory());
+            GemStashInventoryScanResult scan = GemStashInventoryClassifier.Scan(
+                screenshot,
+                grid,
+                templates,
+                AppSettings.Stash.GemTemplateConfidence);
+            GemStashInventoryReplayArtifacts.SaveScanArtifact(screenshot, grid, phase, scan, AppSettings.Stash.GemTemplateConfidence);
+
+            if (!logCandidates)
+            {
+                return scan;
+            }
+
+            foreach (GemStashInventorySlotCandidate candidate in scan.Candidates)
+            {
+                AppLogger.Info(
+                    "Gem stash candidate: " +
+                    $"phase={PortLogField(phase)}; " +
+                    $"row={candidate.Row}; " +
+                    $"column={candidate.Column}; " +
+                    $"screenPoint={FormatPoint(candidate.ScreenPoint)}; " +
+                    $"accepted={candidate.Accepted}; " +
+                    $"reason={PortLogField(candidate.Reason)}; " +
+                    $"bestTemplate={PortLogField(candidate.BestTemplate)}; " +
+                    $"confidence={candidate.Confidence:0.000}; " +
+                    $"threshold={AppSettings.Stash.GemTemplateConfidence:0.000}; " +
+                    $"templateCount={scan.TemplateNames.Count}; " +
+                    $"invalidTemplateCount={scan.InvalidTemplates.Count}; " +
                     "cacheMode=SingleInventoryScan");
             }
 

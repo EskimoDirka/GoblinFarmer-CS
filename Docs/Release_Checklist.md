@@ -14,9 +14,9 @@ Use this before publishing a final Windows release.
 - [ ] Confirm the generated publish folder exists at `artifacts\publish\GoblinFarmer`.
 - [ ] Confirm publish output includes `GoblinFarmer.exe`, `GoblinFarmerIcon.ico`, `Config\AppSettings.json`, `Images\`, `Scripts\create-debug-package.ps1`, `Scripts\debug-analysis-tools.ps1`, and `Scripts\Create Debug Package.bat`.
 - [ ] Compile `Installer\GoblinFarmer.iss` only after `artifacts\publish\GoblinFarmer\GoblinFarmer.exe` exists.
-- [ ] If Inno Setup is installed, confirm `artifacts\installer\GoblinFarmerSetup-1.4.0.exe` is created for v1.4.
-- [ ] Confirm the app title bar shows the expected version, for example `GoblinFarmer v1.4.0`.
-- [ ] Confirm Windows Properties show `FileVersion: 1.4.0.0` and `ProductVersion: 1.4.0`.
+- [ ] If Inno Setup is installed, confirm `artifacts\installer\GoblinFarmerSetup-1.5.0.exe` is created for v1.5.
+- [ ] Confirm the app title bar shows the expected version, for example `GoblinFarmer v1.5.0`.
+- [ ] Confirm Windows Properties show `FileVersion: 1.5.0.0` and `ProductVersion: 1.5.0`.
 
 ## Install
 
@@ -60,8 +60,8 @@ Use this before publishing a final Windows release.
 
 ## GitHub Release
 
-- [ ] Create or update the GitHub Release for `v1.4.0`.
-- [ ] Use `Docs/Release_v1.4.md` as the release body.
+- [ ] Create or update the GitHub Release for `v1.5.0`.
+- [ ] Use `Docs/Release_v1.5.md` as the release body.
 - [ ] Confirm the README screenshot renders from `Docs/Goblin%20Farmer%20v1.4.0.png`.
-- [ ] Upload `GoblinFarmerSetup-1.4.0.exe` and, if useful, the portable `GoblinFarmer-1.4.0-win-x64-portable.zip`.
+- [ ] Upload `GoblinFarmerSetup-1.5.0.exe` and, if useful, the portable `GoblinFarmer-1.5.0-win-x64-portable.zip`.
 - [ ] Confirm the release page links to the installer asset and shows the expected release notes.

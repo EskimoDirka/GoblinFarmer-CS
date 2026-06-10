@@ -53,6 +53,7 @@ namespace GoblinFarmer
         public static DebugSettings Debug => settings.Debug;
         public static UiSettings UI => settings.UI;
         public static RepairSettings Repair => settings.Repair;
+        public static StashSettings Stash => settings.Stash;
         public static TeleportSettings Teleport => settings.Teleport;
         public static BountySettings Bounty => settings.Bounty;
         public static ImageRecognitionSettings ImageRecognition => settings.ImageRecognition;
@@ -533,6 +534,7 @@ namespace GoblinFarmer
             ApplyDebugDefaultsProfile();
             settings.GoblinTracker.EnableDecisionTrace = true;
             settings.Repair.EnableBulkCategorySalvage = true;
+            settings.Stash.EnableAutoGemStash = true;
 
             string? projectRoot = TryResolveProjectRoot();
             if (!string.IsNullOrWhiteSpace(projectRoot))
@@ -1181,6 +1183,8 @@ namespace GoblinFarmer
                 $"Repair.PostArrivalSettleDelayMs={Repair.PostArrivalSettleDelayMs}; " +
                 $"Repair.RepairMenuPollingIntervalMs={Repair.RepairMenuPollingIntervalMs}; " +
                 $"Repair.EnableBulkCategorySalvage={Repair.EnableBulkCategorySalvage}; " +
+                $"Stash.EnableAutoGemStash={Stash.EnableAutoGemStash}; " +
+                $"Stash.GemTemplateConfidence={Stash.GemTemplateConfidence:0.00}; " +
                 $"Teleport.TeleportConfirmationTimeoutMs={Teleport.TeleportConfirmationTimeoutMs}; " +
                 $"Teleport.TeleportRetryCount={Teleport.TeleportRetryCount}; " +
                 $"Bounty.PollIntervalMs={Bounty.PollIntervalMs}; " +
@@ -1243,6 +1247,7 @@ namespace GoblinFarmer
             public DebugSettings Debug { get; set; } = new();
             public UiSettings UI { get; set; } = new();
             public RepairSettings Repair { get; set; } = new();
+            public StashSettings Stash { get; set; } = new();
             public TeleportSettings Teleport { get; set; } = new();
             public BountySettings Bounty { get; set; } = new();
             public ImageRecognitionSettings ImageRecognition { get; set; } = new();
@@ -1258,6 +1263,7 @@ namespace GoblinFarmer
                     Debug = new DebugSettings(),
                     UI = new UiSettings(),
                     Repair = new RepairSettings(),
+                    Stash = new StashSettings(),
                     Teleport = new TeleportSettings(),
                     Bounty = new BountySettings(),
                     ImageRecognition = new ImageRecognitionSettings(),
@@ -1277,6 +1283,7 @@ namespace GoblinFarmer
                     Debug = debugSettings.Clone(),
                     UI = UI,
                     Repair = Repair,
+                    Stash = Stash,
                     Teleport = Teleport,
                     Bounty = Bounty,
                     ImageRecognition = ImageRecognition,
@@ -1292,6 +1299,7 @@ namespace GoblinFarmer
                 Debug ??= new DebugSettings();
                 UI ??= new UiSettings();
                 Repair ??= new RepairSettings();
+                Stash ??= new StashSettings();
                 Teleport ??= new TeleportSettings();
                 Bounty ??= new BountySettings();
                 ImageRecognition ??= new ImageRecognitionSettings();
@@ -1302,6 +1310,7 @@ namespace GoblinFarmer
                 UI.Normalize();
                 Debug.Normalize();
                 Repair.Normalize();
+                Stash.Normalize();
                 Teleport.Normalize();
                 Bounty.Normalize();
                 ImageRecognition.Normalize();
@@ -1474,6 +1483,25 @@ namespace GoblinFarmer
             {
                 PostArrivalSettleDelayMs = Math.Clamp(PostArrivalSettleDelayMs, 0, 1000);
                 RepairMenuPollingIntervalMs = Math.Clamp(RepairMenuPollingIntervalMs, 25, 500);
+            }
+        }
+
+        internal sealed class StashSettings
+        {
+            public bool EnableAutoGemStash { get; set; } = false;
+            public double GemTemplateConfidence { get; set; } = 0.78;
+            public int OpenStashWaitMs { get; set; } = 1200;
+            public int StashTabSettleMs { get; set; } = 250;
+            public int PostGemClickDelayMs { get; set; } = 45;
+            public int RecoveryRescanLimit { get; set; } = 1;
+
+            public void Normalize()
+            {
+                GemTemplateConfidence = Math.Clamp(GemTemplateConfidence, 0.50, 0.99);
+                OpenStashWaitMs = Math.Clamp(OpenStashWaitMs, 100, 5000);
+                StashTabSettleMs = Math.Clamp(StashTabSettleMs, 50, 2000);
+                PostGemClickDelayMs = Math.Clamp(PostGemClickDelayMs, 0, 500);
+                RecoveryRescanLimit = Math.Clamp(RecoveryRescanLimit, 0, 3);
             }
         }
 

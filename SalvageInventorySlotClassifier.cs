@@ -42,8 +42,8 @@ namespace GoblinFarmer
 
     internal static class SalvageInventorySlotClassifier
     {
-        public const int Columns = 10;
-        public const int Rows = 6;
+        public const int Columns = InventoryGridLayout.Columns;
+        public const int Rows = InventoryGridLayout.Rows;
         private const int MinimumColoredFramePixels = 450;
         private const int MinimumInnerBrightPixels = 250;
         private const int MinimumInnerSaturatedPixels = 220;
@@ -92,12 +92,10 @@ namespace GoblinFarmer
             {
                 for (int column = 0; column < Columns; column++)
                 {
-                    Rectangle local = new(column * slotWidth, row * slotHeight, slotWidth, slotHeight);
+                    Rectangle local = InventoryGridLayout.SlotRectangle(inventoryGrid, row, column);
                     SalvageInventorySlotMetrics slotMetrics = MeasureSlot(inventoryGrid, local);
                     metrics[row, column] = slotMetrics;
-                    points[row, column] = new DrawingPoint(
-                        screenGrid.Left + local.Left + (slotWidth / 2),
-                        screenGrid.Top + local.Top + (slotHeight / 2));
+                    points[row, column] = InventoryGridLayout.SlotScreenPoint(screenGrid, local);
                     strongItemLike[row, column] =
                         (slotMetrics.ColoredFramePixels >= MinimumColoredFramePixels &&
                             slotMetrics.InnerBrightPixels >= MinimumInnerBrightPixels &&

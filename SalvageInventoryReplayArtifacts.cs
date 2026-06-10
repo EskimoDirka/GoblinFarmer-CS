@@ -61,7 +61,7 @@ namespace GoblinFarmer
             }
         }
 
-        public static CleanupResult CleanupOldArtifacts(string rootDirectory, TimeSpan retentionAge)
+        public static CleanupResult CleanupOldArtifacts(string rootDirectory, TimeSpan retentionAge, string folderPrefix = FolderPrefix)
         {
             if (retentionAge <= TimeSpan.Zero)
             {
@@ -80,7 +80,7 @@ namespace GoblinFarmer
             try
             {
                 artifactDirectories = new DirectoryInfo(root)
-                    .GetDirectories($"{FolderPrefix}*", SearchOption.TopDirectoryOnly)
+                    .GetDirectories($"{folderPrefix}*", SearchOption.TopDirectoryOnly)
                     .OrderByDescending(directory => directory.LastWriteTimeUtc)
                     .ToArray();
             }

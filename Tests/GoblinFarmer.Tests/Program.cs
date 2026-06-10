@@ -147,6 +147,11 @@ Run("Salvage classifier derives quality from full footprint", TestSalvageClassif
 Run("Salvage classifier flags high rarity confirmation targets", TestSalvageClassifierFlagsHighRarityConfirmationTargets);
 Run("Salvage loop verifies expected confirmation misses before failure", TestSalvageLoopVerifiesExpectedConfirmationMissBeforeFailure);
 Run("Inventory replay loads saved salvage crop", TestInventoryReplayLoadsSavedSalvageCrop);
+Run("Gem stash classifier matches synthetic gem templates", TestGemStashClassifierMatchesSyntheticGemTemplates);
+Run("Gem stash classifier rejects below threshold", TestGemStashClassifierRejectsBelowThreshold);
+Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
+Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
+Run("Inventory replay loads saved gem stash crop", TestInventoryReplayLoadsSavedGemStashCrop);
 Run("Inventory replay retention is scoped and age based", TestInventoryReplayRetentionIsScopedAndAgeBased);
 Run("Inventory replay command remains harness only", TestInventoryReplayCommandRemainsHarnessOnly);
 Run("Kadala hotkey uses faster cadence and timing logs", TestKadalaHotkeyUsesFasterCadenceAndTimingLogs);
@@ -2261,19 +2266,39 @@ static bool TryRunInventoryReplayCommand(string[] commandArgs, out int exitCode)
         for (int i = 1; i < commandArgs.Length; i++)
         {
             string input = Path.GetFullPath(commandArgs[i], FindRepositoryRootForTests());
-            SalvageInventoryReplayRunResult result = SalvageInventoryReplayArtifacts.RunReplayForHarness(input);
-            string status = result.Loaded ? "PASS" : "FAIL";
-            Console.WriteLine($"{status} INVENTORY_REPLAY_LOAD reason={result.Reason} input=\"{input}\" image=\"{result.ImagePath}\" targets={result.TargetCount} candidates={result.CandidateCount}");
-            if (!result.Loaded)
+            if (GemStashInventoryReplayArtifacts.IsGemStashReplayArtifact(input))
             {
-                failed++;
-                continue;
-            }
+                GemStashInventoryReplayRunResult result = GemStashInventoryReplayArtifacts.RunReplayForHarness(input);
+                string status = result.Loaded ? "PASS" : "FAIL";
+                Console.WriteLine($"{status} INVENTORY_REPLAY_LOAD type=GemStash reason={result.Reason} input=\"{input}\" image=\"{result.ImagePath}\" targets={result.TargetCount} candidates={result.CandidateCount}");
+                if (!result.Loaded)
+                {
+                    failed++;
+                    continue;
+                }
 
-            totalTargets += result.TargetCount;
-            foreach (SalvageInventoryReplayTarget target in result.Targets)
+                totalTargets += result.TargetCount;
+                foreach (GemStashInventoryReplayTarget target in result.Targets)
+                {
+                    Console.WriteLine($"TARGET row={target.Row} column={target.Column} template={target.Template} confidence={target.Confidence:0.000} screenPoint={target.ScreenPoint.X},{target.ScreenPoint.Y}");
+                }
+            }
+            else
             {
-                Console.WriteLine($"TARGET row={target.Row} column={target.Column} footprintRows={target.FootprintRows} quality={target.Quality} confirmationExpected={target.ConfirmationExpected} screenPoint={target.ScreenPoint.X},{target.ScreenPoint.Y}");
+                SalvageInventoryReplayRunResult result = SalvageInventoryReplayArtifacts.RunReplayForHarness(input);
+                string status = result.Loaded ? "PASS" : "FAIL";
+                Console.WriteLine($"{status} INVENTORY_REPLAY_LOAD type=Salvage reason={result.Reason} input=\"{input}\" image=\"{result.ImagePath}\" targets={result.TargetCount} candidates={result.CandidateCount}");
+                if (!result.Loaded)
+                {
+                    failed++;
+                    continue;
+                }
+
+                totalTargets += result.TargetCount;
+                foreach (SalvageInventoryReplayTarget target in result.Targets)
+                {
+                    Console.WriteLine($"TARGET row={target.Row} column={target.Column} footprintRows={target.FootprintRows} quality={target.Quality} confirmationExpected={target.ConfirmationExpected} screenPoint={target.ScreenPoint.X},{target.ScreenPoint.Y}");
+                }
             }
         }
 
@@ -2299,8 +2324,9 @@ static void PrintInventoryReplayCommandHelp()
     Console.WriteLine("Usage:");
     Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --inventory-replay \"Debug\\InventoryReplay\\Salvage\\SalvageInventoryReplay_...\"");
     Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --inventory-replay \"Debug\\InventoryReplay\\Salvage\\SalvageInventoryReplay_...\\metadata.json\"");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --inventory-replay \"Debug\\InventoryReplay\\Stash\\GemStashInventoryReplay_...\"");
     Console.WriteLine();
-    Console.WriteLine("Inventory replay is explicit/on-demand only. It runs the production salvage inventory classifier against saved inventory-grid crops and never clicks, presses keys, or runs live automation.");
+    Console.WriteLine("Inventory replay is explicit/on-demand only. It runs production inventory classifiers against saved inventory-grid crops and never clicks, presses keys, or runs live automation.");
 }
 
 static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitCode)
@@ -3875,7 +3901,7 @@ static void TestGoblinObservationModeEnabledByDefaultInRelease()
     string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
     string scannerEnabledMethod = ExtractMethodBody(evidenceSource, "private static bool PortGoblinObservationScannerEnabled");
 
-    AssertTrue(appSettingsSource.Contains("public bool EnableObservationMode { get; set; } = true", StringComparison.Ordinal), "Observation Mode should default on for v1.4 Release diagnostics");
+    AssertTrue(appSettingsSource.Contains("public bool EnableObservationMode { get; set; } = true", StringComparison.Ordinal), "Observation Mode should default on for Release diagnostics");
     AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableObservationMode={GoblinTracker.EnableObservationMode}", StringComparison.Ordinal), "AppSettings startup log should expose the Observation Mode setting");
     AssertTrue(appSettingsSource.Contains("TryGetProperty(\"EnableObservationMode\"", StringComparison.Ordinal), "existing installed configs should be migrated when the Observation Mode setting is absent");
     AssertTrue(configSource.Contains("\"EnableObservationMode\"", StringComparison.Ordinal), "tracked config should make Observation Mode visible");
@@ -5288,6 +5314,36 @@ static void DrawSyntheticRegularGem(Bitmap bitmap, int row, int column, Color co
     graphics.DrawPolygon(highlight, gemPoints);
 }
 
+static Bitmap CreateSyntheticGemTemplate(Color color)
+{
+    Bitmap template = new(24, 24);
+    using Graphics graphics = Graphics.FromImage(template);
+    graphics.Clear(Color.FromArgb(16, 16, 16));
+    using SolidBrush gem = new(color);
+    using Pen highlight = new(Color.FromArgb(
+        Math.Min(255, color.R + 45),
+        Math.Min(255, color.G + 45),
+        Math.Min(255, color.B + 45)), 2);
+    Point[] points =
+    [
+        new(12, 2),
+        new(22, 12),
+        new(12, 22),
+        new(2, 12),
+    ];
+    graphics.FillPolygon(gem, points);
+    graphics.DrawPolygon(highlight, points);
+    graphics.FillRectangle(Brushes.White, 10, 7, 4, 4);
+    return template;
+}
+
+static void DrawSyntheticGemForTemplate(Bitmap bitmap, int row, int column, Bitmap template)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    graphics.DrawImage(template, cell.Left + 22, cell.Top + 23, template.Width, template.Height);
+}
+
 static void DrawSyntheticSetQualityLeftoverAnchor(Bitmap bitmap, int row, int column)
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
@@ -5726,6 +5782,161 @@ static void TestInventoryReplayLoadsSavedSalvageCrop()
     }
 }
 
+static void TestGemStashClassifierMatchesSyntheticGemTemplates()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(30, 185, 80));
+    DrawSyntheticGemForTemplate(grid, 2, 3, template);
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashClassifier_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        string templatePath = Path.Combine(root, "Emerald.png");
+        template.Save(templatePath, System.Drawing.Imaging.ImageFormat.Png);
+
+        GemStashInventoryScanResult result = GemStashInventoryClassifier.Scan(
+            grid,
+            new Rectangle(1000, 700, grid.Width, grid.Height),
+            [new GemStashTemplate("Emerald", templatePath)],
+            0.90);
+
+        AssertEqual(1, result.Targets.Count, "synthetic gem template should match exactly one inventory slot");
+        GemStashInventorySlotTarget target = result.Targets[0];
+        AssertEqual(2, target.Row, "matched gem row should be reported");
+        AssertEqual(3, target.Column, "matched gem column should be reported");
+        AssertEqual("Emerald", target.Template, "matched template should be reported");
+        AssertTrue(target.Confidence >= 0.90, "matched gem confidence should clear threshold");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestGemStashClassifierRejectsBelowThreshold()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(190, 32, 42));
+    DrawSyntheticGemForTemplate(grid, 1, 1, template);
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashThreshold_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        string templatePath = Path.Combine(root, "Ruby.png");
+        template.Save(templatePath, System.Drawing.Imaging.ImageFormat.Png);
+
+        GemStashInventoryScanResult result = GemStashInventoryClassifier.Scan(
+            grid,
+            new Rectangle(0, 0, grid.Width, grid.Height),
+            [new GemStashTemplate("Ruby", templatePath)],
+            1.01);
+
+        AssertEqual(0, result.Targets.Count, "threshold above possible confidence should reject all gem targets");
+        AssertTrue(result.Candidates.Any(candidate => candidate.BestTemplate == "Ruby" && candidate.Reason == "BelowThreshold"), "below-threshold gem match should be diagnostic-only");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestGemStashSettingsAndAssetSeparationAreWired()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string appSettingsJson = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string projectSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
+
+    AssertTrue(appSettingsSource.Contains("public StashSettings Stash { get; set; } = new();", StringComparison.Ordinal), "settings model should expose a separate Stash group");
+    AssertTrue(appSettingsSource.Contains("settings.Stash.EnableAutoGemStash = true", StringComparison.Ordinal), "VS Debug defaults should enable gem stashing");
+    AssertTrue(appSettingsJson.Contains("\"EnableAutoGemStash\": false", StringComparison.Ordinal), "release config should keep gem stashing disabled by default");
+    AssertTrue(automationSource.Contains("Img(\"Gems\", \"Gem Coordinates.txt\")", StringComparison.Ordinal), "gem stash coordinates should be read from Images\\Gems");
+    AssertTrue(townSource.Contains("PortGemStashTemplateDirectory()", StringComparison.Ordinal), "town workflow should use gem template directory helper");
+    AssertTrue(townSource.Contains("return Img(\"Gems\")", StringComparison.Ordinal), "gem stash template directory should resolve to Images\\Gems");
+    AssertTrue(projectSource.Contains("Images\\Gems\\**\\*.*", StringComparison.Ordinal), "project should include gem assets when present");
+    AssertFalse(townSource.Contains("Img(\"Salvage\", \"Salvage Coordinates.txt\")", StringComparison.Ordinal), "stash workflow should not read salvage coordinate files");
+}
+
+static void TestGemStashTownFlowIsNonFatalAfterSalvage()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string repairFlow = ExtractMethodBody(townSource, "private bool PortRunRepairFlow");
+    string stashMethod = ExtractMethodBody(townSource, "private PortGemStashResult PortAutoStashGems");
+
+    AssertTrue(repairFlow.Contains("PortAutoStashGems(token)", StringComparison.Ordinal), "repair flow should call gem stashing after salvage");
+    AssertTrue(repairFlow.IndexOf("PortSalvageInventoryFromOpenBlacksmith", StringComparison.Ordinal) < repairFlow.IndexOf("PortAutoStashGems(token)", StringComparison.Ordinal), "gem stashing should run after salvage succeeds");
+    AssertFalse(repairFlow.Contains("return PortWorkflowFailed(\"Stashing", StringComparison.Ordinal), "gem stashing should not fail the whole repair flow");
+    AssertTrue(stashMethod.Contains("GemFolderMissing", StringComparison.Ordinal), "missing Images\\Gems should skip safely");
+    AssertTrue(stashMethod.Contains("GemCoordinatesMissing", StringComparison.Ordinal), "missing gem coordinates should skip safely");
+    AssertTrue(stashMethod.Contains("NoGemTemplates", StringComparison.Ordinal), "missing gem templates should skip safely");
+    AssertTrue(stashMethod.Contains("RecordStashFailure", StringComparison.Ordinal), "real stash failures should be recorded diagnostically");
+}
+
+static void TestInventoryReplayLoadsSavedGemStashCrop()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashReplay_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "templates"));
+        using Bitmap grid = CreateSyntheticSalvageGrid();
+        using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(210, 170, 40));
+        DrawSyntheticGemForTemplate(grid, 4, 5, template);
+        string imagePath = Path.Combine(root, "inventory-grid.png");
+        string templatePath = Path.Combine(root, "templates", "Topaz.png");
+        grid.Save(imagePath, System.Drawing.Imaging.ImageFormat.Png);
+        template.Save(templatePath, System.Drawing.Imaging.ImageFormat.Png);
+        Rectangle screenGrid = new(2000, 700, grid.Width, grid.Height);
+        GemStashInventoryScanResult direct = GemStashInventoryClassifier.Scan(
+            grid,
+            screenGrid,
+            [new GemStashTemplate("Topaz", templatePath)],
+            0.90);
+        GemStashInventoryReplayMetadata metadata = new(
+            "GemStash",
+            DateTime.UtcNow,
+            "SyntheticGemReplay",
+            GemStashInventoryClassifier.ClassifierVersion,
+            InventoryGridLayout.Columns,
+            InventoryGridLayout.Rows,
+            new InventoryReplayRectangle(screenGrid.Left, screenGrid.Top, screenGrid.Width, screenGrid.Height),
+            "inventory-grid.png",
+            0.90,
+            ["Topaz"],
+            [],
+            direct.Targets.Count,
+            direct.Candidates.Count,
+            direct.Targets.Select(GemStashInventoryReplayTarget.FromTarget).ToArray(),
+            direct.Candidates.Select(GemStashInventoryReplayCandidate.FromCandidate).ToArray());
+        File.WriteAllText(Path.Combine(root, "metadata.json"), JsonSerializer.Serialize(metadata));
+
+        GemStashInventoryReplayRunResult replay = GemStashInventoryReplayArtifacts.RunReplayForHarness(root);
+
+        AssertTrue(GemStashInventoryReplayArtifacts.IsGemStashReplayArtifact(root), "inventory replay should detect gem stash artifact metadata");
+        AssertTrue(replay.Loaded, "inventory replay should load a saved gem stash artifact folder");
+        AssertEqual(direct.Targets.Count, replay.TargetCount, "gem stash replay should use production classifier target count");
+        AssertTrue(replay.Targets.Select(target => (target.Row, target.Column, target.Template)).SequenceEqual(
+            direct.Targets.Select(target => (target.Row, target.Column, target.Template))),
+            "gem stash replay targets should match direct classifier output");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
 static void TestInventoryReplayRetentionIsScopedAndAgeBased()
 {
     string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerInventoryReplayRetention_{Guid.NewGuid():N}");
@@ -5768,15 +5979,19 @@ static void TestInventoryReplayCommandRemainsHarnessOnly()
     string programSource = File.ReadAllText(Path.Combine(repoRoot, "Tests", "GoblinFarmer.Tests", "Program.cs"));
     string imageRecognitionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ImageRecognition.cs"));
     string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
 
     AssertTrue(programSource.Contains("--inventory-replay", StringComparison.Ordinal), "inventory replay command should live in the test harness CLI");
     AssertTrue(programSource.Contains("RunReplayForHarness", StringComparison.Ordinal), "inventory replay command should call the explicit harness replay path");
+    AssertTrue(programSource.Contains("GemStashInventoryReplayArtifacts.IsGemStashReplayArtifact", StringComparison.Ordinal), "inventory replay command should route gem stash artifacts explicitly");
     AssertTrue(programSource.Contains("WritesPersistentDebugFiles: False", StringComparison.Ordinal), "inventory replay command should declare that it does not write persistent debug files");
     AssertTrue(imageRecognitionSource.Contains("SalvageInventoryReplayArtifacts.SaveScanArtifact", StringComparison.Ordinal), "live salvage scans should save bounded replay artifacts in debug mode");
+    AssertTrue(imageRecognitionSource.Contains("GemStashInventoryReplayArtifacts.SaveScanArtifact", StringComparison.Ordinal), "live gem stash scans should save bounded replay artifacts in debug mode");
     AssertTrue(packageScript.Contains("MaxInventoryReplayArtifacts", StringComparison.Ordinal), "debug packages should bound inventory replay artifacts");
     AssertTrue(packageScript.Contains("Debug\\InventoryReplay\\Salvage", StringComparison.Ordinal), "debug packages should include scoped inventory replay artifacts");
+    AssertTrue(packageScript.Contains("Debug\\InventoryReplay\\Stash", StringComparison.Ordinal), "debug packages should include scoped gem stash replay artifacts");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--inventory-replay", StringComparison.Ordinal), "WinForms startup should not know about inventory replay command");
-    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs")).Contains("--inventory-replay", StringComparison.Ordinal), "town automation should not know about inventory replay command");
+    AssertFalse(townSource.Contains("--inventory-replay", StringComparison.Ordinal), "town automation should not know about inventory replay command");
     AssertFalse(packageScript.Contains("dotnet run", StringComparison.Ordinal) && packageScript.Contains("--inventory-replay", StringComparison.Ordinal), "debug package creation should not invoke inventory replay");
 }
 
