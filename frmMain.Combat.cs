@@ -1131,8 +1131,17 @@ namespace GoblinFarmer
                     {
                         Interlocked.Exchange(ref portLastBountyMenuCloseTicks, nowTicks);
                         AppLogger.Info($"BountyMenuDetected: confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource=CombatMenuWatcher; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; diabloActive=True; automationCancelled=false");
-                        PortPressEscapeForAutomation("BountyMenuCombatWatcher");
-                        AppLogger.Info($"BountyMenuEscapeSent: closeMethod=Escape; source=CombatMenuWatcher; confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=true");
+                        PortPressKey(PortVkReturn);
+                        Thread.Sleep(80);
+                        double postEnterConfidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion.Value);
+                        bool escapeSent = false;
+                        if (postEnterConfidence >= PortBountyMenuConfidence)
+                        {
+                            PortPressEscapeForAutomation("BountyMenuCombatWatcher");
+                            escapeSent = true;
+                        }
+
+                        AppLogger.Info($"BountyMenuClearSent: closeMethod=EnterThenEscapeIfStillVisible; source=CombatMenuWatcher; confidence={confidence:0.000}; postEnterConfidence={postEnterConfidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; enterSent=True; escapeSent={escapeSent}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape={escapeSent}");
                     }
                 }
 

@@ -162,7 +162,7 @@ namespace GoblinFarmer
             };
 
             portObsStartTimeLabel = PortCreateObsStatusLabel("Start Time: --", 22);
-            portObsStatusLabel = PortCreateObsStatusLabel("Status: closed", 44);
+            portObsStatusLabel = PortCreateObsStatusLabel("Status: Closed", 44);
             portObsEndTimeLabel = PortCreateObsStatusLabel("End Time: --", 66);
 
             portObsStatusGroup.Controls.Add(portObsStartTimeLabel);
@@ -253,31 +253,31 @@ namespace GoblinFarmer
             string status;
             if (lastRecordingStart.HasValue && (!lastRecordingStop.HasValue || lastRecordingStart.Value > lastRecordingStop.Value))
             {
-                status = "recording";
+                status = "Recording";
             }
             else if (lastCloseRequested.HasValue && (!lastLaunch.HasValue || lastCloseRequested.Value >= lastLaunch.Value) && obsProcessRunning)
             {
-                status = "stopping";
+                status = "Stopping";
             }
             else if (lastRecordingStop.HasValue && lastLaunch.HasValue && lastRecordingStop.Value >= lastLaunch.Value && obsProcessRunning)
             {
-                status = "not recording";
+                status = "Not Recording";
             }
             else if (lastCloseRequested.HasValue && (!lastLaunch.HasValue || lastCloseRequested.Value >= lastLaunch.Value) && !obsProcessRunning)
             {
-                status = "closed";
+                status = "Closed";
             }
             else if (obsProcessRunning && lastLaunch.HasValue)
             {
-                status = "starting";
+                status = "Starting";
             }
             else if (obsProcessRunning)
             {
-                status = "not recording";
+                status = "Not Recording";
             }
             else
             {
-                status = "closed";
+                status = "Closed";
             }
 
             DateTime? startTime = lastRecordingStart;

@@ -25,6 +25,8 @@ namespace GoblinFarmer
         private const int PortBulkSalvageSettleMs = 250;
         private const int PortBulkSalvageButtonSampleSize = 44;
         private const int PortBulkSalvageActivePixelThreshold = 90;
+        private const int PortRepairButtonSampleSize = 44;
+        private const int PortRepairButtonActivePixelThreshold = 55;
         private const int PortSalvageRecoveryRescanLimit = 2;
 
         private sealed record PortRepairReadinessResult(bool VendorPanelAlreadyVisible, bool VendorPanelBecameVisible, bool NewTristramConfirmed, long ReadinessElapsedMs, long PostArrivalWaitMs);
@@ -53,9 +55,31 @@ namespace GoblinFarmer
 
             DrawingPoint repairButtonReference = portRepairCoords.GetValueOrDefault("Repair Button", new DrawingPoint(361, 715));
             DrawingPoint repairButtonPoint = PortScaleGamePoint(repairButtonReference);
-            bool repairButtonClickSent = PortSafeLeftClick(repairButtonPoint);
-            AppLogger.Info($"Repair menu timing: repair button click sent={repairButtonClickSent}; reference={repairButtonReference.X},{repairButtonReference.Y}; screen={repairButtonPoint.X},{repairButtonPoint.Y}; elapsed={repairPerf.ElapsedMilliseconds}ms");
-            PortSleep(token, 350);
+            PortBulkSalvageColorSample repairButtonSample = PortSampleButtonColor(
+                repairButtonPoint,
+                PortRepairButtonActiveColor,
+                PortRepairButtonSampleSize,
+                PortRepairButtonActivePixelThreshold);
+            bool repairButtonClickSent = false;
+            string repairButtonOutcome = repairButtonSample.Active ? "ClickedActionableRepairButton" : "SkippedInactiveRepairButton";
+            if (repairButtonSample.Active)
+            {
+                repairButtonClickSent = PortSafeLeftClick(repairButtonPoint);
+                repairButtonOutcome = repairButtonClickSent ? "ClickedActionableRepairButton" : "UnsafeRepairButtonClick";
+                PortSleep(token, 350);
+            }
+
+            AppLogger.Info(
+                "Repair menu timing: " +
+                $"repair button click sent={repairButtonClickSent}; " +
+                $"repairButtonActionable={repairButtonSample.Active}; " +
+                $"outcome={PortLogField(repairButtonOutcome)}; " +
+                $"activePixels={repairButtonSample.ActivePixels}; " +
+                $"sampledPixels={repairButtonSample.SampledPixels}; " +
+                $"activeRatio={repairButtonSample.ActiveRatio:0.000}; " +
+                $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
+                $"screen={repairButtonPoint.X},{repairButtonPoint.Y}; " +
+                $"elapsed={repairPerf.ElapsedMilliseconds}ms");
 
             if (closeAfterRepair)
             {
@@ -103,14 +127,24 @@ namespace GoblinFarmer
                 }
 
                 AddWorkflowStep("Checking inventory for salvage");
-                if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true))
+                if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: false))
                 {
                     DebugManager.Session.RecordSalvageFailure("Salvage failed during repair flow");
                     return PortWorkflowFailed("Salvaging");
                 }
 
                 AddWorkflowStep("Checking inventory for gem stashing");
-                PortGemStashResult stashResult = PortAutoStashGems(token);
+                PortGemStashResult stashResult;
+                if (PortShouldRunAutoGemStashFromOpenTownUi(token, out stashResult))
+                {
+                    PortCloseTownUiAfterSalvage(token, "RepairFlowBeforeStash");
+                    stashResult = PortAutoStashGems(token);
+                }
+                else
+                {
+                    PortCloseTownUiAfterSalvage(token, "RepairFlowNoGems");
+                }
+
                 AppLogger.Info($"Auto gem stash repair-flow result: outcome={PortLogField(stashResult.Outcome)}; initialTargets={stashResult.InitialTargets}; slotsClicked={stashResult.SlotsClicked}; recoveryPasses={stashResult.RecoveryPasses}; remainingTargets={stashResult.RemainingTargets}; elapsedMs={stashResult.ElapsedMs}");
 
                 AddWorkflowStep("Repair flow completed");
@@ -645,12 +679,25 @@ namespace GoblinFarmer
 
         private PortBulkSalvageColorSample PortSampleBulkSalvageButton(DrawingPoint centerPoint, Func<Color, bool> activeColorPredicate)
         {
+            return PortSampleButtonColor(
+                centerPoint,
+                activeColorPredicate,
+                PortBulkSalvageButtonSampleSize,
+                PortBulkSalvageActivePixelThreshold);
+        }
+
+        private PortBulkSalvageColorSample PortSampleButtonColor(
+            DrawingPoint centerPoint,
+            Func<Color, bool> activeColorPredicate,
+            int sampleSize,
+            int activePixelThreshold)
+        {
             if (!PortTryGetDiabloRect(out RECT rect))
             {
                 return new(false, 0, 0, 0);
             }
 
-            int half = PortBulkSalvageButtonSampleSize / 2;
+            int half = sampleSize / 2;
             Rectangle sample = Rectangle.FromLTRB(
                 centerPoint.X - half,
                 centerPoint.Y - half,
@@ -686,7 +733,7 @@ namespace GoblinFarmer
             }
 
             double ratio = sampledPixels == 0 ? 0 : activePixels / (double)sampledPixels;
-            return new(activePixels >= PortBulkSalvageActivePixelThreshold, activePixels, sampledPixels, ratio);
+            return new(activePixels >= activePixelThreshold, activePixels, sampledPixels, ratio);
         }
 
         private static bool PortBulkSalvageBlueActiveColor(Color color)
@@ -705,6 +752,15 @@ namespace GoblinFarmer
                 Math.Abs(color.R - color.G) <= 70 &&
                 color.R >= color.B + 35 &&
                 color.G >= color.B + 25;
+        }
+
+        private static bool PortRepairButtonActiveColor(Color color)
+        {
+            return color.R >= 120 &&
+                color.G >= 85 &&
+                color.B <= 100 &&
+                color.R >= color.B + 35 &&
+                color.G >= color.B + 20;
         }
 
         private bool PortWaitForSalvageConfirmationCleared(CancellationToken token, int timeoutMs)
@@ -822,6 +878,58 @@ namespace GoblinFarmer
             }
 
             return PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: true);
+        }
+
+        private bool PortShouldRunAutoGemStashFromOpenTownUi(CancellationToken token, out PortGemStashResult skipResult)
+        {
+            Stopwatch preflightPerf = Stopwatch.StartNew();
+            skipResult = new PortGemStashResult("PreflightUnknown", 0, 0, 0, 0, 0);
+            if (!AppSettings.Stash.EnableAutoGemStash)
+            {
+                AddWorkflowStep("Gem stashing skipped: disabled");
+                AppLogger.Info("Auto gem stash preflight skipped: enabled=False; stashTravelSkipped=True");
+                skipResult = new PortGemStashResult("Disabled", 0, 0, 0, 0, preflightPerf.ElapsedMilliseconds);
+                return false;
+            }
+
+            string gemFolder = PortGemStashTemplateDirectory();
+            if (!Directory.Exists(gemFolder))
+            {
+                AddWorkflowStep("Gem stashing skipped: Images\\Gems missing");
+                AppLogger.Info($"Auto gem stash preflight skipped: reason=GemFolderMissing; folder={PortLogField(gemFolder)}; stashTravelSkipped=True");
+                skipResult = new PortGemStashResult("GemFolderMissing", 0, 0, 0, 0, preflightPerf.ElapsedMilliseconds);
+                return false;
+            }
+
+            if (!portGemStashCoordinateFilePresent)
+            {
+                AddWorkflowStep("Gem stashing skipped: coordinates missing");
+                AppLogger.Info($"Auto gem stash preflight skipped: reason=GemCoordinatesMissing; path={PortLogField(Img("Gems", "Gem Coordinates.txt"))}; stashTravelSkipped=True");
+                skipResult = new PortGemStashResult("GemCoordinatesMissing", 0, 0, 0, 0, preflightPerf.ElapsedMilliseconds);
+                return false;
+            }
+
+            IReadOnlyList<GemStashTemplate> templates = GemStashTemplateCatalog.Load(gemFolder);
+            if (templates.Count == 0)
+            {
+                AddWorkflowStep("Gem stashing skipped: no gem templates");
+                AppLogger.Info($"Auto gem stash preflight skipped: reason=NoGemTemplates; folder={PortLogField(gemFolder)}; stashTravelSkipped=True");
+                skipResult = new PortGemStashResult("NoGemTemplates", 0, 0, 0, 0, preflightPerf.ElapsedMilliseconds);
+                return false;
+            }
+
+            GemStashInventoryScanResult scan = PortScanGemStashInventorySlots(logCandidates: true, "PreStashGemInventoryScan");
+            int targets = scan.Targets.Count;
+            if (targets == 0)
+            {
+                AddWorkflowStep("Gem stashing skipped: no gems found");
+                AppLogger.Info($"Auto gem stash preflight skipped: reason=NoGemsFound; initialTargets=0; candidateCount={scan.Candidates.Count}; templateCount={templates.Count}; threshold={AppSettings.Stash.GemTemplateConfidence:0.000}; stashTravelSkipped=True; elapsedMs={preflightPerf.ElapsedMilliseconds}");
+                skipResult = new PortGemStashResult("NoGemsFound", 0, 0, 0, 0, preflightPerf.ElapsedMilliseconds);
+                return false;
+            }
+
+            AppLogger.Info($"Auto gem stash preflight accepted: initialTargets={targets}; candidateCount={scan.Candidates.Count}; templateCount={templates.Count}; threshold={AppSettings.Stash.GemTemplateConfidence:0.000}; stashTravelSkipped=False; elapsedMs={preflightPerf.ElapsedMilliseconds}");
+            return true;
         }
 
         private PortGemStashResult PortAutoStashGems(CancellationToken token)

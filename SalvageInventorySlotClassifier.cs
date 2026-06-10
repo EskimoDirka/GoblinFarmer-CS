@@ -426,6 +426,11 @@ namespace GoblinFarmer
 
         private static bool IsRegularGem(SalvageInventorySlotMetrics metrics)
         {
+            if (HasStrongNonGemQualityBoundary(metrics))
+            {
+                return false;
+            }
+
             if (metrics.RegularGemPixels >= 300 ||
                 (metrics.RegularGemPixels >= 220 && metrics.InnerSaturatedPixels >= 500))
             {
@@ -449,6 +454,16 @@ namespace GoblinFarmer
                 (metrics.OrangeQualityPixels >= 250 ||
                     metrics.GreenQualityPixels >= 250 ||
                     metrics.RegularGemPixels >= 120);
+        }
+
+        private static bool HasStrongNonGemQualityBoundary(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.StackCountTextPixels < 80 &&
+                metrics.TopFramePixels >= ItemTopBoundaryPixels &&
+                metrics.ColoredFramePixels >= 1400 &&
+                metrics.InnerBrightPixels >= 650 &&
+                (metrics.GreenQualityPixels >= SetQualityPixels ||
+                    metrics.OrangeQualityPixels >= LegendaryQualityPixels);
         }
 
         private static bool[,] BuildLiveGemStackClusterMap(SalvageInventorySlotMetrics[,] metrics, bool[,] knownGemLike)

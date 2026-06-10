@@ -63,7 +63,7 @@ namespace GoblinFarmer
 
     internal static class GemStashInventoryClassifier
     {
-        public const string ClassifierVersion = "GemStashTemplateColorV2";
+        public const string ClassifierVersion = "GemStashTemplateColorV3";
 
         private sealed record LoadedTemplate(string Name, Mat Mat) : IDisposable
         {
@@ -215,10 +215,10 @@ namespace GoblinFarmer
                 return false;
             }
 
-            return metrics.RegularGemPixels >= 180 ||
-                (metrics.RegularGemPixels >= 120 &&
-                    metrics.StackCountTextPixels >= 18 &&
-                    metrics.InnerSaturatedPixels >= 450);
+            return metrics.RegularGemPixels >= 120 &&
+                metrics.StackCountTextPixels >= 18 &&
+                (metrics.InnerSaturatedPixels >= 450 ||
+                    metrics.RegularGemPixels >= 500);
         }
 
         private static GemStashInventorySlotMetrics MeasureSlot(Bitmap bitmap, Rectangle local)

@@ -607,7 +607,7 @@ namespace GoblinFarmer
 
             if (PortNewGameJournalCarryoverSuppressionActive(nowUtc, out double newGameCarryoverRemainingSeconds))
             {
-                PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
+                PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc, PortResolvedAreaKey(portLastConfirmedLocation));
                 PortLogJournalEvidenceFreshnessDiagnostic(
                     "JournalCandidateIgnoredNewGameCarryoverWindow",
                     template,
@@ -619,13 +619,32 @@ namespace GoblinFarmer
 
             if (PortTryTouchStaleSuppressedJournalEvidenceByVisibleGoblinLine(journalLineSignature, nowUtc, out string staleVisibleLineDetails))
             {
-                PortLogJournalEvidenceFreshnessDiagnostic(
-                    "JournalCandidateIgnoredStaleVisibleLine",
+                if (PortTryAllowFreshAreaStaleVisibleJournalEvidence(
                     template,
                     match,
-                    portLastConfirmedLocation,
-                    $"{staleVisibleLineDetails}; areaResolutionSkippedReason=StaleVisibleLinePreAreaResolution");
-                return false;
+                    goblinType,
+                    journalLineSignature,
+                    nowUtc,
+                    staleVisibleLineDetails,
+                    out string freshAreaBypassDetails))
+                {
+                    PortLogJournalEvidenceFreshnessDiagnostic(
+                        "JournalCandidateFreshAreaStaleVisibleLineBypass",
+                        template,
+                        match,
+                        PortGoblinEvidenceNoteValue(freshAreaBypassDetails, "currentArea"),
+                        freshAreaBypassDetails);
+                }
+                else
+                {
+                    PortLogJournalEvidenceFreshnessDiagnostic(
+                        "JournalCandidateIgnoredStaleVisibleLine",
+                        template,
+                        match,
+                        portLastConfirmedLocation,
+                        $"{staleVisibleLineDetails}; areaResolutionSkippedReason=StaleVisibleLinePreAreaResolution");
+                    return false;
+                }
             }
 
             lock (portGoblinEvidenceLock)
@@ -688,7 +707,7 @@ namespace GoblinFarmer
                     !string.Equals(firstSeenAreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
                 if (firstSeenAreaChanged)
                 {
-                    PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
+                    PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc, firstSeenAreaKey);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalEngagedIgnoredAreaChanged",
                         template,
@@ -700,7 +719,7 @@ namespace GoblinFarmer
 
                 if (!GoblinJournalFreshnessPolicy.EngagedIsFresh(firstSeenUtc, firstSeenAreaKey, areaKey, nowUtc, GoblinJournalEvidenceFreshWindow))
                 {
-                    PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc);
+                    PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc, firstSeenAreaKey);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalEngagedIgnoredStale",
                         template,
@@ -745,7 +764,7 @@ namespace GoblinFarmer
                     GoblinJournalEvidenceFreshWindow);
                 if (!killedFreshInCurrentArea && !recentEngagedMatches)
                 {
-                    PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc);
+                    PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc, killedState.AreaKey);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalKilledIgnoredStale",
                         template,
@@ -933,6 +952,8 @@ namespace GoblinFarmer
                         $"staleSignature={PortLogField(pair.Key)}; " +
                         $"currentLineBucket={currentBucket}; " +
                         $"staleLineBucket={previousBucket}; " +
+                        $"staleArea={PortLogField(pair.Value.AreaKey)}; " +
+                        $"staleFirstSuppressedAgeSeconds={Math.Max(0, (nowUtc - pair.Value.FirstSuppressedUtc).TotalSeconds):0.0}; " +
                         $"staleLastSeenAgeSeconds={Math.Max(0, (nowUtc - pair.Value.LastSeenUtc).TotalSeconds):0.0}; " +
                         $"freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}";
 
@@ -953,17 +974,120 @@ namespace GoblinFarmer
             return false;
         }
 
-        private void PortRememberStaleSuppressedJournalEvidence(string signature, DateTime nowUtc)
+        private bool PortTryAllowFreshAreaStaleVisibleJournalEvidence(
+            GoblinEvidenceTemplateRequirement template,
+            GoblinEvidenceTemplateMatch match,
+            string goblinType,
+            string signature,
+            DateTime nowUtc,
+            string staleVisibleLineDetails,
+            out string details)
+        {
+            details = "";
+            string staleArea = PortGoblinEvidenceNoteValue(staleVisibleLineDetails, "staleArea");
+            if (string.IsNullOrWhiteSpace(staleArea))
+            {
+                details = $"{staleVisibleLineDetails}; bypassAllowed=False; bypassReason=MissingStaleArea";
+                return false;
+            }
+
+            PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea("Journal");
+            areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, nowUtc, "JournalStaleVisibleFreshAreaBypass");
+            string currentArea = areaResult.Area.Resolved ? areaResult.Area.AreaKey : "";
+            if (string.IsNullOrWhiteSpace(currentArea))
+            {
+                details = $"{staleVisibleLineDetails}; bypassAllowed=False; bypassReason=UnresolvedCurrentArea";
+                return false;
+            }
+
+            double firstSuppressedAgeSeconds = PortParseLogDouble(PortGoblinEvidenceNoteValue(staleVisibleLineDetails, "staleFirstSuppressedAgeSeconds"));
+            if (firstSuppressedAgeSeconds < 20)
+            {
+                details = $"{staleVisibleLineDetails}; currentArea={PortLogField(currentArea)}; bypassAllowed=False; bypassReason=StaleLineTooRecent; minimumAgeSeconds=20";
+                return false;
+            }
+
+            if (string.Equals(staleArea, currentArea, StringComparison.OrdinalIgnoreCase))
+            {
+                details = $"{staleVisibleLineDetails}; currentArea={PortLogField(currentArea)}; bypassAllowed=False; bypassReason=SameArea";
+                return false;
+            }
+
+            if (GoblinManualCountBlockList.IsBlocked(currentArea))
+            {
+                details = $"{staleVisibleLineDetails}; currentArea={PortLogField(currentArea)}; bypassAllowed=False; bypassReason=BlockedArea";
+                return false;
+            }
+
+            PortForgetJournalFreshnessStateForVisibleLine(signature);
+            details =
+                $"{staleVisibleLineDetails}; " +
+                $"currentArea={PortLogField(currentArea)}; " +
+                $"bypassAllowed=True; " +
+                $"bypassReason=FreshResolvedAreaAfterOldStaleLine; " +
+                $"templateKind={PortLogField(template.Kind.ToString())}; " +
+                $"matchLineBucket={PortJournalEvidenceLineBucket(match.MatchPoint)}";
+            return true;
+        }
+
+        private void PortForgetJournalFreshnessStateForVisibleLine(string signature)
+        {
+            lock (portGoblinEvidenceLock)
+            {
+                List<string> staleKeys = portStaleSuppressedJournalEvidenceByKey.Keys
+                    .Where(key => string.Equals(key, signature, StringComparison.OrdinalIgnoreCase) ||
+                        GoblinJournalEvidencePolicy.SameVisibleGoblinLine(signature, key, out _, out _))
+                    .ToList();
+                foreach (string key in staleKeys)
+                {
+                    portStaleSuppressedJournalEvidenceByKey.Remove(key);
+                }
+
+                List<string> seenKeys = portJournalEvidenceSeenByKey.Keys
+                    .Where(key => string.Equals(key, signature, StringComparison.OrdinalIgnoreCase) ||
+                        GoblinJournalEvidencePolicy.SameVisibleGoblinLine(signature, key, out _, out _))
+                    .ToList();
+                foreach (string key in seenKeys)
+                {
+                    portJournalEvidenceSeenByKey.Remove(key);
+                }
+
+                List<string> killedKeys = portJournalKilledEvidenceSeenBySignature.Keys
+                    .Where(key => string.Equals(key, signature, StringComparison.OrdinalIgnoreCase) ||
+                        GoblinJournalEvidencePolicy.SameVisibleGoblinLine(signature, key, out _, out _))
+                    .ToList();
+                foreach (string key in killedKeys)
+                {
+                    portJournalKilledEvidenceSeenBySignature.Remove(key);
+                }
+            }
+        }
+
+        private static double PortParseLogDouble(string value)
+        {
+            return double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed)
+                ? parsed
+                : 0;
+        }
+
+        private static string PortResolvedAreaKey(string location)
+        {
+            GoblinAreaResolution area = GoblinAreaResolver.Resolve(location);
+            return area.Resolved ? area.AreaKey : "";
+        }
+
+        private void PortRememberStaleSuppressedJournalEvidence(string signature, DateTime nowUtc, string areaKey = "")
         {
             lock (portGoblinEvidenceLock)
             {
                 if (portStaleSuppressedJournalEvidenceByKey.TryGetValue(signature, out GoblinJournalStaleSuppressedState? state))
                 {
-                    portStaleSuppressedJournalEvidenceByKey[signature] = state with { LastSeenUtc = nowUtc };
+                    string rememberedArea = string.IsNullOrWhiteSpace(state.AreaKey) ? areaKey : state.AreaKey;
+                    portStaleSuppressedJournalEvidenceByKey[signature] = state with { LastSeenUtc = nowUtc, AreaKey = rememberedArea };
                     return;
                 }
 
-                portStaleSuppressedJournalEvidenceByKey[signature] = new GoblinJournalStaleSuppressedState(nowUtc, nowUtc);
+                portStaleSuppressedJournalEvidenceByKey[signature] = new GoblinJournalStaleSuppressedState(nowUtc, nowUtc, areaKey);
             }
         }
 
@@ -2121,7 +2245,7 @@ namespace GoblinFarmer
         }
 
 
-        private sealed record GoblinJournalStaleSuppressedState(DateTime FirstSuppressedUtc, DateTime LastSeenUtc);
+        private sealed record GoblinJournalStaleSuppressedState(DateTime FirstSuppressedUtc, DateTime LastSeenUtc, string AreaKey);
 
         private sealed record GoblinJournalResetCarryoverSuppressedState(
             string Signature,

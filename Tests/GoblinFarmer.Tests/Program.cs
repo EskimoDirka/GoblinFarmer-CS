@@ -32,6 +32,7 @@ Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectR
 Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
 Run("VS Debug startup requests Diablo auto-record monitor", TestVsDebugStartupRequestsDiabloAutoRecordMonitor);
 Run("VS Debug form shows OBS recording status", TestVsDebugFormShowsObsRecordingStatus);
+Run("VS Debug form uses proper-case OBS status text", TestVsDebugFormUsesProperCaseObsStatusText);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -84,6 +85,7 @@ Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverri
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
 Run("Demon Hunter no-click suppression diagnostic is not named as failure or stall", TestDemonHunterNoClickSuppressionDiagnosticName);
 Run("Witch Doctor combat uses mouse wheel and not held-left mode", TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode);
+Run("Combat menu watcher clears event complete with Enter before Escape", TestCombatMenuWatcherClearsEventCompleteWithEnterBeforeEscape);
 Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGameClickPolicyBlocksInGameSignals);
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
@@ -133,6 +135,7 @@ Run("Goblin auto-count treats different journal templates as separate lines", Te
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin accepted counts persist Last Observation until reset", TestGoblinAcceptedCountsPersistLastObservationUntilReset);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
+Run("Goblin stale journal suppression can bypass after verified fresh area", TestGoblinStaleJournalSuppressionCanBypassAfterVerifiedFreshArea);
 Run("Goblin fresh killed journal can satisfy evidence gate", TestGoblinFreshKilledJournalCanSatisfyEvidenceGate);
 Run("Goblin refresh logs fresh and stale killed journal decisions", TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions);
 Run("Goblin reset clears stale observation state", TestGoblinResetClearsStaleObservationState);
@@ -166,9 +169,12 @@ Run("Inventory replay loads saved salvage crop", TestInventoryReplayLoadsSavedSa
 Run("Gem stash classifier matches synthetic gem templates", TestGemStashClassifierMatchesSyntheticGemTemplates);
 Run("Gem stash classifier rejects below threshold", TestGemStashClassifierRejectsBelowThreshold);
 Run("Gem stash classifier accepts live-style gem color fallback", TestGemStashClassifierAcceptsLiveStyleGemColorFallback);
+Run("Gem stash classifier requires stack text for color fallback", TestGemStashClassifierRequiresStackTextForColorFallback);
 Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
+Run("Gem stash preflight skips stash travel when no gems exist", TestGemStashPreflightSkipsStashTravelWhenNoGemsExist);
 Run("Gem stash travel wait happens after stash coordinate click", TestGemStashTravelWaitHappensAfterStashCoordinateClick);
+Run("Repair flow samples repair button before clicking", TestRepairFlowSamplesRepairButtonBeforeClicking);
 Run("Inventory replay loads saved gem stash crop", TestInventoryReplayLoadsSavedGemStashCrop);
 Run("Inventory replay retention is scoped and age based", TestInventoryReplayRetentionIsScopedAndAgeBased);
 Run("Inventory replay command remains harness only", TestInventoryReplayCommandRemainsHarnessOnly);
@@ -447,13 +453,27 @@ static void TestVsDebugFormShowsObsRecordingStatus()
     AssertTrue(releaseSource.Contains("End Time:", StringComparison.Ordinal), "OBS status group should display recording end time");
     AssertTrue(releaseSource.Contains("OBS recording started", StringComparison.Ordinal), "OBS status should use recording-start log entries for Start Time");
     AssertTrue(releaseSource.Contains("OBS recording stopped", StringComparison.Ordinal), "OBS status should use recording-stop log entries for End Time");
-    AssertTrue(releaseSource.Contains("status = \"recording\"", StringComparison.Ordinal), "OBS status should report recording");
-    AssertTrue(releaseSource.Contains("status = \"not recording\"", StringComparison.Ordinal), "OBS status should report not recording");
-    AssertTrue(releaseSource.Contains("status = \"starting\"", StringComparison.Ordinal), "OBS status should report starting");
-    AssertTrue(releaseSource.Contains("status = \"stopping\"", StringComparison.Ordinal), "OBS status should report stopping");
-    AssertTrue(releaseSource.Contains("status = \"closed\"", StringComparison.Ordinal), "OBS status should report closed");
+    AssertTrue(releaseSource.Contains("status = \"Recording\"", StringComparison.Ordinal), "OBS status should report recording");
+    AssertTrue(releaseSource.Contains("status = \"Not Recording\"", StringComparison.Ordinal), "OBS status should report not recording");
+    AssertTrue(releaseSource.Contains("status = \"Starting\"", StringComparison.Ordinal), "OBS status should report starting");
+    AssertTrue(releaseSource.Contains("status = \"Stopping\"", StringComparison.Ordinal), "OBS status should report stopping");
+    AssertTrue(releaseSource.Contains("status = \"Closed\"", StringComparison.Ordinal), "OBS status should report closed");
     AssertTrue(releaseSource.Contains("portSettingsGroup.Bottom + 10", StringComparison.Ordinal), "OBS status group should sit underneath the Settings group");
     AssertTrue(formSource.Contains("PortUpdateObsStatusDisplay();", StringComparison.Ordinal), "OBS status should refresh from the normal form status timer");
+}
+
+static void TestVsDebugFormUsesProperCaseObsStatusText()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
+
+    AssertTrue(releaseSource.Contains("Status: Closed", StringComparison.Ordinal), "OBS status default should be proper case");
+    AssertFalse(releaseSource.Contains("Status: closed", StringComparison.Ordinal), "OBS status should not display lowercase closed");
+    AssertFalse(releaseSource.Contains("status = \"recording\"", StringComparison.Ordinal), "OBS recording status should not be lowercase");
+    AssertFalse(releaseSource.Contains("status = \"not recording\"", StringComparison.Ordinal), "OBS not-recording status should not be lowercase");
+    AssertFalse(releaseSource.Contains("status = \"starting\"", StringComparison.Ordinal), "OBS starting status should not be lowercase");
+    AssertFalse(releaseSource.Contains("status = \"stopping\"", StringComparison.Ordinal), "OBS stopping status should not be lowercase");
+    AssertFalse(releaseSource.Contains("status = \"closed\"", StringComparison.Ordinal), "OBS closed status should not be lowercase");
 }
 
 static void TestMissingDiabloPathKeepsStartupInSetupRequired()
@@ -3060,6 +3080,21 @@ static void TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode()
     AssertFalse(stateSource.Contains("portWitchDoctorHeldInputFromSafeRegion", StringComparison.Ordinal), "Witch Doctor should not track a held-left safe-region state");
 }
 
+static void TestCombatMenuWatcherClearsEventCompleteWithEnterBeforeEscape()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string combatSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Combat.cs"));
+    string watcherMethod = ExtractMethodBody(combatSource, "private void PortCombatMenuWatcherLoop");
+
+    AssertTrue(watcherMethod.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "event-complete menu clearing should try Enter first");
+    AssertTrue(watcherMethod.Contains("postEnterConfidence", StringComparison.Ordinal), "event-complete menu clearing should rescan after Enter");
+    AssertTrue(watcherMethod.Contains("PortPressEscapeForAutomation(\"BountyMenuCombatWatcher\")", StringComparison.Ordinal), "event-complete menu clearing should keep Escape as fallback");
+    AssertTrue(watcherMethod.Contains("BountyMenuClearSent", StringComparison.Ordinal), "event-complete menu clearing should log the combined clear action");
+    AssertTrue(watcherMethod.Contains("closeMethod=EnterThenEscapeIfStillVisible", StringComparison.Ordinal), "event-complete diagnostics should show Enter/Escape behavior");
+    AssertTrue(watcherMethod.IndexOf("PortPressKey(PortVkReturn)", StringComparison.Ordinal) < watcherMethod.IndexOf("PortPressEscapeForAutomation(\"BountyMenuCombatWatcher\")", StringComparison.Ordinal), "Enter should be attempted before Escape fallback");
+    AssertFalse(watcherMethod.Contains("BountyMenuEscapeSent", StringComparison.Ordinal), "old Escape-only diagnostic should not remain in the combat menu watcher");
+}
+
 static string FindRepositoryRootForTests()
 {
     DirectoryInfo? directory = new(AppContext.BaseDirectory);
@@ -5486,6 +5521,31 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
         "same-goblin stale visible-line suppression should not apply to different goblin types");
 }
 
+static void TestGoblinStaleJournalSuppressionCanBypassAfterVerifiedFreshArea()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string bypassMethod = ExtractMethodBody(evidenceSource, "private bool PortTryAllowFreshAreaStaleVisibleJournalEvidence");
+    string rememberMethod = ExtractMethodBody(evidenceSource, "private void PortRememberStaleSuppressedJournalEvidence");
+    string forgetMethod = ExtractMethodBody(evidenceSource, "private void PortForgetJournalFreshnessStateForVisibleLine");
+
+    AssertTrue(evidenceSource.Contains("JournalCandidateFreshAreaStaleVisibleLineBypass", StringComparison.Ordinal), "fresh-area journal bypass should be explicitly logged");
+    AssertTrue(evidenceSource.Contains("PortTryAllowFreshAreaStaleVisibleJournalEvidence", StringComparison.Ordinal), "stale visible-line bypass should be isolated to a helper");
+    AssertTrue(evidenceSource.Contains("staleArea=", StringComparison.Ordinal), "stale visible-line diagnostics should remember the stale source area");
+    AssertTrue(evidenceSource.Contains("staleFirstSuppressedAgeSeconds=", StringComparison.Ordinal), "stale visible-line diagnostics should include first-suppressed age");
+    AssertTrue(bypassMethod.Contains("PortResolveCurrentGoblinArea(\"Journal\")", StringComparison.Ordinal), "bypass should re-resolve the current area instead of trusting route context");
+    AssertTrue(bypassMethod.Contains("PortApplyJournalMinimapAreaOverride", StringComparison.Ordinal), "bypass should preserve minimap-area override safeguards");
+    AssertTrue(bypassMethod.Contains("firstSuppressedAgeSeconds < 20", StringComparison.Ordinal), "bypass should require a conservative stale-line age");
+    AssertTrue(bypassMethod.Contains("bypassReason=StaleLineTooRecent", StringComparison.Ordinal), "too-recent stale lines should remain suppressed diagnostically");
+    AssertTrue(bypassMethod.Contains("string.Equals(staleArea, currentArea", StringComparison.Ordinal), "same-area stale lines should not bypass suppression");
+    AssertTrue(bypassMethod.Contains("GoblinManualCountBlockList.IsBlocked(currentArea)", StringComparison.Ordinal), "blocked areas should not use the bypass");
+    AssertTrue(bypassMethod.Contains("PortForgetJournalFreshnessStateForVisibleLine(signature)", StringComparison.Ordinal), "allowed bypass should clear stale first-seen state before normal evidence flow continues");
+    AssertTrue(rememberMethod.Contains("AreaKey = rememberedArea", StringComparison.Ordinal), "stale suppression state should retain the original stale area");
+    AssertTrue(forgetMethod.Contains("portJournalEvidenceSeenByKey.Remove(key)", StringComparison.Ordinal), "bypass should clear Engaged first-seen state for that visible line");
+    AssertTrue(forgetMethod.Contains("portJournalKilledEvidenceSeenBySignature.Remove(key)", StringComparison.Ordinal), "bypass should clear Killed first-seen state for that visible line");
+    AssertTrue(forgetMethod.Contains("portStaleSuppressedJournalEvidenceByKey.Remove(key)", StringComparison.Ordinal), "bypass should clear stale suppression state for that visible line");
+}
+
 static void TestGoblinFreshKilledJournalCanSatisfyEvidenceGate()
 {
     DateTime now = DateTime.UtcNow;
@@ -6596,6 +6656,20 @@ static void TestGemStashClassifierAcceptsLiveStyleGemColorFallback()
     }
 }
 
+static void TestGemStashClassifierRequiresStackTextForColorFallback()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string classifierSource = File.ReadAllText(Path.Combine(repoRoot, "GemStashInventoryClassifier.cs"));
+    string fallbackMethod = ExtractMethodBody(classifierSource, "private static bool IsGemColorFallback");
+
+    AssertTrue(classifierSource.Contains("GemStashTemplateColorV3", StringComparison.Ordinal), "gem stash classifier version should change after tightening color fallback");
+    AssertTrue(fallbackMethod.Contains("metrics.StackCountTextPixels >= 18", StringComparison.Ordinal), "gem color fallback should require stack-count text support");
+    AssertTrue(fallbackMethod.Contains("metrics.InnerSaturatedPixels >= 450", StringComparison.Ordinal), "gem color fallback should still require saturated gem body pixels");
+    AssertTrue(fallbackMethod.Contains("metrics.RegularGemPixels >= 500", StringComparison.Ordinal), "gem color fallback should still support bright diamond-like gem stacks with stack text");
+    AssertTrue(fallbackMethod.Contains("metrics.RegularGemPixels >= 120", StringComparison.Ordinal), "gem color fallback should still require gem-colored pixels");
+    AssertFalse(fallbackMethod.Contains("metrics.RegularGemPixels >= 180 ||", StringComparison.Ordinal), "color-only gem pixels should not be enough to accept a stash target");
+}
+
 static void TestGemStashSettingsAndAssetSeparationAreWired()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -6638,6 +6712,24 @@ static void TestGemStashTownFlowIsNonFatalAfterSalvage()
     AssertTrue(stashMethod.Contains("RecordStashFailure", StringComparison.Ordinal), "real stash failures should be recorded diagnostically");
 }
 
+static void TestGemStashPreflightSkipsStashTravelWhenNoGemsExist()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string repairFlow = ExtractMethodBody(townSource, "private bool PortRunRepairFlow");
+    string preflightMethod = ExtractMethodBody(townSource, "private bool PortShouldRunAutoGemStashFromOpenTownUi");
+
+    AssertTrue(repairFlow.Contains("PortShouldRunAutoGemStashFromOpenTownUi(token, out stashResult)", StringComparison.Ordinal), "repair flow should preflight gem targets before traveling to stash");
+    AssertTrue(repairFlow.Contains("PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: false)", StringComparison.Ordinal), "repair flow should keep town UI open until the preflight decides whether stash is needed");
+    AssertTrue(repairFlow.Contains("PortCloseTownUiAfterSalvage(token, \"RepairFlowBeforeStash\")", StringComparison.Ordinal), "repair flow should close the blacksmith UI before stash travel only when gems exist");
+    AssertTrue(repairFlow.Contains("PortCloseTownUiAfterSalvage(token, \"RepairFlowNoGems\")", StringComparison.Ordinal), "repair flow should close the blacksmith UI without stash travel when no gems exist");
+    AssertTrue(preflightMethod.Contains("PreStashGemInventoryScan", StringComparison.Ordinal), "preflight should scan inventory while still at the town UI");
+    AssertTrue(preflightMethod.Contains("targets == 0", StringComparison.Ordinal), "preflight should branch on zero accepted gem targets");
+    AssertTrue(preflightMethod.Contains("stashTravelSkipped=True", StringComparison.Ordinal), "zero-target preflight should log that stash travel was skipped");
+    AssertTrue(preflightMethod.Contains("new PortGemStashResult(\"NoGemsFound\"", StringComparison.Ordinal), "zero-target preflight should report NoGemsFound");
+    AssertFalse(preflightMethod.Contains("PortSafeLeftClick(stashPoint)", StringComparison.Ordinal), "preflight must not click or travel to the stash");
+}
+
 static void TestGemStashTravelWaitHappensAfterStashCoordinateClick()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -6659,6 +6751,22 @@ static void TestGemStashTravelWaitHappensAfterStashCoordinateClick()
     AssertTrue(stashMethod.Contains("stashOpenClickSent", StringComparison.Ordinal), "stash flow should log the second stash-open click separately");
     AssertEqual(1, closeMethod.Split("PortPressEscapeForAutomation();", StringSplitOptions.None).Length - 1, "post-salvage close should press Escape exactly once");
     AssertTrue(closeMethod.Contains("TownUiClosedForStash escapePresses=1", StringComparison.Ordinal), "post-salvage close should log exactly one Escape before stash");
+}
+
+static void TestRepairFlowSamplesRepairButtonBeforeClicking()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string repairMethod = ExtractMethodBody(townSource, "private bool PortRepairGearFromOpenBlacksmith");
+
+    AssertTrue(townSource.Contains("PortRepairButtonActiveColor", StringComparison.Ordinal), "repair flow should have a dedicated active-color predicate");
+    AssertTrue(townSource.Contains("PortRepairButtonActivePixelThreshold", StringComparison.Ordinal), "repair flow should use an explicit active-pixel threshold");
+    AssertTrue(repairMethod.Contains("PortSampleButtonColor(", StringComparison.Ordinal), "repair flow should sample the repair button before clicking it");
+    AssertTrue(repairMethod.Contains("repairButtonActionable", StringComparison.Ordinal), "repair flow diagnostics should report whether repair was actionable");
+    AssertTrue(repairMethod.Contains("SkippedInactiveRepairButton", StringComparison.Ordinal), "inactive repair button should be skipped instead of clicked");
+    AssertTrue(repairMethod.Contains("ClickedActionableRepairButton", StringComparison.Ordinal), "actionable repair button clicks should be diagnosed");
+    AssertTrue(repairMethod.Contains("UnsafeRepairButtonClick", StringComparison.Ordinal), "unsafe repair button click suppression should be diagnosed");
+    AssertTrue(repairMethod.IndexOf("if (repairButtonSample.Active)", StringComparison.Ordinal) < repairMethod.IndexOf("PortSafeLeftClick(repairButtonPoint)", StringComparison.Ordinal), "repair button click should be inside the actionable branch");
 }
 
 static void TestInventoryReplayLoadsSavedGemStashCrop()
