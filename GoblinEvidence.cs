@@ -1143,6 +1143,8 @@ namespace GoblinFarmer
 
     internal static class GoblinAutoCountEncounterSuppressionPolicy
     {
+        private static readonly TimeSpan CrossAreaJournalVisibleRowSuppressWindow = TimeSpan.FromSeconds(20);
+
         public static bool ShouldSuppress(
             string source,
             string goblinType,
@@ -1193,6 +1195,11 @@ namespace GoblinFarmer
             bool bothMinimap = normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
                 normalizedCountedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
             bool recentOrContinuouslySeen = encounterAge <= sourceVariantWindow || lastSeenAge <= sourceVariantWindow;
+            bool recentCrossAreaJournalRow = sameArea ||
+                !currentJournal ||
+                !countedJournal ||
+                encounterAge <= CrossAreaJournalVisibleRowSuppressWindow ||
+                lastSeenAge <= CrossAreaJournalVisibleRowSuppressWindow;
 
             if (encounterAge <= encounterSuppressWindow &&
                 !string.IsNullOrWhiteSpace(globalEvidenceKey) &&
@@ -1209,7 +1216,8 @@ namespace GoblinFarmer
                 }
                 else if (sameArea ||
                     (!currentMinimap || !countedJournal) &&
-                    (!currentJournal && !countedJournal || recentOrContinuouslySeen))
+                    (!currentJournal && !countedJournal || recentOrContinuouslySeen) &&
+                    recentCrossAreaJournalRow)
                 {
                     matchReason = "SameEvidenceKey";
                     return true;
@@ -1219,6 +1227,7 @@ namespace GoblinFarmer
             if (encounterAge <= encounterSuppressWindow &&
                 currentJournal &&
                 countedJournal &&
+                recentCrossAreaJournalRow &&
                 JournalEvidenceBucketsMatch(globalEvidenceKey, countedEvidenceKey, out int currentBucket, out int countedBucket))
             {
                 matchReason = $"JournalLineBucket:{currentBucket}->{countedBucket}";

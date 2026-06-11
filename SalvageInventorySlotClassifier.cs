@@ -105,7 +105,8 @@ namespace GoblinFarmer
                             slotMetrics.InnerBrightPixels >= MinimumInnerBrightPixels &&
                             slotMetrics.InnerSaturatedPixels >= MinimumInnerSaturatedPixels) ||
                         IsPaleItemAnchor(slotMetrics) ||
-                        IsSetQualityAnchor(slotMetrics);
+                        IsSetQualityAnchor(slotMetrics) ||
+                        IsLowColorLegendaryTextAnchor(slotMetrics);
                     weakFootprintLike[row, column] =
                         (slotMetrics.InnerBrightPixels >= WeakFootprintInnerBrightPixels &&
                             (slotMetrics.InnerSaturatedPixels >= WeakFootprintInnerSaturatedPixels ||
@@ -369,6 +370,11 @@ namespace GoblinFarmer
                 {
                     return "Legendary";
                 }
+
+                if (IsLowColorLegendaryTextAnchor(metrics[row, column]))
+                {
+                    return "Legendary";
+                }
             }
 
             return "Normal";
@@ -414,6 +420,18 @@ namespace GoblinFarmer
                 metrics.InnerBrightPixels >= MinimumPaleItemInnerBrightPixels &&
                 metrics.InnerSaturatedPixels >= MinimumPaleItemInnerSaturatedPixels &&
                 !IsRegularGem(metrics);
+        }
+
+        private static bool IsLowColorLegendaryTextAnchor(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.StackCountTextPixels >= 80 &&
+                metrics.RegularGemPixels < 90 &&
+                metrics.GreenQualityPixels < 120 &&
+                metrics.OrangeQualityPixels < 120 &&
+                metrics.TopFramePixels <= 80 &&
+                metrics.ColoredFramePixels >= 200 &&
+                metrics.InnerBrightPixels >= 1000 &&
+                metrics.InnerSaturatedPixels <= 160;
         }
 
         private static bool IsSetQualityFootprint(SalvageInventorySlotMetrics metrics)

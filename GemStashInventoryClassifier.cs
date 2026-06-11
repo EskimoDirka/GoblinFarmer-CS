@@ -137,6 +137,10 @@ namespace GoblinFarmer
         {
             List<GemStashInventorySlotTarget> targets = [];
             List<GemStashInventorySlotCandidate> candidates = [];
+            Dictionary<(int Row, int Column), SalvageInventorySlotCandidateDiagnostic> salvageDiagnostics =
+                SalvageInventorySlotClassifier.Scan(inventoryGrid, screenGrid)
+                    .Candidates
+                    .ToDictionary(candidate => (candidate.Row, candidate.Column));
 
             using Mat rawGrid = OpenCvSharp.Extensions.BitmapConverter.ToMat(inventoryGrid);
             using Mat grid = new();
@@ -168,13 +172,20 @@ namespace GoblinFarmer
                     GemStashInventorySlotMetrics metrics = MeasureSlot(inventoryGrid, local);
                     bool templateAccepted = bestConfidence >= threshold;
                     bool colorAccepted = loadedTemplates.Count > 0 && IsGemColorFallback(metrics, bestConfidence);
-                    bool accepted = templateAccepted || colorAccepted;
+                    bool salvageAllowsGem = salvageDiagnostics.TryGetValue((row + 1, column + 1), out SalvageInventorySlotCandidateDiagnostic? salvageDiagnostic) &&
+                        salvageDiagnostic.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase);
+                    bool acceptedBeforeSalvageGuard = templateAccepted || colorAccepted;
+                    bool accepted = acceptedBeforeSalvageGuard && salvageAllowsGem;
                     string reason = loadedTemplates.Count == 0
                         ? "NoValidGemTemplates"
                         : templateAccepted
-                            ? "GemTemplateMatched"
+                            ? salvageAllowsGem
+                                ? "GemTemplateMatched"
+                                : "RejectedNonGemFootprint"
                             : colorAccepted
-                                ? "GemColorMatched"
+                                ? salvageAllowsGem
+                                    ? "GemColorMatched"
+                                    : "RejectedNonGemFootprint"
                                 : "BelowThreshold";
                     candidates.Add(new GemStashInventorySlotCandidate(
                         row + 1,

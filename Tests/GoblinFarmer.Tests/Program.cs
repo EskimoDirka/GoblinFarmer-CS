@@ -129,6 +129,7 @@ Run("Goblin PF multi-count duplicate bypass stays bounded", TestGoblinPandemoniu
 Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
 Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses);
 Run("Goblin auto-count stale journal does not block fresh cross-area minimap", TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap);
+Run("Goblin auto-count old cross-area journal row expires", TestGoblinAutoCountOldCrossAreaJournalRowExpires);
 Run("Goblin auto-count same-area duplicate journal refreshes encounter state", TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState);
 Run("Goblin auto-count suppresses shifted journal row after pause", TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause);
 Run("Goblin auto-count treats different journal templates as separate lines", TestGoblinAutoCountTreatsDifferentJournalTemplatesAsSeparateLines);
@@ -155,6 +156,7 @@ Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassif
 Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
 Run("Salvage classifier accepts pale legendary boot-like items", TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems);
+Run("Salvage classifier accepts low-color legendary text anchor", TestSalvageClassifierAcceptsLowColorLegendaryTextAnchor);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier merges weak upper and strong lower set boundary", TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary);
 Run("Salvage classifier merges set body continuation rows", TestSalvageClassifierMergesSetBodyContinuationRows);
@@ -170,6 +172,7 @@ Run("Gem stash classifier matches synthetic gem templates", TestGemStashClassifi
 Run("Gem stash classifier rejects below threshold", TestGemStashClassifierRejectsBelowThreshold);
 Run("Gem stash classifier accepts live-style gem color fallback", TestGemStashClassifierAcceptsLiveStyleGemColorFallback);
 Run("Gem stash classifier requires stack text for color fallback", TestGemStashClassifierRequiresStackTextForColorFallback);
+Run("Gem stash classifier rejects non-gem footprint fallback", TestGemStashClassifierRejectsNonGemFootprintFallback);
 Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
 Run("Gem stash preflight skips stash travel when no gems exist", TestGemStashPreflightSkipsStashTravelWhenNoGemsExist);
@@ -1297,8 +1300,8 @@ static void TestGoblinReplaySuppressesDelayedJournalAfterMinimapCount()
         AssertFalse(result.Steps[1].Counted, "matching Southern Highlands journal evidence should not double-count after minimap count");
         AssertEqual("EncounterAlreadyAutoCounted", result.Steps[1].Reason, "matching journal evidence should suppress as the same counted encounter");
         AssertFalse(result.Steps[2].Counted, "old Southern Highlands journal evidence must not count after moving to Cave Level 1");
-        AssertEqual("EncounterAlreadyAutoCounted", result.Steps[2].Reason, "old Cave journal replay should remain attached to the counted Southern Highlands encounter");
-        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureStepResult", StringComparison.Ordinal) && line.Contains("areaKey=Cave Of The Moon Clan Level 1", StringComparison.Ordinal) && line.Contains("reason=EncounterAlreadyAutoCounted", StringComparison.Ordinal)), "replay should log the Cave stale-journal suppression clearly");
+        AssertEqual("JournalPendingKilledOrMinimapConfirmation", result.Steps[2].Reason, "old engaged-only Cave journal replay should expire from duplicate suppression and remain non-countable without killed/minimap confirmation");
+        AssertTrue(replayLogs.Any(line => line.Contains("GoblinReplayFixtureStepResult", StringComparison.Ordinal) && line.Contains("areaKey=Cave Of The Moon Clan Level 1", StringComparison.Ordinal) && line.Contains("reason=JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal)), "replay should log the Cave expired-journal non-count clearly");
     }
     finally
     {
@@ -5280,6 +5283,50 @@ static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
     AssertTrue(string.IsNullOrWhiteSpace(freshMinimapReason), "fresh cross-area minimap evidence should not report a stale journal match reason");
 }
 
+static void TestGoblinAutoCountOldCrossAreaJournalRowExpires()
+{
+    DateTime nowUtc = DateTime.UtcNow;
+    const string treasureJournal = "Journal|Treasure Goblin|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=10";
+
+    bool recentVisibleRowSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Eastern Channel Level 1",
+        globalEvidenceKey: treasureJournal,
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Cathedral Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: treasureJournal,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(18),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(18),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string recentReason);
+
+    AssertTrue(recentVisibleRowSuppressed, "a recently visible cross-area journal row should still suppress as stale carryover");
+    AssertTrue(recentReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal) || recentReason.StartsWith("JournalLineBucket", StringComparison.Ordinal), "recent cross-area journal suppression should explain the row match");
+
+    bool oldVisibleRowSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Eastern Channel Level 1",
+        globalEvidenceKey: treasureJournal,
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Cathedral Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: treasureJournal,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(267),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(237),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string oldReason);
+
+    AssertFalse(oldVisibleRowSuppressed, "an old same-template journal row in a new area should not block a later real Treasure Goblin indefinitely");
+    AssertTrue(string.IsNullOrWhiteSpace(oldReason), "expired cross-area journal rows should not report a duplicate reason");
+}
+
 static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
 {
     AssertTrue(
@@ -5336,8 +5383,8 @@ static void TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause()
         sourceVariantWindow: TimeSpan.FromSeconds(45),
         out string matchReason);
 
-    AssertTrue(suppressed, "a counted journal row that shifts a few feed buckets after a pause should still suppress in the next area");
-    AssertEqual("JournalLineBucket:8->11", matchReason, "shifted-row suppression should explain the journal bucket match");
+    AssertFalse(suppressed, "an old counted journal row that shifts after a long pause should not suppress a fresh later same-type goblin in another area indefinitely");
+    AssertTrue(string.IsNullOrWhiteSpace(matchReason), "expired shifted-row journal evidence should not report a duplicate match reason");
 
     bool unrelatedRowSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
         source: "Journal",
@@ -5735,6 +5782,27 @@ static void DrawSyntheticPaleSalvageItem(Bitmap bitmap, int row, int column)
     graphics.FillEllipse(shadow, cell.Left + 15, cell.Top + 19, 38, 34);
     graphics.FillEllipse(icon, cell.Left + 18, cell.Top + 16, 32, 31);
     graphics.FillRectangle(highlight, cell.Left + 37, cell.Top + 17, 8, 10);
+}
+
+static void DrawSyntheticLowColorLegendaryTextAnchor(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(15, 15, 13));
+    using SolidBrush paleBody = new(Color.FromArgb(86, 86, 82));
+    using SolidBrush sideAccent = new(Color.FromArgb(120, 74, 34));
+    using SolidBrush lightText = new(Color.FromArgb(180, 150, 130));
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillRectangle(paleBody, cell.Left + 13, cell.Top + 15, cell.Width - 26, cell.Height - 23);
+    graphics.FillRectangle(sideAccent, cell.Left + 6, cell.Top + 18, 5, cell.Height - 28);
+    graphics.FillRectangle(sideAccent, cell.Right - 11, cell.Top + 18, 5, cell.Height - 28);
+
+    for (int i = 0; i < 12; i++)
+    {
+        int x = cell.Left + 6 + (i * 5);
+        graphics.FillRectangle(lightText, x, cell.Top + 58, 4, 8);
+    }
 }
 
 static void PaintSyntheticSetQualityInCell(Bitmap bitmap, int row, int column)
@@ -6431,6 +6499,21 @@ static void TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems()
     AssertFalse(result.Candidates.Single(candidate => candidate.Row == 2 && candidate.Column == 10).Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase), "pale item should not use the regular gem rejection reason");
 }
 
+static void TestSalvageClassifierAcceptsLowColorLegendaryTextAnchor()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticLowColorLegendaryTextAnchor(grid, 1, 2);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "low-color text-heavy legendary leftover should produce one salvage target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(1, target.Row, "low-color text-heavy legendary leftover should target the top row");
+    AssertEqual(2, target.Column, "low-color text-heavy legendary leftover should target the observed column");
+    AssertEqual("Legendary", target.Quality, "low-color text-heavy leftover should use legendary confirmation handling");
+    AssertTrue(target.ConfirmationExpected, "low-color text-heavy leftover should expect salvage confirmation");
+}
+
 static void TestSalvageClassifierSplitsStackedOneTileItems()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
@@ -6561,6 +6644,7 @@ static void TestGemStashClassifierMatchesSyntheticGemTemplates()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
     using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(30, 185, 80));
+    DrawSyntheticRegularGemStackCell(grid, 2, 3, Color.FromArgb(30, 185, 80), "127");
     DrawSyntheticGemForTemplate(grid, 2, 3, template);
     string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashClassifier_{Guid.NewGuid():N}");
     try
@@ -6668,6 +6752,38 @@ static void TestGemStashClassifierRequiresStackTextForColorFallback()
     AssertTrue(fallbackMethod.Contains("metrics.RegularGemPixels >= 500", StringComparison.Ordinal), "gem color fallback should still support bright diamond-like gem stacks with stack text");
     AssertTrue(fallbackMethod.Contains("metrics.RegularGemPixels >= 120", StringComparison.Ordinal), "gem color fallback should still require gem-colored pixels");
     AssertFalse(fallbackMethod.Contains("metrics.RegularGemPixels >= 180 ||", StringComparison.Ordinal), "color-only gem pixels should not be enough to accept a stash target");
+}
+
+static void TestGemStashClassifierRejectsNonGemFootprintFallback()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashNonGemGuard_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        using Bitmap grid = CreateSyntheticSalvageGrid();
+        using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(185, 190, 198));
+        DrawSyntheticOneSlotSalvageItem(grid, 1, 2, highRarity: true);
+        DrawSyntheticGemForTemplate(grid, 1, 2, template);
+
+        string templatePath = Path.Combine(root, "Marquise Diamond.png");
+        template.Save(templatePath, System.Drawing.Imaging.ImageFormat.Png);
+
+        GemStashInventoryScanResult result = GemStashInventoryClassifier.Scan(
+            grid,
+            new Rectangle(0, 0, grid.Width, grid.Height),
+            [new GemStashTemplate("Marquise Diamond", templatePath)],
+            0.80);
+
+        AssertFalse(result.Targets.Any(target => target.Row == 1 && target.Column == 2), "gem stash should not accept a template/color hit when the salvage classifier sees a non-gem item footprint");
+        AssertTrue(result.Candidates.Any(candidate => candidate.Row == 1 && candidate.Column == 2 && candidate.Reason == "RejectedNonGemFootprint"), "non-gem footprint guard should be diagnostic");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }
 
 static void TestGemStashSettingsAndAssetSeparationAreWired()
@@ -6778,6 +6894,7 @@ static void TestInventoryReplayLoadsSavedGemStashCrop()
         Directory.CreateDirectory(Path.Combine(root, "templates"));
         using Bitmap grid = CreateSyntheticSalvageGrid();
         using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(210, 170, 40));
+        DrawSyntheticRegularGemStackCell(grid, 4, 5, Color.FromArgb(210, 170, 40), "27");
         DrawSyntheticGemForTemplate(grid, 4, 5, template);
         string imagePath = Path.Combine(root, "inventory-grid.png");
         string templatePath = Path.Combine(root, "templates", "Topaz.png");
