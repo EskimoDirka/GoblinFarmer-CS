@@ -9,6 +9,7 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Explicit Goblin Replay capture-folder command reports clear load/decision output when run with quoted capture folder paths.
 - `git diff --check` has no whitespace errors.
 - `Scripts\Create Debug Package.bat` creates a ZIP when explicit review artifacts are needed.
+- New debug packages include `debug-package-size-summary.txt` with extension totals, top-folder totals, largest files, and applied retention limits.
 
 ## Goblin Tracker
 
@@ -29,6 +30,8 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Cave Of The Moon Clan Level 1/2, Eastern Channel Level 1/2, Western Channel Level 1/2, and Caverns of Frost Level 1/2 remain separate where expected.
 - Battlefields journal history does not replay stale/non-goblin rows into a fresh count.
 - Journal logs include name-validation/history-row/history-input suppression when those protections fire.
+- Suppressed/duplicate automatic-count paths do not show user-facing notifications, and an invalid automatic-count total logs `AutoCountNotificationSkipped reason=InvalidTotal`.
+- Non-counting idle Journal evidence cannot repopulate Last Observation while combat is inactive; expected diagnostic is `LastObservationUpdateSkippedPublishGuard`.
 
 ## Route Logic
 
@@ -48,3 +51,10 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Debug package/log review can use `GoblinTrackerEvents.jsonl` plus timing summaries to correlate observation, suppression, and count latency.
 - Encounter captures save fullscreen, minimap, journal, and metadata for accepted Goblin Tracker counts in VS Debug.
 - Manual recognition captures save fullscreen, minimap, journal, and metadata only when `Capture` is clicked.
+- Runtime inventory replay remains log-first by default; debug package replay can load structured replay logs, while image replay requires explicit review crops/frames.
+
+## Town Flow
+
+- Repair diagnostics log `RepairButtonColorSample` before and after actionable repair clicks, plus `RepairCompletionVerification`.
+- Unidentified legendary and set salvage templates are used when present; template-matched unidentified gear remains confirmation-expected salvage, not a gem.
+- Auto-stash only right-clicks stack-verified gem targets. Unidentified gear or non-gem leftovers should log `RejectedNonGemFootprint` or `RejectedGemStackVerification`.

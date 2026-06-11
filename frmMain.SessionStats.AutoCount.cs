@@ -282,6 +282,13 @@ namespace GoblinFarmer
 
             bool counted = string.IsNullOrWhiteSpace(suppressionReason);
             int areaCountBefore = counted ? Math.Max(0, guardResult.AreaCount - 1) : guardResult.AreaCount;
+            string firstSeenArea = evidenceState == null || string.IsNullOrWhiteSpace(evidenceState.AreaKey)
+                ? area.AreaKey
+                : evidenceState.AreaKey;
+            string currentAreaAtAcceptance = PortResolvedAreaKey(portLastConfirmedLocation);
+            bool areaChangedDuringPendingEvidence = !string.IsNullOrWhiteSpace(firstSeenArea) &&
+                !string.IsNullOrWhiteSpace(currentAreaAtAcceptance) &&
+                !string.Equals(firstSeenArea, currentAreaAtAcceptance, StringComparison.OrdinalIgnoreCase);
             if (PortGoblinDecisionTraceEnabled())
             {
                 GoblinDecisionTraceRecord trace = GoblinDecisionTracePolicy.Create(
@@ -345,7 +352,7 @@ namespace GoblinFarmer
                 string eventName = autoCountingEnabled
                     ? "GoblinAutoCountSuppressed"
                     : "GoblinAutoCountSkippedDisabled";
-                AppLogger.Info($"GoblinTracker: {eventName} source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceReliability={PortLogField(evidenceReliability)} reliabilityReason={PortLogField(reliabilityReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} evidenceFirstSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.FirstSeenUtc.ToString("O"))} evidenceLastSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.LastSeenUtc.ToString("O"))} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterAreaKey={PortLogField(PortDisplayLocation(encounterAreaKey))} encounterCountedUtc={(encounterState == null ? "Unknown" : encounterState.CountedUtc.ToString("O"))} encounterLastSeenUtc={(encounterState == null ? "Unknown" : encounterState.LastSeenUtc.ToString("O"))} encounterMatch={PortLogField(encounterSuppressionMatch)} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
+                AppLogger.Info($"GoblinTracker: {eventName} source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} firstSeenArea={PortLogField(firstSeenArea)} currentAreaAtAcceptance={PortLogField(currentAreaAtAcceptance)} acceptedArea=None areaChangedDuringPendingEvidence={areaChangedDuringPendingEvidence} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason={PortLogField(suppressionReason)} evidenceReliability={PortLogField(evidenceReliability)} reliabilityReason={PortLogField(reliabilityReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} evidenceFirstSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.FirstSeenUtc.ToString("O"))} evidenceLastSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.LastSeenUtc.ToString("O"))} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterAreaKey={PortLogField(PortDisplayLocation(encounterAreaKey))} encounterCountedUtc={(encounterState == null ? "Unknown" : encounterState.CountedUtc.ToString("O"))} encounterLastSeenUtc={(encounterState == null ? "Unknown" : encounterState.LastSeenUtc.ToString("O"))} encounterMatch={PortLogField(encounterSuppressionMatch)} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
                 PortWriteGoblinTrackerJsonEvent(
                     eventName,
                     new Dictionary<string, object?>
@@ -354,6 +361,10 @@ namespace GoblinFarmer
                         ["goblinType"] = observation.GoblinType,
                         ["areaKey"] = areaKey,
                         ["displayLocation"] = displayLocation,
+                        ["firstSeenArea"] = firstSeenArea,
+                        ["currentAreaAtAcceptance"] = currentAreaAtAcceptance,
+                        ["acceptedArea"] = null,
+                        ["areaChangedDuringPendingEvidence"] = areaChangedDuringPendingEvidence,
                         ["areaCount"] = guardResult.AreaCount,
                         ["areaLimit"] = guardResult.AreaLimit,
                         ["reason"] = suppressionReason,
@@ -398,7 +409,7 @@ namespace GoblinFarmer
                     out evidenceReliability);
             }
 
-            AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceReliability={PortLogField(evidenceReliability)} reliabilityReason={PortLogField(reliabilityReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} evidenceFirstSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.FirstSeenUtc.ToString("O"))} evidenceLastSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.LastSeenUtc.ToString("O"))} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterMatch={PortLogField(encounterSuppressionMatch)} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
+            AppLogger.Info($"GoblinTracker: GoblinAutoCountAccepted source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} displayLocation={displayLocation} firstSeenArea={PortLogField(firstSeenArea)} currentAreaAtAcceptance={PortLogField(currentAreaAtAcceptance)} acceptedArea={PortLogField(areaKey)} areaChangedDuringPendingEvidence={areaChangedDuringPendingEvidence} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} reason=Eligible evidenceReliability={PortLogField(evidenceReliability)} reliabilityReason={PortLogField(reliabilityReason)} evidenceAgeSeconds={evidenceAgeSeconds:0.0} evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.0} evidenceFirstSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.FirstSeenUtc.ToString("O"))} evidenceLastSeenUtc={(evidenceState == null ? "Unknown" : evidenceState.LastSeenUtc.ToString("O"))} encounterAgeSeconds={encounterAgeSeconds:0.0} encounterMatch={PortLogField(encounterSuppressionMatch)} autoArmedAgeSeconds={autoArmedAgeSeconds:0.0} evidenceConfidence={observation.EvidenceConfidence:0.000} minimapAutoCountMinConfidence={minimapAutoCountMinimumConfidence:0.000} evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))} total={total} enableObservationMode={AppSettings.GoblinTracker.EnableObservationMode} enableAutomaticCounting={AppSettings.GoblinTracker.EnableAutomaticCounting}");
             AppLogger.Info($"GoblinTracker: GoblinCountAccepted areaKey={areaKey} areaCount={guardResult.AreaCount} areaLimit={guardResult.AreaLimit} blockListStatus=Allowed countResult=Accepted rawLocation='{PortLogField(PortDisplayLocation(area.RawLocation))}' displayLocation='{PortLogField(displayLocation)}' type='{PortLogField(observation.GoblinType)}' source='{PortLogField(source)}' evidenceSource='{PortLogField(observation.Source)}' evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} total={total}");
             DateTime countAcceptedUtc = nowUtc;
             AppLogger.Info(
@@ -421,6 +432,10 @@ namespace GoblinFarmer
                     ["goblinType"] = observation.GoblinType,
                     ["areaKey"] = areaKey,
                     ["displayLocation"] = displayLocation,
+                    ["firstSeenArea"] = firstSeenArea,
+                    ["currentAreaAtAcceptance"] = currentAreaAtAcceptance,
+                    ["acceptedArea"] = areaKey,
+                    ["areaChangedDuringPendingEvidence"] = areaChangedDuringPendingEvidence,
                     ["areaCount"] = guardResult.AreaCount,
                     ["areaLimit"] = guardResult.AreaLimit,
                     ["reason"] = "Eligible",
@@ -438,6 +453,14 @@ namespace GoblinFarmer
                     ["enableAutomaticCounting"] = AppSettings.GoblinTracker.EnableAutomaticCounting,
                 });
             PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, "AutomaticCountAccepted", guardResult);
+            if (total <= 0)
+            {
+                AppLogger.Info($"GoblinTracker: AutoCountNotificationSkipped reason=InvalidTotal source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} total={total} evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)}");
+                PortWriteSessionMetadata(logSuccess: false);
+                PortUpdateGoblinTrackerStats();
+                return true;
+            }
+
             DateTime notificationQueuedUtc = DateTime.UtcNow;
             if (GoblinTypeNormalizer.Normalize(observation.GoblinType).Equals("Rainbow Goblin", StringComparison.OrdinalIgnoreCase))
             {

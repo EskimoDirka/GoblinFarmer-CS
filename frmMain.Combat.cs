@@ -1131,17 +1131,12 @@ namespace GoblinFarmer
                     {
                         Interlocked.Exchange(ref portLastBountyMenuCloseTicks, nowTicks);
                         AppLogger.Info($"BountyMenuDetected: confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource=CombatMenuWatcher; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; diabloActive=True; automationCancelled=false");
-                        PortPressKey(PortVkReturn);
-                        Thread.Sleep(80);
-                        double postEnterConfidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion.Value);
-                        bool escapeSent = false;
-                        if (postEnterConfidence >= PortBountyMenuConfidence)
-                        {
-                            PortPressEscapeForAutomation("BountyMenuCombatWatcher");
-                            escapeSent = true;
-                        }
-
-                        AppLogger.Info($"BountyMenuClearSent: closeMethod=EnterThenEscapeIfStillVisible; source=CombatMenuWatcher; confidence={confidence:0.000}; postEnterConfidence={postEnterConfidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; enterSent=True; escapeSent={escapeSent}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape={escapeSent}");
+                        PortPressEscapeForAutomation("BountyMenuCombatWatcher");
+                        AppLogger.Info($"BountyMenuEscapeSent: source=CombatMenuWatcher; confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=True");
+                        Thread.Sleep(120);
+                        double postEscapeConfidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion.Value);
+                        bool menuClosedConfirmed = postEscapeConfidence < PortBountyMenuConfidence;
+                        AppLogger.Info($"BountyMenuClearSent: closeMethod=EscapeOnly; source=CombatMenuWatcher; confidence={confidence:0.000}; postEscapeConfidence={postEscapeConfidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; enterSent=False; escapeSent=True; menuClosedConfirmed={menuClosedConfirmed}; combatStillActive={portCombatRunning && !portCombatStopping}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=True");
                     }
                 }
 

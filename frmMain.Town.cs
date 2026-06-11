@@ -60,6 +60,18 @@ namespace GoblinFarmer
                 PortRepairButtonActiveColor,
                 PortRepairButtonSampleSize,
                 PortRepairButtonActivePixelThreshold);
+            AppLogger.Info(
+                "RepairButtonColorSample: " +
+                $"phase=PreClick; " +
+                $"buttonVisible=True; " +
+                $"active={repairButtonSample.Active}; " +
+                $"activePixels={repairButtonSample.ActivePixels}; " +
+                $"sampledPixels={repairButtonSample.SampledPixels}; " +
+                $"activeRatio={repairButtonSample.ActiveRatio:0.000}; " +
+                $"activePixelThreshold={PortRepairButtonActivePixelThreshold}; " +
+                $"sampleSize={PortRepairButtonSampleSize}; " +
+                $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
+                $"screen={repairButtonPoint.X},{repairButtonPoint.Y}");
             bool repairButtonClickSent = false;
             string repairButtonOutcome = repairButtonSample.Active ? "ClickedActionableRepairButton" : "SkippedInactiveRepairButton";
             PortBulkSalvageColorSample postRepairButtonSample = repairButtonSample;
@@ -82,6 +94,19 @@ namespace GoblinFarmer
                         PortRepairButtonSampleSize,
                         PortRepairButtonActivePixelThreshold);
                 }
+
+                AppLogger.Info(
+                    "RepairButtonColorSample: " +
+                    $"phase=PostClick; " +
+                    $"buttonVisible=True; " +
+                    $"active={postRepairButtonSample.Active}; " +
+                    $"activePixels={postRepairButtonSample.ActivePixels}; " +
+                    $"sampledPixels={postRepairButtonSample.SampledPixels}; " +
+                    $"activeRatio={postRepairButtonSample.ActiveRatio:0.000}; " +
+                    $"activePixelThreshold={PortRepairButtonActivePixelThreshold}; " +
+                    $"sampleSize={PortRepairButtonSampleSize}; " +
+                    $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
+                    $"screen={repairButtonPoint.X},{repairButtonPoint.Y}");
             }
 
             string repairVerificationOutcome = !repairButtonSample.Active
@@ -400,10 +425,8 @@ namespace GoblinFarmer
 
                     if (target.ConfirmationExpected && !confirmationFound)
                     {
-                        DebugManager.Session.RecordSalvageFailure("Salvage failed: expected confirmation not found");
-                        AppLogger.Info($"Salvage timing summary: phase={PortLogField(phase)}; slotsClicked={slotsClicked}; cachedSlotAttempts={cachedSlotAttempts}; cachedSlotCount={initialCachedSlotCount}; latestCachedSlotCount={cachedSlots.Count}; recoveryPasses={recoveryPasses}; confirmedSalvages={confirmedSalvages}; noPromptSalvages={noPromptSalvages}; confirmationMisses={confirmationMisses}; expectedConfirmationMisses={expectedConfirmationMisses}; staleCachedTargetsSkipped={staleCachedTargetsSkipped}; regularGemSkips={regularGemSkips}; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScanWithRecoveryRescan; salvageSuccess=False; totalSalvageElapsedMs={salvagePerf.ElapsedMilliseconds}; confirmationTimeoutMs={PortSalvageConfirmationTimeoutMs}; expectedConfirmationTimeoutMs={PortSalvageExpectedConfirmationTimeoutMs}; confirmationFastAttempts={PortSalvageConfirmationFastAttempts}; expectedConfirmationAttempts={PortSalvageExpectedConfirmationAttempts}; confirmationFastDelayMs={PortSalvageConfirmationFastDelayMs}; expectedConfirmationDelayMs={PortSalvageExpectedConfirmationDelayMs}; postSlotDelayMs={PortSalvagePostSlotDelayMs}; slotClickSettleMs={PortSalvageSlotClickSettleMs}; slotClickHoldMs={PortSalvageSlotClickHoldMs}");
-                        PortCaptureFailureScreenshot("SalvageExpectedConfirmationMissing", "Salvage");
-                        return false;
+                        AppLogger.Info($"SalvageExpectedConfirmationMissingContinuing: phase={PortLogField(phase)}; row={target.Row}; column={target.Column}; screenPoint={FormatPoint(target.ScreenPoint)}; quality={PortLogField(target.Quality)}; expectedConfirmationMisses={expectedConfirmationMisses}; nextAction=PostClickLeftoverRescan; autoStashMayContinueIfNoActionableLeftovers=True");
+                        break;
                     }
                 }
 
@@ -796,11 +819,35 @@ namespace GoblinFarmer
 
         private static bool PortRepairButtonActiveColor(Color color)
         {
-            return color.R >= 120 &&
+            bool warmGoldActive =
+                color.R >= 120 &&
                 color.G >= 85 &&
                 color.B <= 100 &&
                 color.R >= color.B + 35 &&
                 color.G >= color.B + 20;
+
+            bool redHighlightActive =
+                color.R >= 110 &&
+                color.G <= 95 &&
+                color.B <= 95 &&
+                color.R >= color.G + 30 &&
+                color.R >= color.B + 30;
+
+            bool mutedGoldActive =
+                color.R >= 90 &&
+                color.G >= 62 &&
+                color.B <= 90 &&
+                color.R >= color.B + 24 &&
+                color.G >= color.B + 12;
+
+            bool brightGoldTextActive =
+                color.R >= 150 &&
+                color.G >= 115 &&
+                color.B <= 125 &&
+                color.R >= color.B + 30 &&
+                color.G >= color.B + 15;
+
+            return warmGoldActive || redHighlightActive || mutedGoldActive || brightGoldTextActive;
         }
 
         private bool PortWaitForSalvageConfirmationCleared(CancellationToken token, int timeoutMs)

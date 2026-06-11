@@ -21,6 +21,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # Supported debug ZIP export path for both VS Debug and Release.
 # Normal app diagnostics stay in DebugManager/runtime folders; this script is the
@@ -2139,6 +2140,85 @@ function New-GoblinTrackerPackageSummary {
     $lines | Out-File -FilePath $OutputPath -Encoding utf8
 }
 
+function New-DebugPackageSizeSummaryFromZip {
+    param(
+        [string]$ZipPath,
+        [string]$OutputPath
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("GoblinFarmer Debug Package Size Summary")
+    $lines.Add("Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
+    $lines.Add("Source ZIP: $ZipPath")
+    $lines.Add("")
+
+    if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
+        $lines.Add("Status: ZIP not created yet")
+        $lines | Out-File -FilePath $OutputPath -Encoding utf8
+        return
+    }
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $entries = @($archive.Entries | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
+        $totalCompressed = [long]0
+        $totalUncompressed = [long]0
+        foreach ($entry in $entries) {
+            $totalCompressed += [long]$entry.CompressedLength
+            $totalUncompressed += [long]$entry.Length
+        }
+
+        $lines.Add("Total files: $($entries.Count)")
+        $lines.Add("Total compressed bytes: $totalCompressed")
+        $lines.Add("Total compressed size: $(Format-ByteSize $totalCompressed)")
+        $lines.Add("Total uncompressed bytes: $totalUncompressed")
+        $lines.Add("Total uncompressed size: $(Format-ByteSize $totalUncompressed)")
+        $lines.Add("Retention applied before packaging:")
+        $lines.Add("  Debug packages: $DebugPackageRetentionCount newest GoblinFarmer_Debug_*.zip after package creation")
+        $lines.Add("  Failure screenshots: $MaxFailureScreenshots newest diagnostic groups")
+        $lines.Add("  Debug screenshots: $MaxDebugScreenshots current-session files")
+        $lines.Add("  Goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots newest under $MaxGoblinEvidenceEventScreenshotBytes bytes")
+        $lines.Add("  Observation diagnostics: $MaxGoblinObservationDiagnosticCrops newest crops")
+        $lines.Add("  Replay image folders: excluded by default")
+        $lines.Add("")
+
+        $lines.Add("Size by extension:")
+        $entries |
+            Group-Object { [System.IO.Path]::GetExtension($_.FullName).ToLowerInvariant() } |
+            Sort-Object @{ Expression = { ($_.Group | Measure-Object CompressedLength -Sum).Sum }; Descending = $true } |
+            ForEach-Object {
+                $compressed = [long](($_.Group | Measure-Object CompressedLength -Sum).Sum)
+                $uncompressed = [long](($_.Group | Measure-Object Length -Sum).Sum)
+                $extension = if ([string]::IsNullOrWhiteSpace($_.Name)) { "(none)" } else { $_.Name }
+                $lines.Add("  $extension files=$($_.Count) compressed=$(Format-ByteSize $compressed) ($compressed bytes) uncompressed=$(Format-ByteSize $uncompressed) ($uncompressed bytes)")
+            }
+        $lines.Add("")
+
+        $lines.Add("Size by top folder:")
+        $entries |
+            Group-Object { ($_.FullName -split '/')[0] } |
+            Sort-Object @{ Expression = { ($_.Group | Measure-Object CompressedLength -Sum).Sum }; Descending = $true } |
+            ForEach-Object {
+                $compressed = [long](($_.Group | Measure-Object CompressedLength -Sum).Sum)
+                $uncompressed = [long](($_.Group | Measure-Object Length -Sum).Sum)
+                $lines.Add("  $($_.Name) files=$($_.Count) compressed=$(Format-ByteSize $compressed) ($compressed bytes) uncompressed=$(Format-ByteSize $uncompressed) ($uncompressed bytes)")
+            }
+        $lines.Add("")
+
+        $lines.Add("Largest 20 files:")
+        $rank = 1
+        foreach ($entry in ($entries | Sort-Object Length -Descending | Select-Object -First 20)) {
+            $lines.Add("  $rank. $($entry.FullName) compressed=$(Format-ByteSize ([long]$entry.CompressedLength)) ($($entry.CompressedLength) bytes) uncompressed=$(Format-ByteSize ([long]$entry.Length)) ($($entry.Length) bytes)")
+            $rank++
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+
+    $lines | Out-File -FilePath $OutputPath -Encoding utf8
+}
+
 function New-GoblinTrackerReviewIndex {
     param(
         [string]$StagingRoot,
@@ -2156,6 +2236,7 @@ function New-GoblinTrackerReviewIndex {
         "ReviewEvidence\issue.md",
         "route-failure-summary.txt",
         "debug-screenshot-manifest.txt",
+        "debug-package-size-summary.txt",
         "session-info.txt"
     )) {
         $path = Join-Path $StagingRoot $relative
@@ -2855,6 +2936,7 @@ try {
             "- goblin-evidence-health.txt included: $debugAnalysisFilesIncluded",
             "- goblin-tracker-summary.txt",
             "- goblin-tracker-review.html",
+            "- debug-package-size-summary.txt",
             "- debug-screenshot-manifest.txt",
             "- Latest log: $(if ($null -ne $latestLog) { $latestLog.FullName } else { 'none' })",
             "- Total screenshots included: $totalScreenshotCount",
@@ -2959,11 +3041,14 @@ try {
     }
 
     $packageSizeBytes = 0L
+    $packageSizeSummaryPath = Join-Path $stagingRoot "debug-package-size-summary.txt"
+    New-DebugPackageSizeSummaryFromZip $zipPath $packageSizeSummaryPath
     for ($i = 0; $i -lt 10; $i++) {
         $packageSizeDisplay = if ($packageSizeBytes -gt 0) { Format-ByteSize $packageSizeBytes } else { "calculated during package creation" }
         & $buildManifestLines $packageSizeBytes $packageSizeDisplay | Out-File -FilePath $manifestPath -Encoding utf8
         New-GoblinTrackerReviewIndex $stagingRoot $goblinTrackerReviewIndexPath
         Compress-Archive -Path (Join-Path $stagingRoot "*") -DestinationPath $zipPath -Force
+        New-DebugPackageSizeSummaryFromZip $zipPath $packageSizeSummaryPath
         $newPackageSizeBytes = (Get-Item -LiteralPath $zipPath).Length
         if ($newPackageSizeBytes -eq $packageSizeBytes) {
             break

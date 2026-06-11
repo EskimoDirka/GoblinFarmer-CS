@@ -2,6 +2,51 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-11 Follow-Up Live Review Fix Pass
+
+- Review inputs: `DebugPackages\GoblinFarmer_Debug_20260611_082506.zip` and `Video Clip Review\2026-06-11 07-41-00.mkv`.
+- Issues covered: suppressed/duplicate PF2 notification with invalid total, stale Journal Last Observation returning while idle/menu-like, repair active-button diagnostics, unidentified legendary/set salvage missed while gem stash later stashed gear, and debug package PNG/file growth visibility.
+- Fix coverage: positive-total guard before automatic-count splash notifications, `LastObservationUpdateSkippedPublishGuard` for non-counting idle Journal rows, unidentified salvage template matches overriding gem rejection, gem-stash safety scan loading unidentified salvage templates and requiring stack-verified gem evidence, explicit `RepairButtonColorSample` diagnostics with broader gold active-state matching, and `debug-package-size-summary.txt` inside future debug ZIPs.
+- Replay note: `--debug-package-replay` loaded the attached package successfully, but no image replay scenarios were available because replay crops are excluded by default; the package included structured replay logs only.
+
+Validation commands:
+
+```powershell
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay .\DebugPackages\GoblinFarmer_Debug_20260611_082506.zip
+```
+
+Results:
+
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed with new checks for notification total gating, idle Journal Last Observation suppression, unidentified salvage/gem-stash safety, repair diagnostics, and package size summary.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay .\DebugPackages\GoblinFarmer_Debug_20260611_082506.zip`: passed package load; no image scenarios were present.
+
+## 2026-06-11 Morning Live Review Fix Pass
+
+- Review inputs: `DebugPackages\GoblinFarmer_Debug_20260611_071517.zip` and `Video Clip Review\2026-06-11 06-42-19.mkv`.
+- Issues covered: delayed/wrong-area Goblin Tracker counts after area transitions, Battlefields Treasure Goblin blocked by stale visible journal state, bounty menu Enter close failure, repair active-button color miss, salvage false target on compact Marquise Topaz, missing unidentified set salvage support, and gem-stash color coverage.
+- Fix coverage: pending Journal evidence first-seen area locking, original evidence-age-aware stale visible-line bypass, Escape-only bounty menu close diagnostics, broader repair active-button color matching, unidentified set salvage template support, compact Topaz/regular-gem salvage rejection, non-blocking expected-confirmation miss handoff to final leftover scan, and all-normal-gem color fallback coverage for gem stashing.
+
+Validation commands:
+
+```powershell
+dotnet build .\GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+```
+
+Results:
+
+- `dotnet build .\GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed with new checks for Escape-only bounty close, journal area-lock diagnostics, unidentified set salvage, compact Topaz salvage rejection, and all normal gem color fallback.
+
 ## 2026-06-10 Latest Live Review Fix Pass
 
 - Review inputs: `DebugPackages\GoblinFarmer_Debug_20260610_150324.zip` and `Video Clip Review\2026-06-10 13-55-23.mkv`.

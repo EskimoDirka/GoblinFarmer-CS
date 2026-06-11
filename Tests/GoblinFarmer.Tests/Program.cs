@@ -86,7 +86,7 @@ Run("Explicit AppSettings path override wins", TestExplicitAppSettingsPathOverri
 Run("AppSettings migration preserves existing runtime paths", TestAppSettingsMigrationPreservesRuntimePaths);
 Run("Demon Hunter no-click suppression diagnostic is not named as failure or stall", TestDemonHunterNoClickSuppressionDiagnosticName);
 Run("Witch Doctor combat uses mouse wheel and not held-left mode", TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode);
-Run("Combat menu watcher clears event complete with Enter before Escape", TestCombatMenuWatcherClearsEventCompleteWithEnterBeforeEscape);
+Run("Combat menu watcher closes bounty menu with Escape only", TestCombatMenuWatcherClosesBountyMenuWithEscapeOnly);
 Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGameClickPolicyBlocksInGameSignals);
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
@@ -102,6 +102,7 @@ Run("Debug package includes success screenshots only with opt-in", TestDebugPack
 Run("Debug package includes built-in analysis reports", TestDebugPackageIncludesBuiltInAnalysisReports);
 Run("Debug package includes reviewed OBS evidence when requested", TestDebugPackageIncludesReviewedObsEvidenceWhenRequested);
 Run("Debug package auto-aligns OBS review evidence by default", TestDebugPackageAutoAlignsObsReviewEvidenceByDefault);
+Run("Debug package includes size summary report", TestDebugPackageIncludesSizeSummaryReport);
 Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeepsTrueAreasSeparate);
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
@@ -130,6 +131,7 @@ Run("Goblin auto-count source variant suppression uses recent last-seen state", 
 Run("Goblin PF multi-count duplicate bypass stays bounded", TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded);
 Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
 Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses);
+Run("Goblin auto-count notifications require positive totals", TestGoblinAutoCountNotificationsRequirePositiveTotals);
 Run("Goblin auto-count stale journal does not block fresh cross-area minimap", TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap);
 Run("Goblin auto-count old cross-area journal row expires", TestGoblinAutoCountOldCrossAreaJournalRowExpires);
 Run("Goblin auto-count same-area duplicate journal refreshes encounter state", TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState);
@@ -137,6 +139,7 @@ Run("Goblin auto-count suppresses shifted journal row after pause", TestGoblinAu
 Run("Goblin auto-count treats different journal templates as separate lines", TestGoblinAutoCountTreatsDifferentJournalTemplatesAsSeparateLines);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin accepted counts persist Last Observation until reset", TestGoblinAcceptedCountsPersistLastObservationUntilReset);
+Run("Goblin non-counting idle journal cannot publish Last Observation", TestGoblinNonCountingIdleJournalCannotPublishLastObservation);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
 Run("Goblin stale journal suppression can bypass after verified fresh area", TestGoblinStaleJournalSuppressionCanBypassAfterVerifiedFreshArea);
 Run("Goblin fresh killed journal can satisfy evidence gate", TestGoblinFreshKilledJournalCanSatisfyEvidenceGate);
@@ -160,6 +163,8 @@ Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTi
 Run("Salvage classifier accepts pale legendary boot-like items", TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems);
 Run("Salvage classifier accepts low-color legendary text anchor", TestSalvageClassifierAcceptsLowColorLegendaryTextAnchor);
 Run("Salvage classifier accepts unidentified legendary template", TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate);
+Run("Salvage classifier accepts unidentified set template", TestSalvageClassifierAcceptsUnidentifiedSetTemplate);
+Run("Salvage classifier rejects compact Marquise Topaz stack", TestSalvageClassifierRejectsCompactMarquiseTopazStack);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier merges weak upper and strong lower set boundary", TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary);
 Run("Salvage classifier merges set body continuation rows", TestSalvageClassifierMergesSetBodyContinuationRows);
@@ -173,9 +178,10 @@ Run("Salvage loop verifies expected confirmation misses before failure", TestSal
 Run("Inventory replay loads saved salvage crop", TestInventoryReplayLoadsSavedSalvageCrop);
 Run("Gem stash classifier matches synthetic gem templates", TestGemStashClassifierMatchesSyntheticGemTemplates);
 Run("Gem stash classifier rejects below threshold", TestGemStashClassifierRejectsBelowThreshold);
-Run("Gem stash classifier accepts live-style gem color fallback", TestGemStashClassifierAcceptsLiveStyleGemColorFallback);
+Run("Gem stash classifier accepts all normal gem colors by fallback", TestGemStashClassifierAcceptsAllNormalGemColorsByFallback);
 Run("Gem stash classifier requires stack text for color fallback", TestGemStashClassifierRequiresStackTextForColorFallback);
 Run("Gem stash classifier rejects non-gem footprint fallback", TestGemStashClassifierRejectsNonGemFootprintFallback);
+Run("Gem stash classifier loads salvage unidentified templates for safety", TestGemStashClassifierLoadsSalvageUnidentifiedTemplatesForSafety);
 Run("Gem stash classifier accepts near-threshold verified gems", TestGemStashClassifierAcceptsNearThresholdVerifiedGems);
 Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
@@ -3105,19 +3111,20 @@ static void TestWitchDoctorCombatUsesMouseWheelNotHeldLeftMode()
     AssertFalse(stateSource.Contains("portWitchDoctorHeldInputFromSafeRegion", StringComparison.Ordinal), "Witch Doctor should not track a held-left safe-region state");
 }
 
-static void TestCombatMenuWatcherClearsEventCompleteWithEnterBeforeEscape()
+static void TestCombatMenuWatcherClosesBountyMenuWithEscapeOnly()
 {
     string repoRoot = FindRepositoryRootForTests();
     string combatSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Combat.cs"));
     string watcherMethod = ExtractMethodBody(combatSource, "private void PortCombatMenuWatcherLoop");
 
-    AssertTrue(watcherMethod.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "event-complete menu clearing should try Enter first");
-    AssertTrue(watcherMethod.Contains("postEnterConfidence", StringComparison.Ordinal), "event-complete menu clearing should rescan after Enter");
-    AssertTrue(watcherMethod.Contains("PortPressEscapeForAutomation(\"BountyMenuCombatWatcher\")", StringComparison.Ordinal), "event-complete menu clearing should keep Escape as fallback");
-    AssertTrue(watcherMethod.Contains("BountyMenuClearSent", StringComparison.Ordinal), "event-complete menu clearing should log the combined clear action");
-    AssertTrue(watcherMethod.Contains("closeMethod=EnterThenEscapeIfStillVisible", StringComparison.Ordinal), "event-complete diagnostics should show Enter/Escape behavior");
-    AssertTrue(watcherMethod.IndexOf("PortPressKey(PortVkReturn)", StringComparison.Ordinal) < watcherMethod.IndexOf("PortPressEscapeForAutomation(\"BountyMenuCombatWatcher\")", StringComparison.Ordinal), "Enter should be attempted before Escape fallback");
-    AssertFalse(watcherMethod.Contains("BountyMenuEscapeSent", StringComparison.Ordinal), "old Escape-only diagnostic should not remain in the combat menu watcher");
+    AssertFalse(watcherMethod.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "bounty menu clearing should not send Enter");
+    AssertFalse(watcherMethod.Contains("postEnterConfidence", StringComparison.Ordinal), "bounty menu clearing should not use Enter-rescan diagnostics");
+    AssertTrue(watcherMethod.Contains("PortPressEscapeForAutomation(\"BountyMenuCombatWatcher\")", StringComparison.Ordinal), "bounty menu clearing should send Escape through the automation-safe helper");
+    AssertTrue(watcherMethod.Contains("BountyMenuEscapeSent", StringComparison.Ordinal), "Escape close should have a dedicated diagnostic");
+    AssertTrue(watcherMethod.Contains("BountyMenuClearSent", StringComparison.Ordinal), "bounty menu clearing should log the close result");
+    AssertTrue(watcherMethod.Contains("closeMethod=EscapeOnly", StringComparison.Ordinal), "bounty menu diagnostics should show Escape-only behavior");
+    AssertTrue(watcherMethod.Contains("menuClosedConfirmed=", StringComparison.Ordinal), "bounty menu diagnostics should confirm the menu closed");
+    AssertTrue(watcherMethod.Contains("combatStillActive=", StringComparison.Ordinal), "bounty menu diagnostics should report combat state after Escape");
 }
 
 static string FindRepositoryRootForTests()
@@ -3924,6 +3931,19 @@ static void TestDebugPackageAutoAlignsObsReviewEvidenceByDefault()
             Directory.Delete(testRoot, recursive: true);
         }
     }
+}
+
+static void TestDebugPackageIncludesSizeSummaryReport()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
+
+    AssertTrue(packageScript.Contains("New-DebugPackageSizeSummaryFromZip", StringComparison.Ordinal), "debug package script should generate a package size summary");
+    AssertTrue(packageScript.Contains("debug-package-size-summary.txt", StringComparison.Ordinal), "debug package size summary should be included in package manifests and review index");
+    AssertTrue(packageScript.Contains("Size by extension:", StringComparison.Ordinal), "size summary should report extension totals");
+    AssertTrue(packageScript.Contains("Size by top folder:", StringComparison.Ordinal), "size summary should report folder totals");
+    AssertTrue(packageScript.Contains("Largest 20 files:", StringComparison.Ordinal), "size summary should report largest package files");
+    AssertTrue(packageScript.Contains("Retention applied before packaging:", StringComparison.Ordinal), "size summary should document applied retention policy");
 }
 
 static string ReadRequiredZipText(ZipArchive archive, string entryName)
@@ -5269,6 +5289,21 @@ static void TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses()
     AssertEqual("RecentSourceVariant:Minimap->Journal", matchReason, "delayed minimap-to-journal suppression should explain the source variant");
 }
 
+static void TestGoblinAutoCountNotificationsRequirePositiveTotals()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
+    string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
+
+    int acceptedIndex = autoCountMethod.IndexOf("GoblinAutoCountAccepted", StringComparison.Ordinal);
+    int guardIndex = autoCountMethod.IndexOf("if (total <= 0)", StringComparison.Ordinal);
+    int notificationIndex = autoCountMethod.IndexOf("PortShowSplash(", StringComparison.Ordinal);
+    AssertTrue(guardIndex > acceptedIndex, "positive-total notification guard should run after count acceptance is known");
+    AssertTrue(notificationIndex > guardIndex, "auto-count splash notifications should only run after positive-total validation");
+    AssertTrue(autoCountMethod.Contains("AutoCountNotificationSkipped", StringComparison.Ordinal), "invalid totals should be diagnosed instead of showing user-facing notifications");
+    AssertTrue(autoCountMethod.Contains("reason=InvalidTotal", StringComparison.Ordinal), "invalid-total notification suppression should log a clear reason");
+}
+
 static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
 {
     DateTime nowUtc = DateTime.UtcNow;
@@ -5513,6 +5548,20 @@ static void TestGoblinAcceptedCountsPersistLastObservationUntilReset()
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("preservedAcceptedDisplay", StringComparison.Ordinal), "New Game should not preserve accepted Last Observation display state");
 }
 
+static void TestGoblinNonCountingIdleJournalCannotPublishLastObservation()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
+
+    AssertTrue(observeMethod.Contains("allowObservationPublish", StringComparison.Ordinal), "observation display updates should have an explicit publish guard");
+    AssertTrue(observeMethod.Contains("!observationSource.Equals(\"Journal\"", StringComparison.Ordinal), "publish guard should target idle journal candidates without suppressing accepted minimap counts");
+    AssertTrue(observeMethod.Contains("portCombatRunning", StringComparison.Ordinal), "journal observations should require active combat unless they would count");
+    AssertTrue(observeMethod.Contains("LastObservationUpdateSkippedPublishGuard", StringComparison.Ordinal), "idle journal publish suppression should have a dedicated diagnostic");
+    AssertTrue(observeMethod.Contains("diabloActive={PortDiabloIsActive()}", StringComparison.Ordinal), "publish-guard diagnostics should include active/in-game state context");
+    AssertTrue(observeMethod.Contains("automationRunning={isAutomationRunning}", StringComparison.Ordinal), "publish-guard diagnostics should include automation state");
+}
+
 static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
 {
     DateTime now = DateTime.UtcNow;
@@ -5536,6 +5585,9 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
     string signatureMethod = ExtractMethodBody(evidenceSource, "private string PortJournalEvidenceLineSignature");
     AssertTrue(evidenceSource.Contains("PortJournalEvidenceLineSignature", StringComparison.Ordinal), "journal freshness should use a line signature, not current area as the freshness key");
     AssertTrue(evidenceSource.Contains("JournalEngagedIgnoredAreaChanged", StringComparison.Ordinal), "Engaged journal lines first seen in another area should log an area-change suppression");
+    AssertTrue(evidenceSource.Contains("JournalEngagedAcceptedFirstSeenAreaLock", StringComparison.Ordinal), "fresh pending Engaged evidence should count the first-seen area instead of the later route area");
+    AssertTrue(evidenceSource.Contains("JournalKilledAcceptedAfterEngagedFirstSeenAreaLock", StringComparison.Ordinal), "Killed confirmation after an Engaged area transition should preserve the Engaged first-seen area");
+    AssertTrue(evidenceSource.Contains("areaChangedDuringPendingEvidence=True", StringComparison.Ordinal), "journal area-lock diagnostics should show when pending evidence crossed an area transition");
     AssertTrue(evidenceSource.Contains("JournalCandidateIgnoredHistoryInput", StringComparison.Ordinal), "journal evidence should be suppressed briefly after the player opens journal/chat history with Enter");
     AssertTrue(evidenceSource.Contains("JournalCandidateIgnoredHistoryRow", StringComparison.Ordinal), "journal evidence from upper/history rows should be ignored before it can become fresh evidence");
     AssertTrue(evidenceSource.Contains("GoblinJournalActiveFeedMinimumY", StringComparison.Ordinal), "journal history suppression should use an explicit active-feed row boundary");
@@ -5619,12 +5671,13 @@ static void TestGoblinStaleJournalSuppressionCanBypassAfterVerifiedFreshArea()
     AssertTrue(evidenceSource.Contains("staleFirstSuppressedAgeSeconds=", StringComparison.Ordinal), "stale visible-line diagnostics should include first-suppressed age");
     AssertTrue(bypassMethod.Contains("PortResolveCurrentGoblinArea(\"Journal\")", StringComparison.Ordinal), "bypass should re-resolve the current area instead of trusting route context");
     AssertTrue(bypassMethod.Contains("PortApplyJournalMinimapAreaOverride", StringComparison.Ordinal), "bypass should preserve minimap-area override safeguards");
-    AssertTrue(bypassMethod.Contains("firstSuppressedAgeSeconds < 20", StringComparison.Ordinal), "bypass should require a conservative stale-line age");
+    AssertTrue(evidenceSource.Contains("staleEvidenceFirstSeenAgeSeconds=", StringComparison.Ordinal), "stale visible-line diagnostics should include the original evidence first-seen age");
+    AssertTrue(bypassMethod.Contains("firstSuppressedAgeSeconds >= 20 || evidenceFirstSeenAgeSeconds >= 20", StringComparison.Ordinal), "bypass should allow old original evidence even if the first suppression record is new");
     AssertTrue(bypassMethod.Contains("bypassReason=StaleLineTooRecent", StringComparison.Ordinal), "too-recent stale lines should remain suppressed diagnostically");
     AssertTrue(bypassMethod.Contains("string.Equals(staleArea, currentArea", StringComparison.Ordinal), "same-area stale lines should not bypass suppression");
     AssertTrue(bypassMethod.Contains("GoblinManualCountBlockList.IsBlocked(currentArea)", StringComparison.Ordinal), "blocked areas should not use the bypass");
     AssertTrue(bypassMethod.Contains("PortForgetJournalFreshnessStateForVisibleLine(signature)", StringComparison.Ordinal), "allowed bypass should clear stale first-seen state before normal evidence flow continues");
-    AssertTrue(rememberMethod.Contains("AreaKey = rememberedArea", StringComparison.Ordinal), "stale suppression state should retain the original stale area");
+    AssertTrue(rememberMethod.Contains("EvidenceFirstSeenUtc = rememberedFirstSeen", StringComparison.Ordinal), "stale suppression state should retain the original evidence age");
     AssertTrue(forgetMethod.Contains("portJournalEvidenceSeenByKey.Remove(key)", StringComparison.Ordinal), "bypass should clear Engaged first-seen state for that visible line");
     AssertTrue(forgetMethod.Contains("portJournalKilledEvidenceSeenBySignature.Remove(key)", StringComparison.Ordinal), "bypass should clear Killed first-seen state for that visible line");
     AssertTrue(forgetMethod.Contains("portStaleSuppressedJournalEvidenceByKey.Remove(key)", StringComparison.Ordinal), "bypass should clear stale suppression state for that visible line");
@@ -6158,8 +6211,10 @@ static void TestSalvageLoopHandlesExpectedConfirmationFailures()
     AssertTrue(townSource.Contains("PortPressKey(PortVkReturn)", StringComparison.Ordinal), "confirmation-expected salvage should accept the confirmation when found");
     AssertTrue(townSource.Contains("target.ConfirmationExpected && !confirmationFound", StringComparison.Ordinal), "missing expected confirmation should be handled separately from no-prompt items");
     AssertTrue(townSource.Contains("PortCachedSalvageTargetStillActionable", StringComparison.Ordinal), "missing expected confirmation should verify the cached target still exists before failing");
-    AssertTrue(townSource.Contains("RecordSalvageFailure(\"Salvage failed: expected confirmation not found\")", StringComparison.Ordinal), "missing expected confirmation should record a salvage failure");
-    AssertTrue(townSource.Contains("PortCaptureFailureScreenshot(\"SalvageExpectedConfirmationMissing\", \"Salvage\")", StringComparison.Ordinal), "missing expected confirmation should capture diagnostics");
+    AssertTrue(townSource.Contains("SalvageExpectedConfirmationMissingContinuing", StringComparison.Ordinal), "missing expected confirmation should continue to the final leftover scan instead of immediately blocking auto-stash");
+    AssertTrue(townSource.Contains("PostClickLeftoverRescan", StringComparison.Ordinal), "missing expected confirmation should hand off to a post-click leftover rescan");
+    AssertTrue(townSource.Contains("RecordSalvageFailure(\"Salvage incomplete: actionable leftovers remain after recovery rescans\")", StringComparison.Ordinal), "remaining actionable non-gem leftovers should still fail visibly after bounded recovery");
+    AssertFalse(townSource.Contains("RecordSalvageFailure(\"Salvage failed: expected confirmation not found\")", StringComparison.Ordinal), "a single missed expected confirmation should not immediately abort safe auto-stash");
     AssertTrue(townSource.Contains("salvageSuccess=False", StringComparison.Ordinal), "missing expected confirmation should not be logged as salvage success");
     AssertTrue(townSource.Contains("noPromptSalvages++", StringComparison.Ordinal), "no-prompt salvage targets should continue without failing when no dialog appears");
 }
@@ -6174,7 +6229,7 @@ static void TestSalvageLoopVerifiesExpectedConfirmationMissBeforeFailure()
     AssertTrue(townSource.Contains("Salvage expected-confirmation verification:", StringComparison.Ordinal), "expected-confirmation verification should be logged");
     AssertTrue(townSource.Contains("targetStillActionable=False", StringComparison.Ordinal), "stale-cache skip diagnostics should report when the target is gone");
     AssertTrue(townSource.Contains("staleCachedTargetsSkipped", StringComparison.Ordinal), "salvage summaries should report stale cached target skips");
-    AssertTrue(townSource.IndexOf("PortCachedSalvageTargetStillActionable", StringComparison.Ordinal) < townSource.IndexOf("RecordSalvageFailure(\"Salvage failed: expected confirmation not found\")", StringComparison.Ordinal), "verification should happen before expected-confirmation failure recording");
+    AssertTrue(townSource.IndexOf("PortCachedSalvageTargetStillActionable", StringComparison.Ordinal) < townSource.IndexOf("SalvageExpectedConfirmationMissingContinuing", StringComparison.Ordinal), "verification should happen before continuing after an expected-confirmation miss");
     AssertTrue(verificationMethod.Contains("PortScanSalvageInventorySlots", StringComparison.Ordinal), "verification should use a fresh production classifier scan");
     AssertTrue(verificationMethod.Contains("target.Row >= candidate.Row", StringComparison.Ordinal), "verification should consider targets covering the stale cached row");
     AssertTrue(verificationMethod.Contains("target.Row < candidate.Row + candidate.FootprintRows", StringComparison.Ordinal), "verification should match full legal footprints, not only exact top rows");
@@ -6607,6 +6662,56 @@ static void TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate()
     }
 }
 
+static void TestSalvageClassifierAcceptsUnidentifiedSetTemplate()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    using Bitmap template = CreateSyntheticUnidentifiedLegendaryTemplate();
+    DrawSyntheticUnidentifiedLegendaryTemplate(grid, 3, 5, template);
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerUnidentifiedSet_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        string templatePath = Path.Combine(root, "Unidentified Set Icon.png");
+        template.Save(templatePath, System.Drawing.Imaging.ImageFormat.Png);
+
+        SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(
+            grid,
+            new Rectangle(0, 0, grid.Width, grid.Height),
+            unidentifiedLegendaryTemplatePath: "",
+            unidentifiedSetTemplatePath: templatePath);
+
+        AssertEqual(1, result.Targets.Count, "unidentified set template should create one actionable salvage target");
+        SalvageInventorySlotTarget target = result.Targets[0];
+        AssertEqual(3, target.Row, "unidentified set target should preserve row");
+        AssertEqual(5, target.Column, "unidentified set target should preserve column");
+        AssertEqual("Set", target.Quality, "unidentified set template should classify target as set");
+        AssertTrue(target.ConfirmationExpected, "unidentified set target should expect confirmation");
+        AssertTrue(result.Candidates.Any(candidate => candidate.Row == 3 && candidate.Column == 5 && candidate.Accepted && candidate.Quality == "Set"), "candidate diagnostics should expose unidentified set classification");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestSalvageClassifierRejectsCompactMarquiseTopazStack()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticRegularGemStackCell(grid, 5, 1, Color.FromArgb(210, 170, 40), "7");
+    DrawSyntheticRegularGemStackCell(grid, 5, 2, Color.FromArgb(185, 190, 198), "");
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == 5 && candidate.Column == 1);
+    AssertFalse(candidate.Accepted, "compact Marquise Topaz-style stack should not be accepted as a salvage target");
+    AssertEqual("RegularGemNonSalvageable", candidate.Reason, "compact Marquise Topaz-style stack should use the regular gem skip reason");
+    AssertEqual("RegularGem", candidate.Quality, "compact Marquise Topaz-style stack should expose RegularGem quality");
+    AssertFalse(result.Targets.Any(target => target.Row == 5 && target.Column == 1), "compact Marquise Topaz-style stack should not produce a click target");
+}
+
 static void TestSalvageClassifierSplitsStackedOneTileItems()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
@@ -6798,7 +6903,7 @@ static void TestGemStashClassifierRejectsBelowThreshold()
     }
 }
 
-static void TestGemStashClassifierAcceptsLiveStyleGemColorFallback()
+static void TestGemStashClassifierAcceptsAllNormalGemColorsByFallback()
 {
     string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemStashColorFallback_{Guid.NewGuid():N}");
     try
@@ -6807,7 +6912,10 @@ static void TestGemStashClassifierAcceptsLiveStyleGemColorFallback()
         using Bitmap grid = CreateSyntheticSalvageGrid();
         using Bitmap template = CreateSyntheticGemTemplate(Color.FromArgb(210, 170, 40));
         DrawSyntheticRegularGemStackCell(grid, 1, 1, Color.FromArgb(210, 170, 40), "727");
-        DrawSyntheticRegularGemStackCell(grid, 2, 1, Color.FromArgb(185, 190, 198), "584");
+        DrawSyntheticRegularGemStackCell(grid, 1, 2, Color.FromArgb(190, 32, 42), "99");
+        DrawSyntheticRegularGemStackCell(grid, 1, 3, Color.FromArgb(30, 185, 80), "42");
+        DrawSyntheticRegularGemStackCell(grid, 2, 1, Color.FromArgb(130, 42, 165), "84");
+        DrawSyntheticRegularGemStackCell(grid, 2, 2, Color.FromArgb(185, 190, 198), "584");
         DrawSyntheticLegendaryBootLowerHalf(grid, 6, 6);
 
         string templatePath = Path.Combine(root, "Marquise Topaz.png");
@@ -6820,7 +6928,10 @@ static void TestGemStashClassifierAcceptsLiveStyleGemColorFallback()
             0.99);
 
         AssertTrue(result.Targets.Any(target => target.Row == 1 && target.Column == 1), "live-style stack-count topaz should be accepted by gem color fallback below strict template threshold");
-        AssertTrue(result.Targets.Any(target => target.Row == 2 && target.Column == 1), "live-style stack-count diamond should be accepted by gem color fallback below strict template threshold");
+        AssertTrue(result.Targets.Any(target => target.Row == 1 && target.Column == 2), "live-style stack-count ruby should be accepted by gem color fallback below strict template threshold");
+        AssertTrue(result.Targets.Any(target => target.Row == 1 && target.Column == 3), "live-style stack-count emerald should be accepted by gem color fallback below strict template threshold");
+        AssertTrue(result.Targets.Any(target => target.Row == 2 && target.Column == 1), "live-style stack-count amethyst should be accepted by gem color fallback below strict template threshold");
+        AssertTrue(result.Targets.Any(target => target.Row == 2 && target.Column == 2), "live-style stack-count diamond should be accepted by gem color fallback below strict template threshold");
         AssertFalse(result.Targets.Any(target => target.Row == 6 && target.Column == 6), "legendary boot lower half should not be accepted by gem stash color fallback");
         AssertTrue(result.Candidates.Any(candidate => candidate.Row == 1 && candidate.Column == 1 && candidate.Reason == "GemColorMatched"), "fallback gem candidate should expose GemColorMatched diagnostics");
     }
@@ -6877,6 +6988,21 @@ static void TestGemStashClassifierRejectsNonGemFootprintFallback()
             Directory.Delete(root, recursive: true);
         }
     }
+}
+
+static void TestGemStashClassifierLoadsSalvageUnidentifiedTemplatesForSafety()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string classifierSource = File.ReadAllText(Path.Combine(repoRoot, "GemStashInventoryClassifier.cs"));
+    string imageRecognitionSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ImageRecognition.cs"));
+
+    AssertTrue(classifierSource.Contains("unidentifiedLegendaryTemplatePath", StringComparison.Ordinal), "gem stash safety scan should accept salvage unidentified legendary templates");
+    AssertTrue(classifierSource.Contains("unidentifiedSetTemplatePath", StringComparison.Ordinal), "gem stash safety scan should accept salvage unidentified set templates");
+    AssertTrue(classifierSource.Contains("SalvageInventorySlotClassifier.Scan(", StringComparison.Ordinal), "gem stash should keep using salvage classifier as a non-gem safety guard");
+    AssertTrue(classifierSource.Contains("stackVerifiedGem", StringComparison.Ordinal), "gem stash should require gem-stack verification in addition to template/color matching");
+    AssertTrue(classifierSource.Contains("RejectedGemStackVerification", StringComparison.Ordinal), "gem stash should log when a template/color hit does not look like a normal stacked gem");
+    AssertTrue(imageRecognitionSource.Contains("Img(\"Salvage\", \"Unidentified Salvage Icon.png\")", StringComparison.Ordinal), "live gem stash scans should pass unidentified legendary salvage template path");
+    AssertTrue(imageRecognitionSource.Contains("Img(\"Salvage\", \"Unidentified Set Icon.png\")", StringComparison.Ordinal), "live gem stash scans should pass unidentified set salvage template path");
 }
 
 static void TestGemStashClassifierAcceptsNearThresholdVerifiedGems()

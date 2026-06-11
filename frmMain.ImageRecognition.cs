@@ -805,13 +805,25 @@ namespace GoblinFarmer
 
             string unidentifiedLegendaryTemplatePath = Img("Salvage", "Unidentified Salvage Icon.png");
             bool unidentifiedLegendaryTemplatePresent = File.Exists(unidentifiedLegendaryTemplatePath);
+            string unidentifiedSetTemplatePath = Img("Salvage", "Unidentified Set Icon.png");
+            bool unidentifiedSetTemplatePresent = File.Exists(unidentifiedSetTemplatePath);
             AppLogger.Info(
                 "SalvageUnidentifiedLegendaryTemplateStatus: " +
                 $"phase={PortLogField(phase)}; " +
                 $"templatePresent={unidentifiedLegendaryTemplatePresent}; " +
                 $"templatePath={PortLogField(unidentifiedLegendaryTemplatePath)}; " +
                 $"missingReason={(unidentifiedLegendaryTemplatePresent ? "None" : "TemplateMissing")}");
-            SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid, unidentifiedLegendaryTemplatePath);
+            AppLogger.Info(
+                "SalvageUnidentifiedSetTemplateStatus: " +
+                $"phase={PortLogField(phase)}; " +
+                $"templatePresent={unidentifiedSetTemplatePresent}; " +
+                $"templatePath={PortLogField(unidentifiedSetTemplatePath)}; " +
+                $"missingReason={(unidentifiedSetTemplatePresent ? "None" : "TemplateMissing")}");
+            SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(
+                screenshot,
+                grid,
+                unidentifiedLegendaryTemplatePath,
+                unidentifiedSetTemplatePath);
             SalvageInventoryReplayArtifacts.RecordScanLog(grid, phase, scan);
             if (updateRegularGemCandidateCount)
             {
@@ -861,7 +873,9 @@ namespace GoblinFarmer
                 screenshot,
                 grid,
                 templates,
-                AppSettings.Stash.GemTemplateConfidence);
+                AppSettings.Stash.GemTemplateConfidence,
+                Img("Salvage", "Unidentified Salvage Icon.png"),
+                Img("Salvage", "Unidentified Set Icon.png"));
             GemStashInventoryReplayArtifacts.RecordScanLog(grid, phase, scan, AppSettings.Stash.GemTemplateConfidence);
 
             if (!logCandidates)

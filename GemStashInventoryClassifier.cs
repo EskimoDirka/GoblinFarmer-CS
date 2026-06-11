@@ -79,6 +79,23 @@ namespace GoblinFarmer
             IReadOnlyList<GemStashTemplate> templates,
             double threshold)
         {
+            return Scan(
+                inventoryGrid,
+                screenGrid,
+                templates,
+                threshold,
+                unidentifiedLegendaryTemplatePath: "",
+                unidentifiedSetTemplatePath: "");
+        }
+
+        public static GemStashInventoryScanResult Scan(
+            Bitmap inventoryGrid,
+            Rectangle screenGrid,
+            IReadOnlyList<GemStashTemplate> templates,
+            double threshold,
+            string unidentifiedLegendaryTemplatePath,
+            string unidentifiedSetTemplatePath)
+        {
             if (inventoryGrid.Width <= 0 || inventoryGrid.Height <= 0)
             {
                 return new GemStashInventoryScanResult([], [], templates.Select(template => template.Name).ToArray(), templates.Select(template => template.Path).ToArray(), []);
@@ -115,7 +132,9 @@ namespace GoblinFarmer
                     templates.Select(template => template.Name).ToArray(),
                     templates.Select(template => template.Path).ToArray(),
                     invalidTemplates,
-                    threshold);
+                    threshold,
+                    unidentifiedLegendaryTemplatePath,
+                    unidentifiedSetTemplatePath);
             }
             finally
             {
@@ -133,12 +152,18 @@ namespace GoblinFarmer
             IReadOnlyList<string> templateNames,
             IReadOnlyList<string> templatePaths,
             IReadOnlyList<string> invalidTemplates,
-            double threshold)
+            double threshold,
+            string unidentifiedLegendaryTemplatePath,
+            string unidentifiedSetTemplatePath)
         {
             List<GemStashInventorySlotTarget> targets = [];
             List<GemStashInventorySlotCandidate> candidates = [];
             Dictionary<(int Row, int Column), SalvageInventorySlotCandidateDiagnostic> salvageDiagnostics =
-                SalvageInventorySlotClassifier.Scan(inventoryGrid, screenGrid)
+                SalvageInventorySlotClassifier.Scan(
+                    inventoryGrid,
+                    screenGrid,
+                    unidentifiedLegendaryTemplatePath,
+                    unidentifiedSetTemplatePath)
                     .Candidates
                     .ToDictionary(candidate => (candidate.Row, candidate.Column));
 
@@ -175,21 +200,22 @@ namespace GoblinFarmer
                     bool colorAccepted = loadedTemplates.Count > 0 && IsGemColorFallback(metrics, bestConfidence);
                     bool salvageAllowsGem = salvageDiagnostics.TryGetValue((row + 1, column + 1), out SalvageInventorySlotCandidateDiagnostic? salvageDiagnostic) &&
                         salvageDiagnostic.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase);
+                    bool stackVerifiedGem = metrics.StackCountTextPixels >= 12 || metrics.RegularGemPixels >= 500;
                     bool acceptedBeforeSalvageGuard = templateAccepted || colorAccepted || nearThresholdTemplateAccepted;
-                    bool accepted = acceptedBeforeSalvageGuard && salvageAllowsGem;
+                    bool accepted = acceptedBeforeSalvageGuard && salvageAllowsGem && stackVerifiedGem;
                     string reason = loadedTemplates.Count == 0
                         ? "NoValidGemTemplates"
                         : templateAccepted
                             ? salvageAllowsGem
-                                ? "GemTemplateMatched"
+                                ? stackVerifiedGem ? "GemTemplateMatched" : "RejectedGemStackVerification"
                                 : "RejectedNonGemFootprint"
                             : nearThresholdTemplateAccepted
                                 ? salvageAllowsGem
-                                    ? "GemTemplateNearThresholdVerifiedGem"
+                                    ? stackVerifiedGem ? "GemTemplateNearThresholdVerifiedGem" : "RejectedGemStackVerification"
                                     : "RejectedNonGemFootprint"
                                 : colorAccepted
                                 ? salvageAllowsGem
-                                    ? "GemColorMatched"
+                                    ? stackVerifiedGem ? "GemColorMatched" : "RejectedGemStackVerification"
                                     : "RejectedNonGemFootprint"
                                 : "BelowThreshold";
                     candidates.Add(new GemStashInventorySlotCandidate(

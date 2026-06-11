@@ -357,6 +357,7 @@ namespace GoblinFarmer
             double manualHoldRemainingMs = 0;
             GoblinObservationRecord? preservedObservation = null;
             GoblinObservationRecord observation;
+            bool allowObservationPublish = true;
 
             lock (portGoblinTrackerLock)
             {
@@ -455,7 +456,13 @@ namespace GoblinFarmer
                 DebugManager.Session.RecordGoblinObservation(observation);
                 if (area.Resolved)
                 {
-                    portLastGoblinObservationForManualCount = observation;
+                    allowObservationPublish = wouldCount ||
+                        !observationSource.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                        portCombatRunning;
+                    if (allowObservationPublish)
+                    {
+                        portLastGoblinObservationForManualCount = observation;
+                    }
                 }
 
                 if (observationSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
@@ -464,7 +471,14 @@ namespace GoblinFarmer
                     portRecentMinimapGoblinObservationByType[goblinType] = observation;
                 }
 
-                if (PortManualCountDisplayHoldActive(portDisplayedGoblinObservation, nowUtc))
+                if (!allowObservationPublish)
+                {
+                    displayUpdated = false;
+                    displaySkipKind = "ObservationPublishGuard";
+                    preservedObservation = portDisplayedGoblinObservation;
+                    manualHoldRemainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - nowUtc).TotalMilliseconds);
+                }
+                else if (PortManualCountDisplayHoldActive(portDisplayedGoblinObservation, nowUtc))
                 {
                     displayUpdated = false;
                     displaySkipKind = "ManualCountDisplayHold";
@@ -514,8 +528,10 @@ namespace GoblinFarmer
             {
                 string eventName = displaySkipKind.Equals("ManualCountDisplayHold", StringComparison.OrdinalIgnoreCase)
                     ? "LastObservationUpdateSkippedDuringManualHold"
-                    : "LastObservationUpdateSkippedPreserved";
-                AppLogger.Info($"GoblinTracker: {eventName} incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preserveKind={PortLogField(displaySkipKind)} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
+                    : displaySkipKind.Equals("ObservationPublishGuard", StringComparison.OrdinalIgnoreCase)
+                        ? "LastObservationUpdateSkippedPublishGuard"
+                        : "LastObservationUpdateSkippedPreserved";
+                AppLogger.Info($"GoblinTracker: {eventName} incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preserveKind={PortLogField(displaySkipKind)} allowObservationPublish={allowObservationPublish} combatActive={portCombatRunning} combatStopping={portCombatStopping} automationRunning={isAutomationRunning} diabloRunning={IsDiabloRunning()} diabloActive={PortDiabloIsActive()} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
             }
             PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath);
             PortWriteSessionMetadata(logSuccess: false);
