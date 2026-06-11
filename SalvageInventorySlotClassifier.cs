@@ -474,8 +474,9 @@ namespace GoblinFarmer
                 metrics.RegularGemPixels < 90 &&
                 metrics.GreenQualityPixels < 120 &&
                 metrics.OrangeQualityPixels < 120 &&
-                metrics.TopFramePixels <= 80 &&
+                metrics.TopFramePixels <= 160 &&
                 metrics.ColoredFramePixels >= 200 &&
+                metrics.ColoredFramePixels <= 900 &&
                 metrics.InnerBrightPixels >= 1000 &&
                 metrics.InnerSaturatedPixels <= 160;
         }

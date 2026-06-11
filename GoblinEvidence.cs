@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 
 namespace GoblinFarmer
 {
@@ -35,7 +36,8 @@ namespace GoblinFarmer
         double Confidence,
         string Source,
         string Notes,
-        string GoblinType = "Unknown");
+        string GoblinType = "Unknown",
+        IReadOnlyList<ImageRecognitionSampleCandidate>? RankedSamples = null);
 
     internal readonly record struct GoblinEvidenceTemplateMatch(
         double Confidence,
@@ -135,6 +137,21 @@ namespace GoblinFarmer
                 }
 
                 invalidTemplates.Add(new GoblinEvidenceInvalidTemplate(file.Name, invalidReason));
+            }
+
+            string promotedDirectory = Path.Combine(templateDirectory, "Promoted");
+            if (Directory.Exists(promotedDirectory))
+            {
+                foreach (FileInfo file in new DirectoryInfo(promotedDirectory).EnumerateFiles("*.png", SearchOption.AllDirectories).OrderBy(file => file.FullName, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (TryParsePromotedTemplate(templateDirectory, file, out GoblinEvidenceTemplateRequirement? template, out string invalidReason))
+                    {
+                        templates.Add(template!);
+                        continue;
+                    }
+
+                    invalidTemplates.Add(new GoblinEvidenceInvalidTemplate(Path.GetRelativePath(templateDirectory, file.FullName), invalidReason));
+                }
             }
 
             return new GoblinEvidenceTemplateCatalog(templates, invalidTemplates);
@@ -393,6 +410,93 @@ namespace GoblinFarmer
 
             invalidReason = "UnsupportedNamePattern";
             return false;
+        }
+
+        private static bool TryParsePromotedTemplate(
+            string templateDirectory,
+            FileInfo file,
+            out GoblinEvidenceTemplateRequirement? template,
+            out string invalidReason)
+        {
+            template = null;
+            invalidReason = "";
+            string sidecarPath = Path.ChangeExtension(file.FullName, ".json");
+            if (!File.Exists(sidecarPath))
+            {
+                invalidReason = "PromotedMetadataMissing";
+                return false;
+            }
+
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(File.ReadAllText(sidecarPath));
+                JsonElement selected = document.RootElement.TryGetProperty("selected", out JsonElement selectedElement)
+                    ? selectedElement
+                    : document.RootElement;
+                string goblinType = ReadString(selected, "targetLabel");
+                string source = ReadString(selected, "source");
+                string kind = "";
+                if (selected.TryGetProperty("metadata", out JsonElement metadata) &&
+                    metadata.ValueKind == JsonValueKind.Object)
+                {
+                    kind = ReadString(metadata, "EvidenceKind");
+                }
+
+                if (string.IsNullOrWhiteSpace(goblinType) || !GoblinTypeNormalizer.IsKnownGoblinType(goblinType))
+                {
+                    invalidReason = $"PromotedUnknownGoblinType:{goblinType}";
+                    return false;
+                }
+
+                if (!Enum.TryParse(kind, ignoreCase: true, out GoblinEvidenceTemplateKind evidenceKind) ||
+                    evidenceKind == GoblinEvidenceTemplateKind.Unknown)
+                {
+                    invalidReason = $"PromotedUnknownEvidenceKind:{kind}";
+                    return false;
+                }
+
+                string normalizedSource = source.Contains("Minimap", StringComparison.OrdinalIgnoreCase)
+                    ? "MinimapCandidate"
+                    : source.Contains("Journal", StringComparison.OrdinalIgnoreCase)
+                        ? "JournalCandidate"
+                        : "";
+                if (string.IsNullOrWhiteSpace(normalizedSource))
+                {
+                    invalidReason = $"PromotedUnknownSource:{source}";
+                    return false;
+                }
+
+                GoblinEvidenceType evidenceType = evidenceKind == GoblinEvidenceTemplateKind.Minimap
+                    ? GoblinEvidenceType.MinimapIcon
+                    : evidenceKind == GoblinEvidenceTemplateKind.JournalKilled
+                        ? GoblinEvidenceType.JournalKill
+                        : GoblinEvidenceType.JournalEncounter;
+                double threshold = evidenceKind == GoblinEvidenceTemplateKind.Minimap
+                    ? MinimapThreshold
+                    : JournalThreshold;
+                template = new GoblinEvidenceTemplateRequirement(
+                    evidenceType,
+                    normalizedSource,
+                    Path.GetRelativePath(templateDirectory, file.FullName),
+                    threshold,
+                    GoblinTypeNormalizer.Normalize(goblinType),
+                    evidenceKind);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                invalidReason = $"PromotedMetadataInvalid:{ex.GetType().Name}";
+                return false;
+            }
+        }
+
+        private static string ReadString(JsonElement element, string propertyName)
+        {
+            return element.ValueKind == JsonValueKind.Object &&
+                element.TryGetProperty(propertyName, out JsonElement value) &&
+                value.ValueKind == JsonValueKind.String
+                    ? value.GetString() ?? ""
+                    : "";
         }
 
         private static bool TryParseTemplatePrefix(

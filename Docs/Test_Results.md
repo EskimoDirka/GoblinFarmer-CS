@@ -2,6 +2,28 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-11 Best-Sample Promotion Helper
+
+- Scope covered: reusable debug-only image-recognition best-sample capture/promotion helper wired to Goblin Evidence and Gem Auto-Stash only; Salvage remains excluded.
+- Fix coverage: top-N candidate capture with metadata, deterministic best-candidate selection, quality rejection for unsafe samples, unique promotion filenames with sidecar metadata, promoted Goblin/Gem template discovery through sidecars, accepted-count-only Goblin Evidence capture, success-only Gem Auto-Stash capture, per-domain retention cleanup, and bounded debug-package inclusion.
+- Defaults: accepted-sample capture is release/default off and VS Debug on for validation; Goblin/Gem promotion is disabled by default.
+
+Validation commands:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+git diff --check
+```
+
+Results:
+
+- `dotnet build GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed with new checks for shared helper capture/selection/promotion/retention, Goblin Evidence accepted-count-only wiring, Gem Auto-Stash success-only wiring, promoted template sidecar loading, and bounded debug-package inclusion.
+- `git diff --check`: passed.
+
 ## 2026-06-11 Follow-Up Live Review Fix Pass
 
 - Review inputs: `DebugPackages\GoblinFarmer_Debug_20260611_082506.zip` and `Video Clip Review\2026-06-11 07-41-00.mkv`.

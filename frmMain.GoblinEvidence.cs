@@ -361,6 +361,7 @@ namespace GoblinFarmer
             GoblinEvidenceTemplateRequirement? bestTemplate = null;
             string bestImagePath = "";
             GoblinEvidenceTemplateMatch bestMatch = new(0, Point.Empty, Point.Empty, Size.Empty);
+            List<(GoblinEvidenceTemplateRequirement Template, string ImagePath, GoblinEvidenceTemplateMatch Match)> rankedMatches = [];
             foreach (GoblinEvidenceTemplateRequirement template in templates)
             {
                 string imagePath = Img("Goblin Evidence", template.FileName);
@@ -372,6 +373,7 @@ namespace GoblinFarmer
                 Stopwatch templateStopwatch = Stopwatch.StartNew();
                 GoblinEvidenceTemplateMatch match = PortBestGoblinEvidenceTemplateMatch(scanContext, imagePath);
                 PortRecordGoblinEvidenceTiming($"TemplateMatch:{PortNormalizeGoblinObservationSource(template.Source)}", templateStopwatch.Elapsed);
+                rankedMatches.Add((template, imagePath, match));
                 if (bestTemplate == null || match.Confidence > bestMatch.Confidence)
                 {
                     bestTemplate = template;
@@ -380,9 +382,11 @@ namespace GoblinFarmer
                 }
             }
 
+            IReadOnlyList<ImageRecognitionSampleCandidate> rankedSamples = PortBuildGoblinEvidenceBestSampleCandidates(scanContext, rankedMatches);
+
             if (bestTemplate == null)
             {
-                return new GoblinEvidenceDetectionResult(null, null, bestImagePath, bestMatch, []);
+                return new GoblinEvidenceDetectionResult(null, null, bestImagePath, bestMatch, rankedSamples);
             }
 
             if (bestMatch.Confidence < bestTemplate.Threshold)
@@ -395,7 +399,7 @@ namespace GoblinFarmer
                     referenceRegion,
                     bestMatch,
                     force: false);
-                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch, []);
+                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch, rankedSamples);
             }
 
             string journalNameValidationNotes = "";
@@ -428,7 +432,7 @@ namespace GoblinFarmer
                     referenceRegion,
                     bestMatch,
                     force: true);
-                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch, []);
+                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch, rankedSamples);
             }
 
             if (journalNameConfidence > 0)
@@ -450,9 +454,51 @@ namespace GoblinFarmer
                 bestMatch.Confidence,
                 bestTemplate.Source,
                 $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}{journalNameValidationNotes}{PortMinimapColorNotes(bestTemplate, bestMatch)}",
-                goblinType);
+                goblinType,
+                rankedSamples);
             PortRecordGoblinEvidenceTiming($"DetectBest:{PortNormalizeGoblinObservationSource(bestTemplate.Source)}", sourceStopwatch.Elapsed);
-            return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch, []);
+            return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch, rankedSamples);
+        }
+
+        private static IReadOnlyList<ImageRecognitionSampleCandidate> PortBuildGoblinEvidenceBestSampleCandidates(
+            GoblinEvidenceScanContext scanContext,
+            IReadOnlyList<(GoblinEvidenceTemplateRequirement Template, string ImagePath, GoblinEvidenceTemplateMatch Match)> matches)
+        {
+            return matches
+                .OrderByDescending(match => match.Match.Confidence)
+                .ThenBy(match => match.Template.Source, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(match => match.Template.FileName, StringComparer.OrdinalIgnoreCase)
+                .Select((match, index) =>
+                {
+                    Rectangle cropRegion = new(match.Match.MatchPoint, match.Match.TemplateSize);
+                    Rectangle screenRegion = new(match.Match.ScreenMatchPoint, match.Match.TemplateSize);
+                    byte[] cropPng = ImageRecognitionBestSamplePromoter.EncodePng(scanContext.Screenshot, cropRegion);
+                    bool thresholdMet = match.Match.Confidence >= match.Template.Threshold;
+                    string source = PortNormalizeGoblinObservationSource(match.Template.Source);
+                    return new ImageRecognitionSampleCandidate(
+                        index + 1,
+                        match.Template.GoblinType,
+                        source,
+                        match.Match.Confidence,
+                        thresholdMet ? "ConfidenceMet" : "BelowThreshold",
+                        match.Template.FileName,
+                        match.ImagePath,
+                        cropRegion,
+                        screenRegion,
+                        cropPng,
+                        thresholdMet,
+                        thresholdMet ? "" : "BelowThreshold",
+                        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["EvidenceKind"] = match.Template.Kind.ToString(),
+                            ["EvidenceType"] = match.Template.Type.ToString(),
+                            ["Threshold"] = match.Template.Threshold.ToString("0.000", CultureInfo.InvariantCulture),
+                            ["MatchPoint"] = $"{match.Match.MatchPoint.X},{match.Match.MatchPoint.Y}",
+                            ["ScreenMatchPoint"] = $"{match.Match.ScreenMatchPoint.X},{match.Match.ScreenMatchPoint.Y}",
+                            ["TemplateSize"] = $"{match.Match.TemplateSize.Width}x{match.Match.TemplateSize.Height}",
+                        });
+                })
+                .ToArray();
         }
 
         private sealed record GoblinEvidenceDetectionResult(
@@ -460,16 +506,7 @@ namespace GoblinFarmer
             GoblinEvidenceTemplateRequirement? BestTemplate,
             string BestImagePath,
             GoblinEvidenceTemplateMatch BestMatch,
-            IReadOnlyList<GoblinEvidenceCandidateRank> CandidateRanking);
-
-        private sealed record GoblinEvidenceCandidateRank(
-            string TemplateName,
-            string GoblinType,
-            string Source,
-            GoblinEvidenceTemplateKind Kind,
-            double Confidence,
-            double Threshold,
-            string MatchPoint);
+            IReadOnlyList<ImageRecognitionSampleCandidate> CandidateRanking);
 
         private sealed record GoblinJournalEvidenceSeenState(
             string GoblinType,
@@ -1511,7 +1548,9 @@ namespace GoblinFarmer
                 }
 
                 DateTime latest = Directory.GetLastWriteTimeUtc(directory);
-                foreach (string file in Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly))
+                foreach (string file in Directory.EnumerateFiles(directory, "*.*", SearchOption.AllDirectories)
+                    .Where(file => file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                        file.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
                 {
                     DateTime writeUtc = File.GetLastWriteTimeUtc(file);
                     if (writeUtc > latest)
@@ -1938,7 +1977,7 @@ namespace GoblinFarmer
                 if (forceObservation)
                 {
                     AppLogger.Info($"GoblinEvidenceManualRefreshResult: candidateFound=True; reason=EvidenceCooldownObservationOnly; type={candidate.Type}; source={candidate.Source}; goblinType={PortLogField(candidate.GoblinType)}; cooldownSeconds={GoblinEvidenceCooldown.TotalSeconds:0}");
-                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, evidenceNotes: candidate.Notes);
+                    PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, evidenceNotes: candidate.Notes, rankedSamples: candidate.RankedSamples);
                 }
 
                 return;
@@ -1955,7 +1994,7 @@ namespace GoblinFarmer
 
             DebugManager.Session.RecordGoblinEvidence(evidenceEvent);
             AppLogger.Info($"GoblinEvidence: Type={candidate.Type}; Confidence={candidate.Confidence:0.00}; Source={candidate.Source}; Screenshot={PortLogField(PortDisplayLocation(screenshotPath))}; Notes={PortLogField(candidate.Notes)}");
-            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath, candidate.Notes);
+            PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath, candidate.Notes, candidate.RankedSamples);
         }
 
         private static string PortResolveDebugPackageRuntimeRoot()

@@ -21,6 +21,9 @@ namespace GoblinFarmer
         public static string ScreenshotsDirectory => Path.Combine(BaseDirectory, "Screenshots");
         public static string DebugScreenshotsDirectory => Path.Combine(BaseDirectory, "debug-screenshots");
         public static string GoblinEvidenceDirectory => Path.Combine(BaseDirectory, "Debug", "GoblinEvidence");
+        public static string GoblinEvidenceAcceptedCandidatesDirectory => Path.Combine(GoblinEvidenceDirectory, "AcceptedEvidenceCandidates");
+        public static string GemAutoStashDirectory => Path.Combine(BaseDirectory, "Debug", "GemAutoStash");
+        public static string GemAutoStashAcceptedCandidatesDirectory => Path.Combine(GemAutoStashDirectory, "AcceptedGemCandidates");
         public static string SessionsDirectory => Path.Combine(BaseDirectory, "Sessions");
         public static string SessionInfoPath => Path.Combine(BaseDirectory, "session-info.txt");
 
@@ -270,6 +273,13 @@ namespace GoblinFarmer
         {
             CleanupResult result = CleanupOldGoblinEvidence(GoblinEvidenceDirectory, retentionCount);
             AppLogger.Info($"GoblinEvidence retention cleanup complete: scanned={result.Scanned}; deleted={result.Deleted}; skipped={result.Skipped}; kept={result.Kept}; retentionCount={retentionCount}; folder={GoblinEvidenceDirectory}");
+            return result;
+        }
+
+        public static CleanupResult CleanupOldImageRecognitionBestSampleSets(string folder, int retentionCount, string domain)
+        {
+            CleanupResult result = ImageRecognitionBestSamplePromoter.CleanupOldCaptureSets(folder, retentionCount);
+            AppLogger.Info($"Image recognition best-sample retention cleanup complete: domain={domain}; scanned={result.Scanned}; deleted={result.Deleted}; skipped={result.Skipped}; kept={result.Kept}; retentionCount={retentionCount}; folder={folder}");
             return result;
         }
 

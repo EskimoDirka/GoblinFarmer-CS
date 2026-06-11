@@ -55,6 +55,6 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 
 ## Town Flow
 
-- Repair diagnostics log `RepairButtonColorSample` before and after actionable repair clicks, plus `RepairCompletionVerification`.
-- Unidentified legendary and set salvage templates are used when present; template-matched unidentified gear remains confirmation-expected salvage, not a gem.
+- Repair diagnostics log `RepairButtonColorSample` before and after actionable repair clicks, including `visualState`, center/wide active-pixel metrics, and `RepairCompletionVerification`; inactive or uncertain debug-mode samples should save a focused `RepairButtonFocused_*.png` crop under `debug-screenshots\Repair`.
+- Unidentified legendary and set salvage templates are used when present; template-matched unidentified gear and low-color muted-top-edge unidentified legendary leftovers remain confirmation-expected salvage, not gems or detached footprints.
 - Auto-stash only right-clicks stack-verified gem targets. Unidentified gear or non-gem leftovers should log `RejectedNonGemFootprint` or `RejectedGemStackVerification`.

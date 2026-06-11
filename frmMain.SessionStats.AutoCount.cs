@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace GoblinFarmer
 {
     public partial class frmMain
@@ -6,7 +8,8 @@ namespace GoblinFarmer
             GoblinObservationRecord observation,
             GoblinAreaResolution area,
             string evidenceSignature,
-            string evidenceImagePath)
+            string evidenceImagePath,
+            IReadOnlyList<ImageRecognitionSampleCandidate>? rankedSamples)
         {
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
@@ -453,6 +456,15 @@ namespace GoblinFarmer
                     ["enableAutomaticCounting"] = AppSettings.GoblinTracker.EnableAutomaticCounting,
                 });
             PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, "AutomaticCountAccepted", guardResult);
+            PortCaptureAcceptedGoblinEvidenceBestSamples(
+                observation,
+                area,
+                rankedSamples,
+                nowUtc,
+                autoEvidenceKey,
+                evidenceReliability,
+                reliabilityReason,
+                total);
             if (total <= 0)
             {
                 AppLogger.Info($"GoblinTracker: AutoCountNotificationSkipped reason=InvalidTotal source={PortLogField(observation.Source)} goblinType={PortLogField(observation.GoblinType)} areaKey={areaKey} total={total} evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)}");
@@ -501,6 +513,51 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;
+        }
+
+        private void PortCaptureAcceptedGoblinEvidenceBestSamples(
+            GoblinObservationRecord observation,
+            GoblinAreaResolution area,
+            IReadOnlyList<ImageRecognitionSampleCandidate>? rankedSamples,
+            DateTime acceptedUtc,
+            string autoEvidenceKey,
+            string evidenceReliability,
+            string reliabilityReason,
+            int total)
+        {
+            if (!AppSettings.ImageRecognition.CaptureAcceptedTopCandidates ||
+                (!AppSettings.IsVsDebugProfile && !AppSettings.Debug.DebugMode))
+            {
+                return;
+            }
+
+            string evidenceHash = PortGoblinEvidenceHash(autoEvidenceKey);
+            string actionId = $"goblin-{acceptedUtc:yyyyMMddHHmmssfff}-{evidenceHash}";
+            bool promotionEnabled = AppSettings.GoblinTracker.PromoteBestGoblinEvidenceImage &&
+                (AppSettings.IsVsDebugProfile || AppSettings.Debug.DebugMode);
+            ImageRecognitionBestSamplePromoter.CaptureSelectAndPromote(new ImageRecognitionSamplePromotionRequest(
+                "GoblinEvidence",
+                actionId,
+                acceptedUtc.ToLocalTime().ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+                DebugManager.GoblinEvidenceAcceptedCandidatesDirectory,
+                Path.Combine(PortGoblinEvidenceTemplateDirectory(), "Promoted"),
+                CaptureEnabled: true,
+                PromotionEnabled: promotionEnabled,
+                TopCandidateCount: 3,
+                RetentionCount: AppSettings.ImageRecognition.TopCandidateRetentionCount,
+                Candidates: rankedSamples ?? [],
+                Metadata: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["GoblinType"] = observation.GoblinType,
+                    ["DetectedArea"] = area.AreaKey,
+                    ["DisplayLocation"] = area.DisplayLocation,
+                    ["EvidenceSource"] = observation.Source,
+                    ["AcceptedReason"] = "Eligible",
+                    ["EvidenceHash"] = evidenceHash,
+                    ["EvidenceReliability"] = evidenceReliability,
+                    ["ReliabilityReason"] = reliabilityReason,
+                    ["Total"] = total.ToString(CultureInfo.InvariantCulture),
+                }));
         }
 
         private static bool PortObservationPendingJournalPromotedByReliability(

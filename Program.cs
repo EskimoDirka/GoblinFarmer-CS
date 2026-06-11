@@ -17,6 +17,14 @@ namespace GoblinFarmer
             DebugManager.CleanupOldSessionSummaries(AppSettings.Debug.SessionSummaryRetentionCount);
             DebugManager.CleanupOldDebugPackages(AppSettings.Debug.DebugPackageRetentionCount);
             DebugManager.CleanupOldGoblinEvidence(AppSettings.Debug.GoblinEvidenceRetentionCount);
+            DebugManager.CleanupOldImageRecognitionBestSampleSets(
+                DebugManager.GoblinEvidenceAcceptedCandidatesDirectory,
+                AppSettings.ImageRecognition.TopCandidateRetentionCount,
+                "GoblinEvidence");
+            DebugManager.CleanupOldImageRecognitionBestSampleSets(
+                DebugManager.GemAutoStashAcceptedCandidatesDirectory,
+                AppSettings.ImageRecognition.TopCandidateRetentionCount,
+                "GemAutoStash");
             LocalToolStartup.StartVsDebugDiabloAutoRecordMonitor();
 
             Application.Run(new frmMain());

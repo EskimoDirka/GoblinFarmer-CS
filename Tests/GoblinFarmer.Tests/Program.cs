@@ -103,6 +103,10 @@ Run("Debug package includes built-in analysis reports", TestDebugPackageIncludes
 Run("Debug package includes reviewed OBS evidence when requested", TestDebugPackageIncludesReviewedObsEvidenceWhenRequested);
 Run("Debug package auto-aligns OBS review evidence by default", TestDebugPackageAutoAlignsObsReviewEvidenceByDefault);
 Run("Debug package includes size summary report", TestDebugPackageIncludesSizeSummaryReport);
+Run("Image recognition best-sample helper captures selects and promotes", TestImageRecognitionBestSampleHelperCapturesSelectsAndPromotes);
+Run("Image recognition best-sample helper rejects unsafe samples deterministically", TestImageRecognitionBestSampleHelperRejectsUnsafeSamplesDeterministically);
+Run("Image recognition best-sample helper retention cleans old sets", TestImageRecognitionBestSampleHelperRetentionCleansOldSets);
+Run("Image recognition best-sample debug package inclusion is bounded", TestImageRecognitionBestSampleDebugPackageInclusionIsBounded);
 Run("Goblin area resolver keeps true areas separate", TestGoblinAreaResolverKeepsTrueAreasSeparate);
 Run("Goblin area duplicate guard suppresses same area and resets", TestGoblinAreaDuplicateGuardSuppressesSameAreaAndResets);
 Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAreaDuplicateGuardAllowsPandemoniumFortressTwiceOnly);
@@ -117,6 +121,9 @@ Run("Goblin observation UI state logs update and clear", TestGoblinObservationUi
 Run("Goblin tracker stats UI refreshes after count changes", TestGoblinTrackerStatsUiRefreshesAfterCountChanges);
 Run("Goblin observation mode is enabled by default in Release", TestGoblinObservationModeEnabledByDefaultInRelease);
 Run("Goblin automatic counting gate defaults disabled", TestGoblinAutomaticCountingGateDefaultsDisabled);
+Run("Goblin best-sample promotion settings default safe", TestGoblinBestSamplePromotionSettingsDefaultSafe);
+Run("Goblin promoted templates require sidecar metadata", TestGoblinPromotedTemplatesRequireSidecarMetadata);
+Run("Goblin evidence best-sample capture is accepted-count only", TestGoblinEvidenceBestSampleCaptureIsAcceptedCountOnly);
 Run("Goblin VS Debug automatic-count settings are form-toggleable", TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable);
 Run("Goblin VS Debug recognition Capture button is manual-only", TestGoblinVsDebugRecognitionCaptureButtonIsManualOnly);
 Run("Goblin VS Debug simulation controls use count guards", TestGoblinVsDebugSimulationControlsUseCountGuards);
@@ -162,6 +169,7 @@ Run("Salvage classifier rejects detached footprint without anchor", TestSalvageC
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
 Run("Salvage classifier accepts pale legendary boot-like items", TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems);
 Run("Salvage classifier accepts low-color legendary text anchor", TestSalvageClassifierAcceptsLowColorLegendaryTextAnchor);
+Run("Salvage classifier accepts low-color unidentified legendary with muted top edge", TestSalvageClassifierAcceptsLowColorUnidentifiedLegendaryMutedTopEdge);
 Run("Salvage classifier accepts unidentified legendary template", TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate);
 Run("Salvage classifier accepts unidentified set template", TestSalvageClassifierAcceptsUnidentifiedSetTemplate);
 Run("Salvage classifier rejects compact Marquise Topaz stack", TestSalvageClassifierRejectsCompactMarquiseTopazStack);
@@ -184,6 +192,8 @@ Run("Gem stash classifier rejects non-gem footprint fallback", TestGemStashClass
 Run("Gem stash classifier loads salvage unidentified templates for safety", TestGemStashClassifierLoadsSalvageUnidentifiedTemplatesForSafety);
 Run("Gem stash classifier accepts near-threshold verified gems", TestGemStashClassifierAcceptsNearThresholdVerifiedGems);
 Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
+Run("Gem stash promoted templates load through sidecar metadata", TestGemStashPromotedTemplatesLoadThroughSidecarMetadata);
+Run("Gem stash best-sample capture is success-only and guarded", TestGemStashBestSampleCaptureIsSuccessOnlyAndGuarded);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
 Run("Gem stash preflight skips stash travel when no gems exist", TestGemStashPreflightSkipsStashTravelWhenNoGemsExist);
 Run("Gem stash travel wait happens after stash coordinate click", TestGemStashTravelWaitHappensAfterStashCoordinateClick);
@@ -3946,6 +3956,147 @@ static void TestDebugPackageIncludesSizeSummaryReport()
     AssertTrue(packageScript.Contains("Retention applied before packaging:", StringComparison.Ordinal), "size summary should document applied retention policy");
 }
 
+static void TestImageRecognitionBestSampleHelperCapturesSelectsAndPromotes()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerBestSample_{Guid.NewGuid():N}");
+    try
+    {
+        string captureRoot = Path.Combine(root, "Debug", "Samples");
+        string promotedRoot = Path.Combine(root, "Images", "Promoted");
+        ImageRecognitionSamplePromotionResult result = ImageRecognitionBestSamplePromoter.CaptureSelectAndPromote(new ImageRecognitionSamplePromotionRequest(
+            "TestDomain",
+            "accepted-1",
+            "session-1",
+            captureRoot,
+            promotedRoot,
+            CaptureEnabled: true,
+            PromotionEnabled: true,
+            TopCandidateCount: 3,
+            RetentionCount: 20,
+            Candidates:
+            [
+                CreateBestSampleCandidate(1, "Emerald", "Template", 0.91, Color.FromArgb(40, 180, 80)),
+                CreateBestSampleCandidate(2, "Emerald", "Template", 0.96, Color.FromArgb(30, 205, 90)),
+                CreateBestSampleCandidate(3, "Emerald", "Template", 0.89, Color.FromArgb(70, 150, 90)),
+            ]));
+
+        AssertTrue(result.Captured, "helper should persist accepted candidates");
+        AssertEqual(3, result.Candidates.Count, "helper should persist the top three candidates");
+        AssertTrue(File.Exists(result.MetadataPath), "helper should write capture metadata");
+        AssertTrue(result.Selected != null && result.Selected.Rank == 2, "highest confidence promotable candidate should be selected");
+        AssertTrue(result.Promoted, "promotion should run when explicitly enabled");
+        AssertTrue(File.Exists(result.PromotionPath), "promoted image should be copied");
+        AssertTrue(File.Exists(result.PromotionMetadataPath), "promoted sidecar metadata should be written");
+
+        ImageRecognitionSamplePromotionResult second = ImageRecognitionBestSamplePromoter.CaptureSelectAndPromote(new ImageRecognitionSamplePromotionRequest(
+            "TestDomain",
+            "accepted-2",
+            "session-1",
+            captureRoot,
+            promotedRoot,
+            CaptureEnabled: true,
+            PromotionEnabled: true,
+            TopCandidateCount: 2,
+            RetentionCount: 20,
+            Candidates:
+            [
+                CreateBestSampleCandidate(1, "Emerald", "Template", 0.96, Color.FromArgb(30, 205, 90)),
+            ]));
+        AssertTrue(!second.PromotionPath.Equals(result.PromotionPath, StringComparison.OrdinalIgnoreCase), "promotion should use unique filenames and never overwrite");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestImageRecognitionBestSampleHelperRejectsUnsafeSamplesDeterministically()
+{
+    ImageRecognitionSampleCandidate blank = CreateBestSampleCandidate(1, "Ruby", "Template", 0.99, Color.FromArgb(20, 20, 20), textured: false);
+    ImageRecognitionSampleCandidate mismatch = CreateBestSampleCandidate(2, "Ruby", "Template", 0.99, Color.Red) with
+    {
+        DomainPromotable = false,
+        DomainSkipReason = "MismatchedDomain",
+    };
+    ImageRecognitionSampleCandidate tiedFirst = CreateBestSampleCandidate(3, "Ruby", "Template", 0.90, Color.FromArgb(190, 40, 50));
+    ImageRecognitionSampleCandidate tiedSecond = CreateBestSampleCandidate(4, "Ruby", "Template", 0.90, Color.FromArgb(190, 40, 50));
+
+    AssertEqual("BlankOrLowVariance", ImageRecognitionBestSamplePromoter.AnalyzeQuality(blank).SkipReason, "blank samples should be rejected");
+    AssertEqual("MismatchedDomain", ImageRecognitionBestSamplePromoter.AnalyzeQuality(mismatch).SkipReason, "domain-rejected samples should not promote");
+
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerBestSampleTie_{Guid.NewGuid():N}");
+    try
+    {
+        ImageRecognitionSamplePromotionResult result = ImageRecognitionBestSamplePromoter.CaptureSelectAndPromote(new ImageRecognitionSamplePromotionRequest(
+            "TestDomain",
+            "accepted-tie",
+            "session-1",
+            Path.Combine(root, "Debug"),
+            Path.Combine(root, "Promoted"),
+            CaptureEnabled: true,
+            PromotionEnabled: false,
+            TopCandidateCount: 4,
+            RetentionCount: 20,
+            Candidates: [blank, mismatch, tiedFirst, tiedSecond]));
+
+        AssertTrue(result.Selected != null, "one tied safe candidate should be selected");
+        AssertEqual(3, result.Selected!.Rank, "tie selection should prefer the stable lower rank");
+        AssertFalse(result.Promoted, "promotion should stay disabled by setting");
+        AssertEqual("PromotionDisabled", result.PromotionSkipReason, "disabled promotion should be diagnosed");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestImageRecognitionBestSampleHelperRetentionCleansOldSets()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerBestSampleRetention_{Guid.NewGuid():N}");
+    try
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            string directory = Path.Combine(root, "session", $"accepted-{i}");
+            Directory.CreateDirectory(directory);
+            string metadata = Path.Combine(directory, ImageRecognitionBestSamplePromoter.MetadataFileName);
+            File.WriteAllText(metadata, "{}");
+            Directory.SetLastWriteTimeUtc(directory, DateTime.UtcNow.AddMinutes(-i));
+        }
+
+        CleanupResult result = ImageRecognitionBestSamplePromoter.CleanupOldCaptureSets(root, 2);
+        AssertEqual(4, result.Scanned, "retention should scan accepted action folders");
+        AssertEqual(2, result.Deleted, "retention should delete old accepted action folders");
+        AssertEqual(2, Directory.GetFiles(root, ImageRecognitionBestSamplePromoter.MetadataFileName, SearchOption.AllDirectories).Length, "retention should keep configured newest sets");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestImageRecognitionBestSampleDebugPackageInclusionIsBounded()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
+    AssertTrue(packageScript.Contains("MaxImageRecognitionBestSampleSets", StringComparison.Ordinal), "debug package should expose a bound for image-recognition best-sample sets");
+    AssertTrue(packageScript.Contains("Debug\\GoblinEvidence\\AcceptedEvidenceCandidates", StringComparison.Ordinal), "debug package should include bounded Goblin Evidence best-sample sets");
+    AssertTrue(packageScript.Contains("Debug\\GemAutoStash\\AcceptedGemCandidates", StringComparison.Ordinal), "debug package should include bounded Gem Auto-Stash best-sample sets");
+    AssertTrue(packageScript.Contains("Images\\Goblin Evidence\\Promoted", StringComparison.Ordinal), "debug package should inspect promoted Goblin Evidence samples");
+    AssertTrue(packageScript.Contains("Images\\Gems\\Promoted", StringComparison.Ordinal), "debug package should inspect promoted gem samples");
+    AssertTrue(packageScript.Contains("Included image recognition promoted sample files", StringComparison.Ordinal), "debug package should report bounded promoted-sample inclusion");
+    AssertTrue(packageScript.Contains("newest sidecar-backed promoted samples", StringComparison.Ordinal), "debug package should limit promoted source samples instead of bulk-copying image folders");
+}
+
 static string ReadRequiredZipText(ZipArchive archive, string entryName)
 {
     ZipArchiveEntry entry = archive.Entries.FirstOrDefault(entry =>
@@ -4386,7 +4537,7 @@ static void TestGoblinAutomaticCountingGateDefaultsDisabled()
     AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}", StringComparison.Ordinal), "startup AppSettings logs should expose the automatic-count setting");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableObservationMode", StringComparison.Ordinal), "automatic counting should require Observation Mode");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting", StringComparison.Ordinal), "automatic counting should require the explicit automatic-count setting");
-    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper with evidence identity and image path");
+    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath, rankedSamples)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper with evidence identity, image path, and ranked recognition samples");
     AssertTrue(autoCountMethod.Contains("bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled()", StringComparison.Ordinal), "automatic count helper should snapshot the effective gate");
     AssertTrue(autoCountMethod.Contains("AutomaticCountingDisabled", StringComparison.Ordinal), "automatic count helper should skip incrementing when the gate is disabled");
     AssertTrue(autoCountMethod.Contains("GoblinAutoCountSkippedDisabled", StringComparison.Ordinal), "disabled automatic counts should log that evidence was tracked but no count was attempted");
@@ -4394,6 +4545,96 @@ static void TestGoblinAutomaticCountingGateDefaultsDisabled()
     AssertTrue(autoCountMethod.Contains("GoblinAutoCountSuppressed", StringComparison.Ordinal), "enabled automatic counts should log suppressed decisions");
     AssertTrue(autoCountMethod.Contains("portGoblinAreaDuplicateGuard.TryAccept", StringComparison.Ordinal), "enabled automatic counts should consume the existing duplicate guard");
     AssertTrue(autoCountMethod.Contains("GoblinManualCountBlockList.IsBlocked", StringComparison.Ordinal), "enabled automatic counts should preserve the block list");
+}
+
+static void TestGoblinBestSamplePromotionSettingsDefaultSafe()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string appSettingsSource = File.ReadAllText(Path.Combine(repoRoot, "AppSettings.cs"));
+    string configSource = File.ReadAllText(Path.Combine(repoRoot, "Config", "AppSettings.json"));
+
+    AssertTrue(appSettingsSource.Contains("public ImageRecognitionSettings ImageRecognition { get; set; } = new();", StringComparison.Ordinal), "settings should expose the shared image-recognition best-sample group");
+    AssertTrue(appSettingsSource.Contains("settings.ImageRecognition.CaptureAcceptedTopCandidates = true", StringComparison.Ordinal), "VS Debug defaults should enable accepted-sample capture for validation");
+    AssertTrue(appSettingsSource.Contains("public bool CaptureAcceptedTopCandidates { get; set; } = false", StringComparison.Ordinal), "release defaults should keep accepted-sample capture disabled");
+    AssertTrue(appSettingsSource.Contains("public bool PromoteBestGoblinEvidenceImage { get; set; } = false", StringComparison.Ordinal), "goblin evidence promotion should default off");
+    AssertTrue(appSettingsSource.Contains("public bool PromoteBestGemEvidenceImage { get; set; } = false", StringComparison.Ordinal), "gem evidence promotion should default off");
+    AssertTrue(configSource.Contains("\"CaptureAcceptedTopCandidates\": false", StringComparison.Ordinal), "tracked config should keep shared capture disabled for release");
+    AssertTrue(configSource.Contains("\"PromoteBestGoblinEvidenceImage\": false", StringComparison.Ordinal), "tracked config should keep goblin promotion disabled");
+    AssertTrue(configSource.Contains("\"PromoteBestGemEvidenceImage\": false", StringComparison.Ordinal), "tracked config should keep gem promotion disabled");
+    AssertTrue(appSettingsSource.Contains("TopCandidateRetentionCount = Math.Clamp", StringComparison.Ordinal), "shared retention should be normalized");
+    AssertTrue(appSettingsSource.Contains("PromotedPackageSetLimit = Math.Clamp", StringComparison.Ordinal), "promoted package bounds should be normalized");
+}
+
+static void TestGoblinPromotedTemplatesRequireSidecarMetadata()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGoblinPromoted_{Guid.NewGuid():N}");
+    try
+    {
+        string promotedDirectory = Path.Combine(root, "Promoted", "Treasure Goblin", "Minimap");
+        Directory.CreateDirectory(promotedDirectory);
+        string missingSidecarPath = Path.Combine(promotedDirectory, "missing-sidecar.png");
+        using (Bitmap bitmap = CreateSyntheticGemTemplate(Color.Gold))
+        {
+            bitmap.Save(missingSidecarPath, System.Drawing.Imaging.ImageFormat.Png);
+        }
+
+        GoblinEvidenceTemplateCatalog missingSidecar = GoblinEvidenceTemplateRequirements.DiscoverTemplates(root);
+        AssertEqual(0, missingSidecar.Templates.Count, "promoted goblin templates without helper sidecar metadata should not load");
+        AssertTrue(missingSidecar.InvalidTemplates.Any(template => template.Reason == "PromotedMetadataMissing"), "missing promoted sidecar should be diagnosed");
+
+        string promotedPath = Path.Combine(promotedDirectory, "Treasure_Goblin_Minimap_20260611_120000_950.png");
+        File.Copy(missingSidecarPath, promotedPath);
+        File.WriteAllText(Path.ChangeExtension(promotedPath, ".json"), """
+        {
+          "selected": {
+            "targetLabel": "Treasure Goblin",
+            "source": "Minimap",
+            "metadata": {
+              "EvidenceKind": "Minimap"
+            }
+          }
+        }
+        """);
+
+        GoblinEvidenceTemplateCatalog loaded = GoblinEvidenceTemplateRequirements.DiscoverTemplates(root);
+        AssertEqual(1, loaded.Templates.Count, "promoted goblin templates with sidecar metadata should load");
+        GoblinEvidenceTemplateRequirement template = loaded.Templates[0];
+        AssertEqual("Treasure Goblin", template.GoblinType, "promoted goblin sidecar should preserve normalized goblin type");
+        AssertEqual("MinimapCandidate", template.Source, "promoted minimap sidecar should map to the minimap source");
+        AssertEqual(GoblinEvidenceTemplateKind.Minimap, template.Kind, "promoted sidecar should preserve the evidence kind");
+        AssertTrue(template.FileName.StartsWith("Promoted", StringComparison.OrdinalIgnoreCase), "promoted template path should stay under the Promoted folder");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestGoblinEvidenceBestSampleCaptureIsAcceptedCountOnly()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
+    string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
+    string captureMethod = ExtractMethodBody(autoCountSource, "private void PortCaptureAcceptedGoblinEvidenceBestSamples");
+
+    AssertTrue(evidenceModelSource.Contains("IReadOnlyList<ImageRecognitionSampleCandidate>? RankedSamples", StringComparison.Ordinal), "goblin evidence candidates should preserve ranked matcher samples");
+    AssertTrue(observeMethod.Contains("rankedSamples", StringComparison.Ordinal), "observation plumbing should carry ranked samples without changing the count decision");
+    AssertTrue(autoCountMethod.Contains("PortCaptureAcceptedGoblinEvidenceBestSamples", StringComparison.Ordinal), "accepted automatic counts should invoke best-sample capture");
+    AssertTrue(autoCountMethod.IndexOf("GoblinAutoCountAccepted", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortCaptureAcceptedGoblinEvidenceBestSamples", StringComparison.Ordinal), "best-sample capture should run only after the accepted automatic-count log");
+    AssertTrue(autoCountMethod.IndexOf("GoblinAutoCountSuppressed", StringComparison.Ordinal) < autoCountMethod.IndexOf("return false;", autoCountMethod.IndexOf("GoblinAutoCountSuppressed", StringComparison.Ordinal), StringComparison.Ordinal), "suppressed counts should return before accepted capture");
+    AssertTrue(captureMethod.Contains("AppSettings.ImageRecognition.CaptureAcceptedTopCandidates", StringComparison.Ordinal), "goblin best-sample capture should obey the shared capture setting");
+    AssertTrue(captureMethod.Contains("AppSettings.GoblinTracker.PromoteBestGoblinEvidenceImage", StringComparison.Ordinal), "goblin best-sample promotion should obey the goblin-specific promotion setting");
+    AssertTrue(captureMethod.Contains("DebugManager.GoblinEvidenceAcceptedCandidatesDirectory", StringComparison.Ordinal), "goblin captures should use the accepted evidence candidate folder");
+    AssertTrue(captureMethod.Contains("PortGoblinEvidenceTemplateDirectory()", StringComparison.Ordinal), "goblin promotion should write below the recognizer image source tree");
+    AssertFalse(automationSource.Contains("PortCaptureAcceptedGoblinEvidenceBestSamples", StringComparison.Ordinal), "manual/debug simulation code should not trigger best-sample capture");
 }
 
 static void TestGoblinVsDebugAutomaticCountSettingsAreFormToggleable()
@@ -4775,7 +5016,7 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(packageScript.Contains("goblin-tracker-summary.txt", StringComparison.Ordinal), "debug packages should include a root Goblin Tracker review summary");
     AssertTrue(packageScript.Contains("goblin-tracker-review.html", StringComparison.Ordinal), "debug packages should include a root review index");
     AssertTrue(packageScript.Contains("Debug\\GoblinEvidence", StringComparison.Ordinal), "debug packages should include current GoblinEvidence diagnostic files");
-    AssertTrue(packageScript.Contains("png|jpg|jpeg|bmp|txt|jsonl", StringComparison.Ordinal), "debug packages should include image, text, and structured JSONL evidence from GoblinEvidence folders");
+    AssertTrue(packageScript.Contains("png|jpg|jpeg|bmp|txt|json|jsonl", StringComparison.Ordinal), "debug packages should include image, text, metadata JSON, and structured JSONL evidence from diagnostic folders");
     AssertTrue(packageScript.Contains("Live evidence artifacts:", StringComparison.Ordinal), "debug package summary should report live evidence rather than derived output");
     AssertTrue(packageScript.Contains("DecisionBundles", StringComparison.Ordinal), "debug packages should include live decision bundles");
     AssertTrue(packageScript.Contains("IncludeGoblinDecisionBundleFullImages", StringComparison.Ordinal), "debug packages should make full decision-bundle evidence images opt-in");
@@ -4899,7 +5140,7 @@ static void TestGoblinJournalEvidenceAreaReachesObservationCountPath()
     string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
 
     AssertTrue(evidenceSource.Contains("evidenceNotes: candidate.Notes", StringComparison.Ordinal), "cooldown observation refresh should pass candidate notes into the observation path");
-    AssertTrue(evidenceSource.Contains("PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath, candidate.Notes)", StringComparison.Ordinal), "normal evidence recording should pass candidate notes into the observation path");
+    AssertTrue(evidenceSource.Contains("PortObserveGoblinCandidate(candidate.Source, candidate.GoblinType, evidenceSignature, candidate.Confidence, screenshotPath, candidate.Notes, candidate.RankedSamples)", StringComparison.Ordinal), "normal evidence recording should pass candidate notes and ranked recognition samples into the observation path");
     AssertTrue(sessionStatsSource.Contains("string evidenceNotes = \"\"", StringComparison.Ordinal), "observation path should accept evidence notes");
     AssertTrue(observeMethod.Contains("PortApplyJournalEvidenceAreaFromNotes(areaResult, evidenceNotes, \"ObservationCandidate\")", StringComparison.Ordinal), "journal evidence should apply its resolved JournalArea before count decisions");
     AssertTrue(sessionStatsSource.Contains("PortGoblinEvidenceNoteValue(evidenceNotes, \"JournalArea\")", StringComparison.Ordinal), "journal area handoff should use the existing evidence-note parser");
@@ -5895,6 +6136,16 @@ static void DrawSyntheticLowColorLegendaryTextAnchor(Bitmap bitmap, int row, int
     }
 }
 
+static void DrawSyntheticLowColorUnidentifiedLegendaryMutedTopEdge(Bitmap bitmap, int row, int column)
+{
+    DrawSyntheticLowColorLegendaryTextAnchor(bitmap, row, column);
+
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush mutedTopEdge = new(Color.FromArgb(112, 74, 42));
+    graphics.FillRectangle(mutedTopEdge, cell.Left + 9, cell.Top + 8, 50, 2);
+}
+
 static void PaintSyntheticSetQualityInCell(Bitmap bitmap, int row, int column)
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
@@ -6098,6 +6349,39 @@ static Bitmap CreateSyntheticGemTemplate(Color color)
     graphics.DrawPolygon(highlight, points);
     graphics.FillRectangle(Brushes.White, 10, 7, 4, 4);
     return template;
+}
+
+static ImageRecognitionSampleCandidate CreateBestSampleCandidate(
+    int rank,
+    string target,
+    string source,
+    double confidence,
+    Color color,
+    bool textured = true)
+{
+    using Bitmap bitmap = new(24, 24);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    graphics.Clear(color);
+    if (textured)
+    {
+        using Pen bright = new(Color.FromArgb(Math.Min(255, color.R + 45), Math.Min(255, color.G + 45), Math.Min(255, color.B + 45)), 2);
+        using Pen dark = new(Color.FromArgb(Math.Max(0, color.R - 45), Math.Max(0, color.G - 45), Math.Max(0, color.B - 45)), 2);
+        graphics.DrawLine(bright, 2, 2, 21, 21);
+        graphics.DrawLine(dark, 21, 2, 2, 21);
+        graphics.DrawRectangle(Pens.White, 4, 4, 15, 15);
+    }
+
+    return new ImageRecognitionSampleCandidate(
+        rank,
+        target,
+        source,
+        confidence,
+        "Accepted",
+        $"{target} Template.png",
+        $"{target} Template.png",
+        new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+        new Rectangle(10, 10, bitmap.Width, bitmap.Height),
+        ImageRecognitionBestSamplePromoter.EncodePng(bitmap, new Rectangle(0, 0, bitmap.Width, bitmap.Height)));
 }
 
 static void DrawSyntheticGemForTemplate(Bitmap bitmap, int row, int column, Bitmap template)
@@ -6628,6 +6912,26 @@ static void TestSalvageClassifierAcceptsLowColorLegendaryTextAnchor()
     AssertTrue(target.ConfirmationExpected, "low-color text-heavy leftover should expect salvage confirmation");
 }
 
+static void TestSalvageClassifierAcceptsLowColorUnidentifiedLegendaryMutedTopEdge()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticLowColorUnidentifiedLegendaryMutedTopEdge(grid, 3, 2);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    AssertEqual(1, result.Targets.Count, "muted top-edge low-color unidentified legendary should produce one salvage target");
+    SalvageInventorySlotTarget target = result.Targets[0];
+    AssertEqual(3, target.Row, "muted top-edge unidentified legendary should target the observed row");
+    AssertEqual(2, target.Column, "muted top-edge unidentified legendary should target the observed column");
+    AssertEqual("Legendary", target.Quality, "muted top-edge unidentified legendary should use legendary confirmation handling");
+    AssertTrue(target.ConfirmationExpected, "muted top-edge unidentified legendary should expect salvage confirmation");
+    AssertTrue(target.Metrics.TopFramePixels > 80, "regression fixture should exercise the package-shaped muted top edge");
+    AssertTrue(target.Metrics.TopFramePixels <= 160, "muted top-edge fixture should stay inside the conservative fallback cap");
+    SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == 3 && candidate.Column == 2);
+    AssertTrue(candidate.Accepted, "muted top-edge low-color unidentified legendary should not be rejected as detached footprint");
+    AssertFalse(candidate.Reason.Equals("DetachedItemFootprint", StringComparison.OrdinalIgnoreCase), "muted top-edge low-color unidentified legendary should not use detached-footprint rejection");
+}
+
 static void TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
@@ -7045,6 +7349,83 @@ static void TestGemStashSettingsAndAssetSeparationAreWired()
     AssertFalse(townSource.Contains("Img(\"Salvage\", \"Salvage Coordinates.txt\")", StringComparison.Ordinal), "stash workflow should not read salvage coordinate files");
 }
 
+static void TestGemStashPromotedTemplatesLoadThroughSidecarMetadata()
+{
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerGemPromoted_{Guid.NewGuid():N}");
+    try
+    {
+        string promotedDirectory = Path.Combine(root, "Promoted", "Topaz", "GemTemplateMatched");
+        Directory.CreateDirectory(promotedDirectory);
+        string missingSidecarPath = Path.Combine(promotedDirectory, "missing-sidecar.png");
+        using (Bitmap bitmap = CreateSyntheticGemTemplate(Color.FromArgb(210, 170, 40)))
+        {
+            bitmap.Save(missingSidecarPath, System.Drawing.Imaging.ImageFormat.Png);
+        }
+
+        AssertEqual(0, GemStashTemplateCatalog.Load(root).Count, "promoted gem templates without sidecar metadata should not load");
+
+        string promotedPath = Path.Combine(promotedDirectory, "Topaz_GemTemplateMatched_20260611_120000_950.png");
+        File.Copy(missingSidecarPath, promotedPath);
+        File.WriteAllText(Path.ChangeExtension(promotedPath, ".json"), """
+        {
+          "selected": {
+            "targetLabel": "Marquise Topaz",
+            "source": "GemTemplateMatched"
+          }
+        }
+        """);
+
+        string unsafeDirectory = Path.Combine(root, "Promoted", "Unsafe", "GemTemplateMatched");
+        Directory.CreateDirectory(unsafeDirectory);
+        string unsafePath = Path.Combine(unsafeDirectory, "LegendarySword_GemTemplateMatched_20260611_120000_990.png");
+        File.Copy(missingSidecarPath, unsafePath);
+        File.WriteAllText(Path.ChangeExtension(unsafePath, ".json"), """
+        {
+          "selected": {
+            "targetLabel": "Legendary Sword",
+            "source": "GemTemplateMatched"
+          }
+        }
+        """);
+
+        IReadOnlyList<GemStashTemplate> templates = GemStashTemplateCatalog.Load(root);
+        AssertEqual(1, templates.Count, "only known gem classes should load from promoted sidecars");
+        AssertEqual("Topaz", templates[0].Name, "promoted gem target label should normalize to a known gem family");
+        AssertEqual("GemTemplateMatched", templates[0].Source, "promoted gem source should be preserved for diagnostics");
+        AssertTrue(templates[0].Path.EndsWith(".png", StringComparison.OrdinalIgnoreCase), "promoted gem template should point at the PNG sample");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+static void TestGemStashBestSampleCaptureIsSuccessOnlyAndGuarded()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string classifierSource = File.ReadAllText(Path.Combine(repoRoot, "GemStashInventoryClassifier.cs"));
+    string salvageClassifierSource = File.ReadAllText(Path.Combine(repoRoot, "SalvageInventorySlotClassifier.cs"));
+    string stashMethod = ExtractMethodBody(townSource, "private PortGemStashResult PortAutoStashGems");
+    string captureMethod = ExtractMethodBody(townSource, "private void PortCaptureAcceptedGemStashBestSamples");
+
+    AssertTrue(stashMethod.Contains("outcome.Equals(\"Complete\", StringComparison.OrdinalIgnoreCase) && slotsClicked > 0", StringComparison.Ordinal), "gem best-sample capture should run only after a successful stash action");
+    AssertTrue(stashMethod.Contains("PortCaptureAcceptedGemStashBestSamples(scan, outcome, slotsClicked, initialTargets, remainingTargets)", StringComparison.Ordinal), "successful gem stash should pass scan diagnostics to best-sample capture");
+    AssertTrue(captureMethod.Contains("AppSettings.ImageRecognition.CaptureAcceptedTopCandidates", StringComparison.Ordinal), "gem best-sample capture should obey the shared capture setting");
+    AssertTrue(captureMethod.Contains("AppSettings.Stash.PromoteBestGemEvidenceImage", StringComparison.Ordinal), "gem best-sample promotion should obey the gem-specific promotion setting");
+    AssertTrue(captureMethod.Contains("DebugManager.GemAutoStashAcceptedCandidatesDirectory", StringComparison.Ordinal), "gem captures should use the Gem Auto-Stash accepted candidate folder");
+    AssertTrue(captureMethod.Contains("PortGemStashTemplateDirectory()", StringComparison.Ordinal), "gem promotion should write below the gem recognizer image source tree");
+    AssertTrue(captureMethod.Contains("GemStashTemplateCatalog.NormalizeKnownGemType", StringComparison.Ordinal), "gem promotion should be limited to known gem families");
+    AssertTrue(captureMethod.Contains("remainingTargets", StringComparison.Ordinal), "gem sample metadata should preserve final leftover context");
+    AssertTrue(classifierSource.Contains("RejectedNonGemFootprint", StringComparison.Ordinal), "gem recognition should keep non-gem footprint rejection");
+    AssertTrue(classifierSource.Contains("RejectedGemStackVerification", StringComparison.Ordinal), "gem recognition should keep stack verification rejection");
+    AssertTrue(classifierSource.Contains("salvageAllowsGem", StringComparison.Ordinal), "gem recognition should keep salvage-classifier verification");
+    AssertFalse(salvageClassifierSource.Contains("ImageRecognitionBestSamplePromoter", StringComparison.Ordinal), "salvage should not be wired into best-sample promotion");
+}
+
 static void TestGemStashTownFlowIsNonFatalAfterSalvage()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -7110,7 +7491,12 @@ static void TestRepairFlowSamplesRepairButtonBeforeClicking()
 
     AssertTrue(townSource.Contains("PortRepairButtonActiveColor", StringComparison.Ordinal), "repair flow should have a dedicated active-color predicate");
     AssertTrue(townSource.Contains("PortRepairButtonActivePixelThreshold", StringComparison.Ordinal), "repair flow should use an explicit active-pixel threshold");
-    AssertTrue(repairMethod.Contains("PortSampleButtonColor(", StringComparison.Ordinal), "repair flow should sample the repair button before clicking it");
+    AssertTrue(townSource.Contains("PortRepairButtonWideSampleWidth", StringComparison.Ordinal), "repair flow should use a focused wide repair-button sample");
+    AssertTrue(townSource.Contains("PortSampleRepairButtonVisualState", StringComparison.Ordinal), "repair flow should sample a structured repair button visual state");
+    AssertTrue(townSource.Contains("PortCaptureRepairButtonFocusedCrop", StringComparison.Ordinal), "repair flow should save a focused crop when the button sample is uncertain or inactive in debug mode");
+    AssertTrue(repairMethod.Contains("PortSampleRepairButtonVisualState", StringComparison.Ordinal), "repair flow should sample the repair button before clicking it");
+    AssertTrue(townSource.Contains("visualState=", StringComparison.Ordinal), "repair diagnostics should expose the visual state classification");
+    AssertTrue(townSource.Contains("wideActivePixels=", StringComparison.Ordinal), "repair diagnostics should expose wide-sample active pixels");
     AssertTrue(repairMethod.Contains("repairButtonActionable", StringComparison.Ordinal), "repair flow diagnostics should report whether repair was actionable");
     AssertTrue(repairMethod.Contains("SkippedInactiveRepairButton", StringComparison.Ordinal), "inactive repair button should be skipped instead of clicked");
     AssertTrue(repairMethod.Contains("ClickedActionableRepairButton", StringComparison.Ordinal), "actionable repair button clicks should be diagnosed");

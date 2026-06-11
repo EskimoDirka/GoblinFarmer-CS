@@ -106,6 +106,8 @@ namespace GoblinFarmer
                     bool hasSavedSuccessScreenshotsPreference = HasSavedSuccessScreenshotsPreference(json);
                     bool hasSavedUserPreferences = HasSavedUserPreferences(json);
                     bool hasSavedGoblinTrackerPreferences = HasSavedGoblinTrackerPreferences(json);
+                    bool hasSavedImageRecognitionBestSamplePreferences = HasSavedImageRecognitionBestSamplePreferences(json);
+                    bool hasSavedStashPromotionPreference = HasSavedStashPromotionPreference(json);
                     SettingsModel? loaded = JsonSerializer.Deserialize<SettingsModel>(json, JsonOptions);
                     settings = loaded ?? SettingsModel.Default();
                     settings.Normalize();
@@ -135,6 +137,18 @@ namespace GoblinFarmer
                     {
                         shouldSaveLoadedSettings = true;
                         AppLogger.Info("AppSettings missing one or more GoblinTracker preferences; using defaults for missing values.");
+                    }
+
+                    if (!hasSavedImageRecognitionBestSamplePreferences)
+                    {
+                        shouldSaveLoadedSettings = true;
+                        AppLogger.Info("AppSettings missing one or more ImageRecognition best-sample preferences; using defaults for missing values.");
+                    }
+
+                    if (!hasSavedStashPromotionPreference)
+                    {
+                        shouldSaveLoadedSettings = true;
+                        AppLogger.Info("AppSettings missing Stash.PromoteBestGemEvidenceImage; using disabled default.");
                     }
 
                     ApplyReleaseDebugPersistenceDefaults();
@@ -468,11 +482,56 @@ namespace GoblinFarmer
                     goblinTrackerElement.TryGetProperty("AllowUnknownManualCount", out _) &&
                     goblinTrackerElement.TryGetProperty("EnableObservationMode", out _) &&
                     goblinTrackerElement.TryGetProperty("EnableAutomaticCounting", out _) &&
-                    goblinTrackerElement.TryGetProperty("EnableDecisionTrace", out _);
+                    goblinTrackerElement.TryGetProperty("EnableDecisionTrace", out _) &&
+                    goblinTrackerElement.TryGetProperty("PromoteBestGoblinEvidenceImage", out _);
             }
             catch (Exception ex)
             {
                 AppLogger.Error("Failed to inspect AppSettings GoblinTracker preferences.", ex);
+                return false;
+            }
+        }
+
+        private static bool HasSavedImageRecognitionBestSamplePreferences(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
+
+                return document.RootElement.TryGetProperty("ImageRecognition", out JsonElement imageRecognitionElement) &&
+                    imageRecognitionElement.ValueKind == JsonValueKind.Object &&
+                    imageRecognitionElement.TryGetProperty("CaptureAcceptedTopCandidates", out _) &&
+                    imageRecognitionElement.TryGetProperty("TopCandidateRetentionCount", out _) &&
+                    imageRecognitionElement.TryGetProperty("PromotedPackageSetLimit", out _);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to inspect AppSettings ImageRecognition best-sample preferences.", ex);
+                return false;
+            }
+        }
+
+        private static bool HasSavedStashPromotionPreference(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
+
+                return document.RootElement.TryGetProperty("Stash", out JsonElement stashElement) &&
+                    stashElement.ValueKind == JsonValueKind.Object &&
+                    stashElement.TryGetProperty("PromoteBestGemEvidenceImage", out _);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to inspect AppSettings Stash.PromoteBestGemEvidenceImage preference.", ex);
                 return false;
             }
         }
@@ -533,6 +592,7 @@ namespace GoblinFarmer
 
             ApplyDebugDefaultsProfile();
             settings.GoblinTracker.EnableDecisionTrace = true;
+            settings.ImageRecognition.CaptureAcceptedTopCandidates = true;
             settings.Repair.EnableBulkCategorySalvage = true;
             settings.Stash.EnableAutoGemStash = true;
 
@@ -1187,16 +1247,21 @@ namespace GoblinFarmer
                 $"Stash.GemTemplateConfidence={Stash.GemTemplateConfidence:0.00}; " +
                 $"Stash.TravelToStashWaitMs={Stash.TravelToStashWaitMs}; " +
                 $"Stash.OpenStashWaitMs={Stash.OpenStashWaitMs}; " +
+                $"Stash.PromoteBestGemEvidenceImage={Stash.PromoteBestGemEvidenceImage}; " +
                 $"Teleport.TeleportConfirmationTimeoutMs={Teleport.TeleportConfirmationTimeoutMs}; " +
                 $"Teleport.TeleportRetryCount={Teleport.TeleportRetryCount}; " +
                 $"Bounty.PollIntervalMs={Bounty.PollIntervalMs}; " +
                 $"Bounty.EscapeCooldownMs={Bounty.EscapeCooldownMs}; " +
                 $"ImageRecognition.StartGameButtonConfidence={ImageRecognition.StartGameButtonConfidence:0.000}; " +
                 $"ImageRecognition.BattleNetPlayButtonConfidence={ImageRecognition.BattleNetPlayButtonConfidence:0.000}; " +
+                $"ImageRecognition.CaptureAcceptedTopCandidates={ImageRecognition.CaptureAcceptedTopCandidates}; " +
+                $"ImageRecognition.TopCandidateRetentionCount={ImageRecognition.TopCandidateRetentionCount}; " +
+                $"ImageRecognition.PromotedPackageSetLimit={ImageRecognition.PromotedPackageSetLimit}; " +
                 $"GoblinTracker.AllowUnknownManualCount={GoblinTracker.AllowUnknownManualCount}; " +
                 $"GoblinTracker.EnableObservationMode={GoblinTracker.EnableObservationMode}; " +
                 $"GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}; " +
                 $"GoblinTracker.EnableDecisionTrace={GoblinTracker.EnableDecisionTrace}; " +
+                $"GoblinTracker.PromoteBestGoblinEvidenceImage={GoblinTracker.PromoteBestGoblinEvidenceImage}; " +
                 $"User.CombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatProfile={User.CombatProfile}; " +
                 $"SelectedCombatClass={User.CombatProfile}; " +
@@ -1327,6 +1392,7 @@ namespace GoblinFarmer
             public bool EnableObservationMode { get; set; } = true;
             public bool EnableAutomaticCounting { get; set; } = false;
             public bool EnableDecisionTrace { get; set; } = false;
+            public bool PromoteBestGoblinEvidenceImage { get; set; } = false;
 
             public void Normalize()
             {
@@ -1497,6 +1563,7 @@ namespace GoblinFarmer
             public int StashTabSettleMs { get; set; } = 150;
             public int PostGemClickDelayMs { get; set; } = 25;
             public int RecoveryRescanLimit { get; set; } = 1;
+            public bool PromoteBestGemEvidenceImage { get; set; } = false;
 
             public void Normalize()
             {
@@ -1547,6 +1614,9 @@ namespace GoblinFarmer
             public double BlockedLocationConfidence { get; set; } = 0.68;
             public double MapActHeaderConfidence { get; set; } = 0.92;
             public double WorldMapConfidence { get; set; } = 0.80;
+            public bool CaptureAcceptedTopCandidates { get; set; } = false;
+            public int TopCandidateRetentionCount { get; set; } = 20;
+            public int PromotedPackageSetLimit { get; set; } = 3;
 
             public void Normalize()
             {
@@ -1562,6 +1632,8 @@ namespace GoblinFarmer
                 BlockedLocationConfidence = ClampConfidence(BlockedLocationConfidence, 0.68);
                 MapActHeaderConfidence = ClampConfidence(MapActHeaderConfidence, 0.92);
                 WorldMapConfidence = ClampConfidence(WorldMapConfidence, 0.80);
+                TopCandidateRetentionCount = Math.Clamp(TopCandidateRetentionCount, 0, 250);
+                PromotedPackageSetLimit = Math.Clamp(PromotedPackageSetLimit, 0, 25);
             }
 
             private static double ClampConfidence(double value, double defaultValue)

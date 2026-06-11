@@ -331,7 +331,8 @@ namespace GoblinFarmer
             string evidenceSignature = "",
             double evidenceConfidence = 0,
             string evidenceImagePath = "",
-            string evidenceNotes = "")
+            string evidenceNotes = "",
+            IReadOnlyList<ImageRecognitionSampleCandidate>? rankedSamples = null)
         {
             string observationSource = PortNormalizeGoblinObservationSource(source);
             PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea(observationSource);
@@ -533,7 +534,7 @@ namespace GoblinFarmer
                         : "LastObservationUpdateSkippedPreserved";
                 AppLogger.Info($"GoblinTracker: {eventName} incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preserveKind={PortLogField(displaySkipKind)} allowObservationPublish={allowObservationPublish} combatActive={portCombatRunning} combatStopping={portCombatStopping} automationRunning={isAutomationRunning} diabloRunning={IsDiabloRunning()} diabloActive={PortDiabloIsActive()} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
             }
-            PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath);
+            PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath, rankedSamples);
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return wouldCount;

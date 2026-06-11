@@ -10,6 +10,7 @@ param(
     [int]$MaxGoblinEvidenceEventScreenshots = 3,
     [long]$MaxGoblinEvidenceEventScreenshotBytes = 1048576,
     [int]$MaxGoblinObservationDiagnosticCrops = 12,
+    [int]$MaxImageRecognitionBestSampleSets = 3,
     [int]$MaxReviewEvidenceFrames = 12,
     [int]$DebugPackageRetentionCount = 20,
     [switch]$IncludeGoblinDecisionBundleFullImages,
@@ -2179,6 +2180,8 @@ function New-DebugPackageSizeSummaryFromZip {
         $lines.Add("  Debug screenshots: $MaxDebugScreenshots current-session files")
         $lines.Add("  Goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots newest under $MaxGoblinEvidenceEventScreenshotBytes bytes")
         $lines.Add("  Observation diagnostics: $MaxGoblinObservationDiagnosticCrops newest crops")
+        $lines.Add("  Image recognition best-sample sets: $MaxImageRecognitionBestSampleSets newest accepted action folders")
+        $lines.Add("  Image recognition promoted samples: $MaxImageRecognitionBestSampleSets newest sidecar-backed promoted samples")
         $lines.Add("  Replay image folders: excluded by default")
         $lines.Add("")
 
@@ -2313,6 +2316,10 @@ if ($MaxGoblinObservationDiagnosticCrops -lt 0) {
     Write-Warning "MaxGoblinObservationDiagnosticCrops must be at least 0. Using 0."
     $MaxGoblinObservationDiagnosticCrops = 0
 }
+if ($MaxImageRecognitionBestSampleSets -lt 0) {
+    Write-Warning "MaxImageRecognitionBestSampleSets must be at least 0. Using 0."
+    $MaxImageRecognitionBestSampleSets = 0
+}
 if ($MaxReviewEvidenceFrames -lt 0) {
     Write-Warning "MaxReviewEvidenceFrames must be at least 0. Using 0."
     $MaxReviewEvidenceFrames = 0
@@ -2349,6 +2356,7 @@ Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
 Write-Host "Max goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots"
 Write-Host "Max goblin evidence event screenshot bytes: $MaxGoblinEvidenceEventScreenshotBytes"
 Write-Host "Max goblin observation diagnostic crops: $MaxGoblinObservationDiagnosticCrops"
+Write-Host "Max image recognition best-sample sets: $MaxImageRecognitionBestSampleSets"
 Write-Host "Max review evidence frames: $MaxReviewEvidenceFrames"
 Write-Host "Include goblin decision bundle full images: $($IncludeGoblinDecisionBundleFullImages.IsPresent)"
 Write-Host "Include goblin capture fullscreen images: $($IncludeGoblinCaptureFullscreenImages.IsPresent)"
@@ -2433,6 +2441,7 @@ try {
         Add-UniquePath $replayLogFoldersList (Join-Path $root "Debug\ReplayLogs")
         Add-UniquePath $replayLogSourceRootsList (Join-Path $root "Debug")
         Add-UniquePath $goblinEvidenceFoldersList (Join-Path $root "Debug\GoblinEvidence")
+        Add-UniquePath $goblinEvidenceFoldersList (Join-Path $root "Debug\GemAutoStash")
         Add-UniquePath $goblinEvidenceSourceRootsList (Join-Path $root "Debug")
     }
     $screenshotFolders = $screenshotFoldersList.ToArray()
@@ -2613,7 +2622,7 @@ try {
     $goblinEvidenceCandidates = foreach ($folder in $goblinEvidenceFolders) {
         if (Test-Path -LiteralPath $folder -PathType Container) {
             Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt|jsonl)$' }
+                Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp|txt|json|jsonl)$' }
         }
     }
     $goblinEvidenceScreenshots = @($goblinEvidenceCandidates |
@@ -2734,6 +2743,57 @@ try {
                 $_.FullName.Replace('/', '\').IndexOf('\Debug\GoblinEvidence\ObservationDiagnostics\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
             (-not $isObservationDiagnosticCrop) -or $selectedGoblinObservationDiagnosticCropPaths.ContainsKey($_.FullName)
         })
+    $imageRecognitionBestSampleFiles = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $normalizedFullName = $_.FullName.Replace('/', '\')
+            $normalizedFullName.IndexOf('\Debug\GoblinEvidence\AcceptedEvidenceCandidates\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                $normalizedFullName.IndexOf('\Debug\GemAutoStash\AcceptedGemCandidates\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+        })
+    $imageRecognitionBestSampleMetadata = @($imageRecognitionBestSampleFiles |
+        Where-Object { $_.Name -ieq 'metadata.json' } |
+        Sort-Object LastWriteTime -Descending)
+    $selectedImageRecognitionBestSampleSetFolders = @{}
+    foreach ($metadata in @($imageRecognitionBestSampleMetadata | Select-Object -First $MaxImageRecognitionBestSampleSets)) {
+        $selectedImageRecognitionBestSampleSetFolders[(Split-Path -Parent $metadata.FullName)] = $true
+    }
+    $selectedImageRecognitionBestSampleFiles = @($imageRecognitionBestSampleFiles |
+        Where-Object {
+            $selectedImageRecognitionBestSampleSetFolders.ContainsKey((Split-Path -Parent $_.FullName))
+        })
+    $selectedImageRecognitionBestSampleFilePaths = @{}
+    foreach ($file in $selectedImageRecognitionBestSampleFiles) {
+        $selectedImageRecognitionBestSampleFilePaths[$file.FullName] = $true
+    }
+    $excludedImageRecognitionBestSampleFiles = [Math]::Max(0, $imageRecognitionBestSampleFiles.Count - $selectedImageRecognitionBestSampleFiles.Count)
+    $goblinEvidenceScreenshots = @($goblinEvidenceScreenshots |
+        Where-Object {
+            $normalizedFullName = $_.FullName.Replace('/', '\')
+            $isBestSampleFile = $normalizedFullName.IndexOf('\Debug\GoblinEvidence\AcceptedEvidenceCandidates\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                $normalizedFullName.IndexOf('\Debug\GemAutoStash\AcceptedGemCandidates\', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+            (-not $isBestSampleFile) -or $selectedImageRecognitionBestSampleFilePaths.ContainsKey($_.FullName)
+        })
+    $imageRecognitionPromotedFolders = @(
+        (Join-Path $repoRoot "Images\Goblin Evidence\Promoted"),
+        (Join-Path $repoRoot "Images\Gems\Promoted")
+    )
+    $imageRecognitionPromotedFiles = foreach ($folder in $imageRecognitionPromotedFolders) {
+        if (Test-Path -LiteralPath $folder -PathType Container) {
+            Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -match '^\.(png|json)$' }
+        }
+    }
+    $imageRecognitionPromotedMetadata = @($imageRecognitionPromotedFiles |
+        Where-Object { $_.Extension -ieq '.json' } |
+        Sort-Object LastWriteTime -Descending)
+    $selectedImageRecognitionPromotedSampleKeys = @{}
+    foreach ($metadata in @($imageRecognitionPromotedMetadata | Select-Object -First $MaxImageRecognitionBestSampleSets)) {
+        $selectedImageRecognitionPromotedSampleKeys[[System.IO.Path]::ChangeExtension($metadata.FullName, $null)] = $true
+    }
+    $selectedImageRecognitionPromotedFiles = @($imageRecognitionPromotedFiles |
+        Where-Object {
+            $selectedImageRecognitionPromotedSampleKeys.ContainsKey([System.IO.Path]::ChangeExtension($_.FullName, $null))
+        })
+    $excludedImageRecognitionPromotedFiles = [Math]::Max(0, $imageRecognitionPromotedFiles.Count - $selectedImageRecognitionPromotedFiles.Count)
     $selectedGoblinEvidenceFolder = if ($goblinEvidenceScreenshots.Count -gt 0) { Split-Path -Parent $goblinEvidenceScreenshots[0].FullName } elseif (-not [string]::IsNullOrWhiteSpace($goblinTrackerInfo.EvidenceScreenshotFolder)) { $goblinTrackerInfo.EvidenceScreenshotFolder } else { "none" }
     Write-Host "Selected goblin evidence folder: $selectedGoblinEvidenceFolder"
     Write-Host "Excluded goblin evidence full images: $excludedGoblinEvidenceFullImages"
@@ -2744,7 +2804,12 @@ try {
     Write-Host "Oversized goblin evidence event screenshots excluded: $oversizedGoblinEvidenceEventScreenshots"
     Write-Host "Included goblin observation diagnostic crops: $($selectedGoblinObservationDiagnosticCrops.Count)"
     Write-Host "Excluded goblin observation diagnostic crops: $excludedGoblinObservationDiagnosticCrops"
+    Write-Host "Included image recognition best-sample sets: $($selectedImageRecognitionBestSampleSetFolders.Count)"
+    Write-Host "Excluded image recognition best-sample files: $excludedImageRecognitionBestSampleFiles"
     $goblinEvidenceScreenshotCount = Copy-DebugScreenshotsToPackage $goblinEvidenceScreenshots $goblinEvidenceSourceRoots (Join-Path $stagingRoot "Debug")
+    $imageRecognitionPromotedFileCount = Copy-DebugScreenshotsToPackage $selectedImageRecognitionPromotedFiles @($repoRoot) $stagingRoot
+    Write-Host "Included image recognition promoted sample files: $imageRecognitionPromotedFileCount"
+    Write-Host "Excluded image recognition promoted sample files: $excludedImageRecognitionPromotedFiles"
     if ($goblinEvidenceScreenshotCount -eq 0) {
         Write-Host "No current-session goblin evidence screenshots found."
     }
@@ -3012,6 +3077,8 @@ try {
             "- Debug\GoblinEvidence\EncounterCaptures and ManualCaptures *_Fullscreen images are excluded by default; replay-ready *_Metadata.txt, *_Journal.png, and *_Minimap.png are kept",
             "- Debug/GoblinEvidence/GoblinEvidence_* event screenshots are limited to MaxGoblinEvidenceEventScreenshots newest files and MaxGoblinEvidenceEventScreenshotBytes",
             "- Debug/GoblinEvidence/ObservationDiagnostics image crops are limited to MaxGoblinObservationDiagnosticCrops newest files",
+            "- Debug/GoblinEvidence/AcceptedEvidenceCandidates and Debug/GemAutoStash/AcceptedGemCandidates are limited to MaxImageRecognitionBestSampleSets newest accepted action folders",
+            "- Images/Goblin Evidence/Promoted and Images/Gems/Promoted are limited to MaxImageRecognitionBestSampleSets newest sidecar-backed promoted samples and are not bulk-copied",
             "- Debug/InventoryReplay/Salvage and Debug/InventoryReplay/Stash replay image folders are excluded by default; use ReviewEvidence frames/crops for image replay",
             "- Debug/ReplayLogs structured replay logs are copied when present for the current session",
             "- ReviewEvidence includes only selected OBS frames and manually supplied evidence; full video files are not copied by default",

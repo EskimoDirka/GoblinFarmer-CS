@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
@@ -27,12 +28,16 @@ namespace GoblinFarmer
         private const int PortBulkSalvageActivePixelThreshold = 90;
         private const int PortRepairButtonSampleSize = 44;
         private const int PortRepairButtonActivePixelThreshold = 55;
+        private const int PortRepairButtonWideSampleWidth = 150;
+        private const int PortRepairButtonWideSampleHeight = 84;
+        private const int PortRepairButtonWideActivePixelThreshold = 45;
         private const int PortSalvageRecoveryRescanLimit = 2;
 
         private sealed record PortRepairReadinessResult(bool VendorPanelAlreadyVisible, bool VendorPanelBecameVisible, bool NewTristramConfirmed, long ReadinessElapsedMs, long PostArrivalWaitMs);
         private sealed record PortBlacksmithOpenResult(bool Opened, int Attempts, long ElapsedMs, long WorkflowElapsedMs);
         private sealed record PortSalvageBulkCategory(string Name, string CoordinateName, Func<Color, bool> ActiveColorPredicate);
         private sealed record PortBulkSalvageColorSample(bool Active, int ActivePixels, int SampledPixels, double ActiveRatio);
+        private sealed record PortRepairButtonVisualSample(bool Active, string VisualState, PortBulkSalvageColorSample CenterSample, PortBulkSalvageColorSample WideSample, string DiagnosticCropPath);
         private sealed record PortBulkSalvageResult(string Category, string Outcome, bool ClickSent, bool PromptFound, bool EnterSent, bool PromptCleared, PortBulkSalvageColorSample ColorSample, long ElapsedMs);
         private sealed record PortGemStashResult(string Outcome, int InitialTargets, int SlotsClicked, int RecoveryPasses, int RemainingTargets, long ElapsedMs);
 
@@ -55,58 +60,30 @@ namespace GoblinFarmer
 
             DrawingPoint repairButtonReference = portRepairCoords.GetValueOrDefault("Repair Button", new DrawingPoint(361, 715));
             DrawingPoint repairButtonPoint = PortScaleGamePoint(repairButtonReference);
-            PortBulkSalvageColorSample repairButtonSample = PortSampleButtonColor(
+            PortRepairButtonVisualSample repairButtonSample = PortSampleRepairButtonVisualState(
                 repairButtonPoint,
-                PortRepairButtonActiveColor,
-                PortRepairButtonSampleSize,
-                PortRepairButtonActivePixelThreshold);
-            AppLogger.Info(
-                "RepairButtonColorSample: " +
-                $"phase=PreClick; " +
-                $"buttonVisible=True; " +
-                $"active={repairButtonSample.Active}; " +
-                $"activePixels={repairButtonSample.ActivePixels}; " +
-                $"sampledPixels={repairButtonSample.SampledPixels}; " +
-                $"activeRatio={repairButtonSample.ActiveRatio:0.000}; " +
-                $"activePixelThreshold={PortRepairButtonActivePixelThreshold}; " +
-                $"sampleSize={PortRepairButtonSampleSize}; " +
-                $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
-                $"screen={repairButtonPoint.X},{repairButtonPoint.Y}");
+                repairButtonReference,
+                "PreClick");
             bool repairButtonClickSent = false;
             string repairButtonOutcome = repairButtonSample.Active ? "ClickedActionableRepairButton" : "SkippedInactiveRepairButton";
-            PortBulkSalvageColorSample postRepairButtonSample = repairButtonSample;
+            PortRepairButtonVisualSample postRepairButtonSample = repairButtonSample;
             if (repairButtonSample.Active)
             {
                 repairButtonClickSent = PortSafeLeftClick(repairButtonPoint);
                 repairButtonOutcome = repairButtonClickSent ? "ClickedActionableRepairButton" : "UnsafeRepairButtonClick";
                 PortSleep(token, 350);
-                postRepairButtonSample = PortSampleButtonColor(
+                postRepairButtonSample = PortSampleRepairButtonVisualState(
                     repairButtonPoint,
-                    PortRepairButtonActiveColor,
-                    PortRepairButtonSampleSize,
-                    PortRepairButtonActivePixelThreshold);
+                    repairButtonReference,
+                    "PostClick");
                 if (postRepairButtonSample.Active && repairButtonClickSent)
                 {
                     PortSleep(token, 500);
-                    postRepairButtonSample = PortSampleButtonColor(
+                    postRepairButtonSample = PortSampleRepairButtonVisualState(
                         repairButtonPoint,
-                        PortRepairButtonActiveColor,
-                        PortRepairButtonSampleSize,
-                        PortRepairButtonActivePixelThreshold);
+                        repairButtonReference,
+                        "PostClickSettled");
                 }
-
-                AppLogger.Info(
-                    "RepairButtonColorSample: " +
-                    $"phase=PostClick; " +
-                    $"buttonVisible=True; " +
-                    $"active={postRepairButtonSample.Active}; " +
-                    $"activePixels={postRepairButtonSample.ActivePixels}; " +
-                    $"sampledPixels={postRepairButtonSample.SampledPixels}; " +
-                    $"activeRatio={postRepairButtonSample.ActiveRatio:0.000}; " +
-                    $"activePixelThreshold={PortRepairButtonActivePixelThreshold}; " +
-                    $"sampleSize={PortRepairButtonSampleSize}; " +
-                    $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
-                    $"screen={repairButtonPoint.X},{repairButtonPoint.Y}");
             }
 
             string repairVerificationOutcome = !repairButtonSample.Active
@@ -116,14 +93,24 @@ namespace GoblinFarmer
                     : repairButtonClickSent
                         ? "RepairClickUnconfirmed"
                         : "RepairClickNotSent";
+            int reportedActivePixels = repairButtonSample.WideSample.Active
+                ? repairButtonSample.WideSample.ActivePixels
+                : repairButtonSample.CenterSample.ActivePixels;
+            int reportedSampledPixels = repairButtonSample.WideSample.Active
+                ? repairButtonSample.WideSample.SampledPixels
+                : repairButtonSample.CenterSample.SampledPixels;
+            double reportedActiveRatio = repairButtonSample.WideSample.Active
+                ? repairButtonSample.WideSample.ActiveRatio
+                : repairButtonSample.CenterSample.ActiveRatio;
             AppLogger.Info(
                 "Repair menu timing: " +
                 $"repair button click sent={repairButtonClickSent}; " +
                 $"repairButtonActionable={repairButtonSample.Active}; " +
                 $"outcome={PortLogField(repairButtonOutcome)}; " +
-                $"activePixels={repairButtonSample.ActivePixels}; " +
-                $"sampledPixels={repairButtonSample.SampledPixels}; " +
-                $"activeRatio={repairButtonSample.ActiveRatio:0.000}; " +
+                $"visualState={PortLogField(repairButtonSample.VisualState)}; " +
+                $"activePixels={reportedActivePixels}; " +
+                $"sampledPixels={reportedSampledPixels}; " +
+                $"activeRatio={reportedActiveRatio:0.000}; " +
                 $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
                 $"screen={repairButtonPoint.X},{repairButtonPoint.Y}; " +
                 $"elapsed={repairPerf.ElapsedMilliseconds}ms");
@@ -132,10 +119,15 @@ namespace GoblinFarmer
                 $"outcome={PortLogField(repairVerificationOutcome)}; " +
                 $"preActive={repairButtonSample.Active}; " +
                 $"postActive={postRepairButtonSample.Active}; " +
-                $"preActivePixels={repairButtonSample.ActivePixels}; " +
-                $"postActivePixels={postRepairButtonSample.ActivePixels}; " +
-                $"sampledPixels={postRepairButtonSample.SampledPixels}; " +
-                $"postActiveRatio={postRepairButtonSample.ActiveRatio:0.000}; " +
+                $"preVisualState={PortLogField(repairButtonSample.VisualState)}; " +
+                $"postVisualState={PortLogField(postRepairButtonSample.VisualState)}; " +
+                $"preCenterActivePixels={repairButtonSample.CenterSample.ActivePixels}; " +
+                $"preWideActivePixels={repairButtonSample.WideSample.ActivePixels}; " +
+                $"postCenterActivePixels={postRepairButtonSample.CenterSample.ActivePixels}; " +
+                $"postWideActivePixels={postRepairButtonSample.WideSample.ActivePixels}; " +
+                $"postWideSampledPixels={postRepairButtonSample.WideSample.SampledPixels}; " +
+                $"postWideActiveRatio={postRepairButtonSample.WideSample.ActiveRatio:0.000}; " +
+                $"diagnosticCropPath={PortLogField(repairButtonSample.DiagnosticCropPath)}; " +
                 $"repairButtonClickSent={repairButtonClickSent}; " +
                 $"elapsed={repairPerf.ElapsedMilliseconds}ms");
             if (repairVerificationOutcome.Equals("RepairClickUnconfirmed", StringComparison.OrdinalIgnoreCase) ||
@@ -749,10 +741,80 @@ namespace GoblinFarmer
                 PortBulkSalvageActivePixelThreshold);
         }
 
+        private PortRepairButtonVisualSample PortSampleRepairButtonVisualState(
+            DrawingPoint repairButtonPoint,
+            DrawingPoint repairButtonReference,
+            string phase)
+        {
+            PortBulkSalvageColorSample centerSample = PortSampleButtonColor(
+                repairButtonPoint,
+                PortRepairButtonActiveColor,
+                PortRepairButtonSampleSize,
+                PortRepairButtonActivePixelThreshold);
+            PortBulkSalvageColorSample wideSample = PortSampleButtonColor(
+                repairButtonPoint,
+                PortRepairButtonActiveColor,
+                PortRepairButtonWideSampleWidth,
+                PortRepairButtonWideSampleHeight,
+                PortRepairButtonWideActivePixelThreshold);
+
+            bool active = centerSample.Active || wideSample.Active;
+            string visualState = active
+                ? "Active"
+                : centerSample.SampledPixels == 0 && wideSample.SampledPixels == 0
+                    ? "MissedSampleRegion"
+                    : centerSample.ActivePixels > 0 || wideSample.ActivePixels > 0
+                        ? "InactiveOrDisabledLowActivePixels"
+                        : "InactiveOrDisabled";
+            bool saveFocusedCrop = !active || !centerSample.Active;
+            string diagnosticCropPath = saveFocusedCrop
+                ? PortCaptureRepairButtonFocusedCrop(repairButtonPoint, phase, visualState)
+                : "";
+
+            AppLogger.Info(
+                "RepairButtonColorSample: " +
+                $"phase={PortLogField(phase)}; " +
+                $"buttonVisible=True; " +
+                $"visualState={PortLogField(visualState)}; " +
+                $"active={active}; " +
+                $"centerActive={centerSample.Active}; " +
+                $"centerActivePixels={centerSample.ActivePixels}; " +
+                $"centerSampledPixels={centerSample.SampledPixels}; " +
+                $"centerActiveRatio={centerSample.ActiveRatio:0.000}; " +
+                $"centerActivePixelThreshold={PortRepairButtonActivePixelThreshold}; " +
+                $"centerSampleSize={PortRepairButtonSampleSize}; " +
+                $"wideActive={wideSample.Active}; " +
+                $"wideActivePixels={wideSample.ActivePixels}; " +
+                $"wideSampledPixels={wideSample.SampledPixels}; " +
+                $"wideActiveRatio={wideSample.ActiveRatio:0.000}; " +
+                $"wideActivePixelThreshold={PortRepairButtonWideActivePixelThreshold}; " +
+                $"wideSampleSize={PortRepairButtonWideSampleWidth}x{PortRepairButtonWideSampleHeight}; " +
+                $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
+                $"screen={repairButtonPoint.X},{repairButtonPoint.Y}; " +
+                $"diagnosticCropPath={PortLogField(diagnosticCropPath)}");
+
+            return new(active, visualState, centerSample, wideSample, diagnosticCropPath);
+        }
+
         private PortBulkSalvageColorSample PortSampleButtonColor(
             DrawingPoint centerPoint,
             Func<Color, bool> activeColorPredicate,
             int sampleSize,
+            int activePixelThreshold)
+        {
+            return PortSampleButtonColor(
+                centerPoint,
+                activeColorPredicate,
+                sampleSize,
+                sampleSize,
+                activePixelThreshold);
+        }
+
+        private PortBulkSalvageColorSample PortSampleButtonColor(
+            DrawingPoint centerPoint,
+            Func<Color, bool> activeColorPredicate,
+            int sampleWidth,
+            int sampleHeight,
             int activePixelThreshold)
         {
             if (!PortTryGetDiabloRect(out RECT rect))
@@ -760,12 +822,13 @@ namespace GoblinFarmer
                 return new(false, 0, 0, 0);
             }
 
-            int half = sampleSize / 2;
+            int halfWidth = sampleWidth / 2;
+            int halfHeight = sampleHeight / 2;
             Rectangle sample = Rectangle.FromLTRB(
-                centerPoint.X - half,
-                centerPoint.Y - half,
-                centerPoint.X + half,
-                centerPoint.Y + half);
+                centerPoint.X - halfWidth,
+                centerPoint.Y - halfHeight,
+                centerPoint.X + halfWidth,
+                centerPoint.Y + halfHeight);
             Rectangle diablo = Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
             sample = Rectangle.Intersect(sample, diablo);
             sample = Rectangle.Intersect(sample, SystemInformation.VirtualScreen);
@@ -797,6 +860,101 @@ namespace GoblinFarmer
 
             double ratio = sampledPixels == 0 ? 0 : activePixels / (double)sampledPixels;
             return new(activePixels >= activePixelThreshold, activePixels, sampledPixels, ratio);
+        }
+
+        private string PortCaptureRepairButtonFocusedCrop(DrawingPoint repairButtonPoint, string phase, string visualState)
+        {
+            try
+            {
+                if (portApplicationClosing ||
+                    !DebugManager.ShouldCaptureDebugEvidence(chkKeepDebugScreenshots == null || chkKeepDebugScreenshots.Checked))
+                {
+                    return "";
+                }
+
+                Rectangle sample = Rectangle.FromLTRB(
+                    repairButtonPoint.X - PortRepairButtonWideSampleWidth / 2,
+                    repairButtonPoint.Y - PortRepairButtonWideSampleHeight / 2,
+                    repairButtonPoint.X + PortRepairButtonWideSampleWidth / 2,
+                    repairButtonPoint.Y + PortRepairButtonWideSampleHeight / 2);
+                sample = Rectangle.Intersect(sample, SystemInformation.VirtualScreen);
+                if (sample.Width <= 0 || sample.Height <= 0)
+                {
+                    return "";
+                }
+
+                string directory = System.IO.Path.Combine(DebugManager.DebugScreenshotsDirectory, "Repair");
+                System.IO.Directory.CreateDirectory(directory);
+                string safePhase = PortSafeFileToken(phase);
+                string safeState = PortSafeFileToken(visualState);
+                string path = System.IO.Path.Combine(
+                    directory,
+                    $"RepairButtonFocused_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{safePhase}_{safeState}.png");
+                using Bitmap crop = new(sample.Width, sample.Height);
+                using (Graphics graphics = Graphics.FromImage(crop))
+                {
+                    graphics.CopyFromScreen(sample.Left, sample.Top, 0, 0, crop.Size);
+                }
+
+                crop.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                DebugManager.RecordDebugScreenshotPath(path);
+                PortCleanupRepairButtonFocusedCrops(directory);
+                return path;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Repair button focused crop capture failed.", ex);
+                return "";
+            }
+        }
+
+        private static void PortCleanupRepairButtonFocusedCrops(string directory)
+        {
+            try
+            {
+                System.IO.DirectoryInfo info = new(directory);
+                if (!info.Exists)
+                {
+                    return;
+                }
+
+                System.IO.FileInfo[] files = info.GetFiles("RepairButtonFocused_*.png");
+                Array.Sort(
+                    files,
+                    (left, right) => right.LastWriteTimeUtc.CompareTo(left.LastWriteTimeUtc));
+                for (int i = 24; i < files.Length; i++)
+                {
+                    files[i].Delete();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Repair button focused crop cleanup failed.", ex);
+            }
+        }
+
+        private static string PortSafeFileToken(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "Unknown";
+            }
+
+            char[] chars = value.ToCharArray();
+            char[] invalid = System.IO.Path.GetInvalidFileNameChars();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (Array.IndexOf(invalid, chars[i]) >= 0 ||
+                    char.IsWhiteSpace(chars[i]) ||
+                    chars[i] == ';' ||
+                    chars[i] == ':' ||
+                    chars[i] == '=')
+                {
+                    chars[i] = '_';
+                }
+            }
+
+            return new string(chars);
         }
 
         private static bool PortBulkSalvageBlueActiveColor(Color color)
@@ -1204,7 +1362,85 @@ namespace GoblinFarmer
                 PortCaptureSuccessScreenshot("Stash", "GemStashComplete");
             }
 
+            if (outcome.Equals("Complete", StringComparison.OrdinalIgnoreCase) && slotsClicked > 0)
+            {
+                PortCaptureAcceptedGemStashBestSamples(scan, outcome, slotsClicked, initialTargets, remainingTargets);
+            }
+
             return new PortGemStashResult(outcome, initialTargets, slotsClicked, recoveryPasses, remainingTargets, stashPerf.ElapsedMilliseconds);
+        }
+
+        private void PortCaptureAcceptedGemStashBestSamples(
+            GemStashInventoryScanResult scan,
+            string outcome,
+            int slotsClicked,
+            int initialTargets,
+            int remainingTargets)
+        {
+            if (!AppSettings.ImageRecognition.CaptureAcceptedTopCandidates ||
+                (!AppSettings.IsVsDebugProfile && !AppSettings.Debug.DebugMode))
+            {
+                return;
+            }
+
+            Dictionary<(int Row, int Column), GemStashInventorySlotCandidate> candidateBySlot = scan.Candidates
+                .Where(candidate => candidate.Accepted)
+                .ToDictionary(candidate => (candidate.Row, candidate.Column));
+            List<ImageRecognitionSampleCandidate> candidates = [];
+            foreach (GemStashInventorySlotTarget target in scan.Targets
+                .OrderByDescending(target => target.Confidence)
+                .ThenBy(target => target.Row)
+                .ThenBy(target => target.Column))
+            {
+                candidateBySlot.TryGetValue((target.Row, target.Column), out GemStashInventorySlotCandidate? candidate);
+                string gemType = GemStashTemplateCatalog.NormalizeKnownGemType(target.Template);
+                bool knownGem = !string.IsNullOrWhiteSpace(gemType);
+                string reason = candidate?.Reason ?? "AcceptedTarget";
+                candidates.Add(new ImageRecognitionSampleCandidate(
+                    candidates.Count + 1,
+                    knownGem ? gemType : target.Template,
+                    reason,
+                    target.Confidence,
+                    reason,
+                    target.Template,
+                    candidate?.BestTemplatePath ?? "",
+                    candidate?.LocalRegion ?? Rectangle.Empty,
+                    candidate?.ScreenRegion ?? Rectangle.Empty,
+                    candidate?.CropPng,
+                    knownGem,
+                    knownGem ? "" : "UnknownGemType",
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Row"] = target.Row.ToString(CultureInfo.InvariantCulture),
+                        ["Column"] = target.Column.ToString(CultureInfo.InvariantCulture),
+                        ["ScreenPoint"] = $"{target.ScreenPoint.X},{target.ScreenPoint.Y}",
+                        ["ClassifierVersion"] = GemStashInventoryClassifier.ClassifierVersion,
+                        ["AcceptedReason"] = reason,
+                    }));
+            }
+
+            string actionId = $"gem-stash-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{slotsClicked}";
+            bool promotionEnabled = AppSettings.Stash.PromoteBestGemEvidenceImage &&
+                (AppSettings.IsVsDebugProfile || AppSettings.Debug.DebugMode);
+            ImageRecognitionBestSamplePromoter.CaptureSelectAndPromote(new ImageRecognitionSamplePromotionRequest(
+                "GemAutoStash",
+                actionId,
+                DateTime.Now.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+                DebugManager.GemAutoStashAcceptedCandidatesDirectory,
+                Path.Combine(PortGemStashTemplateDirectory(), "Promoted"),
+                CaptureEnabled: true,
+                PromotionEnabled: promotionEnabled,
+                TopCandidateCount: 3,
+                RetentionCount: AppSettings.ImageRecognition.TopCandidateRetentionCount,
+                Candidates: candidates,
+                Metadata: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Outcome"] = outcome,
+                    ["SlotsClicked"] = slotsClicked.ToString(CultureInfo.InvariantCulture),
+                    ["InitialTargets"] = initialTargets.ToString(CultureInfo.InvariantCulture),
+                    ["RemainingTargets"] = remainingTargets.ToString(CultureInfo.InvariantCulture),
+                    ["Threshold"] = AppSettings.Stash.GemTemplateConfidence.ToString("0.000", CultureInfo.InvariantCulture),
+                }));
         }
 
         private bool PortClickGemStashTargets(IReadOnlyList<GemStashInventorySlotTarget> targets, CancellationToken token, ref int slotsClicked)

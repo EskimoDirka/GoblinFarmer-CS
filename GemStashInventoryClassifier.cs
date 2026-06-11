@@ -4,7 +4,7 @@ using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
 {
-    internal sealed record GemStashTemplate(string Name, string Path);
+    internal sealed record GemStashTemplate(string Name, string Path, string Source = "Template");
 
     internal sealed record GemStashInventorySlotCandidate(
         int Row,
@@ -13,7 +13,11 @@ namespace GoblinFarmer
         bool Accepted,
         string Reason,
         string BestTemplate,
-        double Confidence);
+        double Confidence,
+        string BestTemplatePath = "",
+        Rectangle LocalRegion = default,
+        Rectangle ScreenRegion = default,
+        byte[]? CropPng = null);
 
     internal sealed record GemStashInventorySlotTarget(
         int Row,
@@ -43,11 +47,21 @@ namespace GoblinFarmer
                 return [];
             }
 
-            return Directory.GetFiles(folder, "*.png", SearchOption.TopDirectoryOnly)
+            List<GemStashTemplate> templates = Directory.GetFiles(folder, "*.png", SearchOption.TopDirectoryOnly)
                 .Where(IsGemTemplateFile)
                 .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
                 .Select(path => new GemStashTemplate(Path.GetFileNameWithoutExtension(path), path))
-                .ToArray();
+                .ToList();
+            string promoted = Path.Combine(folder, "Promoted");
+            if (Directory.Exists(promoted))
+            {
+                templates.AddRange(Directory.GetFiles(promoted, "*.png", SearchOption.AllDirectories)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .Select(TryLoadPromotedTemplate)
+                    .OfType<GemStashTemplate>());
+            }
+
+            return templates;
         }
 
         private static bool IsGemTemplateFile(string path)
@@ -59,13 +73,74 @@ namespace GoblinFarmer
                 !name.Contains("tab", StringComparison.OrdinalIgnoreCase) &&
                 !name.Contains("placement", StringComparison.OrdinalIgnoreCase);
         }
+
+        private static GemStashTemplate? TryLoadPromotedTemplate(string path)
+        {
+            string metadataPath = Path.ChangeExtension(path, ".json");
+            if (!File.Exists(metadataPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(metadataPath));
+                System.Text.Json.JsonElement selected = document.RootElement.TryGetProperty("selected", out System.Text.Json.JsonElement selectedElement)
+                    ? selectedElement
+                    : document.RootElement;
+                string target = selected.TryGetProperty("targetLabel", out System.Text.Json.JsonElement targetElement) && targetElement.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? targetElement.GetString() ?? ""
+                    : "";
+                string source = selected.TryGetProperty("source", out System.Text.Json.JsonElement sourceElement) && sourceElement.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? sourceElement.GetString() ?? "Promoted"
+                    : "Promoted";
+                string gemType = NormalizeKnownGemType(target);
+                return string.IsNullOrWhiteSpace(gemType)
+                    ? null
+                    : new GemStashTemplate(gemType, path, source);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        internal static string NormalizeKnownGemType(string value)
+        {
+            if (value.Contains("Emerald", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Emerald";
+            }
+
+            if (value.Contains("Ruby", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Ruby";
+            }
+
+            if (value.Contains("Topaz", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Topaz";
+            }
+
+            if (value.Contains("Amethyst", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Amethyst";
+            }
+
+            if (value.Contains("Diamond", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Diamond";
+            }
+
+            return "";
+        }
     }
 
     internal static class GemStashInventoryClassifier
     {
         public const string ClassifierVersion = "GemStashTemplateColorV3";
 
-        private sealed record LoadedTemplate(string Name, Mat Mat) : IDisposable
+        private sealed record LoadedTemplate(string Name, string Path, Mat Mat) : IDisposable
         {
             public void Dispose()
             {
@@ -122,7 +197,7 @@ namespace GoblinFarmer
                         continue;
                     }
 
-                    loadedTemplates.Add(new LoadedTemplate(template.Name, mat));
+                    loadedTemplates.Add(new LoadedTemplate(template.Name, template.Path, mat));
                 }
 
                 return ScanLoaded(
@@ -178,6 +253,7 @@ namespace GoblinFarmer
                     Rectangle local = InventoryGridLayout.SlotRectangle(inventoryGrid, row, column);
                     DrawingPoint screenPoint = InventoryGridLayout.SlotScreenPoint(screenGrid, local);
                     string bestTemplate = "";
+                    string bestTemplatePath = "";
                     double bestConfidence = 0;
 
                     if (loadedTemplates.Count > 0)
@@ -190,6 +266,7 @@ namespace GoblinFarmer
                             {
                                 bestConfidence = confidence;
                                 bestTemplate = template.Name;
+                                bestTemplatePath = template.Path;
                             }
                         }
                     }
@@ -225,7 +302,11 @@ namespace GoblinFarmer
                         accepted,
                         reason,
                         bestTemplate,
-                        bestConfidence));
+                        bestConfidence,
+                        bestTemplatePath,
+                        local,
+                        new Rectangle(screenGrid.Left + local.Left, screenGrid.Top + local.Top, local.Width, local.Height),
+                        ImageRecognitionBestSamplePromoter.EncodePng(inventoryGrid, local)));
 
                     if (accepted)
                     {
