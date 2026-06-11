@@ -803,7 +803,15 @@ namespace GoblinFarmer
         {
             using Bitmap screenshot = PortCaptureInventoryGrid(out Rectangle grid);
 
-            SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid);
+            string unidentifiedLegendaryTemplatePath = Img("Salvage", "Unidentified Salvage Icon.png");
+            bool unidentifiedLegendaryTemplatePresent = File.Exists(unidentifiedLegendaryTemplatePath);
+            AppLogger.Info(
+                "SalvageUnidentifiedLegendaryTemplateStatus: " +
+                $"phase={PortLogField(phase)}; " +
+                $"templatePresent={unidentifiedLegendaryTemplatePresent}; " +
+                $"templatePath={PortLogField(unidentifiedLegendaryTemplatePath)}; " +
+                $"missingReason={(unidentifiedLegendaryTemplatePresent ? "None" : "TemplateMissing")}");
+            SalvageInventorySlotScanResult scan = SalvageInventorySlotClassifier.Scan(screenshot, grid, unidentifiedLegendaryTemplatePath);
             SalvageInventoryReplayArtifacts.RecordScanLog(grid, phase, scan);
             if (updateRegularGemCandidateCount)
             {

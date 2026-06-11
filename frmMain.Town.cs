@@ -62,13 +62,35 @@ namespace GoblinFarmer
                 PortRepairButtonActivePixelThreshold);
             bool repairButtonClickSent = false;
             string repairButtonOutcome = repairButtonSample.Active ? "ClickedActionableRepairButton" : "SkippedInactiveRepairButton";
+            PortBulkSalvageColorSample postRepairButtonSample = repairButtonSample;
             if (repairButtonSample.Active)
             {
                 repairButtonClickSent = PortSafeLeftClick(repairButtonPoint);
                 repairButtonOutcome = repairButtonClickSent ? "ClickedActionableRepairButton" : "UnsafeRepairButtonClick";
                 PortSleep(token, 350);
+                postRepairButtonSample = PortSampleButtonColor(
+                    repairButtonPoint,
+                    PortRepairButtonActiveColor,
+                    PortRepairButtonSampleSize,
+                    PortRepairButtonActivePixelThreshold);
+                if (postRepairButtonSample.Active && repairButtonClickSent)
+                {
+                    PortSleep(token, 500);
+                    postRepairButtonSample = PortSampleButtonColor(
+                        repairButtonPoint,
+                        PortRepairButtonActiveColor,
+                        PortRepairButtonSampleSize,
+                        PortRepairButtonActivePixelThreshold);
+                }
             }
 
+            string repairVerificationOutcome = !repairButtonSample.Active
+                ? "NoRepairNeeded"
+                : repairButtonClickSent && !postRepairButtonSample.Active
+                    ? "RepairPerformedConfirmed"
+                    : repairButtonClickSent
+                        ? "RepairClickUnconfirmed"
+                        : "RepairClickNotSent";
             AppLogger.Info(
                 "Repair menu timing: " +
                 $"repair button click sent={repairButtonClickSent}; " +
@@ -80,6 +102,24 @@ namespace GoblinFarmer
                 $"reference={repairButtonReference.X},{repairButtonReference.Y}; " +
                 $"screen={repairButtonPoint.X},{repairButtonPoint.Y}; " +
                 $"elapsed={repairPerf.ElapsedMilliseconds}ms");
+            AppLogger.Info(
+                "RepairCompletionVerification: " +
+                $"outcome={PortLogField(repairVerificationOutcome)}; " +
+                $"preActive={repairButtonSample.Active}; " +
+                $"postActive={postRepairButtonSample.Active}; " +
+                $"preActivePixels={repairButtonSample.ActivePixels}; " +
+                $"postActivePixels={postRepairButtonSample.ActivePixels}; " +
+                $"sampledPixels={postRepairButtonSample.SampledPixels}; " +
+                $"postActiveRatio={postRepairButtonSample.ActiveRatio:0.000}; " +
+                $"repairButtonClickSent={repairButtonClickSent}; " +
+                $"elapsed={repairPerf.ElapsedMilliseconds}ms");
+            if (repairVerificationOutcome.Equals("RepairClickUnconfirmed", StringComparison.OrdinalIgnoreCase) ||
+                repairVerificationOutcome.Equals("RepairClickNotSent", StringComparison.OrdinalIgnoreCase))
+            {
+                DebugManager.Session.RecordRepairFailure($"Repair failed: {repairVerificationOutcome}");
+                PortCaptureFailureScreenshot("RepairCompletionUnconfirmed", "Repair");
+                return false;
+            }
 
             if (closeAfterRepair)
             {
@@ -1035,6 +1075,7 @@ namespace GoblinFarmer
             int recoveryPasses = 0;
             int remainingTargets = initialTargets;
             string outcome = "NoGemsFound";
+            bool zeroTargetVerificationDone = false;
             if (initialTargets > 0)
             {
                 outcome = PortClickGemStashTargets(scan.Targets, token, ref slotsClicked)
@@ -1047,6 +1088,32 @@ namespace GoblinFarmer
             {
                 GemStashInventoryScanResult finalScan = PortScanGemStashInventorySlots(logCandidates: false, recoveryPasses == 0 ? "FinalGemStashCheck" : $"GemStashRecoveryPass{recoveryPasses}FinalCheck");
                 remainingTargets = finalScan.Targets.Count;
+                if (remainingTargets == 0)
+                {
+                    if (initialTargets > 0 && !zeroTargetVerificationDone)
+                    {
+                        zeroTargetVerificationDone = true;
+                        PortSleep(token, Math.Max(150, AppSettings.Stash.PostGemClickDelayMs * 4));
+                        GemStashInventoryScanResult verificationScan = PortScanGemStashInventorySlots(logCandidates: true, "FinalGemStashVerification");
+                        remainingTargets = verificationScan.Targets.Count;
+                        AppLogger.Info($"Auto gem stash final verification: firstFinalTargets=0; verificationTargets={remainingTargets}; slotsClicked={slotsClicked}; recoveryPasses={recoveryPasses}; settleMs={Math.Max(150, AppSettings.Stash.PostGemClickDelayMs * 4)}");
+                        if (remainingTargets > 0)
+                        {
+                            finalScan = verificationScan;
+                        }
+                        else
+                        {
+                            outcome = "Complete";
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        outcome = initialTargets == 0 ? "NoGemsFound" : "Complete";
+                        break;
+                    }
+                }
+
                 if (remainingTargets == 0)
                 {
                     outcome = initialTargets == 0 ? "NoGemsFound" : "Complete";

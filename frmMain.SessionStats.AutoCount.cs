@@ -167,6 +167,29 @@ namespace GoblinFarmer
                     suppressionReason = "MinimapConfidencePendingJournal";
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
+                    PortJournalEngagedHasRecentMinimapConfirmation(
+                        observation,
+                        area.AreaKey,
+                        autoEvidenceKey,
+                        nowUtc,
+                        out GoblinObservationRecord recentMinimapConfirmation,
+                        out double recentMinimapConfirmationAgeSeconds))
+                {
+                    evidenceReliabilityAllowsCount = true;
+                    evidenceReliability = "JournalEngagedRecentMinimapConfirmation";
+                    reliabilityReason = "";
+                    AppLogger.Info(
+                        "GoblinTracker: JournalEngagedRecentMinimapConfirmation " +
+                        $"areaKey={PortLogField(PortDisplayLocation(area.AreaKey))} " +
+                        $"source={PortLogField(observation.Source)} " +
+                        $"goblinType={PortLogField(observation.GoblinType)} " +
+                        $"journalConfidence={observation.EvidenceConfidence:0.000} " +
+                        $"recentMinimapConfidence={recentMinimapConfirmation.EvidenceConfidence:0.000} " +
+                        $"recentMinimapAgeSeconds={recentMinimapConfirmationAgeSeconds:0.0} " +
+                        $"recentMinimapWindowSeconds={PortAutomaticGoblinRecentMinimapJournalConfirmationWindow.TotalSeconds:0} " +
+                        $"recentMinimapMinConfidence={PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence:0.000}");
+                }
+                else if (string.IsNullOrWhiteSpace(suppressionReason) &&
                     !(evidenceReliabilityAllowsCount = GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
                         observation.Source,
                         autoEvidenceKey,
@@ -465,7 +488,32 @@ namespace GoblinFarmer
             return evidenceReliabilityAllowsCount &&
                 observation.Source.Contains("Journal", StringComparison.OrdinalIgnoreCase) &&
                 observation.Reason.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation, StringComparison.OrdinalIgnoreCase) &&
-                evidenceReliability.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombat, StringComparison.OrdinalIgnoreCase);
+                (evidenceReliability.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombat, StringComparison.OrdinalIgnoreCase) ||
+                evidenceReliability.Equals("JournalEngagedRecentMinimapConfirmation", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private bool PortJournalEngagedHasRecentMinimapConfirmation(
+            GoblinObservationRecord observation,
+            string areaKey,
+            string evidenceSignature,
+            DateTime nowUtc,
+            out GoblinObservationRecord recentMinimapConfirmation,
+            out double recentMinimapConfirmationAgeSeconds)
+        {
+            recentMinimapConfirmation = default!;
+            recentMinimapConfirmationAgeSeconds = -1;
+            if (!observation.Source.Contains("Journal", StringComparison.OrdinalIgnoreCase) ||
+                !evidenceSignature.Contains("Kind=JournalEngaged", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return PortTryGetRecentMinimapJournalConfirmation(
+                observation.GoblinType,
+                areaKey,
+                nowUtc,
+                out recentMinimapConfirmation,
+                out recentMinimapConfirmationAgeSeconds);
         }
 
         private void PortLogGoblinDecisionTrace(GoblinDecisionTraceRecord trace)

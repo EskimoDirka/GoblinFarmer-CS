@@ -57,6 +57,8 @@ namespace GoblinFarmer
         private static readonly TimeSpan PortAutomaticGoblinObservationDisplayHold = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan PortAutomaticGoblinJournalEncounterSuppressWindow = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan PortAutomaticGoblinSourceVariantSuppressWindow = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan PortAutomaticGoblinRecentMinimapJournalConfirmationWindow = TimeSpan.FromSeconds(5);
+        private const double PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence = 0.65;
         private static readonly TimeSpan PortGoblinDecisionBundleSuppressionThrottleWindow = TimeSpan.FromSeconds(30);
         private GoblinObservationRecord? portLastGoblinObservationForManualCount;
         private GoblinObservationRecord? portDisplayedGoblinObservation;

@@ -31,6 +31,7 @@ Run("VS Debug/dev profile suppresses first-run setup and forces internal debug d
 Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectRootConfigPreferred);
 Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
 Run("VS Debug startup requests Diablo auto-record monitor", TestVsDebugStartupRequestsDiabloAutoRecordMonitor);
+Run("VS Debug OBS monitor startup has readiness diagnostics", TestVsDebugObsMonitorStartupHasReadinessDiagnostics);
 Run("VS Debug form shows OBS recording status", TestVsDebugFormShowsObsRecordingStatus);
 Run("VS Debug form uses proper-case OBS status text", TestVsDebugFormUsesProperCaseObsStatusText);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
@@ -124,6 +125,7 @@ Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLive
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin journal evidence area reaches observation count path", TestGoblinJournalEvidenceAreaReachesObservationCountPath);
 Run("Goblin automatic count reliability requires killed or minimap confirmation", TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmation);
+Run("Goblin engaged journal can count after recent minimap confirmation", TestGoblinEngagedJournalCanCountAfterRecentMinimapConfirmation);
 Run("Goblin auto-count source variant suppression uses recent last-seen state", TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState);
 Run("Goblin PF multi-count duplicate bypass stays bounded", TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded);
 Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
@@ -157,6 +159,7 @@ Run("Salvage classifier rejects detached footprint without anchor", TestSalvageC
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
 Run("Salvage classifier accepts pale legendary boot-like items", TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems);
 Run("Salvage classifier accepts low-color legendary text anchor", TestSalvageClassifierAcceptsLowColorLegendaryTextAnchor);
+Run("Salvage classifier accepts unidentified legendary template", TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier merges weak upper and strong lower set boundary", TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary);
 Run("Salvage classifier merges set body continuation rows", TestSalvageClassifierMergesSetBodyContinuationRows);
@@ -173,11 +176,13 @@ Run("Gem stash classifier rejects below threshold", TestGemStashClassifierReject
 Run("Gem stash classifier accepts live-style gem color fallback", TestGemStashClassifierAcceptsLiveStyleGemColorFallback);
 Run("Gem stash classifier requires stack text for color fallback", TestGemStashClassifierRequiresStackTextForColorFallback);
 Run("Gem stash classifier rejects non-gem footprint fallback", TestGemStashClassifierRejectsNonGemFootprintFallback);
+Run("Gem stash classifier accepts near-threshold verified gems", TestGemStashClassifierAcceptsNearThresholdVerifiedGems);
 Run("Gem stash settings and asset separation are wired", TestGemStashSettingsAndAssetSeparationAreWired);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
 Run("Gem stash preflight skips stash travel when no gems exist", TestGemStashPreflightSkipsStashTravelWhenNoGemsExist);
 Run("Gem stash travel wait happens after stash coordinate click", TestGemStashTravelWaitHappensAfterStashCoordinateClick);
 Run("Repair flow samples repair button before clicking", TestRepairFlowSamplesRepairButtonBeforeClicking);
+Run("Repair flow verifies repair completion", TestRepairFlowVerifiesRepairCompletion);
 Run("Inventory replay loads saved gem stash crop", TestInventoryReplayLoadsSavedGemStashCrop);
 Run("Inventory replay retention is scoped and age based", TestInventoryReplayRetentionIsScopedAndAgeBased);
 Run("Inventory replay command remains harness only", TestInventoryReplayCommandRemainsHarnessOnly);
@@ -440,6 +445,23 @@ static void TestVsDebugStartupRequestsDiabloAutoRecordMonitor()
         AssertTrue(localScriptSource.Contains("$script:obsLaunchedByMonitor", StringComparison.Ordinal), "auto-record script should track whether it launched OBS");
         AssertTrue(localScriptSource.Contains("CloseMainWindow()", StringComparison.Ordinal), "auto-record script should close OBS when the monitor launched it");
         AssertTrue(localScriptSource.Contains("OBS left running because it was not launched by this monitor.", StringComparison.Ordinal), "auto-record script should avoid closing a manually opened OBS instance");
+    }
+}
+
+static void TestVsDebugObsMonitorStartupHasReadinessDiagnostics()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string localToolStartupSource = File.ReadAllText(Path.Combine(repoRoot, "LocalToolStartup.cs"));
+    string localScriptPath = Path.Combine(repoRoot, "Scripts", "Local Tools", "Auto Record Diablo.ps1");
+
+    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorReady", StringComparison.Ordinal), "startup should log when the OBS monitor remains running");
+    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorExitedEarly", StringComparison.Ordinal), "startup should log early PowerShell monitor exits");
+    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorLaunchRetry", StringComparison.Ordinal), "startup should expose retry diagnostics when process creation is inconclusive");
+    AssertTrue(localToolStartupSource.Contains("attempt <= 2", StringComparison.Ordinal), "startup should retry the monitor request once");
+    if (File.Exists(localScriptPath))
+    {
+        string localScriptSource = File.ReadAllText(localScriptPath);
+        AssertTrue(localScriptSource.Contains("Diablo auto-record monitor already running; startup request ignored by mutex.", StringComparison.Ordinal), "the local script should log mutex-blocked startup requests");
     }
 }
 
@@ -4942,6 +4964,21 @@ static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmati
     AssertEqual("MinimapConfirmed", minimapReliability, "minimap reliability should be explicit");
 }
 
+static void TestGoblinEngagedJournalCanCountAfterRecentMinimapConfirmation()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+
+    AssertTrue(autoCountSource.Contains("JournalEngagedRecentMinimapConfirmation", StringComparison.Ordinal), "auto-count should name the recent-minimap journal reliability path");
+    AssertTrue(autoCountSource.Contains("PortJournalEngagedHasRecentMinimapConfirmation", StringComparison.Ordinal), "auto-count should check recent minimap support before suppressing Engaged journal evidence");
+    AssertTrue(autoCountSource.Contains("PortObservationPendingJournalPromotedByReliability", StringComparison.Ordinal), "pending journal observations should be promotable by reliability");
+    AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationWindow", StringComparison.Ordinal), "recent minimap confirmation should be bounded by a short window");
+    AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence", StringComparison.Ordinal), "recent minimap confirmation should keep a minimum confidence floor");
+    AssertTrue(evidenceSource.Contains("JournalEngagedAcceptedRecentMinimapConfirmation", StringComparison.Ordinal), "stale-looking Engaged journal rows should only bypass freshness when a recent same-area minimap supports them");
+}
+
 static void TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState()
 {
     DateTime countedUtc = DateTime.UtcNow - TimeSpan.FromSeconds(21);
@@ -6017,6 +6054,28 @@ static void DrawSyntheticGemForTemplate(Bitmap bitmap, int row, int column, Bitm
     graphics.DrawImage(template, cell.Left + 22, cell.Top + 23, template.Width, template.Height);
 }
 
+static Bitmap CreateSyntheticUnidentifiedLegendaryTemplate()
+{
+    Bitmap template = new(18, 18);
+    using Graphics graphics = Graphics.FromImage(template);
+    graphics.Clear(Color.FromArgb(31, 23, 14));
+    using SolidBrush fill = new(Color.FromArgb(176, 108, 38));
+    using SolidBrush highlight = new(Color.FromArgb(238, 184, 82));
+    using Pen outline = new(Color.FromArgb(84, 50, 20), 2);
+    graphics.FillEllipse(fill, 2, 2, 14, 14);
+    graphics.DrawEllipse(outline, 2, 2, 14, 14);
+    graphics.FillRectangle(highlight, 7, 4, 4, 9);
+    graphics.FillRectangle(highlight, 7, 14, 4, 2);
+    return template;
+}
+
+static void DrawSyntheticUnidentifiedLegendaryTemplate(Bitmap bitmap, int row, int column, Bitmap template)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    graphics.DrawImage(template, cell.Left + 25, cell.Top + 21, template.Width, template.Height);
+}
+
 static void DrawSyntheticSetQualityLeftoverAnchor(Bitmap bitmap, int row, int column)
 {
     Rectangle cell = SyntheticSalvageSlotRect(row, column);
@@ -6514,6 +6573,40 @@ static void TestSalvageClassifierAcceptsLowColorLegendaryTextAnchor()
     AssertTrue(target.ConfirmationExpected, "low-color text-heavy leftover should expect salvage confirmation");
 }
 
+static void TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    using Bitmap template = CreateSyntheticUnidentifiedLegendaryTemplate();
+    DrawSyntheticUnidentifiedLegendaryTemplate(grid, 2, 4, template);
+    string root = Path.Combine(Path.GetTempPath(), $"GoblinFarmerUnidentifiedLegendary_{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(root);
+        string templatePath = Path.Combine(root, "Unidentified Salvage Icon.png");
+        template.Save(templatePath, System.Drawing.Imaging.ImageFormat.Png);
+
+        SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(
+            grid,
+            new Rectangle(0, 0, grid.Width, grid.Height),
+            templatePath);
+
+        AssertEqual(1, result.Targets.Count, "unidentified legendary template should create one actionable salvage target");
+        SalvageInventorySlotTarget target = result.Targets[0];
+        AssertEqual(2, target.Row, "unidentified legendary target should preserve row");
+        AssertEqual(4, target.Column, "unidentified legendary target should preserve column");
+        AssertEqual("Legendary", target.Quality, "unidentified legendary template should classify target as legendary");
+        AssertTrue(target.ConfirmationExpected, "unidentified legendary target should expect confirmation");
+        AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 4 && candidate.Accepted && candidate.Quality == "Legendary"), "candidate diagnostics should expose unidentified legendary classification");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
 static void TestSalvageClassifierSplitsStackedOneTileItems()
 {
     using Bitmap grid = CreateSyntheticSalvageGrid();
@@ -6786,6 +6879,20 @@ static void TestGemStashClassifierRejectsNonGemFootprintFallback()
     }
 }
 
+static void TestGemStashClassifierAcceptsNearThresholdVerifiedGems()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string classifierSource = File.ReadAllText(Path.Combine(repoRoot, "GemStashInventoryClassifier.cs"));
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+
+    AssertTrue(classifierSource.Contains("nearThresholdTemplateAccepted", StringComparison.Ordinal), "gem classifier should have a near-threshold template recovery path");
+    AssertTrue(classifierSource.Contains("Math.Max(0.70, threshold - 0.06)", StringComparison.Ordinal), "near-threshold recovery should stay bounded below the configured threshold");
+    AssertTrue(classifierSource.Contains("GemTemplateNearThresholdVerifiedGem", StringComparison.Ordinal), "near-threshold gem recovery should log an explicit candidate reason");
+    AssertTrue(classifierSource.Contains("salvageAllowsGem", StringComparison.Ordinal), "near-threshold gem recovery should still require salvage-classifier gem verification");
+    AssertTrue(townSource.Contains("FinalGemStashVerification", StringComparison.Ordinal), "gem stash flow should run a settled verification scan after an initial zero-target final scan");
+    AssertTrue(townSource.Contains("Auto gem stash final verification", StringComparison.Ordinal), "gem stash flow should log the strengthened final verification pass");
+}
+
 static void TestGemStashSettingsAndAssetSeparationAreWired()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -6883,6 +6990,21 @@ static void TestRepairFlowSamplesRepairButtonBeforeClicking()
     AssertTrue(repairMethod.Contains("ClickedActionableRepairButton", StringComparison.Ordinal), "actionable repair button clicks should be diagnosed");
     AssertTrue(repairMethod.Contains("UnsafeRepairButtonClick", StringComparison.Ordinal), "unsafe repair button click suppression should be diagnosed");
     AssertTrue(repairMethod.IndexOf("if (repairButtonSample.Active)", StringComparison.Ordinal) < repairMethod.IndexOf("PortSafeLeftClick(repairButtonPoint)", StringComparison.Ordinal), "repair button click should be inside the actionable branch");
+}
+
+static void TestRepairFlowVerifiesRepairCompletion()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string repairMethod = ExtractMethodBody(townSource, "private bool PortRepairGearFromOpenBlacksmith");
+
+    AssertTrue(repairMethod.Contains("postRepairButtonSample", StringComparison.Ordinal), "repair flow should resample the repair button after clicking");
+    AssertTrue(repairMethod.Contains("RepairCompletionVerification", StringComparison.Ordinal), "repair flow should log completion verification");
+    AssertTrue(repairMethod.Contains("NoRepairNeeded", StringComparison.Ordinal), "inactive repair button should be explicitly diagnosed as no repair needed");
+    AssertTrue(repairMethod.Contains("RepairPerformedConfirmed", StringComparison.Ordinal), "successful repair click should require post-click inactive confirmation");
+    AssertTrue(repairMethod.Contains("RepairClickUnconfirmed", StringComparison.Ordinal), "repair flow should diagnose click attempts that leave the button active");
+    AssertTrue(repairMethod.Contains("RepairCompletionUnconfirmed", StringComparison.Ordinal), "unconfirmed repair completion should capture diagnostics");
+    AssertTrue(repairMethod.Contains("RecordRepairFailure", StringComparison.Ordinal), "unconfirmed repair completion should be recorded as a repair failure");
 }
 
 static void TestInventoryReplayLoadsSavedGemStashCrop()

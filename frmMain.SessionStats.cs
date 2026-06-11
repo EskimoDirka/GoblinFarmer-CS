@@ -617,6 +617,43 @@ namespace GoblinFarmer
             };
         }
 
+        private bool PortTryGetRecentMinimapJournalConfirmation(
+            string goblinType,
+            string areaKey,
+            DateTime nowUtc,
+            out GoblinObservationRecord recentMinimapObservation,
+            out double recentMinimapAgeSeconds)
+        {
+            recentMinimapObservation = default!;
+            recentMinimapAgeSeconds = -1;
+            string normalizedGoblinType = GoblinTypeNormalizer.Normalize(goblinType);
+            if (string.IsNullOrWhiteSpace(normalizedGoblinType) ||
+                string.IsNullOrWhiteSpace(areaKey))
+            {
+                return false;
+            }
+
+            lock (portGoblinTrackerLock)
+            {
+                if (!portRecentMinimapGoblinObservationByType.TryGetValue(normalizedGoblinType, out GoblinObservationRecord? candidate))
+                {
+                    return false;
+                }
+
+                recentMinimapObservation = candidate;
+            }
+
+            if (!recentMinimapObservation.Source.Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
+                !GoblinTypeNormalizer.Normalize(recentMinimapObservation.GoblinType).Equals(normalizedGoblinType, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(GoblinAreaResolver.NormalizedKey(recentMinimapObservation.AreaKey), GoblinAreaResolver.NormalizedKey(areaKey), StringComparison.OrdinalIgnoreCase) ||
+                recentMinimapObservation.EvidenceConfidence < PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence)
+            {
+                return false;
+            }
+
+            recentMinimapAgeSeconds = Math.Max(0, (nowUtc - recentMinimapObservation.TimestampUtc).TotalSeconds);
+            return recentMinimapAgeSeconds <= PortAutomaticGoblinRecentMinimapJournalConfirmationWindow.TotalSeconds;
+        }
 
         private static string PortNormalizeGoblinObservationSource(string source)
         {

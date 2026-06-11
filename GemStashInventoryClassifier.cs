@@ -171,10 +171,11 @@ namespace GoblinFarmer
 
                     GemStashInventorySlotMetrics metrics = MeasureSlot(inventoryGrid, local);
                     bool templateAccepted = bestConfidence >= threshold;
+                    bool nearThresholdTemplateAccepted = bestConfidence >= Math.Max(0.70, threshold - 0.06);
                     bool colorAccepted = loadedTemplates.Count > 0 && IsGemColorFallback(metrics, bestConfidence);
                     bool salvageAllowsGem = salvageDiagnostics.TryGetValue((row + 1, column + 1), out SalvageInventorySlotCandidateDiagnostic? salvageDiagnostic) &&
                         salvageDiagnostic.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase);
-                    bool acceptedBeforeSalvageGuard = templateAccepted || colorAccepted;
+                    bool acceptedBeforeSalvageGuard = templateAccepted || colorAccepted || nearThresholdTemplateAccepted;
                     bool accepted = acceptedBeforeSalvageGuard && salvageAllowsGem;
                     string reason = loadedTemplates.Count == 0
                         ? "NoValidGemTemplates"
@@ -182,7 +183,11 @@ namespace GoblinFarmer
                             ? salvageAllowsGem
                                 ? "GemTemplateMatched"
                                 : "RejectedNonGemFootprint"
-                            : colorAccepted
+                            : nearThresholdTemplateAccepted
+                                ? salvageAllowsGem
+                                    ? "GemTemplateNearThresholdVerifiedGem"
+                                    : "RejectedNonGemFootprint"
+                                : colorAccepted
                                 ? salvageAllowsGem
                                     ? "GemColorMatched"
                                     : "RejectedNonGemFootprint"

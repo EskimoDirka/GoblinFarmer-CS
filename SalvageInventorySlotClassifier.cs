@@ -1,4 +1,5 @@
 using System.Drawing;
+using OpenCvSharp;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
@@ -73,6 +74,11 @@ namespace GoblinFarmer
 
         public static SalvageInventorySlotScanResult Scan(Bitmap inventoryGrid, Rectangle screenGrid)
         {
+            return Scan(inventoryGrid, screenGrid, unidentifiedLegendaryTemplatePath: "");
+        }
+
+        public static SalvageInventorySlotScanResult Scan(Bitmap inventoryGrid, Rectangle screenGrid, string unidentifiedLegendaryTemplatePath)
+        {
             if (inventoryGrid.Width <= 0 || inventoryGrid.Height <= 0)
             {
                 return new SalvageInventorySlotScanResult([], []);
@@ -89,8 +95,16 @@ namespace GoblinFarmer
             bool[,] weakFootprintLike = new bool[Rows, Columns];
             bool[,] regularGemLike = new bool[Rows, Columns];
             bool[,] occupied = new bool[Rows, Columns];
+            bool[,] unidentifiedLegendaryLike = new bool[Rows, Columns];
             SalvageInventorySlotMetrics[,] metrics = new SalvageInventorySlotMetrics[Rows, Columns];
             DrawingPoint[,] points = new DrawingPoint[Rows, Columns];
+            using Mat? unidentifiedLegendaryTemplate = TryLoadUnidentifiedLegendaryTemplate(unidentifiedLegendaryTemplatePath, slotWidth, slotHeight);
+            using Mat? gridMat = unidentifiedLegendaryTemplate == null ? null : OpenCvSharp.Extensions.BitmapConverter.ToMat(inventoryGrid);
+            using Mat? bgrGrid = gridMat == null ? null : new Mat();
+            if (gridMat != null && bgrGrid != null)
+            {
+                Cv2.CvtColor(gridMat, bgrGrid, ColorConversionCodes.BGRA2BGR);
+            }
 
             for (int row = 0; row < Rows; row++)
             {
@@ -98,9 +112,11 @@ namespace GoblinFarmer
                 {
                     Rectangle local = InventoryGridLayout.SlotRectangle(inventoryGrid, row, column);
                     SalvageInventorySlotMetrics slotMetrics = MeasureSlot(inventoryGrid, local);
+                    unidentifiedLegendaryLike[row, column] = IsUnidentifiedLegendaryTemplateMatch(bgrGrid, unidentifiedLegendaryTemplate, local);
                     metrics[row, column] = slotMetrics;
                     points[row, column] = InventoryGridLayout.SlotScreenPoint(screenGrid, local);
                     strongItemLike[row, column] =
+                        unidentifiedLegendaryLike[row, column] ||
                         (slotMetrics.ColoredFramePixels >= MinimumColoredFramePixels &&
                             slotMetrics.InnerBrightPixels >= MinimumInnerBrightPixels &&
                             slotMetrics.InnerSaturatedPixels >= MinimumInnerSaturatedPixels) ||
@@ -139,7 +155,7 @@ namespace GoblinFarmer
             }
 
             Dictionary<(int Row, int Column), ItemFootprint> footprintsByCell = [];
-            List<ItemFootprint> footprints = BuildFootprints(occupied, metrics);
+            List<ItemFootprint> footprints = BuildFootprints(occupied, metrics, unidentifiedLegendaryLike);
             foreach (ItemFootprint footprint in footprints)
             {
                 for (int row = footprint.StartRow; row < footprint.StartRow + footprint.Rows; row++)
@@ -210,7 +226,7 @@ namespace GoblinFarmer
             return new SalvageInventorySlotScanResult(targets, diagnostics);
         }
 
-        private static List<ItemFootprint> BuildFootprints(bool[,] occupied, SalvageInventorySlotMetrics[,] metrics)
+        private static List<ItemFootprint> BuildFootprints(bool[,] occupied, SalvageInventorySlotMetrics[,] metrics, bool[,] unidentifiedLegendaryLike)
         {
             List<ItemFootprint> footprints = [];
             for (int column = 0; column < Columns; column++)
@@ -231,7 +247,7 @@ namespace GoblinFarmer
                     }
 
                     int endRowExclusive = row;
-                    AddLegalFootprints(footprints, metrics, startRow, endRowExclusive, column);
+                    AddLegalFootprints(footprints, metrics, unidentifiedLegendaryLike, startRow, endRowExclusive, column);
                 }
             }
 
@@ -241,6 +257,7 @@ namespace GoblinFarmer
         private static void AddLegalFootprints(
             List<ItemFootprint> footprints,
             SalvageInventorySlotMetrics[,] metrics,
+            bool[,] unidentifiedLegendaryLike,
             int startRow,
             int endRowExclusive,
             int column)
@@ -253,16 +270,17 @@ namespace GoblinFarmer
                     continue;
                 }
 
-                AddLegalFootprintSegment(footprints, metrics, segmentStart, row, column);
+                AddLegalFootprintSegment(footprints, metrics, unidentifiedLegendaryLike, segmentStart, row, column);
                 segmentStart = row;
             }
 
-            AddLegalFootprintSegment(footprints, metrics, segmentStart, endRowExclusive, column);
+            AddLegalFootprintSegment(footprints, metrics, unidentifiedLegendaryLike, segmentStart, endRowExclusive, column);
         }
 
         private static void AddLegalFootprintSegment(
             List<ItemFootprint> footprints,
             SalvageInventorySlotMetrics[,] metrics,
+            bool[,] unidentifiedLegendaryLike,
             int startRow,
             int endRowExclusive,
             int column)
@@ -271,7 +289,7 @@ namespace GoblinFarmer
             while (row < endRowExclusive)
             {
                 int rows = Math.Min(MaximumItemFootprintRows, endRowExclusive - row);
-                string quality = ResolveQuality(metrics, row, column, rows);
+                string quality = ResolveQuality(metrics, unidentifiedLegendaryLike, row, column, rows);
                 footprints.Add(new ItemFootprint(
                     row,
                     column,
@@ -344,14 +362,21 @@ namespace GoblinFarmer
             return "InsufficientItemColor";
         }
 
-        private static string ResolveQuality(SalvageInventorySlotMetrics[,] metrics, int topRow, int column, int footprintRows)
+        private static string ResolveQuality(SalvageInventorySlotMetrics[,] metrics, bool[,] unidentifiedLegendaryLike, int topRow, int column, int footprintRows)
         {
             int greenPixels = 0;
             int orangePixels = 0;
+            bool unidentifiedLegendary = false;
             for (int row = topRow; row < Rows && row < topRow + footprintRows; row++)
             {
                 greenPixels += metrics[row, column].GreenQualityPixels;
                 orangePixels += metrics[row, column].OrangeQualityPixels;
+                unidentifiedLegendary = unidentifiedLegendary || unidentifiedLegendaryLike[row, column];
+            }
+
+            if (unidentifiedLegendary)
+            {
+                return "Legendary";
             }
 
             if (greenPixels >= SetQualityPixels)
@@ -472,6 +497,37 @@ namespace GoblinFarmer
                 (metrics.OrangeQualityPixels >= 250 ||
                     metrics.GreenQualityPixels >= 250 ||
                     metrics.RegularGemPixels >= 120);
+        }
+
+        private static Mat? TryLoadUnidentifiedLegendaryTemplate(string path, int slotWidth, int slotHeight)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return null;
+            }
+
+            Mat mat = Cv2.ImRead(path, ImreadModes.Color);
+            if (mat.Empty() || mat.Width <= 0 || mat.Height <= 0 || mat.Width > slotWidth || mat.Height > slotHeight)
+            {
+                mat.Dispose();
+                return null;
+            }
+
+            return mat;
+        }
+
+        private static bool IsUnidentifiedLegendaryTemplateMatch(Mat? bgrGrid, Mat? template, Rectangle local)
+        {
+            if (bgrGrid == null || template == null)
+            {
+                return false;
+            }
+
+            using Mat slot = new(bgrGrid, new OpenCvSharp.Rect(local.Left, local.Top, local.Width, local.Height));
+            using Mat result = new();
+            Cv2.MatchTemplate(slot, template, result, TemplateMatchModes.CCoeffNormed);
+            Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out _);
+            return maxVal >= 0.78;
         }
 
         private static bool HasStrongNonGemQualityBoundary(SalvageInventorySlotMetrics metrics)

@@ -707,6 +707,21 @@ namespace GoblinFarmer
                     !string.Equals(firstSeenAreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
                 if (firstSeenAreaChanged)
                 {
+                    if (PortTryGetRecentMinimapJournalConfirmation(goblinType, areaKey, nowUtc, out GoblinObservationRecord? recentMinimap, out double recentMinimapAgeSeconds))
+                    {
+                        PortLogJournalEvidenceFreshnessDiagnostic(
+                            "JournalEngagedAcceptedRecentMinimapConfirmation",
+                            template,
+                            match,
+                            displayArea,
+                            $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(firstSeenAreaKey)}; currentArea={PortLogField(areaKey)}; recentMinimapArea={PortLogField(recentMinimap.AreaKey)}; recentMinimapAgeSeconds={recentMinimapAgeSeconds:0.0}; recentMinimapConfidence={recentMinimap.EvidenceConfidence:0.000}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        acceptedCandidate = candidate with
+                        {
+                            Notes = $"{candidate.Notes}; JournalFreshness=EngagedAcceptedRecentMinimapConfirmation; JournalArea={displayArea}"
+                        };
+                        return true;
+                    }
+
                     PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc, firstSeenAreaKey);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalEngagedIgnoredAreaChanged",
@@ -719,6 +734,21 @@ namespace GoblinFarmer
 
                 if (!GoblinJournalFreshnessPolicy.EngagedIsFresh(firstSeenUtc, firstSeenAreaKey, areaKey, nowUtc, GoblinJournalEvidenceFreshWindow))
                 {
+                    if (PortTryGetRecentMinimapJournalConfirmation(goblinType, areaKey, nowUtc, out GoblinObservationRecord? recentMinimap, out double recentMinimapAgeSeconds))
+                    {
+                        PortLogJournalEvidenceFreshnessDiagnostic(
+                            "JournalEngagedAcceptedRecentMinimapConfirmation",
+                            template,
+                            match,
+                            displayArea,
+                            $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(firstSeenAreaKey)}; currentArea={PortLogField(areaKey)}; recentMinimapArea={PortLogField(recentMinimap.AreaKey)}; recentMinimapAgeSeconds={recentMinimapAgeSeconds:0.0}; recentMinimapConfidence={recentMinimap.EvidenceConfidence:0.000}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        acceptedCandidate = candidate with
+                        {
+                            Notes = $"{candidate.Notes}; JournalFreshness=EngagedAcceptedRecentMinimapConfirmation; JournalArea={displayArea}"
+                        };
+                        return true;
+                    }
+
                     PortRememberStaleSuppressedJournalEvidence(journalLineSignature, nowUtc, firstSeenAreaKey);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalEngagedIgnoredStale",

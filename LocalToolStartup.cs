@@ -22,29 +22,49 @@ namespace GoblinFarmer
                 return;
             }
 
-            try
+            for (int attempt = 1; attempt <= 2; attempt++)
             {
-                ProcessStartInfo startInfo = new()
+                try
                 {
-                    FileName = "powershell.exe",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WorkingDirectory = projectRoot,
-                };
-                startInfo.ArgumentList.Add("-NoProfile");
-                startInfo.ArgumentList.Add("-ExecutionPolicy");
-                startInfo.ArgumentList.Add("Bypass");
-                startInfo.ArgumentList.Add("-File");
-                startInfo.ArgumentList.Add(scriptPath);
-                startInfo.ArgumentList.Add("-ProjectRoot");
-                startInfo.ArgumentList.Add(projectRoot);
+                    ProcessStartInfo startInfo = new()
+                    {
+                        FileName = "powershell.exe",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WorkingDirectory = projectRoot,
+                    };
+                    startInfo.ArgumentList.Add("-NoProfile");
+                    startInfo.ArgumentList.Add("-ExecutionPolicy");
+                    startInfo.ArgumentList.Add("Bypass");
+                    startInfo.ArgumentList.Add("-File");
+                    startInfo.ArgumentList.Add(scriptPath);
+                    startInfo.ArgumentList.Add("-ProjectRoot");
+                    startInfo.ArgumentList.Add(projectRoot);
 
-                Process? process = Process.Start(startInfo);
-                AppLogger.Info($"AutoRecordDiabloMonitorLaunchRequested: scriptPath={scriptPath}; projectRoot={projectRoot}; processId={process?.Id.ToString() ?? "unknown"}");
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error($"AutoRecordDiabloMonitorLaunchFailed: scriptPath={scriptPath}; projectRoot={projectRoot}", ex);
+                    Process? process = Process.Start(startInfo);
+                    AppLogger.Info($"AutoRecordDiabloMonitorLaunchRequested: scriptPath={scriptPath}; projectRoot={projectRoot}; processId={process?.Id.ToString() ?? "unknown"}; attempt={attempt}");
+                    if (process == null)
+                    {
+                        AppLogger.Info($"AutoRecordDiabloMonitorLaunchRetry: reason=ProcessStartReturnedNull; scriptPath={scriptPath}; attempt={attempt}");
+                        continue;
+                    }
+
+                    if (!process.WaitForExit(750))
+                    {
+                        AppLogger.Info($"AutoRecordDiabloMonitorReady: scriptPath={scriptPath}; processId={process.Id}; attempt={attempt}; state=Running");
+                        return;
+                    }
+
+                    AppLogger.Info($"AutoRecordDiabloMonitorExitedEarly: scriptPath={scriptPath}; processId={process.Id}; exitCode={process.ExitCode}; attempt={attempt}");
+                    if (process.ExitCode == 0)
+                    {
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error($"AutoRecordDiabloMonitorLaunchFailed: scriptPath={scriptPath}; projectRoot={projectRoot}; attempt={attempt}", ex);
+                }
             }
         }
 
