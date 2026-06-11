@@ -170,30 +170,14 @@ namespace GoblinFarmer
                     suppressionReason = "MinimapConfidencePendingJournal";
                 }
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
-                    PortJournalEngagedHasRecentMinimapConfirmation(
+                    !(evidenceReliabilityAllowsCount = PortTryApplyRecentMinimapJournalConfirmationReliability(
                         observation,
                         area.AreaKey,
                         autoEvidenceKey,
                         nowUtc,
-                        out GoblinObservationRecord recentMinimapConfirmation,
-                        out double recentMinimapConfirmationAgeSeconds))
-                {
-                    evidenceReliabilityAllowsCount = true;
-                    evidenceReliability = "JournalEngagedRecentMinimapConfirmation";
-                    reliabilityReason = "";
-                    AppLogger.Info(
-                        "GoblinTracker: JournalEngagedRecentMinimapConfirmation " +
-                        $"areaKey={PortLogField(PortDisplayLocation(area.AreaKey))} " +
-                        $"source={PortLogField(observation.Source)} " +
-                        $"goblinType={PortLogField(observation.GoblinType)} " +
-                        $"journalConfidence={observation.EvidenceConfidence:0.000} " +
-                        $"recentMinimapConfidence={recentMinimapConfirmation.EvidenceConfidence:0.000} " +
-                        $"recentMinimapAgeSeconds={recentMinimapConfirmationAgeSeconds:0.0} " +
-                        $"recentMinimapWindowSeconds={PortAutomaticGoblinRecentMinimapJournalConfirmationWindow.TotalSeconds:0} " +
-                        $"recentMinimapMinConfidence={PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence:0.000}");
-                }
-                else if (string.IsNullOrWhiteSpace(suppressionReason) &&
-                    !(evidenceReliabilityAllowsCount = GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+                        out reliabilityReason,
+                        out evidenceReliability) ||
+                    GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
                         observation.Source,
                         autoEvidenceKey,
                         evidenceFirstSeenAgeSeconds,
@@ -558,6 +542,42 @@ namespace GoblinFarmer
                     ["ReliabilityReason"] = reliabilityReason,
                     ["Total"] = total.ToString(CultureInfo.InvariantCulture),
                 }));
+        }
+
+        private bool PortTryApplyRecentMinimapJournalConfirmationReliability(
+            GoblinObservationRecord observation,
+            string areaKey,
+            string evidenceSignature,
+            DateTime nowUtc,
+            out string reliabilityReason,
+            out string evidenceReliability)
+        {
+            reliabilityReason = "";
+            evidenceReliability = "";
+            if (!PortJournalEngagedHasRecentMinimapConfirmation(
+                observation,
+                areaKey,
+                evidenceSignature,
+                nowUtc,
+                out GoblinObservationRecord recentMinimapConfirmation,
+                out double recentMinimapConfirmationAgeSeconds))
+            {
+                return false;
+            }
+
+            evidenceReliability = "JournalEngagedRecentMinimapConfirmation";
+            AppLogger.Info(
+                "GoblinTracker: JournalEngagedRecentMinimapConfirmation " +
+                $"areaKey={PortLogField(PortDisplayLocation(areaKey))} " +
+                $"source={PortLogField(observation.Source)} " +
+                $"goblinType={PortLogField(observation.GoblinType)} " +
+                $"journalConfidence={observation.EvidenceConfidence:0.000} " +
+                $"recentMinimapConfidence={recentMinimapConfirmation.EvidenceConfidence:0.000} " +
+                $"recentMinimapAgeSeconds={recentMinimapConfirmationAgeSeconds:0.0} " +
+                $"recentMinimapWindowSeconds={PortAutomaticGoblinRecentMinimapJournalConfirmationWindow.TotalSeconds:0} " +
+                $"recentMinimapMinConfidence={PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence:0.000} " +
+                "continuesThroughDuplicateGuard=True");
+            return true;
         }
 
         private static bool PortObservationPendingJournalPromotedByReliability(

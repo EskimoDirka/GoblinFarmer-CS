@@ -458,6 +458,10 @@ static void TestVsDebugStartupRequestsDiabloAutoRecordMonitor()
     {
         string localScriptSource = File.ReadAllText(localScriptPath);
         AssertTrue(localScriptSource.Contains("StopRecord", StringComparison.Ordinal), "auto-record script should stop OBS recording after Diablo closes");
+        AssertTrue(localScriptSource.Contains("Get-VisibleDiabloProcesses", StringComparison.Ordinal), "auto-record script should distinguish visible Diablo windows from lingering background processes");
+        AssertTrue(localScriptSource.Contains("MainWindowHandle", StringComparison.Ordinal), "auto-record script should use Diablo window presence for recording lifetime");
+        AssertTrue(localScriptSource.Contains("Diablo process detected without visible window; treating as closed for recording", StringComparison.Ordinal), "auto-record script should log no-window Diablo processes for shutdown diagnostics");
+        AssertTrue(localScriptSource.Contains("Stop-Recording -Reason \"Diablo window closed\"", StringComparison.Ordinal), "auto-record script should stop OBS when the Diablo window closes even if a process lingers");
         AssertTrue(localScriptSource.Contains("$script:obsLaunchedByMonitor", StringComparison.Ordinal), "auto-record script should track whether it launched OBS");
         AssertTrue(localScriptSource.Contains("CloseMainWindow()", StringComparison.Ordinal), "auto-record script should close OBS when the monitor launched it");
         AssertTrue(localScriptSource.Contains("OBS left running because it was not launched by this monitor.", StringComparison.Ordinal), "auto-record script should avoid closing a manually opened OBS instance");
@@ -1084,8 +1088,10 @@ static void TestGoblinMinimapColorDisambiguatesTreasureAndOdious()
     string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
 
     AssertTrue(evidenceModelSource.Contains("GoblinMinimapColorClassification", StringComparison.Ordinal), "minimap template matches should carry color classification data");
-    AssertTrue(evidenceSource.Contains("PortApplyMinimapColorDisambiguation(bestTemplate, bestMatch)", StringComparison.Ordinal), "minimap candidates should apply color disambiguation before creating the observation candidate");
+    AssertTrue(evidenceSource.Contains("PortShouldSuppressMinimapColorDisagreement(bestTemplate, bestMatch", StringComparison.Ordinal), "minimap candidates should reject template/color disagreement before creating the observation candidate");
     AssertTrue(evidenceSource.Contains("GoblinEvidenceMinimapColorOverride", StringComparison.Ordinal), "Treasure/Odious minimap color overrides should be logged");
+    AssertTrue(evidenceSource.Contains("GoblinEvidenceMinimapColorDisagreement", StringComparison.Ordinal), "Treasure/Odious minimap template/color disagreements should be logged");
+    AssertTrue(evidenceSource.Contains("MinimapColorDisagreement", StringComparison.Ordinal), "Treasure/Odious minimap template/color disagreements should suppress the candidate pending Journal confirmation");
     AssertTrue(evidenceSource.Contains("PortGoblinTypeUsesTreasureOdiousMinimapColor", StringComparison.Ordinal), "color override should be scoped to the Treasure/Odious pair");
     AssertTrue(evidenceSource.Contains("return \"Treasure Goblin\"", StringComparison.Ordinal), "yellow minimap matches should classify as Treasure Goblin");
     AssertTrue(evidenceSource.Contains("return \"Odious Collector\"", StringComparison.Ordinal), "green minimap matches should classify as Odious Collector");
@@ -5234,6 +5240,8 @@ static void TestGoblinEngagedJournalCanCountAfterRecentMinimapConfirmation()
 
     AssertTrue(autoCountSource.Contains("JournalEngagedRecentMinimapConfirmation", StringComparison.Ordinal), "auto-count should name the recent-minimap journal reliability path");
     AssertTrue(autoCountSource.Contains("PortJournalEngagedHasRecentMinimapConfirmation", StringComparison.Ordinal), "auto-count should check recent minimap support before suppressing Engaged journal evidence");
+    AssertTrue(autoCountSource.Contains("PortTryApplyRecentMinimapJournalConfirmationReliability", StringComparison.Ordinal), "recent minimap confirmation should be a reliability promotion, not a terminal accepted branch");
+    AssertTrue(autoCountSource.Contains("continuesThroughDuplicateGuard=True", StringComparison.Ordinal), "recent minimap confirmation should log that normal duplicate/count acceptance still runs");
     AssertTrue(autoCountSource.Contains("PortObservationPendingJournalPromotedByReliability", StringComparison.Ordinal), "pending journal observations should be promotable by reliability");
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationWindow", StringComparison.Ordinal), "recent minimap confirmation should be bounded by a short window");
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence", StringComparison.Ordinal), "recent minimap confirmation should keep a minimum confidence floor");
@@ -5541,6 +5549,7 @@ static void TestGoblinAutoCountNotificationsRequirePositiveTotals()
     int notificationIndex = autoCountMethod.IndexOf("PortShowSplash(", StringComparison.Ordinal);
     AssertTrue(guardIndex > acceptedIndex, "positive-total notification guard should run after count acceptance is known");
     AssertTrue(notificationIndex > guardIndex, "auto-count splash notifications should only run after positive-total validation");
+    AssertTrue(autoCountMethod.IndexOf("PortTryApplyRecentMinimapJournalConfirmationReliability", StringComparison.Ordinal) < autoCountMethod.IndexOf("portGoblinAreaDuplicateGuard.TryAccept", StringComparison.Ordinal), "recent-minimap journal confirmation must continue into the normal area-count acceptance path");
     AssertTrue(autoCountMethod.Contains("AutoCountNotificationSkipped", StringComparison.Ordinal), "invalid totals should be diagnosed instead of showing user-facing notifications");
     AssertTrue(autoCountMethod.Contains("reason=InvalidTotal", StringComparison.Ordinal), "invalid-total notification suppression should log a clear reason");
 }
@@ -7514,6 +7523,9 @@ static void TestRepairFlowVerifiesRepairCompletion()
     AssertTrue(repairMethod.Contains("RepairCompletionVerification", StringComparison.Ordinal), "repair flow should log completion verification");
     AssertTrue(repairMethod.Contains("NoRepairNeeded", StringComparison.Ordinal), "inactive repair button should be explicitly diagnosed as no repair needed");
     AssertTrue(repairMethod.Contains("RepairPerformedConfirmed", StringComparison.Ordinal), "successful repair click should require post-click inactive confirmation");
+    AssertTrue(repairMethod.Contains("RepairClickSoftConfirmed", StringComparison.Ordinal), "repair clicks with a large active-pixel drop should continue as soft-confirmed");
+    AssertTrue(repairMethod.Contains("PortRepairClickLikelySucceeded", StringComparison.Ordinal), "repair flow should classify likely successful clicks before failing");
+    AssertTrue(repairMethod.Contains("activePixelDropRatio=", StringComparison.Ordinal), "repair verification should log the active-pixel drop ratio");
     AssertTrue(repairMethod.Contains("RepairClickUnconfirmed", StringComparison.Ordinal), "repair flow should diagnose click attempts that leave the button active");
     AssertTrue(repairMethod.Contains("RepairCompletionUnconfirmed", StringComparison.Ordinal), "unconfirmed repair completion should capture diagnostics");
     AssertTrue(repairMethod.Contains("RecordRepairFailure", StringComparison.Ordinal), "unconfirmed repair completion should be recorded as a repair failure");

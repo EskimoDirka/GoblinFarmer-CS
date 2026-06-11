@@ -90,9 +90,11 @@ namespace GoblinFarmer
                 ? "NoRepairNeeded"
                 : repairButtonClickSent && !postRepairButtonSample.Active
                     ? "RepairPerformedConfirmed"
-                    : repairButtonClickSent
-                        ? "RepairClickUnconfirmed"
-                        : "RepairClickNotSent";
+                    : repairButtonClickSent && PortRepairClickLikelySucceeded(repairButtonSample, postRepairButtonSample)
+                        ? "RepairClickSoftConfirmed"
+                        : repairButtonClickSent
+                            ? "RepairClickUnconfirmed"
+                            : "RepairClickNotSent";
             int reportedActivePixels = repairButtonSample.WideSample.Active
                 ? repairButtonSample.WideSample.ActivePixels
                 : repairButtonSample.CenterSample.ActivePixels;
@@ -127,6 +129,7 @@ namespace GoblinFarmer
                 $"postWideActivePixels={postRepairButtonSample.WideSample.ActivePixels}; " +
                 $"postWideSampledPixels={postRepairButtonSample.WideSample.SampledPixels}; " +
                 $"postWideActiveRatio={postRepairButtonSample.WideSample.ActiveRatio:0.000}; " +
+                $"activePixelDropRatio={PortRepairActivePixelDropRatio(repairButtonSample, postRepairButtonSample):0.000}; " +
                 $"diagnosticCropPath={PortLogField(repairButtonSample.DiagnosticCropPath)}; " +
                 $"repairButtonClickSent={repairButtonClickSent}; " +
                 $"elapsed={repairPerf.ElapsedMilliseconds}ms");
@@ -146,6 +149,31 @@ namespace GoblinFarmer
 
             PortCaptureSuccessScreenshot("Repair", "RepairComplete");
             return true;
+        }
+
+        private static bool PortRepairClickLikelySucceeded(PortRepairButtonVisualSample preClick, PortRepairButtonVisualSample postClick)
+        {
+            if (!preClick.Active || !postClick.Active)
+            {
+                return false;
+            }
+
+            double dropRatio = PortRepairActivePixelDropRatio(preClick, postClick);
+            return preClick.WideSample.ActivePixels >= PortRepairButtonWideActivePixelThreshold &&
+                postClick.CenterSample.ActivePixels == 0 &&
+                (dropRatio >= 0.55 ||
+                    postClick.WideSample.ActivePixels <= PortRepairButtonWideActivePixelThreshold * 3);
+        }
+
+        private static double PortRepairActivePixelDropRatio(PortRepairButtonVisualSample preClick, PortRepairButtonVisualSample postClick)
+        {
+            if (preClick.WideSample.ActivePixels <= 0)
+            {
+                return 0;
+            }
+
+            int drop = Math.Max(0, preClick.WideSample.ActivePixels - postClick.WideSample.ActivePixels);
+            return drop / (double)preClick.WideSample.ActivePixels;
         }
 
         private bool PortRepairGear(CancellationToken token)

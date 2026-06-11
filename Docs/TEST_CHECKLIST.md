@@ -32,6 +32,7 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Journal logs include name-validation/history-row/history-input suppression when those protections fire.
 - Suppressed/duplicate automatic-count paths do not show user-facing notifications, and an invalid automatic-count total logs `AutoCountNotificationSkipped reason=InvalidTotal`.
 - Non-counting idle Journal evidence cannot repopulate Last Observation while combat is inactive; expected diagnostic is `LastObservationUpdateSkippedPublishGuard`.
+- Treasure/Odious minimap template and color evidence must agree before minimap-only counting; mismatches should log `GoblinEvidenceMinimapColorDisagreement` and wait for safer evidence instead of showing the wrong goblin type.
 
 ## Route Logic
 
@@ -52,9 +53,11 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Encounter captures save fullscreen, minimap, journal, and metadata for accepted Goblin Tracker counts in VS Debug.
 - Manual recognition captures save fullscreen, minimap, journal, and metadata only when `Capture` is clicked.
 - Runtime inventory replay remains log-first by default; debug package replay can load structured replay logs, while image replay requires explicit review crops/frames.
+- VS Debug OBS auto-recording starts when a visible Diablo game window appears and stops when the visible Diablo window closes, even if a no-window Diablo process lingers until the debug form exits.
 
 ## Town Flow
 
 - Repair diagnostics log `RepairButtonColorSample` before and after actionable repair clicks, including `visualState`, center/wide active-pixel metrics, and `RepairCompletionVerification`; inactive or uncertain debug-mode samples should save a focused `RepairButtonFocused_*.png` crop under `debug-screenshots\Repair`.
+- Repair may soft-confirm a likely successful repair click when focused active pixels collapse after clicking even if residual edge pixels still look active, allowing salvage and auto-stash to continue.
 - Unidentified legendary and set salvage templates are used when present; template-matched unidentified gear and low-color muted-top-edge unidentified legendary leftovers remain confirmation-expected salvage, not gems or detached footprints.
 - Auto-stash only right-clicks stack-verified gem targets. Unidentified gear or non-gem leftovers should log `RejectedNonGemFootprint` or `RejectedGemStackVerification`.

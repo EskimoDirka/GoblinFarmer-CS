@@ -448,6 +448,32 @@ namespace GoblinFarmer
                 referenceRegion,
                 bestMatch,
                 force: true);
+            if (PortShouldSuppressMinimapColorDisagreement(bestTemplate, bestMatch, out string colorGoblinType))
+            {
+                AppLogger.Info(
+                    "GoblinEvidenceMinimapColorDisagreement: " +
+                    $"templateGoblinType={PortLogField(bestTemplate.GoblinType)}; " +
+                    $"colorGoblinType={PortLogField(colorGoblinType)}; " +
+                    $"templateName={PortLogField(bestTemplate.FileName)}; " +
+                    $"yellowPixels={bestMatch.MinimapColor.YellowPixels}; " +
+                    $"orangePixels={bestMatch.MinimapColor.OrangePixels}; " +
+                    $"greenPixels={bestMatch.MinimapColor.GreenPixels}; " +
+                    $"purplePixels={bestMatch.MinimapColor.PurplePixels}; " +
+                    $"coloredPixels={bestMatch.MinimapColor.ColoredPixels}; " +
+                    $"matchPoint={FormatPoint(bestMatch.MatchPoint)}; " +
+                    $"screenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}; " +
+                    "action=SuppressPendingJournal");
+                PortLogGoblinEvidenceDetectorDiagnostic(
+                    bestTemplate,
+                    "NotFound",
+                    "MinimapColorDisagreement",
+                    bestImagePath,
+                    referenceRegion,
+                    bestMatch,
+                    force: true);
+                return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch, rankedSamples);
+            }
+
             string goblinType = PortApplyMinimapColorDisambiguation(bestTemplate, bestMatch);
             GoblinEvidenceCandidate candidate = new(
                 bestTemplate.Type,
@@ -2092,6 +2118,23 @@ namespace GoblinFarmer
             }
 
             return classifiedGoblinType;
+        }
+
+        private static bool PortShouldSuppressMinimapColorDisagreement(
+            GoblinEvidenceTemplateRequirement template,
+            GoblinEvidenceTemplateMatch match,
+            out string colorGoblinType)
+        {
+            colorGoblinType = "";
+            if (!PortNormalizeGoblinObservationSource(template.Source).Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
+                !PortGoblinTypeUsesTreasureOdiousMinimapColor(template.GoblinType))
+            {
+                return false;
+            }
+
+            colorGoblinType = PortClassifyTreasureOdiousMinimapColor(match.MinimapColor);
+            return !string.IsNullOrWhiteSpace(colorGoblinType) &&
+                !colorGoblinType.Equals(template.GoblinType, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool PortGoblinTypeUsesMinimapColorDisambiguation(string goblinType)

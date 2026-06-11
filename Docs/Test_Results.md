@@ -2,6 +2,32 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-11 111859 Live Review Fix Pass
+
+- Review inputs: `DebugPackages\GoblinFarmer_Debug_20260611_111859.zip` and `Video Clip Review\2026-06-11 10-39-48.mkv`.
+- Issues covered: wrong first notification for a Highlands Cave Odious Collector, delayed Western Channel Level 1 and Battlefields notifications from accepted counts with `total=0`, repair stop after a visually successful click, and OBS recording continuing until the VS Debug form closed when the Diablo process lingered without a visible game window.
+- Fix coverage: Treasure/Odious minimap template/color disagreement is suppressed for Journal confirmation instead of reporting the wrong type, recent-minimap Journal reliability now continues through duplicate guard and count recording, repair can soft-confirm a click when focused active pixels collapse, and the local OBS monitor stops recording when the visible Diablo window closes.
+- Replay note: `--debug-package-replay` loaded the attached package successfully; it contained no replay logs or review frames to replay.
+
+Validation commands:
+
+```powershell
+dotnet build .\GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay .\DebugPackages\GoblinFarmer_Debug_20260611_111859.zip
+git diff --check
+```
+
+Results:
+
+- `dotnet build .\GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed with new checks for Treasure/Odious minimap disagreement suppression, recent-minimap Journal count recording, repair soft confirmation, and visible-window OBS shutdown source coverage.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay .\DebugPackages\GoblinFarmer_Debug_20260611_111859.zip`: passed package load; no image scenarios were present.
+
 ## 2026-06-11 Best-Sample Promotion Helper
 
 - Scope covered: reusable debug-only image-recognition best-sample capture/promotion helper wired to Goblin Evidence and Gem Auto-Stash only; Salvage remains excluded.
