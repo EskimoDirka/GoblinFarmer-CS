@@ -108,6 +108,7 @@ namespace GoblinFarmer
     internal static class GoblinEvidenceTemplateRequirements
     {
         public const double JournalThreshold = 0.90;
+        public const double GelatinousSireJournalThreshold = 0.78;
         public const double MinimapThreshold = 0.65;
 
         public static GoblinEvidenceTemplateCatalog DiscoverTemplates(string templateDirectory)
@@ -471,9 +472,7 @@ namespace GoblinFarmer
                     : evidenceKind == GoblinEvidenceTemplateKind.JournalKilled
                         ? GoblinEvidenceType.JournalKill
                         : GoblinEvidenceType.JournalEncounter;
-                double threshold = evidenceKind == GoblinEvidenceTemplateKind.Minimap
-                    ? MinimapThreshold
-                    : JournalThreshold;
+                double threshold = ResolveTemplateThreshold(GoblinTypeNormalizer.Normalize(goblinType), evidenceKind);
                 template = new GoblinEvidenceTemplateRequirement(
                     evidenceType,
                     normalizedSource,
@@ -544,7 +543,7 @@ namespace GoblinFarmer
                 evidenceType,
                 source,
                 $"{baseName}.png",
-                threshold,
+                ResolveTemplateThreshold(GoblinTypeNormalizer.Normalize(goblinType), kind, threshold),
                 GoblinTypeNormalizer.Normalize(goblinType),
                 kind);
             return true;
@@ -584,10 +583,26 @@ namespace GoblinFarmer
                 evidenceType,
                 source,
                 $"{baseName}.png",
-                threshold,
+                ResolveTemplateThreshold(GoblinTypeNormalizer.Normalize(goblinType), kind, threshold),
                 GoblinTypeNormalizer.Normalize(goblinType),
                 kind);
             return true;
+        }
+
+        private static double ResolveTemplateThreshold(
+            string goblinType,
+            GoblinEvidenceTemplateKind kind,
+            double defaultThreshold = JournalThreshold)
+        {
+            if (!kind.Equals(GoblinEvidenceTemplateKind.Minimap) &&
+                GoblinTypeNormalizer.Normalize(goblinType).Equals("Gelatinous Sire", StringComparison.OrdinalIgnoreCase))
+            {
+                return GelatinousSireJournalThreshold;
+            }
+
+            return kind == GoblinEvidenceTemplateKind.Minimap
+                ? MinimapThreshold
+                : defaultThreshold;
         }
     }
 
@@ -1116,7 +1131,7 @@ namespace GoblinFarmer
         public const string JournalPendingKilledOrMinimapConfirmation = "JournalPendingKilledOrMinimapConfirmation";
         public const string JournalEngagedSustainedActiveCombat = "JournalEngagedSustainedActiveCombat";
         public const string JournalEvidenceKindUnknown = "JournalEvidenceKindUnknown";
-        public static readonly TimeSpan JournalEngagedSustainedActiveCombatMinimumAge = TimeSpan.FromSeconds(2);
+        public static readonly TimeSpan JournalEngagedSustainedActiveCombatMinimumAge = TimeSpan.FromSeconds(1);
         public static readonly TimeSpan JournalEngagedSustainedActiveCombatMaximumAge = TimeSpan.FromSeconds(8);
 
         public static bool AllowsAutomaticCount(
@@ -2106,6 +2121,8 @@ namespace GoblinFarmer
 
     internal static class GoblinJournalFreshnessPolicy
     {
+        public static readonly TimeSpan AreaChangedKilledRecentEngagedWindow = TimeSpan.FromSeconds(12);
+
         public static bool IsFresh(DateTime firstSeenUtc, DateTime nowUtc, TimeSpan freshnessWindow)
         {
             return nowUtc - firstSeenUtc <= freshnessWindow;
@@ -2129,6 +2146,15 @@ namespace GoblinFarmer
             return recentEngaged != null &&
                 string.Equals(recentEngaged.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase) &&
                 nowUtc - recentEngaged.SeenUtc <= freshnessWindow;
+        }
+
+        public static bool KilledHasRecentEngagedForAreaChangedLock(GoblinJournalEngagedState? recentEngaged, string goblinType, DateTime nowUtc)
+        {
+            return recentEngaged != null &&
+                !string.IsNullOrWhiteSpace(recentEngaged.AreaKey) &&
+                !GoblinManualCountBlockList.IsBlocked(recentEngaged.AreaKey) &&
+                string.Equals(recentEngaged.GoblinType, goblinType, StringComparison.OrdinalIgnoreCase) &&
+                nowUtc - recentEngaged.SeenUtc <= AreaChangedKilledRecentEngagedWindow;
         }
 
         public static bool KilledIsFresh(GoblinJournalKilledState? killedState, string areaKey, DateTime nowUtc, TimeSpan freshnessWindow)

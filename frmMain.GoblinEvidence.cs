@@ -878,11 +878,10 @@ namespace GoblinFarmer
                     areaKey,
                     nowUtc,
                     GoblinJournalEvidenceFreshWindow);
-                bool recentEngagedFreshAnyArea = recentEngaged != null &&
-                    string.Equals(recentEngaged.GoblinType, goblinType, StringComparison.OrdinalIgnoreCase) &&
-                    GoblinJournalFreshnessPolicy.IsFresh(recentEngaged.SeenUtc, nowUtc, GoblinJournalEvidenceFreshWindow) &&
-                    !string.IsNullOrWhiteSpace(recentEngaged.AreaKey) &&
-                    !GoblinManualCountBlockList.IsBlocked(recentEngaged.AreaKey);
+                bool recentEngagedFreshAnyArea = GoblinJournalFreshnessPolicy.KilledHasRecentEngagedForAreaChangedLock(
+                    recentEngaged,
+                    goblinType,
+                    nowUtc);
                 string acceptedAreaKey = recentEngagedFreshAnyArea ? recentEngaged!.AreaKey : areaKey;
                 string acceptedDisplayArea = !string.IsNullOrWhiteSpace(acceptedAreaKey)
                     ? PortDisplayLocation(acceptedAreaKey)
@@ -890,6 +889,10 @@ namespace GoblinFarmer
                 bool killedAreaChangedDuringPendingEvidence = !string.IsNullOrWhiteSpace(acceptedAreaKey) &&
                     !string.IsNullOrWhiteSpace(areaKey) &&
                     !string.Equals(acceptedAreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
+                bool recentEngagedAreaDiffers = recentEngaged != null &&
+                    !string.IsNullOrWhiteSpace(recentEngaged.AreaKey) &&
+                    !string.IsNullOrWhiteSpace(areaKey) &&
+                    !string.Equals(recentEngaged.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
                 if (!killedFreshInCurrentArea && !recentEngagedMatches && !recentEngagedFreshAnyArea)
                 {
                     PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc, killedState.AreaKey, killedState.FirstSeenUtc);
@@ -898,7 +901,7 @@ namespace GoblinFarmer
                         template,
                         match,
                         displayArea,
-                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; acceptedArea=None; areaChangedDuringPendingEvidence={killedAreaChangedDuringPendingEvidence}; discardReason=KilledEvidenceStaleWithoutFreshEngagedAnchor; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; acceptedArea=None; areaChangedDuringPendingEvidence={recentEngagedAreaDiffers}; recentEngagedArea={PortLogField(recentEngaged?.AreaKey ?? "")}; recentEngagedAgeSeconds={(recentEngaged == null ? -1 : Math.Max(0, (nowUtc - recentEngaged.SeenUtc).TotalSeconds)):0.0}; discardReason=KilledEvidenceStaleWithoutFreshEngagedAnchor; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; areaLockWindowSeconds={GoblinJournalFreshnessPolicy.AreaChangedKilledRecentEngagedWindow.TotalSeconds:0}");
                     return false;
                 }
 
@@ -941,7 +944,7 @@ namespace GoblinFarmer
                         template,
                         match,
                         acceptedDisplayArea,
-                        $"recentEngagedArea={PortLogField(recentEngaged!.AreaKey)}; recentEngagedAgeSeconds={Math.Max(0, (nowUtc - recentEngaged.SeenUtc).TotalSeconds):0.0}; currentArea={PortLogField(areaKey)}; acceptedArea={PortLogField(acceptedAreaKey)}; areaChangedDuringPendingEvidence=True; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        $"recentEngagedArea={PortLogField(recentEngaged!.AreaKey)}; recentEngagedAgeSeconds={Math.Max(0, (nowUtc - recentEngaged.SeenUtc).TotalSeconds):0.0}; currentArea={PortLogField(areaKey)}; acceptedArea={PortLogField(acceptedAreaKey)}; areaChangedDuringPendingEvidence=True; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; areaLockWindowSeconds={GoblinJournalFreshnessPolicy.AreaChangedKilledRecentEngagedWindow.TotalSeconds:0}");
                     acceptedCandidate = candidate with
                     {
                         Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedAfterEngagedFirstSeenAreaLock; JournalArea={acceptedDisplayArea}"

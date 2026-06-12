@@ -5,6 +5,7 @@ param(
     [int]$MaxSuccessScreenshots = 0,
     [int]$MaxDiagnosticScreenshots = 10,
     [int]$MaxDebugScreenshots = 4,
+    [long]$MaxPackagedScreenshotBytes = 3145728,
     [switch]$IncludeSuccessScreenshots,
     [int]$MaxGoblinEvidenceFullImages = 0,
     [int]$MaxGoblinEvidenceEventScreenshots = 3,
@@ -854,6 +855,15 @@ function Copy-DebugScreenshotsToPackage {
     }
 
     return $copied
+}
+
+function Test-PackagedScreenshotSizeEligible {
+    param(
+        [System.IO.FileInfo]$File,
+        [long]$MaxBytes
+    )
+
+    return $MaxBytes -le 0 -or $File.Length -le $MaxBytes
 }
 
 function ConvertTo-SafeFileNamePart {
@@ -2300,6 +2310,10 @@ if ($MaxDebugScreenshots -lt 0) {
     Write-Warning "MaxDebugScreenshots must be at least 0. Using 0."
     $MaxDebugScreenshots = 0
 }
+if ($MaxPackagedScreenshotBytes -lt 0) {
+    Write-Warning "MaxPackagedScreenshotBytes must be at least 0. Using 0."
+    $MaxPackagedScreenshotBytes = 0
+}
 if ($MaxGoblinEvidenceFullImages -lt 0) {
     Write-Warning "MaxGoblinEvidenceFullImages must be at least 0. Using 0."
     $MaxGoblinEvidenceFullImages = 0
@@ -2351,6 +2365,7 @@ Write-Host "Max failure screenshots: $MaxFailureScreenshots"
 Write-Host "Max success screenshot groups: $MaxSuccessScreenshots"
 Write-Host "Max diagnostic screenshot groups: $MaxDiagnosticScreenshots"
 Write-Host "Max debug screenshots: $MaxDebugScreenshots"
+Write-Host "Max packaged screenshot bytes: $MaxPackagedScreenshotBytes"
 Write-Host "Include success screenshots: $($IncludeSuccessScreenshots.IsPresent)"
 Write-Host "Max goblin evidence full images: $MaxGoblinEvidenceFullImages"
 Write-Host "Max goblin evidence event screenshots: $MaxGoblinEvidenceEventScreenshots"
@@ -2501,15 +2516,17 @@ try {
         $selectedPairKeys[$group.Name] = $true
     }
 
-    $failureScreenshots = @(Get-FilesFromScreenshotGroups $failureGroups)
+    $rawFailureScreenshots = @(Get-FilesFromScreenshotGroups $failureGroups)
+    $oversizedFailureScreenshots = @($rawFailureScreenshots | Where-Object { -not (Test-PackagedScreenshotSizeEligible $_ $MaxPackagedScreenshotBytes) })
+    $failureScreenshots = @($rawFailureScreenshots | Where-Object { Test-PackagedScreenshotSizeEligible $_ $MaxPackagedScreenshotBytes })
     $failureScreenshotSizeMeasure = $failureScreenshots | Measure-Object Length -Sum
     $failureScreenshotSizeBytes = if ($null -ne $failureScreenshotSizeMeasure.Sum) { [long]$failureScreenshotSizeMeasure.Sum } else { 0L }
     $failureScreenshotSizeDisplay = Format-ByteSize $failureScreenshotSizeBytes
     $excludedFailureScreenshots = [Math]::Max(0, $availableFailureScreenshots.Count - $failureScreenshots.Count)
     $excludedFailureScreenshotSizeBytes = [Math]::Max(0L, $availableFailureScreenshotSizeBytes - $failureScreenshotSizeBytes)
     $excludedFailureScreenshotSizeDisplay = Format-ByteSize $excludedFailureScreenshotSizeBytes
-    $successScreenshots = @(Get-FilesFromScreenshotGroups $successGroups)
-    $diagnosticScreenshots = @(Get-FilesFromScreenshotGroups $diagnosticGroups)
+    $successScreenshots = @(Get-FilesFromScreenshotGroups $successGroups | Where-Object { Test-PackagedScreenshotSizeEligible $_ $MaxPackagedScreenshotBytes })
+    $diagnosticScreenshots = @(Get-FilesFromScreenshotGroups $diagnosticGroups | Where-Object { Test-PackagedScreenshotSizeEligible $_ $MaxPackagedScreenshotBytes })
     Write-Host "Enable success screenshots setting: $($successScreenshotSetting.Enabled) ($($successScreenshotSetting.Source))"
     if ($successScreenshotSetting.Enabled -and $availableSuccessScreenshots.Count -gt 0) {
         Write-Host "Available success screenshots excluded by default: $($availableSuccessScreenshots.Count), $availableSuccessScreenshotSizeDisplay"
@@ -2521,7 +2538,8 @@ try {
             -not (Test-SuccessScreenshotFile $_) -and
                 $info.Outcome -eq "DEBUG" -and
                 -not (Test-RetiredDemonHunterSuppressionScreenshot $info) -and
-                -not $selectedPairKeys.ContainsKey($info.PairKey)
+                -not $selectedPairKeys.ContainsKey($info.PairKey) -and
+                (Test-PackagedScreenshotSizeEligible $_ $MaxPackagedScreenshotBytes)
         } |
         Select-Object -First $MaxScreenshots)
 
@@ -2552,7 +2570,7 @@ try {
         }
         else {
                 Write-Host "Included failure screenshots: $failureCount"
-                Write-Host "Failure screenshot policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; includedSize=$failureScreenshotSizeDisplay; excludedSize=$excludedFailureScreenshotSizeDisplay; availableSize=$availableFailureScreenshotSizeDisplay"
+                Write-Host "Failure screenshot policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; oversizedSelected=$($oversizedFailureScreenshots.Count); maxBytes=$MaxPackagedScreenshotBytes; includedSize=$failureScreenshotSizeDisplay; excludedSize=$excludedFailureScreenshotSizeDisplay; availableSize=$availableFailureScreenshotSizeDisplay"
                 Write-Host "Latest failure screenshot type: $latestFailureType"
                 Write-Host "Latest failure screenshot filename: $($latestFailureScreenshot.Name)"
         }
@@ -2593,6 +2611,7 @@ try {
     }
     $debugScreenshots = @($debugScreenshotCandidates |
         Where-Object { $_.LastWriteTime -ge $sessionStart -or $_.CreationTime -ge $sessionStart } |
+        Where-Object { Test-PackagedScreenshotSizeEligible $_ $MaxPackagedScreenshotBytes } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First $MaxDebugScreenshots)
     $selectedDebugScreenshotFolder = if ($debugScreenshots.Count -gt 0) { Split-Path -Parent $debugScreenshots[0].FullName } else { "none" }
@@ -2974,7 +2993,7 @@ try {
             "Review evidence frames included: $($reviewEvidenceInfo.FrameCount)",
             "Review evidence manual files included: $($reviewEvidenceInfo.ManualFileCount)",
             "Review evidence manifest: $($reviewEvidenceInfo.ManifestPath)",
-            "Failure screenshot package policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; includedSize=$failureScreenshotSizeDisplay ($failureScreenshotSizeBytes bytes); excludedSize=$excludedFailureScreenshotSizeDisplay ($excludedFailureScreenshotSizeBytes bytes); availableSize=$availableFailureScreenshotSizeDisplay ($availableFailureScreenshotSizeBytes bytes)",
+            "Failure screenshot package policy: most recent $MaxFailureScreenshots groups included; $excludedFailureScreenshots files excluded; oversizedSelected=$($oversizedFailureScreenshots.Count); maxBytes=$MaxPackagedScreenshotBytes; includedSize=$failureScreenshotSizeDisplay ($failureScreenshotSizeBytes bytes); excludedSize=$excludedFailureScreenshotSizeDisplay ($excludedFailureScreenshotSizeBytes bytes); availableSize=$availableFailureScreenshotSizeDisplay ($availableFailureScreenshotSizeBytes bytes)",
             "Debug screenshot package policy: most recent $MaxDebugScreenshots files included from current session",
             $goblinEvidenceSourceSummaryLine,
             "Log folders searched:",

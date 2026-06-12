@@ -171,6 +171,9 @@ namespace GoblinFarmer
         private Form? portSplashForm;
         private Label? portSplashLabel;
         private System.Windows.Forms.Timer? portSplashTimer;
+        private long portGoblinAutoCountNotificationSequence;
+        private long portLatestGoblinAutoCountNotificationSequence;
+        private static readonly TimeSpan PortGoblinAutoCountNotificationFreshnessWindow = TimeSpan.FromSeconds(8);
         private PortScanRegionManager? portScanRegionManager;
         private int portLastRegularGemCandidateCount;
 
@@ -1455,6 +1458,14 @@ namespace GoblinFarmer
             string source = "")
         {
             DateTime queuedUtc = notificationQueuedUtc ?? DateTime.UtcNow;
+            bool isGoblinAutoCountNotification = string.Equals(latencyContext, "GoblinAutoCount", StringComparison.OrdinalIgnoreCase);
+            long notificationSequence = 0;
+            if (isGoblinAutoCountNotification)
+            {
+                notificationSequence = System.Threading.Interlocked.Increment(ref portGoblinAutoCountNotificationSequence);
+                System.Threading.Interlocked.Exchange(ref portLatestGoblinAutoCountNotificationSequence, notificationSequence);
+            }
+
             if (!string.IsNullOrWhiteSpace(latencyContext))
             {
                 AppLogger.Info(
@@ -1462,6 +1473,8 @@ namespace GoblinFarmer
                     "stage=NotificationQueued; " +
                     $"context={PortLogField(latencyContext)}; " +
                     $"queuedUtc={queuedUtc:O}; " +
+                    $"notificationSequence={notificationSequence}; " +
+                    $"queueSize={(isGoblinAutoCountNotification ? 1 : 0)}; " +
                     $"evidenceDetectedUtc={(evidenceDetectedUtc.HasValue ? evidenceDetectedUtc.Value.ToString("O") : "Unknown")}; " +
                     $"countAcceptedUtc={(countAcceptedUtc.HasValue ? countAcceptedUtc.Value.ToString("O") : "Unknown")}; " +
                     $"detectionToQueueMs={PortElapsedMsForLog(evidenceDetectedUtc, queuedUtc)}; " +
@@ -1471,11 +1484,103 @@ namespace GoblinFarmer
                     $"areaKey={PortLogField(areaKey)}");
             }
 
+            if (isGoblinAutoCountNotification)
+            {
+                PortWriteGoblinTrackerJsonEvent(
+                    "GoblinAutoCountNotificationQueued",
+                    new Dictionary<string, object?>
+                    {
+                        ["queuedUtc"] = queuedUtc.ToString("O"),
+                        ["notificationSequence"] = notificationSequence,
+                        ["queueSize"] = 1,
+                        ["payloadGoblinType"] = goblinType,
+                        ["payloadAreaKey"] = areaKey,
+                        ["payloadSource"] = source,
+                        ["evidenceDetectedUtc"] = evidenceDetectedUtc?.ToString("O"),
+                        ["countAcceptedUtc"] = countAcceptedUtc?.ToString("O"),
+                        ["detectionToQueueMs"] = PortElapsedMsForLog(evidenceDetectedUtc, queuedUtc),
+                        ["countToQueueMs"] = PortElapsedMsForLog(countAcceptedUtc, queuedUtc),
+                    });
+            }
+
             RunOnUiThread(() =>
             {
                 try
                 {
                     DateTime displayedUtc = DateTime.UtcNow;
+                    double queueAgeMs = Math.Max(0, (displayedUtc - queuedUtc).TotalMilliseconds);
+                    if (isGoblinAutoCountNotification)
+                    {
+                        long latestSequence = System.Threading.Volatile.Read(ref portLatestGoblinAutoCountNotificationSequence);
+                        if (notificationSequence < latestSequence)
+                        {
+                            AppLogger.Info(
+                                "GoblinLatencyTrace: " +
+                                "stage=NotificationDropped; " +
+                                "reason=SupersededByNewerNotification; " +
+                                $"context={PortLogField(latencyContext)}; " +
+                                $"queuedUtc={queuedUtc:O}; " +
+                                $"droppedUtc={displayedUtc:O}; " +
+                                $"notificationSequence={notificationSequence}; " +
+                                $"latestNotificationSequence={latestSequence}; " +
+                                "queueSize=0; " +
+                                $"queueAgeMs={queueAgeMs:0.0}; " +
+                                $"source={PortLogField(source)}; " +
+                                $"goblinType={PortLogField(goblinType)}; " +
+                                $"areaKey={PortLogField(areaKey)}");
+                            PortWriteGoblinTrackerJsonEvent(
+                                "GoblinAutoCountNotificationDropped",
+                                new Dictionary<string, object?>
+                                {
+                                    ["reason"] = "SupersededByNewerNotification",
+                                    ["queuedUtc"] = queuedUtc.ToString("O"),
+                                    ["droppedUtc"] = displayedUtc.ToString("O"),
+                                    ["notificationSequence"] = notificationSequence,
+                                    ["latestNotificationSequence"] = latestSequence,
+                                    ["queueSize"] = 0,
+                                    ["queueAgeMs"] = queueAgeMs,
+                                    ["payloadGoblinType"] = goblinType,
+                                    ["payloadAreaKey"] = areaKey,
+                                    ["payloadSource"] = source,
+                                });
+                            return;
+                        }
+
+                        if (displayedUtc - queuedUtc > PortGoblinAutoCountNotificationFreshnessWindow)
+                        {
+                            AppLogger.Info(
+                                "GoblinLatencyTrace: " +
+                                "stage=NotificationDropped; " +
+                                "reason=StaleQueuedNotification; " +
+                                $"context={PortLogField(latencyContext)}; " +
+                                $"queuedUtc={queuedUtc:O}; " +
+                                $"droppedUtc={displayedUtc:O}; " +
+                                $"notificationSequence={notificationSequence}; " +
+                                $"freshnessWindowSeconds={PortGoblinAutoCountNotificationFreshnessWindow.TotalSeconds:0}; " +
+                                "queueSize=0; " +
+                                $"queueAgeMs={queueAgeMs:0.0}; " +
+                                $"source={PortLogField(source)}; " +
+                                $"goblinType={PortLogField(goblinType)}; " +
+                                $"areaKey={PortLogField(areaKey)}");
+                            PortWriteGoblinTrackerJsonEvent(
+                                "GoblinAutoCountNotificationDropped",
+                                new Dictionary<string, object?>
+                                {
+                                    ["reason"] = "StaleQueuedNotification",
+                                    ["queuedUtc"] = queuedUtc.ToString("O"),
+                                    ["droppedUtc"] = displayedUtc.ToString("O"),
+                                    ["notificationSequence"] = notificationSequence,
+                                    ["freshnessWindowSeconds"] = PortGoblinAutoCountNotificationFreshnessWindow.TotalSeconds,
+                                    ["queueSize"] = 0,
+                                    ["queueAgeMs"] = queueAgeMs,
+                                    ["payloadGoblinType"] = goblinType,
+                                    ["payloadAreaKey"] = areaKey,
+                                    ["payloadSource"] = source,
+                                });
+                            return;
+                        }
+                    }
+
                     if (portSplashForm == null || portSplashForm.IsDisposed)
                     {
                         portSplashForm = new PortNoActivateSplashForm
@@ -1532,14 +1637,37 @@ namespace GoblinFarmer
                             $"context={PortLogField(latencyContext)}; " +
                             $"queuedUtc={queuedUtc:O}; " +
                             $"displayedUtc={displayedUtc:O}; " +
+                            $"notificationSequence={notificationSequence}; " +
+                            "queueSize=0; " +
                             $"evidenceDetectedUtc={(evidenceDetectedUtc.HasValue ? evidenceDetectedUtc.Value.ToString("O") : "Unknown")}; " +
                             $"countAcceptedUtc={(countAcceptedUtc.HasValue ? countAcceptedUtc.Value.ToString("O") : "Unknown")}; " +
-                            $"queueToDisplayMs={Math.Max(0, (displayedUtc - queuedUtc).TotalMilliseconds):0.0}; " +
+                            $"queueToDisplayMs={queueAgeMs:0.0}; " +
                             $"detectionToDisplayMs={PortElapsedMsForLog(evidenceDetectedUtc, displayedUtc)}; " +
                             $"countToDisplayMs={PortElapsedMsForLog(countAcceptedUtc, displayedUtc)}; " +
                             $"source={PortLogField(source)}; " +
                             $"goblinType={PortLogField(goblinType)}; " +
                             $"areaKey={PortLogField(areaKey)}");
+                    }
+
+                    if (isGoblinAutoCountNotification)
+                    {
+                        PortWriteGoblinTrackerJsonEvent(
+                            "GoblinAutoCountNotificationDisplayed",
+                            new Dictionary<string, object?>
+                            {
+                                ["queuedUtc"] = queuedUtc.ToString("O"),
+                                ["displayedUtc"] = displayedUtc.ToString("O"),
+                                ["notificationSequence"] = notificationSequence,
+                                ["queueSize"] = 0,
+                                ["queueToDisplayMs"] = queueAgeMs,
+                                ["payloadGoblinType"] = goblinType,
+                                ["payloadAreaKey"] = areaKey,
+                                ["payloadSource"] = source,
+                                ["evidenceDetectedUtc"] = evidenceDetectedUtc?.ToString("O"),
+                                ["countAcceptedUtc"] = countAcceptedUtc?.ToString("O"),
+                                ["detectionToDisplayMs"] = PortElapsedMsForLog(evidenceDetectedUtc, displayedUtc),
+                                ["countToDisplayMs"] = PortElapsedMsForLog(countAcceptedUtc, displayedUtc),
+                            });
                     }
                 }
                 catch (Exception ex)

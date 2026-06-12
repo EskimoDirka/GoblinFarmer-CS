@@ -34,6 +34,7 @@ Run("VS Debug startup requests Diablo auto-record monitor", TestVsDebugStartupRe
 Run("VS Debug OBS monitor startup has readiness diagnostics", TestVsDebugObsMonitorStartupHasReadinessDiagnostics);
 Run("VS Debug form shows OBS recording status", TestVsDebugFormShowsObsRecordingStatus);
 Run("VS Debug form uses proper-case OBS status text", TestVsDebugFormUsesProperCaseObsStatusText);
+Run("VS Debug OBS monitor logger tolerates shared log access", TestVsDebugObsMonitorLoggerToleratesSharedLogAccess);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -90,6 +91,7 @@ Run("Combat menu watcher closes bounty menu with Escape only", TestCombatMenuWat
 Run("Start Game click policy blocks Leave Game and in-game signals", TestStartGameClickPolicyBlocksInGameSignals);
 Run("Goblin journal parser counts escaped goblin encounters", TestGoblinJournalParserCountsEscapedEncounters);
 Run("Goblin type normalization maps Gelatinous Spawn to Gelatinous Sire", TestGelatinousSpawnNormalizesToSire);
+Run("Goblin evidence Gelatinous Sire uses targeted journal threshold", TestGoblinEvidenceGelatinousSireUsesTargetedJournalThreshold);
 Run("Goblin minimap color disambiguates Treasure and Odious", TestGoblinMinimapColorDisambiguatesTreasureAndOdious);
 Run("Goblin minimap color disambiguates Gilded and Malevolent", TestGoblinMinimapColorDisambiguatesGildedAndMalevolent);
 Run("Goblin automatic minimap counts require strong confidence", TestGoblinAutomaticMinimapCountsRequireStrongConfidence);
@@ -139,6 +141,7 @@ Run("Goblin PF multi-count duplicate bypass stays bounded", TestGoblinPandemoniu
 Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
 Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses);
 Run("Goblin auto-count notifications require positive totals", TestGoblinAutoCountNotificationsRequirePositiveTotals);
+Run("Goblin auto-count notification queue drops stale or superseded payloads", TestGoblinAutoCountNotificationQueueDropsStaleOrSupersededPayloads);
 Run("Goblin auto-count stale journal does not block fresh cross-area minimap", TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap);
 Run("Goblin auto-count old cross-area journal row expires", TestGoblinAutoCountOldCrossAreaJournalRowExpires);
 Run("Goblin auto-count same-area duplicate journal refreshes encounter state", TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState);
@@ -146,8 +149,10 @@ Run("Goblin auto-count suppresses shifted journal row after pause", TestGoblinAu
 Run("Goblin auto-count treats different journal templates as separate lines", TestGoblinAutoCountTreatsDifferentJournalTemplatesAsSeparateLines);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
 Run("Goblin accepted counts persist Last Observation until reset", TestGoblinAcceptedCountsPersistLastObservationUntilReset);
+Run("Goblin pending combat journal can replace stale Last Observation display", TestGoblinPendingCombatJournalCanReplaceStaleLastObservationDisplay);
 Run("Goblin non-counting idle journal cannot publish Last Observation", TestGoblinNonCountingIdleJournalCannotPublishLastObservation);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
+Run("Goblin area-changed killed journal uses short first-seen lock window", TestGoblinAreaChangedKilledJournalUsesShortFirstSeenLockWindow);
 Run("Goblin stale journal suppression can bypass after verified fresh area", TestGoblinStaleJournalSuppressionCanBypassAfterVerifiedFreshArea);
 Run("Goblin fresh killed journal can satisfy evidence gate", TestGoblinFreshKilledJournalCanSatisfyEvidenceGate);
 Run("Goblin refresh logs fresh and stale killed journal decisions", TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions);
@@ -483,6 +488,19 @@ static void TestVsDebugObsMonitorStartupHasReadinessDiagnostics()
         string localScriptSource = File.ReadAllText(localScriptPath);
         AssertTrue(localScriptSource.Contains("Diablo auto-record monitor already running; startup request ignored by mutex.", StringComparison.Ordinal), "the local script should log mutex-blocked startup requests");
     }
+}
+
+static void TestVsDebugObsMonitorLoggerToleratesSharedLogAccess()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string localScriptPath = Path.Combine(repoRoot, "Scripts", "Local Tools", "Auto Record Diablo.ps1");
+    AssertTrue(File.Exists(localScriptPath), "local OBS script should exist for VS Debug auto-recording");
+
+    string localScriptSource = File.ReadAllText(localScriptPath);
+    AssertTrue(localScriptSource.Contains("[IO.File]::Open($logPath", StringComparison.Ordinal), "OBS workflow log writes should use explicit file sharing");
+    AssertTrue(localScriptSource.Contains("[IO.FileShare]::ReadWrite", StringComparison.Ordinal), "OBS workflow log writes should tolerate another reader/writer holding the log");
+    AssertFalse(localScriptSource.Contains("Add-Content -Path $logPath", StringComparison.Ordinal), "OBS workflow log writes should not use Add-Content because transient locks crashed the monitor");
+    AssertTrue(localScriptSource.Contains("$script:obsDesktopRuntimeEnsured", StringComparison.Ordinal), "runtime OBS layout updates should be cached during an active recording session");
 }
 
 static void TestVsDebugFormShowsObsRecordingStatus()
@@ -3263,6 +3281,46 @@ static void TestGelatinousSpawnNormalizesToSire()
     AssertEqual("Gelatinous Sire", parsed!.GoblinType, "Gelatinous Spawn journal kill should count as Gelatinous Sire");
 }
 
+static void TestGoblinEvidenceGelatinousSireUsesTargetedJournalThreshold()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GoblinFarmer.GelatinousThresholdTests", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+
+    try
+    {
+        File.WriteAllText(Path.Combine(root, "Gelatinous Sire Engaged Journal.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Gelatinous Sire Killed Journal.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Treasure Goblin Engaged Journal.png"), "fake template for discovery test");
+        File.WriteAllText(Path.Combine(root, "Gelatinous Sire Minimap.png"), "fake template for discovery test");
+
+        GoblinEvidenceTemplateCatalog catalog = GoblinEvidenceTemplateRequirements.DiscoverTemplates(root);
+        GoblinEvidenceTemplateRequirement gelatinousEngaged = catalog.Templates.First(template =>
+            template.GoblinType == "Gelatinous Sire" &&
+            template.Kind == GoblinEvidenceTemplateKind.JournalEngaged);
+        GoblinEvidenceTemplateRequirement gelatinousKilled = catalog.Templates.First(template =>
+            template.GoblinType == "Gelatinous Sire" &&
+            template.Kind == GoblinEvidenceTemplateKind.JournalKilled);
+        GoblinEvidenceTemplateRequirement treasureEngaged = catalog.Templates.First(template =>
+            template.GoblinType == "Treasure Goblin" &&
+            template.Kind == GoblinEvidenceTemplateKind.JournalEngaged);
+        GoblinEvidenceTemplateRequirement gelatinousMinimap = catalog.Templates.First(template =>
+            template.GoblinType == "Gelatinous Sire" &&
+            template.Kind == GoblinEvidenceTemplateKind.Minimap);
+
+        AssertEqual(GoblinEvidenceTemplateRequirements.GelatinousSireJournalThreshold, gelatinousEngaged.Threshold, "Gelatinous Sire engaged journal evidence should use the targeted lower threshold from live diagnostics");
+        AssertEqual(GoblinEvidenceTemplateRequirements.GelatinousSireJournalThreshold, gelatinousKilled.Threshold, "Gelatinous Sire killed journal evidence should use the targeted lower threshold from live diagnostics");
+        AssertEqual(GoblinEvidenceTemplateRequirements.JournalThreshold, treasureEngaged.Threshold, "other goblin journal thresholds should remain unchanged");
+        AssertEqual(GoblinEvidenceTemplateRequirements.MinimapThreshold, gelatinousMinimap.Threshold, "Gelatinous Sire minimap threshold should remain unchanged");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
 static void TestDebugPackageExcludesSuccessScreenshotsByDefault()
 {
     string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
@@ -3960,6 +4018,8 @@ static void TestDebugPackageIncludesSizeSummaryReport()
     AssertTrue(packageScript.Contains("Size by top folder:", StringComparison.Ordinal), "size summary should report folder totals");
     AssertTrue(packageScript.Contains("Largest 20 files:", StringComparison.Ordinal), "size summary should report largest package files");
     AssertTrue(packageScript.Contains("Retention applied before packaging:", StringComparison.Ordinal), "size summary should document applied retention policy");
+    AssertTrue(packageScript.Contains("MaxPackagedScreenshotBytes", StringComparison.Ordinal), "generic full-screen screenshot packaging should have a size gate to keep debug ZIPs bounded");
+    AssertTrue(packageScript.Contains("Test-PackagedScreenshotSizeEligible", StringComparison.Ordinal), "screenshot size gate should be applied before copying large PNG diagnostics");
 }
 
 static void TestImageRecognitionBestSampleHelperCapturesSelectsAndPromotes()
@@ -5168,12 +5228,13 @@ static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmati
         engagedReason,
         "Engaged-only journal evidence should report the pending-confirmation reason");
     AssertEqual("JournalEngagedOnly", engagedReliability, "Engaged-only journal reliability should be explicit in logs and JSONL");
+    AssertEqual(1.0, GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds, "active combat journal evidence should be eligible after the shortened live-test latency window");
 
     AssertTrue(
         GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
             "Journal",
             "JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
-            evidenceFirstSeenAgeSeconds: 2.5,
+            evidenceFirstSeenAgeSeconds: 1.2,
             combatActive: true,
             out string sustainedEngagedReason,
             out string sustainedEngagedReliability),
@@ -5554,6 +5615,26 @@ static void TestGoblinAutoCountNotificationsRequirePositiveTotals()
     AssertTrue(autoCountMethod.Contains("reason=InvalidTotal", StringComparison.Ordinal), "invalid-total notification suppression should log a clear reason");
 }
 
+static void TestGoblinAutoCountNotificationQueueDropsStaleOrSupersededPayloads()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string splashMethod = ExtractMethodBody(automationSource, "private void PortShowSplash");
+
+    AssertTrue(automationSource.Contains("PortGoblinAutoCountNotificationFreshnessWindow", StringComparison.Ordinal), "automatic count notifications should have an explicit freshness window");
+    AssertTrue(automationSource.Contains("portGoblinAutoCountNotificationSequence", StringComparison.Ordinal), "automatic count notifications should carry a monotonic sequence");
+    AssertTrue(automationSource.Contains("portLatestGoblinAutoCountNotificationSequence", StringComparison.Ordinal), "newer automatic count notifications should supersede older queued payloads");
+    AssertTrue(splashMethod.Contains("SupersededByNewerNotification", StringComparison.Ordinal), "queued old goblin notifications should be dropped instead of overwriting newer observations");
+    AssertTrue(splashMethod.Contains("StaleQueuedNotification", StringComparison.Ordinal), "queued goblin notifications should be dropped after the freshness window");
+    AssertTrue(splashMethod.Contains("GoblinAutoCountNotificationQueued", StringComparison.Ordinal), "queued notification timing should mirror to GoblinTrackerEvents.jsonl");
+    AssertTrue(splashMethod.Contains("GoblinAutoCountNotificationDisplayed", StringComparison.Ordinal), "displayed notification timing should mirror to GoblinTrackerEvents.jsonl");
+    AssertTrue(splashMethod.Contains("GoblinAutoCountNotificationDropped", StringComparison.Ordinal), "dropped notification timing should mirror to GoblinTrackerEvents.jsonl");
+    AssertTrue(splashMethod.Contains("System.Threading.Volatile.Read", StringComparison.Ordinal), "supersede checks should read the latest sequence safely");
+    AssertTrue(splashMethod.Contains("queueSize", StringComparison.Ordinal), "notification diagnostics should include queue size");
+    AssertTrue(splashMethod.Contains("payloadGoblinType", StringComparison.Ordinal), "notification diagnostics should include the goblin payload type");
+    AssertTrue(splashMethod.Contains("payloadAreaKey", StringComparison.Ordinal), "notification diagnostics should include the goblin payload area");
+}
+
 static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
 {
     DateTime nowUtc = DateTime.UtcNow;
@@ -5798,6 +5879,19 @@ static void TestGoblinAcceptedCountsPersistLastObservationUntilReset()
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("preservedAcceptedDisplay", StringComparison.Ordinal), "New Game should not preserve accepted Last Observation display state");
 }
 
+static void TestGoblinPendingCombatJournalCanReplaceStaleLastObservationDisplay()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string preserveIncomingMethod = ExtractMethodBody(sessionStatsSource, "private bool PortShouldPreserveDisplayedObservationAgainstIncoming");
+    string pendingReplaceMethod = ExtractMethodBody(sessionStatsSource, "private bool PortPendingJournalObservationShouldReplaceAcceptedDisplay");
+
+    AssertTrue(preserveIncomingMethod.Contains("PortPendingJournalObservationShouldReplaceAcceptedDisplay(incomingObservation, displayedObservation)", StringComparison.Ordinal), "accepted Last Observation persistence should yield to fresh pending combat journal evidence");
+    AssertTrue(pendingReplaceMethod.Contains("portCombatRunning", StringComparison.Ordinal), "pending journal display replacement should require active combat");
+    AssertTrue(pendingReplaceMethod.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "only reliability-pending journal evidence should replace stale accepted display");
+    AssertTrue(pendingReplaceMethod.Contains("LastObservationPendingJournalReplacesAcceptedDisplay", StringComparison.Ordinal), "replacement path should log explicit stale-display diagnostics");
+}
+
 static void TestGoblinNonCountingIdleJournalCannotPublishLastObservation()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -5905,6 +5999,36 @@ static void TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines()
             out _,
             out _),
         "same-goblin stale visible-line suppression should not apply to different goblin types");
+}
+
+static void TestGoblinAreaChangedKilledJournalUsesShortFirstSeenLockWindow()
+{
+    DateTime now = DateTime.UtcNow;
+    GoblinJournalEngagedState freshAreaChangedEngaged = new("Menagerist", "Rakkis Crossing", now - TimeSpan.FromSeconds(10));
+    GoblinJournalEngagedState oldAreaChangedEngaged = new("Menagerist", "Rakkis Crossing", now - TimeSpan.FromSeconds(20));
+    GoblinJournalEngagedState wrongTypeEngaged = new("Treasure Goblin", "Rakkis Crossing", now - TimeSpan.FromSeconds(10));
+    GoblinJournalEngagedState blockedAreaEngaged = new("Treasure Goblin", "New Tristram", now - TimeSpan.FromSeconds(10));
+
+    AssertEqual(TimeSpan.FromSeconds(12), GoblinJournalFreshnessPolicy.AreaChangedKilledRecentEngagedWindow, "area-changed killed journal confirmations should use a short first-seen area-lock window");
+    AssertTrue(
+        GoblinJournalFreshnessPolicy.KilledHasRecentEngagedForAreaChangedLock(freshAreaChangedEngaged, "Menagerist", now),
+        "fresh area-changed killed journal evidence should be allowed to lock to the first-seen engaged area");
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.KilledHasRecentEngagedForAreaChangedLock(oldAreaChangedEngaged, "Menagerist", now),
+        "old area-changed killed journal evidence should not migrate a previous encounter into a later route area");
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.KilledHasRecentEngagedForAreaChangedLock(wrongTypeEngaged, "Menagerist", now),
+        "area-changed killed journal evidence should require the same goblin type as the engaged anchor");
+    AssertFalse(
+        GoblinJournalFreshnessPolicy.KilledHasRecentEngagedForAreaChangedLock(blockedAreaEngaged, "Treasure Goblin", now),
+        "area-changed killed journal evidence should not lock to blocked town/menu areas");
+
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    AssertTrue(evidenceSource.Contains("KilledHasRecentEngagedForAreaChangedLock", StringComparison.Ordinal), "journal killed area-lock decisions should use the short area-changed freshness helper");
+    AssertTrue(evidenceSource.Contains("areaLockWindowSeconds", StringComparison.Ordinal), "area-lock diagnostics should report the short freshness window");
+    AssertTrue(evidenceSource.Contains("discardReason=KilledEvidenceStaleWithoutFreshEngagedAnchor", StringComparison.Ordinal), "stale area-changed journal kills should log a clear discard reason");
+    AssertTrue(evidenceSource.Contains("recentEngagedAgeSeconds", StringComparison.Ordinal), "discard diagnostics should include the recent engaged age");
 }
 
 static void TestGoblinStaleJournalSuppressionCanBypassAfterVerifiedFreshArea()

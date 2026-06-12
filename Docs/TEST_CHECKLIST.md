@@ -10,6 +10,7 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - `git diff --check` has no whitespace errors.
 - `Scripts\Create Debug Package.bat` creates a ZIP when explicit review artifacts are needed.
 - New debug packages include `debug-package-size-summary.txt` with extension totals, top-folder totals, largest files, and applied retention limits.
+- Generic full-screen screenshot packaging is size-gated by default; package manifests report oversized selected screenshots without dropping replay-ready Journal/Minimap crops or JSONL evidence.
 
 ## Goblin Tracker
 
@@ -31,8 +32,12 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Battlefields journal history does not replay stale/non-goblin rows into a fresh count.
 - Journal logs include name-validation/history-row/history-input suppression when those protections fire.
 - Suppressed/duplicate automatic-count paths do not show user-facing notifications, and an invalid automatic-count total logs `AutoCountNotificationSkipped reason=InvalidTotal`.
+- Auto-count notifications are single-slot ordered: queued/displayed/dropped events are mirrored into `GoblinTrackerEvents.jsonl`, superseded payloads log `SupersededByNewerNotification`, and over-age payloads log `StaleQueuedNotification`.
 - Non-counting idle Journal evidence cannot repopulate Last Observation while combat is inactive; expected diagnostic is `LastObservationUpdateSkippedPublishGuard`.
+- Fresh pending combat Journal evidence can replace an old accepted Last Observation display before the count fully accepts; expected diagnostic is `LastObservationPendingJournalReplacesAcceptedDisplay`.
 - Treasure/Odious minimap template and color evidence must agree before minimap-only counting; mismatches should log `GoblinEvidenceMinimapColorDisagreement` and wait for safer evidence instead of showing the wrong goblin type.
+- Gelatinous Sire Journal Engaged/Killed templates use the targeted lower threshold from the 2026-06-11 PF2 diagnostics; other goblin journal templates keep the global threshold.
+- Area-changed Journal Killed confirmations require a same-type Engaged anchor inside the short first-seen area-lock window; older cross-area killed rows should suppress with `KilledEvidenceStaleWithoutFreshEngagedAnchor` while same-area journal freshness remains unchanged.
 
 ## Route Logic
 
@@ -53,7 +58,7 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Encounter captures save fullscreen, minimap, journal, and metadata for accepted Goblin Tracker counts in VS Debug.
 - Manual recognition captures save fullscreen, minimap, journal, and metadata only when `Capture` is clicked.
 - Runtime inventory replay remains log-first by default; debug package replay can load structured replay logs, while image replay requires explicit review crops/frames.
-- VS Debug OBS auto-recording starts when a visible Diablo game window appears and stops when the visible Diablo window closes, even if a no-window Diablo process lingers until the debug form exits.
+- VS Debug OBS auto-recording starts when a visible Diablo game window appears and stops when the visible Diablo window closes, even if a no-window Diablo process lingers until the debug form exits. The OBS monitor log writer uses shared file access/retry behavior, so a temporarily locked `obs-diablo-auto-record.log` should not terminate the monitor.
 
 ## Town Flow
 

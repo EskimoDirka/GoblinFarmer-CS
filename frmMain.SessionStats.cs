@@ -1038,7 +1038,7 @@ namespace GoblinFarmer
 
             if (PortDisplayedObservationIsAcceptedCount(displayedObservation))
             {
-                return true;
+                return !PortPendingJournalObservationShouldReplaceAcceptedDisplay(incomingObservation, displayedObservation);
             }
 
             if (incomingObservation.WouldCount)
@@ -1051,6 +1051,34 @@ namespace GoblinFarmer
                 incomingObservation.Reason.Equals("AreaLimitReached", StringComparison.OrdinalIgnoreCase) ||
                 incomingObservation.Reason.Equals("EvidenceAlreadyAutoCounted", StringComparison.OrdinalIgnoreCase) ||
                 incomingObservation.Reason.Equals("StaleEvidence", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool PortPendingJournalObservationShouldReplaceAcceptedDisplay(
+            GoblinObservationRecord incomingObservation,
+            GoblinObservationRecord displayedObservation)
+        {
+            if (!portCombatRunning ||
+                !incomingObservation.Source.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                !incomingObservation.Reason.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (incomingObservation.AreaKey.Equals(displayedObservation.AreaKey, StringComparison.OrdinalIgnoreCase) &&
+                incomingObservation.GoblinType.Equals(displayedObservation.GoblinType, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            AppLogger.Info(
+                "GoblinTracker: LastObservationPendingJournalReplacesAcceptedDisplay " +
+                $"incomingGoblinType={PortLogField(incomingObservation.GoblinType)} " +
+                $"incomingAreaKey={PortLogField(incomingObservation.AreaKey)} " +
+                $"incomingReason={PortLogField(incomingObservation.Reason)} " +
+                $"preservedGoblinType={PortLogField(displayedObservation.GoblinType)} " +
+                $"preservedAreaKey={PortLogField(displayedObservation.AreaKey)} " +
+                $"combatActive={portCombatRunning}");
+            return true;
         }
 
         private bool PortShouldPreserveDisplayedGoblinObservation(
