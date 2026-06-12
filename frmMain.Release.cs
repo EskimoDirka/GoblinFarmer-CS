@@ -1,4 +1,3 @@
-using System.Globalization;
 using DrawingPoint = System.Drawing.Point;
 
 namespace GoblinFarmer
@@ -13,10 +12,6 @@ namespace GoblinFarmer
         private CheckBox? portDebugModeCheckBox;
         private Button? portSettingsButton;
         private Button? portValidateSettingsButton;
-        private GroupBox? portObsStatusGroup;
-        private Label? portObsStartTimeLabel;
-        private Label? portObsStatusLabel;
-        private Label? portObsEndTimeLabel;
 
         private void PortInitializeReleaseUi()
         {
@@ -105,7 +100,6 @@ namespace GoblinFarmer
             }
 
             Controls.Add(portSettingsGroup);
-            PortInitializeObsStatusGroup();
             PortApplyDebugModeUi();
         }
 
@@ -143,195 +137,6 @@ namespace GoblinFarmer
                 Size = new Size(318, 20),
                 UseMnemonic = false,
             };
-        }
-
-        private void PortInitializeObsStatusGroup()
-        {
-            if (!AppSettings.IsVsDebugProfile || portSettingsGroup == null || portObsStatusGroup != null)
-            {
-                return;
-            }
-
-            portObsStatusGroup = new GroupBox
-            {
-                Name = "grpObsStatus",
-                Text = "OBS",
-                Location = new DrawingPoint(portSettingsGroup.Left, portSettingsGroup.Bottom + 10),
-                Size = new Size(portSettingsGroup.Width, 94),
-                TabStop = false,
-            };
-
-            portObsStartTimeLabel = PortCreateObsStatusLabel("Start Time: --", 22);
-            portObsStatusLabel = PortCreateObsStatusLabel("Status: Closed", 44);
-            portObsEndTimeLabel = PortCreateObsStatusLabel("End Time: --", 66);
-
-            portObsStatusGroup.Controls.Add(portObsStartTimeLabel);
-            portObsStatusGroup.Controls.Add(portObsStatusLabel);
-            portObsStatusGroup.Controls.Add(portObsEndTimeLabel);
-            Controls.Add(portObsStatusGroup);
-            PortUpdateObsStatusDisplay();
-        }
-
-        private static Label PortCreateObsStatusLabel(string text, int y)
-        {
-            return new Label
-            {
-                AutoEllipsis = true,
-                Location = new DrawingPoint(14, y),
-                Size = new Size(516, 18),
-                Text = text,
-            };
-        }
-
-        private void PortUpdateObsStatusDisplay()
-        {
-            if (portObsStatusGroup == null || portObsStartTimeLabel == null || portObsStatusLabel == null || portObsEndTimeLabel == null)
-            {
-                return;
-            }
-
-            (DateTime? startTime, string status, DateTime? endTime) = PortReadObsStatusSnapshot();
-            portObsStartTimeLabel.Text = $"Start Time: {PortFormatObsStatusTime(startTime)}";
-            portObsStatusLabel.Text = $"Status: {status}";
-            portObsEndTimeLabel.Text = $"End Time: {PortFormatObsStatusTime(endTime)}";
-        }
-
-        private (DateTime? StartTime, string Status, DateTime? EndTime) PortReadObsStatusSnapshot()
-        {
-            bool obsProcessRunning = false;
-            try
-            {
-                obsProcessRunning =
-                    System.Diagnostics.Process.GetProcessesByName("obs64").Length > 0 ||
-                    System.Diagnostics.Process.GetProcessesByName("obs").Length > 0;
-            }
-            catch
-            {
-                obsProcessRunning = false;
-            }
-
-            DateTime? lastRecordingStart = null;
-            DateTime? lastRecordingStop = null;
-            DateTime? lastLaunch = null;
-            DateTime? lastCloseRequested = null;
-            string logPath = Path.Combine(PortResolveProjectRootForLocalTools(), "Video Clip Review", "obs-diablo-auto-record.log");
-            try
-            {
-                if (File.Exists(logPath))
-                {
-                    foreach (string line in File.ReadAllLines(logPath).TakeLast(250))
-                    {
-                        if (!PortTryParseObsLogTimestamp(line, out DateTime timestamp))
-                        {
-                            continue;
-                        }
-
-                        if (line.Contains("OBS recording started", StringComparison.OrdinalIgnoreCase))
-                        {
-                            lastRecordingStart = timestamp;
-                        }
-                        else if (line.Contains("OBS recording stopped", StringComparison.OrdinalIgnoreCase))
-                        {
-                            lastRecordingStop = timestamp;
-                        }
-                        else if (line.Contains("OBS launched", StringComparison.OrdinalIgnoreCase))
-                        {
-                            lastLaunch = timestamp;
-                        }
-                        else if (line.Contains("OBS close requested", StringComparison.OrdinalIgnoreCase))
-                        {
-                            lastCloseRequested = timestamp;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error($"OBS status log read failed: path={logPath}", ex);
-            }
-
-            string status;
-            if (lastRecordingStart.HasValue && (!lastRecordingStop.HasValue || lastRecordingStart.Value > lastRecordingStop.Value))
-            {
-                status = "Recording";
-            }
-            else if (lastCloseRequested.HasValue && (!lastLaunch.HasValue || lastCloseRequested.Value >= lastLaunch.Value) && obsProcessRunning)
-            {
-                status = "Stopping";
-            }
-            else if (lastRecordingStop.HasValue && lastLaunch.HasValue && lastRecordingStop.Value >= lastLaunch.Value && obsProcessRunning)
-            {
-                status = "Not Recording";
-            }
-            else if (lastCloseRequested.HasValue && (!lastLaunch.HasValue || lastCloseRequested.Value >= lastLaunch.Value) && !obsProcessRunning)
-            {
-                status = "Closed";
-            }
-            else if (obsProcessRunning && lastLaunch.HasValue)
-            {
-                status = "Starting";
-            }
-            else if (obsProcessRunning)
-            {
-                status = "Not Recording";
-            }
-            else
-            {
-                status = "Closed";
-            }
-
-            DateTime? startTime = lastRecordingStart;
-            DateTime? endTime = lastRecordingStop;
-            return (startTime, status, endTime);
-        }
-
-        private static bool PortTryParseObsLogTimestamp(string line, out DateTime timestamp)
-        {
-            timestamp = DateTime.MinValue;
-            if (string.IsNullOrWhiteSpace(line) || line.Length < 21 || line[0] != '[')
-            {
-                return false;
-            }
-
-            string text = line.Substring(1, 19);
-            return DateTime.TryParseExact(
-                text,
-                "yyyy-MM-dd HH:mm:ss",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeLocal,
-                out timestamp);
-        }
-
-        private static string PortFormatObsStatusTime(DateTime? value)
-        {
-            return value.HasValue ? value.Value.ToString("HH:mm:ss", CultureInfo.CurrentCulture) : "--";
-        }
-
-        private static string PortResolveProjectRootForLocalTools()
-        {
-            string? configDirectory = Path.GetDirectoryName(AppSettings.ConfigPath);
-            if (!string.IsNullOrWhiteSpace(configDirectory) &&
-                string.Equals(Path.GetFileName(configDirectory), "Config", StringComparison.OrdinalIgnoreCase))
-            {
-                DirectoryInfo? root = Directory.GetParent(configDirectory);
-                if (root != null)
-                {
-                    return root.FullName;
-                }
-            }
-
-            DirectoryInfo? directory = new(AppDomain.CurrentDomain.BaseDirectory);
-            while (directory != null)
-            {
-                if (File.Exists(Path.Combine(directory.FullName, "GoblinFarmer.csproj")))
-                {
-                    return directory.FullName;
-                }
-
-                directory = directory.Parent;
-            }
-
-            return AppDomain.CurrentDomain.BaseDirectory;
         }
 
         private void PortRefreshReleaseSettingsUi()

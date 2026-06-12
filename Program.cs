@@ -25,7 +25,6 @@ namespace GoblinFarmer
                 DebugManager.GemAutoStashAcceptedCandidatesDirectory,
                 AppSettings.ImageRecognition.TopCandidateRetentionCount,
                 "GemAutoStash");
-            LocalToolStartup.StartVsDebugDiabloAutoRecordMonitor();
 
             Application.Run(new frmMain());
         }

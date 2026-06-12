@@ -1455,11 +1455,18 @@ namespace GoblinFarmer
             DateTime? notificationQueuedUtc = null,
             string goblinType = "",
             string areaKey = "",
-            string source = "")
+            string source = "",
+            string firstSeenArea = "",
+            string acceptedArea = "",
+            string currentAreaAtAcceptance = "",
+            string evidenceHash = "",
+            string notificationFreshnessState = "")
         {
             DateTime queuedUtc = notificationQueuedUtc ?? DateTime.UtcNow;
             bool isGoblinAutoCountNotification = string.Equals(latencyContext, "GoblinAutoCount", StringComparison.OrdinalIgnoreCase);
             long notificationSequence = 0;
+            string notificationDisplayArea = areaKey;
+            string payloadFreshnessState = string.IsNullOrWhiteSpace(notificationFreshnessState) ? "Current" : notificationFreshnessState;
             if (isGoblinAutoCountNotification)
             {
                 notificationSequence = System.Threading.Interlocked.Increment(ref portGoblinAutoCountNotificationSequence);
@@ -1481,7 +1488,13 @@ namespace GoblinFarmer
                     $"countToQueueMs={PortElapsedMsForLog(countAcceptedUtc, queuedUtc)}; " +
                     $"source={PortLogField(source)}; " +
                     $"goblinType={PortLogField(goblinType)}; " +
-                    $"areaKey={PortLogField(areaKey)}");
+                    $"areaKey={PortLogField(areaKey)}; " +
+                    $"firstSeenArea={PortLogField(firstSeenArea)}; " +
+                    $"acceptedArea={PortLogField(acceptedArea)}; " +
+                    $"currentAreaAtAcceptance={PortLogField(currentAreaAtAcceptance)}; " +
+                    $"notificationDisplayArea={PortLogField(notificationDisplayArea)}; " +
+                    $"notificationFreshnessState={PortLogField(payloadFreshnessState)}; " +
+                    $"evidenceHash={PortLogField(evidenceHash)}");
             }
 
             if (isGoblinAutoCountNotification)
@@ -1496,6 +1509,12 @@ namespace GoblinFarmer
                         ["payloadGoblinType"] = goblinType,
                         ["payloadAreaKey"] = areaKey,
                         ["payloadSource"] = source,
+                        ["firstSeenArea"] = firstSeenArea,
+                        ["acceptedArea"] = acceptedArea,
+                        ["currentAreaAtAcceptance"] = currentAreaAtAcceptance,
+                        ["notificationDisplayArea"] = notificationDisplayArea,
+                        ["notificationFreshnessState"] = payloadFreshnessState,
+                        ["evidenceHash"] = evidenceHash,
                         ["evidenceDetectedUtc"] = evidenceDetectedUtc?.ToString("O"),
                         ["countAcceptedUtc"] = countAcceptedUtc?.ToString("O"),
                         ["detectionToQueueMs"] = PortElapsedMsForLog(evidenceDetectedUtc, queuedUtc),
@@ -1527,7 +1546,13 @@ namespace GoblinFarmer
                                 $"queueAgeMs={queueAgeMs:0.0}; " +
                                 $"source={PortLogField(source)}; " +
                                 $"goblinType={PortLogField(goblinType)}; " +
-                                $"areaKey={PortLogField(areaKey)}");
+                                $"areaKey={PortLogField(areaKey)}; " +
+                                $"firstSeenArea={PortLogField(firstSeenArea)}; " +
+                                $"acceptedArea={PortLogField(acceptedArea)}; " +
+                                $"currentAreaAtAcceptance={PortLogField(currentAreaAtAcceptance)}; " +
+                                $"notificationDisplayArea={PortLogField(notificationDisplayArea)}; " +
+                                "notificationFreshnessState=Superseded; " +
+                                $"evidenceHash={PortLogField(evidenceHash)}");
                             PortWriteGoblinTrackerJsonEvent(
                                 "GoblinAutoCountNotificationDropped",
                                 new Dictionary<string, object?>
@@ -1542,6 +1567,12 @@ namespace GoblinFarmer
                                     ["payloadGoblinType"] = goblinType,
                                     ["payloadAreaKey"] = areaKey,
                                     ["payloadSource"] = source,
+                                    ["firstSeenArea"] = firstSeenArea,
+                                    ["acceptedArea"] = acceptedArea,
+                                    ["currentAreaAtAcceptance"] = currentAreaAtAcceptance,
+                                    ["notificationDisplayArea"] = notificationDisplayArea,
+                                    ["notificationFreshnessState"] = "Superseded",
+                                    ["evidenceHash"] = evidenceHash,
                                 });
                             return;
                         }
@@ -1561,7 +1592,13 @@ namespace GoblinFarmer
                                 $"queueAgeMs={queueAgeMs:0.0}; " +
                                 $"source={PortLogField(source)}; " +
                                 $"goblinType={PortLogField(goblinType)}; " +
-                                $"areaKey={PortLogField(areaKey)}");
+                                $"areaKey={PortLogField(areaKey)}; " +
+                                $"firstSeenArea={PortLogField(firstSeenArea)}; " +
+                                $"acceptedArea={PortLogField(acceptedArea)}; " +
+                                $"currentAreaAtAcceptance={PortLogField(currentAreaAtAcceptance)}; " +
+                                $"notificationDisplayArea={PortLogField(notificationDisplayArea)}; " +
+                                "notificationFreshnessState=Stale; " +
+                                $"evidenceHash={PortLogField(evidenceHash)}");
                             PortWriteGoblinTrackerJsonEvent(
                                 "GoblinAutoCountNotificationDropped",
                                 new Dictionary<string, object?>
@@ -1576,6 +1613,12 @@ namespace GoblinFarmer
                                     ["payloadGoblinType"] = goblinType,
                                     ["payloadAreaKey"] = areaKey,
                                     ["payloadSource"] = source,
+                                    ["firstSeenArea"] = firstSeenArea,
+                                    ["acceptedArea"] = acceptedArea,
+                                    ["currentAreaAtAcceptance"] = currentAreaAtAcceptance,
+                                    ["notificationDisplayArea"] = notificationDisplayArea,
+                                    ["notificationFreshnessState"] = "Stale",
+                                    ["evidenceHash"] = evidenceHash,
                                 });
                             return;
                         }
@@ -1646,7 +1689,13 @@ namespace GoblinFarmer
                             $"countToDisplayMs={PortElapsedMsForLog(countAcceptedUtc, displayedUtc)}; " +
                             $"source={PortLogField(source)}; " +
                             $"goblinType={PortLogField(goblinType)}; " +
-                            $"areaKey={PortLogField(areaKey)}");
+                            $"areaKey={PortLogField(areaKey)}; " +
+                            $"firstSeenArea={PortLogField(firstSeenArea)}; " +
+                            $"acceptedArea={PortLogField(acceptedArea)}; " +
+                            $"currentAreaAtAcceptance={PortLogField(currentAreaAtAcceptance)}; " +
+                            $"notificationDisplayArea={PortLogField(notificationDisplayArea)}; " +
+                            $"notificationFreshnessState={PortLogField(payloadFreshnessState)}; " +
+                            $"evidenceHash={PortLogField(evidenceHash)}");
                     }
 
                     if (isGoblinAutoCountNotification)
@@ -1663,6 +1712,12 @@ namespace GoblinFarmer
                                 ["payloadGoblinType"] = goblinType,
                                 ["payloadAreaKey"] = areaKey,
                                 ["payloadSource"] = source,
+                                ["firstSeenArea"] = firstSeenArea,
+                                ["acceptedArea"] = acceptedArea,
+                                ["currentAreaAtAcceptance"] = currentAreaAtAcceptance,
+                                ["notificationDisplayArea"] = notificationDisplayArea,
+                                ["notificationFreshnessState"] = payloadFreshnessState,
+                                ["evidenceHash"] = evidenceHash,
                                 ["evidenceDetectedUtc"] = evidenceDetectedUtc?.ToString("O"),
                                 ["countAcceptedUtc"] = countAcceptedUtc?.ToString("O"),
                                 ["detectionToDisplayMs"] = PortElapsedMsForLog(evidenceDetectedUtc, displayedUtc),

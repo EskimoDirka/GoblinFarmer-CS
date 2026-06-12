@@ -908,6 +908,19 @@ namespace GoblinFarmer
                 if (!recentEngagedMatches && !recentEngagedFreshAnyArea && !string.IsNullOrWhiteSpace(freshKilledWithoutEngagedReason))
                 {
                     bool acceptedForManualRefresh = string.Equals(freshKilledWithoutEngagedReason, "Manual", StringComparison.OrdinalIgnoreCase);
+                    if (!acceptedForManualRefresh &&
+                        !PortFreshKilledObservationAreaMatchesConfirmedArea(areaKey, out string confirmedAreaKey))
+                    {
+                        PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc, killedState.AreaKey, killedState.FirstSeenUtc);
+                        PortLogJournalEvidenceFreshnessDiagnostic(
+                            "JournalKilledIgnoredFreshObservationAreaUnconfirmed",
+                            template,
+                            match,
+                            displayArea,
+                            $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; confirmedArea={PortLogField(confirmedAreaKey)}; acceptedArea=None; areaChangedDuringPendingEvidence=True; discardReason=KilledFreshObservationAreaUnconfirmed; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; staleSuppressed=True");
+                        return false;
+                    }
+
                     string freshnessReason = acceptedForManualRefresh ? "Manual" : "Observation";
                     string diagnosticEventName = acceptedForManualRefresh
                         ? "JournalKilledAcceptedFreshManual"
@@ -967,6 +980,16 @@ namespace GoblinFarmer
 
             acceptedCandidate = candidate;
             return true;
+        }
+
+        private bool PortFreshKilledObservationAreaMatchesConfirmedArea(string areaKey, out string confirmedAreaKey)
+        {
+            confirmedAreaKey = PortResolvedAreaKey(portLastConfirmedLocation);
+            return !string.IsNullOrWhiteSpace(areaKey) &&
+                !string.IsNullOrWhiteSpace(confirmedAreaKey) &&
+                GoblinAreaResolver.NormalizedKey(areaKey).Equals(
+                    GoblinAreaResolver.NormalizedKey(confirmedAreaKey),
+                    StringComparison.OrdinalIgnoreCase);
         }
 
         private GoblinJournalKilledState PortRememberJournalKilledEvidence(
@@ -1131,6 +1154,12 @@ namespace GoblinFarmer
             out string details)
         {
             details = "";
+            if (template.Kind == GoblinEvidenceTemplateKind.JournalKilled)
+            {
+                details = $"{staleVisibleLineDetails}; bypassAllowed=False; bypassReason=KilledLineRequiresFreshAnchor";
+                return false;
+            }
+
             string staleArea = PortGoblinEvidenceNoteValue(staleVisibleLineDetails, "staleArea");
             if (string.IsNullOrWhiteSpace(staleArea))
             {

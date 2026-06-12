@@ -19,6 +19,7 @@ param(
     [string]$ReviewVideoPath = "",
     [string[]]$ReviewTimestamp = @(),
     [string]$ReviewNotesPath = "",
+    [string]$ReviewNotesUrl = "https://docs.google.com/spreadsheets/d/1y4qj2gwqmtMxiG3t-epvyjaPoW7TM74bOcbeFyGn9kw/edit?gid=0#gid=0",
     [string]$ReviewEvidenceFolder = ""
 )
 
@@ -1169,7 +1170,7 @@ function Get-AutoReviewEvidenceSelection {
         return [pscustomobject]@{
             VideoPath = ""
             TimestampArgs = @()
-            Status = "Auto review skipped: no OBS video found in Video Clip Review"
+            Status = "Auto review skipped: no review video found in Video Clip Review"
             SourceLog = if ($null -ne $LatestLog) { $LatestLog.FullName } else { "none" }
             VideoStartLocal = ""
             VideoStartSource = ""
@@ -1185,7 +1186,7 @@ function Get-AutoReviewEvidenceSelection {
         "Auto review selected $($events.Count) log-aligned video frame(s)"
     }
     else {
-        "Auto review found OBS video but no high-value log events aligned to the estimated video window"
+        "Auto review found review video but no high-value log events aligned to the estimated video window"
     }
 
     return [pscustomobject]@{
@@ -1206,6 +1207,7 @@ function Add-ReviewEvidenceToPackage {
         [string]$ReviewVideoPath,
         [string[]]$ReviewTimestamp,
         [string]$ReviewNotesPath,
+        [string]$ReviewNotesUrl,
         [string]$ReviewEvidenceFolder,
         [int]$MaxReviewEvidenceFrames,
         [string]$AutoReviewStatus = "",
@@ -1326,9 +1328,10 @@ function Add-ReviewEvidenceToPackage {
             "",
             "Issue: auto-generated debug package review evidence",
             "",
-            "Observed behavior: see selected log-aligned OBS frames and logs.",
+            "Observed behavior: see selected log-aligned video frames, logs, and review notes.",
             "",
             "Source video: $(if ($videoProvided) { $resolvedVideoPath } else { 'none' })",
+            "Review notes URL: $(if ([string]::IsNullOrWhiteSpace($ReviewNotesUrl)) { 'none' } else { $ReviewNotesUrl })",
             "Source log: $(if ([string]::IsNullOrWhiteSpace($AutoReviewSourceLog)) { 'none' } else { $AutoReviewSourceLog })",
             "Auto review status: $(if ([string]::IsNullOrWhiteSpace($AutoReviewStatus)) { 'not requested' } else { $AutoReviewStatus })",
             "Estimated video start: $(if ([string]::IsNullOrWhiteSpace($AutoReviewVideoStartLocal)) { 'unknown' } else { $AutoReviewVideoStartLocal })",
@@ -1368,6 +1371,7 @@ function Add-ReviewEvidenceToPackage {
         ManualEvidenceFolder = if ($manualFolderProvided) { Resolve-FullPath $ReviewEvidenceFolder } else { "" }
         ManualFiles = $manualFiles
         NotesPath = if ($notesProvided) { $resolvedNotesPath } else { "" }
+        NotesUrl = $ReviewNotesUrl
         IssueFile = "ReviewEvidence/issue.md"
         Status = $status
         AutoReviewStatus = $AutoReviewStatus
@@ -2276,7 +2280,7 @@ function New-GoblinTrackerReviewIndex {
         "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#202124}li{margin:4px 0}code{background:#f6f8fa;padding:2px 4px}</style>",
         "</head><body>",
         "<h1>Goblin Tracker Review</h1>",
-        "<p>Open <code>goblin-tracker-summary.txt</code> first. Reviewed OBS frames, when requested, live under <code>ReviewEvidence/</code>.</p>",
+        "<p>Open <code>goblin-tracker-summary.txt</code> first. Reviewed video frames, when requested, live under <code>ReviewEvidence/</code>.</p>",
         "<ul>",
         $links,
         "</ul>",
@@ -2378,6 +2382,7 @@ Write-Host "Include goblin capture fullscreen images: $($IncludeGoblinCaptureFul
 Write-Host "Review video path: $(if ([string]::IsNullOrWhiteSpace($ReviewVideoPath)) { 'none' } else { $ReviewVideoPath })"
 Write-Host "Review timestamp count: $(@($ReviewTimestamp).Count)"
 Write-Host "Review notes path: $(if ([string]::IsNullOrWhiteSpace($ReviewNotesPath)) { 'none' } else { $ReviewNotesPath })"
+Write-Host "Review notes URL: $(if ([string]::IsNullOrWhiteSpace($ReviewNotesUrl)) { 'none' } else { $ReviewNotesUrl })"
 Write-Host "Review evidence folder: $(if ([string]::IsNullOrWhiteSpace($ReviewEvidenceFolder)) { 'none' } else { $ReviewEvidenceFolder })"
 
 if (Test-Path -LiteralPath $stagingRoot) {
@@ -2857,6 +2862,7 @@ try {
         -ReviewVideoPath $effectiveReviewVideoPath `
         -ReviewTimestamp $effectiveReviewTimestamp `
         -ReviewNotesPath $ReviewNotesPath `
+        -ReviewNotesUrl $ReviewNotesUrl `
         -ReviewEvidenceFolder $ReviewEvidenceFolder `
         -MaxReviewEvidenceFrames $MaxReviewEvidenceFrames `
         -AutoReviewStatus $autoReviewSelection.Status `
@@ -2982,10 +2988,11 @@ try {
             "Goblin observation diagnostic crop package policy: most recent $MaxGoblinObservationDiagnosticCrops included; $excludedGoblinObservationDiagnosticCrops excluded",
             "Inventory replay package policy: automatic replay screenshot folders are excluded; structured replay logs are included from Debug\ReplayLogs",
             "Replay log files included: $replayLogFileCount",
-            "Review evidence package policy: selected OBS frames only; full videos are excluded by default; maxReviewEvidenceFrames=$MaxReviewEvidenceFrames",
+            "Review evidence package policy: selected review-video frames only; full videos are excluded by default; maxReviewEvidenceFrames=$MaxReviewEvidenceFrames",
             "Review evidence included: $($reviewEvidenceInfo.Included)",
             "Review evidence status: $($reviewEvidenceInfo.Status)",
             "Review evidence source video: $($reviewEvidenceInfo.SourceVideo)",
+            "Review evidence notes URL: $ReviewNotesUrl",
             "Review evidence ffmpeg: $($reviewEvidenceInfo.Ffmpeg)",
             "Auto review evidence status: $($reviewEvidenceInfo.AutoReviewStatus)",
             "Auto review evidence selected events: $($reviewEvidenceInfo.AutoReviewEventCount)",
@@ -3100,7 +3107,7 @@ try {
             "- Images/Goblin Evidence/Promoted and Images/Gems/Promoted are limited to MaxImageRecognitionBestSampleSets newest sidecar-backed promoted samples and are not bulk-copied",
             "- Debug/InventoryReplay/Salvage and Debug/InventoryReplay/Stash replay image folders are excluded by default; use ReviewEvidence frames/crops for image replay",
             "- Debug/ReplayLogs structured replay logs are copied when present for the current session",
-            "- ReviewEvidence includes only selected OBS frames and manually supplied evidence; full video files are not copied by default",
+            "- ReviewEvidence includes only selected review-video frames and manually supplied evidence; full video files are not copied by default",
             "- bin folders are not copied",
             "- obj folders are not copied",
             "- source files are not copied except selected docs and manifest inputs",

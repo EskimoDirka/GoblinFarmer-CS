@@ -14,11 +14,11 @@ Use `Scripts\Create Debug Package.bat` to create the supported review ZIP. Usefu
 - `goblin-tracker-review.html`
 - latest logs, route summaries, session metadata, screenshots, and structured JSONL events
 - `Debug\ReplayLogs\*.jsonl` when inventory replay metadata was recorded
-- `ReviewEvidence\manifest.json`, `ReviewEvidence\issue.md`, and selected reviewed OBS frames/crops when review evidence parameters were supplied
+- `ReviewEvidence\manifest.json`, `ReviewEvidence\issue.md`, and selected reviewed video frames/crops when review evidence parameters were supplied
 
 Do not create alternate debug package generators without explicit approval.
 
-Reviewed OBS evidence should be folded into the normal debug package, not a separate package format. By default, `Scripts\Create Debug Package.bat` attempts to find the newest `Video Clip Review` recording, align high-value log events to video offsets, and extract selected frames into `ReviewEvidence`. Pass selected timestamps and notes to `Scripts\create-debug-package.ps1` using `-ReviewVideoPath`, `-ReviewTimestamp`, `-ReviewNotesPath`, and optional `-ReviewEvidenceFolder` when the automatic alignment misses something. Full video files remain outside ZIPs by default.
+Reviewed video evidence should be folded into the normal debug package, not a separate package format. By default, `Scripts\Create Debug Package.bat` attempts to find the newest NVIDIA/attached recording under `Video Clip Review`, align high-value log events to video offsets, and extract selected frames into `ReviewEvidence`. Pass selected timestamps and notes to `Scripts\create-debug-package.ps1` using `-ReviewVideoPath`, `-ReviewTimestamp`, `-ReviewNotesPath`, `-ReviewNotesUrl`, and optional `-ReviewEvidenceFolder` when the automatic alignment misses something. Full video files remain outside ZIPs by default. The default live-test notes source is the shared Google Sheet: `https://docs.google.com/spreadsheets/d/1y4qj2gwqmtMxiG3t-epvyjaPoW7TM74bOcbeFyGn9kw/edit?gid=0#gid=0`.
 
 ## Useful Logs And Evidence
 

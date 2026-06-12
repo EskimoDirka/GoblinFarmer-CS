@@ -370,20 +370,43 @@ namespace GoblinFarmer
                     bool confirmationFound = PortWaitForSalvageConfirmation(token, target.ConfirmationExpected, out long confirmationWaitMs, out int confirmationScans);
                     bool retryAttempted = false;
                     bool retryClickSent = false;
+                    bool staleTargetSkippedBeforeRetry = false;
                     if (!confirmationFound && target.ConfirmationExpected && slotClickSent && !token.IsCancellationRequested)
                     {
-                        retryAttempted = true;
-                        PortSleep(token, PortSalvageExpectedConfirmationRetryDelayMs);
-                        retryClickSent = PortSafeSalvageSlotClick(target.ScreenPoint);
-                        if (retryClickSent)
+                        if (!PortCachedSalvageTargetStillActionable(target, phase, recoveryPasses, out int retryVerificationTargets, out long retryVerificationScanMs))
                         {
-                            slotsClicked++;
+                            staleCachedTargetsSkipped++;
+                            staleTargetSkippedBeforeRetry = true;
+                            AppLogger.Info(
+                                "Salvage expected-confirmation stale cache verification: " +
+                                $"phase={PortLogField(phase)}; " +
+                                $"recoveryPass={recoveryPasses}; " +
+                                $"row={target.Row}; " +
+                                $"column={target.Column}; " +
+                                $"screenPoint={FormatPoint(target.ScreenPoint)}; " +
+                                $"footprintRows={target.FootprintRows}; " +
+                                $"quality={PortLogField(target.Quality)}; " +
+                                $"confirmationExpected={target.ConfirmationExpected}; " +
+                                $"targetStillActionable=False; " +
+                                $"freshAcceptedTargets={retryVerificationTargets}; " +
+                                $"scanMs={retryVerificationScanMs}; " +
+                                "outcome=StaleCachedTargetSkippedBeforeRetry");
                         }
+                        else
+                        {
+                            retryAttempted = true;
+                            PortSleep(token, PortSalvageExpectedConfirmationRetryDelayMs);
+                            retryClickSent = PortSafeSalvageSlotClick(target.ScreenPoint);
+                            if (retryClickSent)
+                            {
+                                slotsClicked++;
+                            }
 
-                        bool retryConfirmationFound = PortWaitForSalvageConfirmationExpected(token, out long retryConfirmationWaitMs, out int retryConfirmationScans);
-                        confirmationWaitMs += retryConfirmationWaitMs;
-                        confirmationScans += retryConfirmationScans;
-                        confirmationFound = retryConfirmationFound;
+                            bool retryConfirmationFound = PortWaitForSalvageConfirmationExpected(token, out long retryConfirmationWaitMs, out int retryConfirmationScans);
+                            confirmationWaitMs += retryConfirmationWaitMs;
+                            confirmationScans += retryConfirmationScans;
+                            confirmationFound = retryConfirmationFound;
+                        }
                     }
 
                     bool enterSent = false;
@@ -395,10 +418,13 @@ namespace GoblinFarmer
                         confirmedSalvages++;
                         outcome = "Confirmed";
                     }
+                    else if (staleTargetSkippedBeforeRetry)
+                    {
+                        outcome = "StaleCachedTargetSkippedBeforeRetry";
+                    }
                     else if (target.ConfirmationExpected &&
                         !PortCachedSalvageTargetStillActionable(target, phase, recoveryPasses, out int verificationTargets, out long verificationScanMs))
                     {
-                        staleCachedTargetsSkipped++;
                         outcome = "StaleCachedTargetSkippedAfterRescan";
                         AppLogger.Info(
                             "Salvage expected-confirmation stale cache verification: " +

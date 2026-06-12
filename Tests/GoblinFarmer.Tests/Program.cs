@@ -30,11 +30,8 @@ Run("Default AppSettings path/debug profile are launch-surface neutral", TestApp
 Run("VS Debug/dev profile suppresses first-run setup and forces internal debug defaults", TestVsDebugDevProfileDefaults);
 Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectRootConfigPreferred);
 Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
-Run("VS Debug startup requests Diablo auto-record monitor", TestVsDebugStartupRequestsDiabloAutoRecordMonitor);
-Run("VS Debug OBS monitor startup has readiness diagnostics", TestVsDebugObsMonitorStartupHasReadinessDiagnostics);
-Run("VS Debug form shows OBS recording status", TestVsDebugFormShowsObsRecordingStatus);
-Run("VS Debug form uses proper-case OBS status text", TestVsDebugFormUsesProperCaseObsStatusText);
-Run("VS Debug OBS monitor logger tolerates shared log access", TestVsDebugObsMonitorLoggerToleratesSharedLogAccess);
+Run("VS Debug startup has no external recorder dependency", TestVsDebugStartupHasNoExternalRecorderDependency);
+Run("VS Debug form omits external recorder status panel", TestVsDebugFormOmitsExternalRecorderStatusPanel);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -102,8 +99,8 @@ Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsO
 Run("Debug package limits goblin evidence event screenshots", TestDebugPackageLimitsGoblinEvidenceEventScreenshots);
 Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
 Run("Debug package includes built-in analysis reports", TestDebugPackageIncludesBuiltInAnalysisReports);
-Run("Debug package includes reviewed OBS evidence when requested", TestDebugPackageIncludesReviewedObsEvidenceWhenRequested);
-Run("Debug package auto-aligns OBS review evidence by default", TestDebugPackageAutoAlignsObsReviewEvidenceByDefault);
+Run("Debug package includes reviewed video evidence when requested", TestDebugPackageIncludesReviewedVideoEvidenceWhenRequested);
+Run("Debug package auto-aligns video review evidence by default", TestDebugPackageAutoAlignsVideoReviewEvidenceByDefault);
 Run("Debug package includes size summary report", TestDebugPackageIncludesSizeSummaryReport);
 Run("Image recognition best-sample helper captures selects and promotes", TestImageRecognitionBestSampleHelperCapturesSelectsAndPromotes);
 Run("Image recognition best-sample helper rejects unsafe samples deterministically", TestImageRecognitionBestSampleHelperRejectsUnsafeSamplesDeterministically);
@@ -178,6 +175,7 @@ Run("Salvage classifier accepts low-color unidentified legendary with muted top 
 Run("Salvage classifier accepts unidentified legendary template", TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate);
 Run("Salvage classifier accepts unidentified set template", TestSalvageClassifierAcceptsUnidentifiedSetTemplate);
 Run("Salvage classifier rejects compact Marquise Topaz stack", TestSalvageClassifierRejectsCompactMarquiseTopazStack);
+Run("Salvage classifier rejects muted Marquise Diamond stack as legendary", TestSalvageClassifierRejectsMutedMarquiseDiamondStackAsLegendary);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
 Run("Salvage classifier merges weak upper and strong lower set boundary", TestSalvageClassifierMergesWeakUpperAndStrongLowerSetBoundary);
 Run("Salvage classifier merges set body continuation rows", TestSalvageClassifierMergesSetBodyContinuationRows);
@@ -444,99 +442,34 @@ static void TestVsDebugProjectLocalConfigPreferred()
     }
 }
 
-static void TestVsDebugStartupRequestsDiabloAutoRecordMonitor()
+static void TestVsDebugStartupHasNoExternalRecorderDependency()
 {
     string repoRoot = FindRepositoryRootForTests();
     string programSource = File.ReadAllText(Path.Combine(repoRoot, "Program.cs"));
-    string localToolStartupSource = File.ReadAllText(Path.Combine(repoRoot, "LocalToolStartup.cs"));
 
-    AssertTrue(programSource.Contains("LocalToolStartup.StartVsDebugDiabloAutoRecordMonitor();", StringComparison.Ordinal), "app startup should request the VS Debug local auto-record monitor");
-    AssertTrue(localToolStartupSource.Contains("if (!AppSettings.IsVsDebugProfile)", StringComparison.Ordinal), "auto-record monitor launch must be guarded to VS Debug profile only");
-    AssertTrue(localToolStartupSource.Contains("Auto Record Diablo.ps1", StringComparison.Ordinal), "auto-record monitor should target the ignored local OBS script");
-    AssertTrue(localToolStartupSource.Contains("Scripts\\Local Tools\\Auto Record Diablo.ps1", StringComparison.Ordinal), "auto-record monitor should resolve the expected local script path");
-    AssertTrue(localToolStartupSource.Contains("CreateNoWindow = true", StringComparison.Ordinal), "auto-record monitor should launch PowerShell without a visible console window");
-    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorSkipped: reason=ScriptMissing", StringComparison.Ordinal), "missing local script should be a logged skip, not a startup failure");
-    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorLaunchRequested", StringComparison.Ordinal), "successful launch requests should be logged for diagnostics");
-
-    string localScriptPath = Path.Combine(repoRoot, "Scripts", "Local Tools", "Auto Record Diablo.ps1");
-    if (File.Exists(localScriptPath))
-    {
-        string localScriptSource = File.ReadAllText(localScriptPath);
-        AssertTrue(localScriptSource.Contains("StopRecord", StringComparison.Ordinal), "auto-record script should stop OBS recording after Diablo closes");
-        AssertTrue(localScriptSource.Contains("Get-VisibleDiabloProcesses", StringComparison.Ordinal), "auto-record script should distinguish visible Diablo windows from lingering background processes");
-        AssertTrue(localScriptSource.Contains("MainWindowHandle", StringComparison.Ordinal), "auto-record script should use Diablo window presence for recording lifetime");
-        AssertTrue(localScriptSource.Contains("Diablo process detected without visible window; treating as closed for recording", StringComparison.Ordinal), "auto-record script should log no-window Diablo processes for shutdown diagnostics");
-        AssertTrue(localScriptSource.Contains("Stop-Recording -Reason \"Diablo window closed\"", StringComparison.Ordinal), "auto-record script should stop OBS when the Diablo window closes even if a process lingers");
-        AssertTrue(localScriptSource.Contains("$script:obsLaunchedByMonitor", StringComparison.Ordinal), "auto-record script should track whether it launched OBS");
-        AssertTrue(localScriptSource.Contains("CloseMainWindow()", StringComparison.Ordinal), "auto-record script should close OBS when the monitor launched it");
-        AssertTrue(localScriptSource.Contains("OBS left running because it was not launched by this monitor.", StringComparison.Ordinal), "auto-record script should avoid closing a manually opened OBS instance");
-    }
+    AssertFalse(File.Exists(Path.Combine(repoRoot, "LocalToolStartup.cs")), "local recorder startup helper should be removed");
+    string oldScriptName = string.Concat("Auto", " Record ", "Diablo", ".ps1");
+    string oldStartupToken = string.Concat("Auto", "Record");
+    AssertFalse(File.Exists(Path.Combine(repoRoot, "Scripts", "Local Tools", oldScriptName)), "local recorder script should be removed");
+    AssertFalse(programSource.Contains("LocalToolStartup", StringComparison.Ordinal), "app startup should not launch local recording tooling");
+    AssertFalse(programSource.Contains(oldStartupToken, StringComparison.Ordinal), "app startup should not request a recorder monitor");
 }
 
-static void TestVsDebugObsMonitorStartupHasReadinessDiagnostics()
-{
-    string repoRoot = FindRepositoryRootForTests();
-    string localToolStartupSource = File.ReadAllText(Path.Combine(repoRoot, "LocalToolStartup.cs"));
-    string localScriptPath = Path.Combine(repoRoot, "Scripts", "Local Tools", "Auto Record Diablo.ps1");
-
-    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorReady", StringComparison.Ordinal), "startup should log when the OBS monitor remains running");
-    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorExitedEarly", StringComparison.Ordinal), "startup should log early PowerShell monitor exits");
-    AssertTrue(localToolStartupSource.Contains("AutoRecordDiabloMonitorLaunchRetry", StringComparison.Ordinal), "startup should expose retry diagnostics when process creation is inconclusive");
-    AssertTrue(localToolStartupSource.Contains("attempt <= 2", StringComparison.Ordinal), "startup should retry the monitor request once");
-    if (File.Exists(localScriptPath))
-    {
-        string localScriptSource = File.ReadAllText(localScriptPath);
-        AssertTrue(localScriptSource.Contains("Diablo auto-record monitor already running; startup request ignored by mutex.", StringComparison.Ordinal), "the local script should log mutex-blocked startup requests");
-    }
-}
-
-static void TestVsDebugObsMonitorLoggerToleratesSharedLogAccess()
-{
-    string repoRoot = FindRepositoryRootForTests();
-    string localScriptPath = Path.Combine(repoRoot, "Scripts", "Local Tools", "Auto Record Diablo.ps1");
-    AssertTrue(File.Exists(localScriptPath), "local OBS script should exist for VS Debug auto-recording");
-
-    string localScriptSource = File.ReadAllText(localScriptPath);
-    AssertTrue(localScriptSource.Contains("[IO.File]::Open($logPath", StringComparison.Ordinal), "OBS workflow log writes should use explicit file sharing");
-    AssertTrue(localScriptSource.Contains("[IO.FileShare]::ReadWrite", StringComparison.Ordinal), "OBS workflow log writes should tolerate another reader/writer holding the log");
-    AssertFalse(localScriptSource.Contains("Add-Content -Path $logPath", StringComparison.Ordinal), "OBS workflow log writes should not use Add-Content because transient locks crashed the monitor");
-    AssertTrue(localScriptSource.Contains("$script:obsDesktopRuntimeEnsured", StringComparison.Ordinal), "runtime OBS layout updates should be cached during an active recording session");
-}
-
-static void TestVsDebugFormShowsObsRecordingStatus()
+static void TestVsDebugFormOmitsExternalRecorderStatusPanel()
 {
     string repoRoot = FindRepositoryRootForTests();
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
     string formSource = File.ReadAllText(Path.Combine(repoRoot, "Form1.cs"));
 
-    AssertTrue(releaseSource.Contains("Name = \"grpObsStatus\"", StringComparison.Ordinal), "VS Debug form should create an OBS status group");
-    AssertTrue(releaseSource.Contains("Text = \"OBS\"", StringComparison.Ordinal), "OBS status group should be labeled OBS");
-    AssertTrue(releaseSource.Contains("Start Time:", StringComparison.Ordinal), "OBS status group should display recording start time");
-    AssertTrue(releaseSource.Contains("Status:", StringComparison.Ordinal), "OBS status group should display recording status");
-    AssertTrue(releaseSource.Contains("End Time:", StringComparison.Ordinal), "OBS status group should display recording end time");
-    AssertTrue(releaseSource.Contains("OBS recording started", StringComparison.Ordinal), "OBS status should use recording-start log entries for Start Time");
-    AssertTrue(releaseSource.Contains("OBS recording stopped", StringComparison.Ordinal), "OBS status should use recording-stop log entries for End Time");
-    AssertTrue(releaseSource.Contains("status = \"Recording\"", StringComparison.Ordinal), "OBS status should report recording");
-    AssertTrue(releaseSource.Contains("status = \"Not Recording\"", StringComparison.Ordinal), "OBS status should report not recording");
-    AssertTrue(releaseSource.Contains("status = \"Starting\"", StringComparison.Ordinal), "OBS status should report starting");
-    AssertTrue(releaseSource.Contains("status = \"Stopping\"", StringComparison.Ordinal), "OBS status should report stopping");
-    AssertTrue(releaseSource.Contains("status = \"Closed\"", StringComparison.Ordinal), "OBS status should report closed");
-    AssertTrue(releaseSource.Contains("portSettingsGroup.Bottom + 10", StringComparison.Ordinal), "OBS status group should sit underneath the Settings group");
-    AssertTrue(formSource.Contains("PortUpdateObsStatusDisplay();", StringComparison.Ordinal), "OBS status should refresh from the normal form status timer");
-}
-
-static void TestVsDebugFormUsesProperCaseObsStatusText()
-{
-    string repoRoot = FindRepositoryRootForTests();
-    string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
-
-    AssertTrue(releaseSource.Contains("Status: Closed", StringComparison.Ordinal), "OBS status default should be proper case");
-    AssertFalse(releaseSource.Contains("Status: closed", StringComparison.Ordinal), "OBS status should not display lowercase closed");
-    AssertFalse(releaseSource.Contains("status = \"recording\"", StringComparison.Ordinal), "OBS recording status should not be lowercase");
-    AssertFalse(releaseSource.Contains("status = \"not recording\"", StringComparison.Ordinal), "OBS not-recording status should not be lowercase");
-    AssertFalse(releaseSource.Contains("status = \"starting\"", StringComparison.Ordinal), "OBS starting status should not be lowercase");
-    AssertFalse(releaseSource.Contains("status = \"stopping\"", StringComparison.Ordinal), "OBS stopping status should not be lowercase");
-    AssertFalse(releaseSource.Contains("status = \"closed\"", StringComparison.Ordinal), "OBS closed status should not be lowercase");
+    string oldGroupName = string.Concat("grp", "O", "bs", "Status");
+    string oldRefreshMethod = string.Concat("PortUpdate", "O", "bs", "StatusDisplay");
+    string oldProcessName = string.Concat("o", "bs", "64");
+    string oldLogName = string.Concat("o", "bs", "-diablo-auto", "-", "record.log");
+    AssertFalse(releaseSource.Contains(oldGroupName, StringComparison.Ordinal), "VS Debug form should not create a recorder status group");
+    AssertFalse(releaseSource.Contains(oldRefreshMethod, StringComparison.Ordinal), "recorder status refresh code should be removed");
+    AssertFalse(releaseSource.Contains(oldProcessName, StringComparison.OrdinalIgnoreCase), "form should not inspect recorder processes");
+    AssertFalse(releaseSource.Contains(oldLogName, StringComparison.OrdinalIgnoreCase), "form should not read recorder logs");
+    AssertFalse(formSource.Contains(oldRefreshMethod, StringComparison.Ordinal), "status timer should not refresh recorder state");
 }
 
 static void TestMissingDiabloPathKeepsStartupInSetupRequired()
@@ -3858,7 +3791,7 @@ static void TestDebugPackageIncludesBuiltInAnalysisReports()
     }
 }
 
-static void TestDebugPackageIncludesReviewedObsEvidenceWhenRequested()
+static void TestDebugPackageIncludesReviewedVideoEvidenceWhenRequested()
 {
     string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
     string logs = Path.Combine(testRoot, "Logs");
@@ -3885,7 +3818,7 @@ static void TestDebugPackageIncludesReviewedObsEvidenceWhenRequested()
         File.WriteAllText(Path.Combine(legacyReplay, "metadata.json"), "{}");
         File.WriteAllText(Path.Combine(manualEvidence, "gem-stash-crop.png"), "manual reviewed crop");
         string notesPath = Path.Combine(manualEvidence, "issue.md");
-        File.WriteAllText(notesPath, "# Gem stash issue\r\n\r\nIssue: reviewed OBS frame.");
+        File.WriteAllText(notesPath, "# Gem stash issue\r\n\r\nIssue: reviewed NVIDIA frame.");
 
         string missingVideoPath = Path.Combine(testRoot, "Video Clip Review", "missing.mkv");
         string scriptPath = FindDebugPackageScript();
@@ -3920,8 +3853,11 @@ static void TestDebugPackageIncludesReviewedObsEvidenceWhenRequested()
         string packageManifest = ReadRequiredZipText(archive, "debug-package-manifest.txt");
         string reviewIndex = ReadRequiredZipText(archive, "goblin-tracker-review.html");
         AssertTrue(reviewManifest.Contains("Frame extraction skipped: review video missing", StringComparison.OrdinalIgnoreCase), "review manifest should record missing-video frame extraction skip");
+        AssertTrue(reviewManifest.Contains("NotesUrl", StringComparison.OrdinalIgnoreCase), "review manifest should include the review notes URL");
+        AssertTrue(reviewManifest.Contains("docs.google.com/spreadsheets", StringComparison.OrdinalIgnoreCase), "review manifest should carry the default Google Sheet review notes URL");
         AssertTrue(reviewManifest.Contains("\"VideoIncluded\"", StringComparison.OrdinalIgnoreCase) && reviewManifest.Contains("false", StringComparison.OrdinalIgnoreCase), "review manifest should state that full videos are not packaged");
         AssertTrue(packageManifest.Contains("Review evidence included: True", StringComparison.OrdinalIgnoreCase), "package manifest should report review evidence inclusion");
+        AssertTrue(packageManifest.Contains("Review evidence notes URL:", StringComparison.OrdinalIgnoreCase), "package manifest should report the review notes URL");
         AssertTrue(packageManifest.Contains("Replay log files included: 1", StringComparison.OrdinalIgnoreCase), "package manifest should report replay log inclusion");
         AssertTrue(packageManifest.Contains("automatic replay screenshot folders are excluded", StringComparison.OrdinalIgnoreCase), "package manifest should document replay image folder exclusion");
         AssertTrue(reviewIndex.Contains("ReviewEvidence/manifest.json", StringComparison.OrdinalIgnoreCase), "review index should link review evidence manifest");
@@ -3935,7 +3871,7 @@ static void TestDebugPackageIncludesReviewedObsEvidenceWhenRequested()
     }
 }
 
-static void TestDebugPackageAutoAlignsObsReviewEvidenceByDefault()
+static void TestDebugPackageAutoAlignsVideoReviewEvidenceByDefault()
 {
     string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
     string logs = Path.Combine(testRoot, "Logs");
@@ -3958,7 +3894,7 @@ static void TestDebugPackageAutoAlignsObsReviewEvidenceByDefault()
             $"[{eventTime:yyyy-MM-dd HH:mm:ss.fff}] SalvageActionableLeftoversRemain phase=PostSalvage; targetCount=2",
         ]);
 
-        string videoPath = Path.Combine(videoReview, "obs-review-auto.mkv");
+        string videoPath = Path.Combine(videoReview, "nvidia-review-auto.mkv");
         File.WriteAllText(videoPath, "fake video file for package selection test");
         File.SetCreationTime(videoPath, sessionStart);
         File.SetLastWriteTime(videoPath, sessionStart.AddSeconds(30));
@@ -3977,7 +3913,7 @@ static void TestDebugPackageAutoAlignsObsReviewEvidenceByDefault()
         string output = process.StandardOutput.ReadToEnd();
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit(60000);
-        AssertEqual(0, process.ExitCode, $"debug package script should succeed with default OBS review alignment. stdout={output}; stderr={error}");
+        AssertEqual(0, process.ExitCode, $"debug package script should succeed with default video review alignment. stdout={output}; stderr={error}");
 
         string packagePath = Directory.GetFiles(Path.Combine(testRoot, "DebugPackages"), "GoblinFarmer_Debug_*.zip")
             .OrderByDescending(File.GetLastWriteTimeUtc)
@@ -3985,13 +3921,14 @@ static void TestDebugPackageAutoAlignsObsReviewEvidenceByDefault()
         AssertTrue(File.Exists(packagePath), "debug package zip should be created");
 
         using ZipArchive archive = ZipFile.OpenRead(packagePath);
-        AssertTrue(ZipHasEntry(archive, "ReviewEvidence/manifest.json"), "default package should include review evidence manifest when an OBS video and matching log event exist");
+        AssertTrue(ZipHasEntry(archive, "ReviewEvidence/manifest.json"), "default package should include review evidence manifest when a review video and matching log event exist");
         AssertTrue(ZipHasEntry(archive, "ReviewEvidence/issue.md"), "default package should include auto-generated review issue notes");
 
         string reviewManifest = ReadRequiredZipText(archive, "ReviewEvidence/manifest.json");
         string packageManifest = ReadRequiredZipText(archive, "debug-package-manifest.txt");
         string issueText = ReadRequiredZipText(archive, "ReviewEvidence/issue.md");
         AssertTrue(reviewManifest.Contains("Auto review selected 1 log-aligned video frame", StringComparison.OrdinalIgnoreCase), "review manifest should report automatic log/video alignment");
+        AssertTrue(reviewManifest.Contains("docs.google.com/spreadsheets", StringComparison.OrdinalIgnoreCase), "review manifest should carry the default Google Sheet review notes URL");
         AssertTrue(reviewManifest.Contains("salvage-actionable-leftovers-remain", StringComparison.OrdinalIgnoreCase), "review manifest should include the selected log event label");
         AssertTrue(reviewManifest.Contains("SalvageActionableLeftoversRemain", StringComparison.OrdinalIgnoreCase), "review manifest should include the source log line");
         AssertTrue(reviewManifest.Contains("VideoIncluded", StringComparison.OrdinalIgnoreCase) && reviewManifest.Contains("false", StringComparison.OrdinalIgnoreCase), "review manifest should record that the full video was excluded");
@@ -5175,6 +5112,8 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress", StringComparison.Ordinal), "automatic counting should share a testable encounter suppression policy");
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "automatic counting should require reliable evidence before incrementing");
     AssertTrue(autoCountSource.Contains("PortObservationPendingJournalPromotedByReliability", StringComparison.Ordinal), "sustained active Engaged journal evidence should be able to promote a pending observation into the normal count guards");
+    AssertTrue(autoCountMethod.Contains("MinimapAreaChangedLowMargin", StringComparison.Ordinal), "borderline minimap evidence should not count a new area when the confirmed area still points elsewhere");
+    AssertTrue(autoCountMethod.Contains("MinimapAreaChangedConfidenceMargin", StringComparison.Ordinal), "area-changed minimap suppression should use an explicit conservative margin");
     AssertTrue(observeMethod.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "observation summaries should show pending Engaged-only journal evidence before auto-count attempts run");
     AssertTrue(evidenceModelSource.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "Engaged-only journal evidence should have an explicit pending-confirmation reason");
     AssertTrue(autoCountSource.Contains("refreshEncounterLastSeen", StringComparison.Ordinal), "suppressed source variants should refresh encounter last-seen state instead of expiring from the original count time");
@@ -5188,6 +5127,9 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");
     AssertTrue(autoCountMethod.Contains("Goblin auto-counted", StringComparison.Ordinal), "automatic counting should show a visible notification when it increments");
     AssertTrue(autoCountMethod.Contains("GoblinLatencyTrace", StringComparison.Ordinal), "automatic counting should log count-to-notification latency diagnostics");
+    AssertTrue(autoCountMethod.Contains("notificationDisplayArea", StringComparison.Ordinal), "accepted/suppressed auto-count diagnostics should include the notification display area");
+    AssertTrue(autoCountMethod.Contains("notificationFreshnessState", StringComparison.Ordinal), "accepted/suppressed auto-count diagnostics should include stale/current notification state");
+    AssertTrue(autoCountMethod.Contains("currentAreaAtAcceptance", StringComparison.Ordinal), "auto-count diagnostics should include the current area at acceptance");
     AssertTrue(autoCountMethod.Contains("RAINBOW GOBLIN!", StringComparison.Ordinal), "automatic counting should show a special Rainbow Goblin alert");
     AssertTrue(autoCountMethod.Contains("System.Media.SystemSounds.Exclamation.Play()", StringComparison.Ordinal), "Rainbow Goblin automatic counts should play a local alert sound");
     AssertTrue(automationSource.Contains("WS_EX_TRANSPARENT", StringComparison.Ordinal), "notification splash should be click-through so it does not block teleport clicks");
@@ -5633,6 +5575,11 @@ static void TestGoblinAutoCountNotificationQueueDropsStaleOrSupersededPayloads()
     AssertTrue(splashMethod.Contains("queueSize", StringComparison.Ordinal), "notification diagnostics should include queue size");
     AssertTrue(splashMethod.Contains("payloadGoblinType", StringComparison.Ordinal), "notification diagnostics should include the goblin payload type");
     AssertTrue(splashMethod.Contains("payloadAreaKey", StringComparison.Ordinal), "notification diagnostics should include the goblin payload area");
+    AssertTrue(splashMethod.Contains("firstSeenArea", StringComparison.Ordinal), "notification diagnostics should include the original first-seen area");
+    AssertTrue(splashMethod.Contains("acceptedArea", StringComparison.Ordinal), "notification diagnostics should include the accepted area");
+    AssertTrue(splashMethod.Contains("notificationDisplayArea", StringComparison.Ordinal), "notification diagnostics should include the actual displayed area");
+    AssertTrue(splashMethod.Contains("notificationFreshnessState", StringComparison.Ordinal), "notification diagnostics should identify current, stale, or superseded payloads");
+    AssertTrue(splashMethod.Contains("evidenceHash", StringComparison.Ordinal), "notification diagnostics should include the source evidence hash");
 }
 
 static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
@@ -5873,6 +5820,8 @@ static void TestGoblinAcceptedCountsPersistLastObservationUntilReset()
     AssertTrue(acceptedPublishMethod.Contains("persistUntilNextAcceptedCount=True", StringComparison.Ordinal), "accepted count update logs should document the persistent display policy");
     AssertTrue(clearMethod.Contains("PortDisplayedObservationIsAcceptedCount(previousObservation)", StringComparison.Ordinal), "clear/no-candidate paths should preserve the last accepted count before area-change clearing");
     AssertTrue(clearMethod.Contains("AcceptedCountPersistent", StringComparison.Ordinal), "clear skips should identify accepted-count persistence");
+    AssertTrue(clearMethod.Contains("TeleportConfirmedAreaChanged", StringComparison.Ordinal), "confirmed route area changes should clear accepted Last Observation instead of leaking stale goblins into the next area");
+    AssertTrue(clearMethod.Contains("acceptedDisplayAreaChanged", StringComparison.Ordinal), "accepted Last Observation persistence should still clear when the confirmed area changes");
     AssertTrue(preserveIncomingMethod.Contains("PortDisplayedObservationIsAcceptedCount(displayedObservation)", StringComparison.Ordinal), "suppressed/stale incoming observations should not replace an accepted-count display");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinEvidenceObservationState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear the accepted Last Observation");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinEvidenceObservationState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear the accepted Last Observation like Reset Stats");
@@ -5884,12 +5833,13 @@ static void TestGoblinPendingCombatJournalCanReplaceStaleLastObservationDisplay(
     string repoRoot = FindRepositoryRootForTests();
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
     string preserveIncomingMethod = ExtractMethodBody(sessionStatsSource, "private bool PortShouldPreserveDisplayedObservationAgainstIncoming");
-    string pendingReplaceMethod = ExtractMethodBody(sessionStatsSource, "private bool PortPendingJournalObservationShouldReplaceAcceptedDisplay");
+    string pendingReplaceMethod = ExtractMethodBody(sessionStatsSource, "private bool PortFreshObservationShouldReplaceAcceptedDisplay");
 
-    AssertTrue(preserveIncomingMethod.Contains("PortPendingJournalObservationShouldReplaceAcceptedDisplay(incomingObservation, displayedObservation)", StringComparison.Ordinal), "accepted Last Observation persistence should yield to fresh pending combat journal evidence");
+    AssertTrue(preserveIncomingMethod.Contains("PortFreshObservationShouldReplaceAcceptedDisplay(incomingObservation, displayedObservation)", StringComparison.Ordinal), "accepted Last Observation persistence should yield to fresh incoming evidence");
     AssertTrue(pendingReplaceMethod.Contains("portCombatRunning", StringComparison.Ordinal), "pending journal display replacement should require active combat");
+    AssertTrue(pendingReplaceMethod.Contains("incomingObservation.WouldCount", StringComparison.Ordinal), "fresh count-eligible evidence should replace a stale accepted display before the count finalizes");
     AssertTrue(pendingReplaceMethod.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "only reliability-pending journal evidence should replace stale accepted display");
-    AssertTrue(pendingReplaceMethod.Contains("LastObservationPendingJournalReplacesAcceptedDisplay", StringComparison.Ordinal), "replacement path should log explicit stale-display diagnostics");
+    AssertTrue(pendingReplaceMethod.Contains("LastObservationFreshEvidenceReplacesAcceptedDisplay", StringComparison.Ordinal), "replacement path should log explicit stale-display diagnostics");
 }
 
 static void TestGoblinNonCountingIdleJournalCannotPublishLastObservation()
@@ -6047,6 +5997,7 @@ static void TestGoblinStaleJournalSuppressionCanBypassAfterVerifiedFreshArea()
     AssertTrue(bypassMethod.Contains("PortApplyJournalMinimapAreaOverride", StringComparison.Ordinal), "bypass should preserve minimap-area override safeguards");
     AssertTrue(evidenceSource.Contains("staleEvidenceFirstSeenAgeSeconds=", StringComparison.Ordinal), "stale visible-line diagnostics should include the original evidence first-seen age");
     AssertTrue(bypassMethod.Contains("firstSuppressedAgeSeconds >= 20 || evidenceFirstSeenAgeSeconds >= 20", StringComparison.Ordinal), "bypass should allow old original evidence even if the first suppression record is new");
+    AssertTrue(bypassMethod.Contains("KilledLineRequiresFreshAnchor", StringComparison.Ordinal), "old killed-only journal rows should not migrate into a later area without fresh Engaged or Minimap support");
     AssertTrue(bypassMethod.Contains("bypassReason=StaleLineTooRecent", StringComparison.Ordinal), "too-recent stale lines should remain suppressed diagnostically");
     AssertTrue(bypassMethod.Contains("string.Equals(staleArea, currentArea", StringComparison.Ordinal), "same-area stale lines should not bypass suppression");
     AssertTrue(bypassMethod.Contains("GoblinManualCountBlockList.IsBlocked(currentArea)", StringComparison.Ordinal), "blocked areas should not use the bypass");
@@ -6085,6 +6036,8 @@ static void TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions()
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
 
     AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshObservation", StringComparison.Ordinal), "continuous observation scans should log fresh Killed journal acceptance");
+    AssertTrue(evidenceSource.Contains("JournalKilledIgnoredFreshObservationAreaUnconfirmed", StringComparison.Ordinal), "continuous observation killed-only scans should reject unconfirmed area drift before counting");
+    AssertTrue(evidenceSource.Contains("PortFreshKilledObservationAreaMatchesConfirmedArea", StringComparison.Ordinal), "fresh killed-only observation scans should require a confirmed same-area anchor");
     AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshManual", StringComparison.Ordinal), "manual refresh should log fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("JournalKilledIgnoredStale", StringComparison.Ordinal), "stale Killed journal lines should log a stale suppression reason");
     AssertTrue(evidenceSource.Contains("freshKilledWithoutEngagedReason: \"Observation\"", StringComparison.Ordinal), "continuous observation scans should opt into fresh Killed journal acceptance");
@@ -6255,13 +6208,41 @@ static void DrawSyntheticLowColorLegendaryTextAnchor(Bitmap bitmap, int row, int
     using SolidBrush background = new(Color.FromArgb(15, 15, 13));
     using SolidBrush paleBody = new(Color.FromArgb(86, 86, 82));
     using SolidBrush sideAccent = new(Color.FromArgb(120, 74, 34));
+    using SolidBrush mutedTopEdge = new(Color.FromArgb(112, 74, 42));
     using SolidBrush lightText = new(Color.FromArgb(180, 150, 130));
 
     graphics.FillRectangle(background, cell);
     graphics.FillRectangle(paleBody, cell.Left + 13, cell.Top + 15, cell.Width - 26, cell.Height - 23);
+    graphics.FillRectangle(mutedTopEdge, cell.Left + 9, cell.Top + 8, 50, 2);
     graphics.FillRectangle(sideAccent, cell.Left + 6, cell.Top + 18, 5, cell.Height - 28);
     graphics.FillRectangle(sideAccent, cell.Right - 11, cell.Top + 18, 5, cell.Height - 28);
 
+    for (int i = 0; i < 12; i++)
+    {
+        int x = cell.Left + 6 + (i * 5);
+        graphics.FillRectangle(lightText, x, cell.Top + 58, 4, 8);
+    }
+}
+
+static void DrawSyntheticMutedMarquiseDiamondStackLikeCell(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(15, 15, 13));
+    using SolidBrush paleBody = new(Color.FromArgb(86, 86, 82));
+    using SolidBrush mutedDiamond = new(Color.FromArgb(170, 185, 205));
+    using SolidBrush lightText = new(Color.FromArgb(180, 150, 130));
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillRectangle(paleBody, cell.Left + 13, cell.Top + 18, cell.Width - 26, cell.Height - 26);
+    Point[] gem =
+    [
+        new(cell.Left + 32, cell.Top + 23),
+        new(cell.Left + 47, cell.Top + 35),
+        new(cell.Left + 39, cell.Top + 52),
+        new(cell.Left + 22, cell.Top + 42)
+    ];
+    graphics.FillPolygon(mutedDiamond, gem);
     for (int i = 0; i < 12; i++)
     {
         int x = cell.Left + 6 + (i * 5);
@@ -6643,9 +6624,11 @@ static void TestSalvageLoopVerifiesExpectedConfirmationMissBeforeFailure()
     string verificationMethod = ExtractMethodBody(townSource, "private bool PortCachedSalvageTargetStillActionable");
 
     AssertTrue(townSource.Contains("StaleCachedTargetSkippedAfterRescan", StringComparison.Ordinal), "stale cached expected-confirmation targets should be skipped after a verification rescan");
+    AssertTrue(townSource.Contains("StaleCachedTargetSkippedBeforeRetry", StringComparison.Ordinal), "stale cached expected-confirmation targets should be verified before retry-clicking a missed confirmation");
     AssertTrue(townSource.Contains("Salvage expected-confirmation verification:", StringComparison.Ordinal), "expected-confirmation verification should be logged");
     AssertTrue(townSource.Contains("targetStillActionable=False", StringComparison.Ordinal), "stale-cache skip diagnostics should report when the target is gone");
     AssertTrue(townSource.Contains("staleCachedTargetsSkipped", StringComparison.Ordinal), "salvage summaries should report stale cached target skips");
+    AssertTrue(townSource.IndexOf("PortCachedSalvageTargetStillActionable(target, phase, recoveryPasses, out int retryVerificationTargets", StringComparison.Ordinal) < townSource.IndexOf("retryClickSent = PortSafeSalvageSlotClick(target.ScreenPoint)", StringComparison.Ordinal), "expected-confirmation retry should verify the target is still actionable before clicking again");
     AssertTrue(townSource.IndexOf("PortCachedSalvageTargetStillActionable", StringComparison.Ordinal) < townSource.IndexOf("SalvageExpectedConfirmationMissingContinuing", StringComparison.Ordinal), "verification should happen before continuing after an expected-confirmation miss");
     AssertTrue(verificationMethod.Contains("PortScanSalvageInventorySlots", StringComparison.Ordinal), "verification should use a fresh production classifier scan");
     AssertTrue(verificationMethod.Contains("target.Row >= candidate.Row", StringComparison.Ordinal), "verification should consider targets covering the stale cached row");
@@ -7147,6 +7130,20 @@ static void TestSalvageClassifierRejectsCompactMarquiseTopazStack()
     AssertEqual("RegularGemNonSalvageable", candidate.Reason, "compact Marquise Topaz-style stack should use the regular gem skip reason");
     AssertEqual("RegularGem", candidate.Quality, "compact Marquise Topaz-style stack should expose RegularGem quality");
     AssertFalse(result.Targets.Any(target => target.Row == 5 && target.Column == 1), "compact Marquise Topaz-style stack should not produce a click target");
+}
+
+static void TestSalvageClassifierRejectsMutedMarquiseDiamondStackAsLegendary()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticMutedMarquiseDiamondStackLikeCell(grid, 3, 1);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == 3 && candidate.Column == 1);
+    AssertFalse(candidate.Accepted, "muted Marquise Diamond-like stack should not be accepted as a salvage target");
+    AssertFalse(candidate.Quality.Equals("Legendary", StringComparison.OrdinalIgnoreCase), "muted Marquise Diamond-like stack should not use legendary confirmation handling");
+    AssertFalse(result.Targets.Any(target => target.Row == 3 && target.Column == 1), "muted Marquise Diamond-like stack should not produce a salvage click target");
+    AssertTrue(candidate.Metrics.TopFramePixels < 80, "regression fixture should exercise the no-top-edge gem shape seen in the 001505 video");
 }
 
 static void TestSalvageClassifierSplitsStackedOneTileItems()
@@ -7767,7 +7764,8 @@ static void TestInventoryReplayCommandRemainsHarnessOnly()
     AssertTrue(imageRecognitionSource.Contains("GemStashInventoryReplayArtifacts.RecordScanLog", StringComparison.Ordinal), "live gem stash scans should record structured replay logs instead of saving replay screenshots");
     AssertFalse(imageRecognitionSource.Contains("SaveScanArtifact", StringComparison.Ordinal), "live inventory scans should not call automatic replay screenshot writers");
     AssertTrue(packageScript.Contains("ReviewEvidence", StringComparison.Ordinal), "debug packages should support curated review evidence");
-    AssertTrue(packageScript.Contains("ReviewVideoPath", StringComparison.Ordinal), "debug packages should accept reviewed OBS video paths for selected frame extraction");
+    AssertTrue(packageScript.Contains("ReviewVideoPath", StringComparison.Ordinal), "debug packages should accept reviewed video paths for selected frame extraction");
+    AssertTrue(packageScript.Contains("ReviewNotesUrl", StringComparison.Ordinal), "debug packages should carry the shared review notes URL");
     AssertTrue(packageScript.Contains("Debug\\ReplayLogs", StringComparison.Ordinal), "debug packages should include structured replay logs");
     AssertTrue(packageScript.Contains("automatic replay screenshot folders are excluded", StringComparison.Ordinal), "debug packages should document automatic replay screenshot exclusion");
     AssertFalse(packageScript.Contains("MaxInventoryReplayArtifacts", StringComparison.Ordinal), "debug packages should no longer include bounded automatic inventory replay image folders");
