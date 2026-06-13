@@ -2,11 +2,34 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-13 164257 Live Review Fix Pass
+
+- Review inputs: `DebugPackages\GoblinFarmer_Debug_20260613_164257.zip` and `Video Clip Review\2026-06-13 16-23-12.mkv`.
+- Issues covered: Cave Level 1 overlay `Go Next` falling back to `Y` after title-area freshness expired, Cathedral Level 2 stale Blood Thief killed-row false count, PF1 first-goblin overlay `Go Next` showing `Y`, PF1 second Treasure Goblin same-signature Journal Engaged duplicate suppression, and New Tristram strong green set cells skipped as regular gems after bulk salvage.
+- Fix coverage: overlay current-area override now persists for 90 seconds and stores accepted area count/limit; PF1/PF2 overlay stays `Go Next: N` until the second count slot is filled; killed Journal visible-row carryover has a bounded 75-second suppression window; PF duplicate bypass accepts sustained high-confidence combat Journal Engaged support up to 60 seconds only inside PF1/PF2 while capacity remains; salvage rejects strong set-green/weak-gem-body cells from both regular-gem and live gem-stack fallback classification.
+- Live validation still needed: confirm the next PF1/PF2 run shows `Go Next: N` after goblin one and counts/notifies goblin two, and confirm a town salvage run no longer leaves the reviewed strong green set-item shape behind.
+
+Validation commands:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+git diff --check
+```
+
+Results:
+
+- `dotnet build GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including the new stale killed-row, PF duplicate, overlay, and salvage set-cell coverage.
+- `git diff --check`: passed with LF-to-CRLF normalization warnings only.
+
 ## 2026-06-13 VS Debug In-Game Goblin Overlay
 
 - Scope covered: passive VS Debug-only click-through Goblin overlay centered over Diablo.
-- Fix coverage: overlay initializes only for VS Debug, hides when Diablo is missing/minimized, formats `Count/Goblin/Area/Go Next`, updates only after successful automatic counts, excludes `Sim Count`/debug simulation paths, recomputes `Go Next` from current confirmed location, and resets on Reset Stats/New Game.
-- Follow-up coverage: `Video Clip Review\2026-06-13 13-20-42.mkv` showed a Cave of the Moon Clan Level 1 Treasure Goblin count where the accepted area was the Cave sub-area but the route-confirmed context was still Southern Highlands, so `Go Next` stayed `N`. The overlay now stores the route context at acceptance and treats that as valid for `Go Next=Y` until the confirmed route context changes; the overlay text is also custom-painted with larger colored sections.
+- Fix coverage: overlay initializes only for VS Debug, hides when Diablo is missing/minimized, formats `Count/GPH/Goblin/Area/Go Next`, updates only after successful automatic counts, excludes `Sim Count`/debug simulation paths, recomputes `Go Next` from current confirmed location, and resets on Reset Stats/New Game.
+- Follow-up coverage: `Video Clip Review\2026-06-13 13-20-42.mkv` showed a Cave of the Moon Clan Level 1 Treasure Goblin count where the accepted area was the Cave sub-area but the route-confirmed context was still Southern Highlands, so `Go Next` stayed `N`. The overlay now stores the route context at acceptance and treats that as valid for `Go Next=Y` until the confirmed route context changes; the overlay text is also custom-painted with larger colored sections, explicit section gaps, and `GPH` immediately to the right of `Count`.
 - Live validation still needed: confirm the overlay is positioned correctly over the real Diablo window on the current dual-monitor layout and remains click-through during route/combat input.
 
 Validation commands:

@@ -6,9 +6,9 @@ namespace GoblinFarmer
     public partial class frmMain
     {
         private const int PortGoblinOverlayTopInset = 8;
-        private const int PortGoblinOverlayWidth = 1060;
+        private const int PortGoblinOverlayWidth = 1240;
         private const int PortGoblinOverlayHeight = 46;
-        private static readonly TimeSpan PortGoblinOverlayDetectedAreaFreshness = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan PortGoblinOverlayDetectedAreaFreshness = TimeSpan.FromSeconds(90);
         private readonly object portGoblinOverlayLock = new();
         private Form? portGoblinOverlayForm;
         private PortGoblinOverlayTextControl? portGoblinOverlayTextControl;
@@ -23,6 +23,8 @@ namespace GoblinFarmer
             string AcceptedRouteAreaKey,
             string DisplayArea,
             string Source,
+            int AreaCount,
+            int AreaLimit,
             DateTime AcceptedUtc);
 
         private sealed class PortNoActivateGoblinOverlayForm : Form
@@ -47,6 +49,7 @@ namespace GoblinFarmer
         private sealed class PortGoblinOverlayTextControl : Control
         {
             private int total;
+            private double gph;
             private string goblinType = "--";
             private string area = "--";
             private bool goNext;
@@ -63,13 +66,14 @@ namespace GoblinFarmer
                 ForeColor = Color.White;
             }
 
-            public void SetOverlayState(int total, string goblinType, string area, bool goNext)
+            public void SetOverlayState(int total, double gph, string goblinType, string area, bool goNext)
             {
                 this.total = Math.Max(0, total);
+                this.gph = Math.Max(0, gph);
                 this.goblinType = string.IsNullOrWhiteSpace(goblinType) ? "--" : goblinType.Trim();
                 this.area = string.IsNullOrWhiteSpace(area) ? "--" : area.Trim();
                 this.goNext = goNext;
-                Text = PortFormatGoblinOverlayText(this.total, this.goblinType, this.area, goNext);
+                Text = PortFormatGoblinOverlayText(this.total, this.gph, this.goblinType, this.area, goNext);
                 Invalidate();
             }
 
@@ -83,6 +87,8 @@ namespace GoblinFarmer
                 [
                     ("Count:", Color.Red, 0f),
                     ($" {total}", Color.Red, sectionGap),
+                    ("GPH:", Color.DeepSkyBlue, 0f),
+                    ($" {gph:0.00}", Color.DeepSkyBlue, sectionGap),
                     ("Goblin:", Color.Gold, 0f),
                     ($" {goblinType}", Color.Gold, sectionGap),
                     ("Area:", Color.LightGreen, 0f),
@@ -138,7 +144,7 @@ namespace GoblinFarmer
                 BackColor = Color.FromArgb(24, 24, 24),
                 Font = new Font(Font.FontFamily, 16.0f, FontStyle.Bold),
             };
-            portGoblinOverlayTextControl.SetOverlayState(0, "--", "--", false);
+            portGoblinOverlayTextControl.SetOverlayState(0, 0.0, "--", "--", false);
 
             portGoblinOverlayForm.Controls.Add(portGoblinOverlayTextControl);
         }
@@ -167,7 +173,7 @@ namespace GoblinFarmer
             }
 
             PortGoblinOverlayDisplayState displayState = PortBuildGoblinOverlayDisplayState();
-            portGoblinOverlayTextControl.SetOverlayState(displayState.Count, displayState.GoblinType, displayState.Area, displayState.GoNext);
+            portGoblinOverlayTextControl.SetOverlayState(displayState.Count, displayState.Gph, displayState.GoblinType, displayState.Area, displayState.GoNext);
 
             int diabloWidth = rect.Right - rect.Left;
             portGoblinOverlayForm.Left = rect.Left + (diabloWidth - portGoblinOverlayForm.Width) / 2;
@@ -188,21 +194,27 @@ namespace GoblinFarmer
 
             if (state == null)
             {
-                return new(0, "--", "--", false);
+                return new(0, 0.0, "--", "--", false);
             }
 
+            DiagnosticsSessionSnapshot snapshot = DebugManager.Session.Snapshot(DateTime.Now);
             string currentAreaForGoNext = PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow);
             bool goNext = PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, state.AcceptedRouteAreaKey, currentAreaForGoNext);
-            return new(state.Count, state.GoblinType, state.DisplayArea, goNext);
+            if (goNext && PortGoblinOverlayWaitingForPandemoniumSecondGoblin(state))
+            {
+                goNext = false;
+            }
+
+            return new(state.Count, snapshot.GoblinsPerHour, state.GoblinType, state.DisplayArea, goNext);
         }
 
-        private sealed record PortGoblinOverlayDisplayState(int Count, string GoblinType, string Area, bool GoNext);
+        private sealed record PortGoblinOverlayDisplayState(int Count, double Gph, string GoblinType, string Area, bool GoNext);
 
-        private static string PortFormatGoblinOverlayText(int total, string goblinType, string area, bool goNext)
+        private static string PortFormatGoblinOverlayText(int total, double gph, string goblinType, string area, bool goNext)
         {
             string displayGoblinType = string.IsNullOrWhiteSpace(goblinType) ? "--" : goblinType.Trim();
             string displayArea = string.IsNullOrWhiteSpace(area) ? "--" : area.Trim();
-            return $"Count: {Math.Max(0, total)}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? "Y" : "N")}";
+            return $"Count: {Math.Max(0, total)}  GPH: {Math.Max(0, gph):0.00}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? "Y" : "N")}";
         }
 
         private bool PortGoblinOverlayShouldGoNext(string lastAcceptedAreaKey, string acceptedRouteAreaKey, string currentConfirmedLocation)
@@ -220,6 +232,14 @@ namespace GoblinFarmer
                 acceptedKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase) ||
                 (!string.IsNullOrWhiteSpace(acceptedRouteKey) &&
                 acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private bool PortGoblinOverlayWaitingForPandemoniumSecondGoblin(PortGoblinOverlayAcceptedCountState state)
+        {
+            return state.AreaLimit == 2 &&
+                state.AreaCount > 0 &&
+                state.AreaCount < state.AreaLimit &&
+                GoblinPandemoniumMultiCountDuplicatePolicy.IsPandemoniumFortressTwoCountArea(state.AcceptedAreaKey);
         }
 
         private string PortGoblinOverlayCurrentAreaForGoNext(DateTime nowUtc)
@@ -276,6 +296,8 @@ namespace GoblinFarmer
             string acceptedRouteAreaKey,
             string displayArea,
             string source,
+            int areaCount,
+            int areaLimit,
             DateTime acceptedUtc)
         {
             if (!AppSettings.IsVsDebugProfile || total <= 0)
@@ -292,6 +314,8 @@ namespace GoblinFarmer
                     PortLocationKey(acceptedRouteAreaKey),
                     string.IsNullOrWhiteSpace(displayArea) ? "--" : displayArea.Trim(),
                     string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim(),
+                    Math.Max(0, areaCount),
+                    Math.Max(0, areaLimit),
                     acceptedUtc);
             }
 
@@ -303,6 +327,8 @@ namespace GoblinFarmer
                 $"acceptedRouteAreaKey={PortLogField(PortDisplayLocation(acceptedRouteAreaKey))}; " +
                 $"displayArea={PortLogField(displayArea)}; " +
                 $"source={PortLogField(source)}; " +
+                $"areaCount={areaCount}; " +
+                $"areaLimit={areaLimit}; " +
                 $"acceptedUtc={acceptedUtc:O}");
         }
 
@@ -317,7 +343,7 @@ namespace GoblinFarmer
 
             if (portGoblinOverlayTextControl != null && !portGoblinOverlayTextControl.IsDisposed)
             {
-                portGoblinOverlayTextControl.SetOverlayState(0, "--", "--", false);
+                portGoblinOverlayTextControl.SetOverlayState(0, 0.0, "--", "--", false);
             }
 
             AppLogger.Info($"GoblinOverlayReset: reason={PortLogField(reason)}");

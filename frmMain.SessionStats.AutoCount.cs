@@ -556,6 +556,8 @@ namespace GoblinFarmer
                 currentAreaAtAcceptance,
                 displayLocation,
                 observation.Source,
+                guardResult.AreaCount,
+                guardResult.AreaLimit,
                 countAcceptedUtc);
             PortCaptureAcceptedGoblinEvidenceBestSamples(
                 observation,

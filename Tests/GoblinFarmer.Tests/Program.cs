@@ -172,6 +172,7 @@ Run("Salvage classifier rejects dense stack-count gem clusters", TestSalvageClas
 Run("Salvage classifier rejects tooltip-covered gem stacks", TestSalvageClassifierRejectsTooltipCoveredGemStacks);
 Run("Salvage classifier does not treat legendary boot lower halves as gems", TestSalvageClassifierDoesNotTreatLegendaryBootLowerHalvesAsGems);
 Run("Salvage classifier accepts set-quality leftover anchor", TestSalvageClassifierAcceptsSetQualityLeftoverAnchor);
+Run("Salvage classifier does not treat strong green set cells as gems", TestSalvageClassifierDoesNotTreatStrongGreenSetCellsAsGems);
 Run("Salvage classifier rejects detached footprint without anchor", TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor);
 Run("Salvage classifier caches one tile items", TestSalvageClassifierCachesOneTileItems);
 Run("Salvage classifier accepts pale legendary boot-like items", TestSalvageClassifierAcceptsPaleLegendaryBootLikeItems);
@@ -521,23 +522,31 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
     AssertTrue(overlaySource.Contains("const float sectionGap = 28f", StringComparison.Ordinal), "overlay should use explicit painted gaps between sections instead of relying on trailing spaces");
     AssertTrue(overlaySource.Contains("(\"Count:\", Color.Red, 0f)", StringComparison.Ordinal), "Count label should render red");
     AssertTrue(overlaySource.Contains("($\" {total}\", Color.Red, sectionGap)", StringComparison.Ordinal), "Count value should render red and add a section gap");
+    AssertTrue(overlaySource.Contains("(\"GPH:\", Color.DeepSkyBlue, 0f)", StringComparison.Ordinal), "GPH label should render to the right of Count");
+    AssertTrue(overlaySource.Contains("($\" {gph:0.00}\", Color.DeepSkyBlue, sectionGap)", StringComparison.Ordinal), "GPH value should render with two decimals and add a section gap");
     AssertTrue(overlaySource.Contains("(\"Goblin:\", Color.Gold, 0f)", StringComparison.Ordinal), "Goblin label should render gold");
     AssertTrue(overlaySource.Contains("($\" {goblinType}\", Color.Gold, sectionGap)", StringComparison.Ordinal), "Goblin value should render gold and add a section gap");
     AssertTrue(overlaySource.Contains("(\"Area:\", Color.LightGreen, 0f)", StringComparison.Ordinal), "Area label should render light green");
     AssertTrue(overlaySource.Contains("($\" {area}\", Color.LightGreen, sectionGap)", StringComparison.Ordinal), "Area value should render light green and add a section gap");
     AssertTrue(overlaySource.Contains("goNext ? Color.LimeGreen : Color.Red", StringComparison.Ordinal), "Go Next Y/N value should render green/red");
     AssertTrue(overlaySource.Contains("PortFormatGoblinOverlayText", StringComparison.Ordinal), "overlay should have a focused text formatter");
-    AssertTrue(overlaySource.Contains("Count: {Math.Max(0, total)}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? \"Y\" : \"N\")}", StringComparison.Ordinal), "overlay text should use the requested single-line label contract");
-    AssertTrue(overlaySource.Contains("SetOverlayState(0, \"--\", \"--\", false)", StringComparison.Ordinal), "overlay default state should be Count 0, blank goblin/area, and Go Next N");
+    AssertTrue(overlaySource.Contains("Count: {Math.Max(0, total)}  GPH: {Math.Max(0, gph):0.00}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? \"Y\" : \"N\")}", StringComparison.Ordinal), "overlay text should use the requested single-line label contract with GPH after Count");
+    AssertTrue(overlaySource.Contains("SetOverlayState(0, 0.0, \"--\", \"--\", false)", StringComparison.Ordinal), "overlay default state should be Count 0, GPH 0.00, blank goblin/area, and Go Next N");
+    AssertTrue(overlaySource.Contains("DiagnosticsSessionSnapshot snapshot = DebugManager.Session.Snapshot(DateTime.Now)", StringComparison.Ordinal), "overlay should compute GPH from the same diagnostics session snapshot as the VS Debug stats UI");
+    AssertTrue(overlaySource.Contains("snapshot.GoblinsPerHour", StringComparison.Ordinal), "overlay should display live GPH from the diagnostics snapshot");
     AssertTrue(overlaySource.Contains("PortGoblinOverlayShouldGoNext", StringComparison.Ordinal), "overlay should isolate Go Next comparison logic");
     AssertTrue(overlaySource.Contains("PortLocationKey(lastAcceptedAreaKey)", StringComparison.Ordinal), "accepted area should be normalized before comparing");
     AssertTrue(overlaySource.Contains("PortLocationKey(acceptedRouteAreaKey)", StringComparison.Ordinal), "accepted route context should be normalized for sub-area Go Next checks");
     AssertTrue(overlaySource.Contains("PortLocationKey(currentConfirmedLocation)", StringComparison.Ordinal), "current confirmed area should be normalized before comparing");
-    AssertTrue(overlaySource.Contains("PortGoblinOverlayDetectedAreaFreshness", StringComparison.Ordinal), "Go Next should support a short fresh-location resolver override");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayDetectedAreaFreshness = TimeSpan.FromSeconds(90)", StringComparison.Ordinal), "Go Next should keep recent title-resolved areas long enough for route state lag after sub-area transitions");
     AssertTrue(overlaySource.Contains("PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow)", StringComparison.Ordinal), "Go Next should use fresh detected current area before falling back to route state");
     AssertTrue(overlaySource.Contains("return portLastConfirmedLocation;", StringComparison.Ordinal), "Go Next should fall back to current confirmed route area when no fresh detected area is available");
     AssertTrue(sessionStatsSource.Contains("PortRememberGoblinOverlayDetectedArea(currentAreaResult.Area.AreaKey, nowUtc, observationSource, \"CurrentAreaResolver\")", StringComparison.Ordinal), "candidate observation should update overlay current area from the resolver before Journal evidence area overrides");
     AssertTrue(overlaySource.Contains("acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase)", StringComparison.Ordinal), "Go Next should stay Y for accepted sub-areas while their route context is still current");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayWaitingForPandemoniumSecondGoblin", StringComparison.Ordinal), "PF1/PF2 should keep Go Next N until the second guaranteed goblin slot is filled");
+    AssertTrue(overlaySource.Contains("state.AreaCount > 0", StringComparison.Ordinal), "PF overlay wait should only apply after the first accepted PF count");
+    AssertTrue(overlaySource.Contains("state.AreaCount < state.AreaLimit", StringComparison.Ordinal), "PF overlay wait should clear when the two-count limit is filled");
+    AssertTrue(overlaySource.Contains("GoblinPandemoniumMultiCountDuplicatePolicy.IsPandemoniumFortressTwoCountArea", StringComparison.Ordinal), "PF overlay wait should be limited to PF1/PF2");
 
     AssertTrue(overlaySource.Contains("FindDiabloWindow()", StringComparison.Ordinal), "overlay should follow the Diablo window");
     AssertTrue(overlaySource.Contains("IsIconic(diabloWindow)", StringComparison.Ordinal), "overlay should hide while Diablo is minimized");
@@ -547,6 +556,8 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
 
     AssertTrue(autoCountMethod.Contains("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "successful automatic counts should update overlay state");
     AssertTrue(autoCountMethod.Contains("currentAreaAtAcceptance,", StringComparison.Ordinal), "overlay should capture route context at count acceptance for sub-area Go Next checks");
+    AssertTrue(autoCountMethod.Contains("guardResult.AreaCount,", StringComparison.Ordinal), "overlay should capture the accepted area count for PF two-goblin Go Next handling");
+    AssertTrue(autoCountMethod.Contains("guardResult.AreaLimit,", StringComparison.Ordinal), "overlay should capture the area limit for PF two-goblin Go Next handling");
     AssertTrue(autoCountMethod.IndexOf("GoblinAutoCountAccepted", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "overlay should update only after automatic count acceptance");
     AssertTrue(autoCountMethod.IndexOf("if (total <= 0)", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "overlay should not update when accepted count total is invalid");
     AssertTrue(autoCountMethod.Contains("PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, \"AutomaticCountAccepted\", guardResult);", StringComparison.Ordinal), "existing accepted observation publish should remain separate");
@@ -5734,6 +5745,25 @@ static void TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded()
             out _),
         "sustained current-area PF Engaged journal evidence can support a second-goblin duplicate bypass");
 
+    AssertTrue(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Journal",
+            pf1,
+            currentAreaCount: 0,
+            areaLimit: 2,
+            countedAreaKey: pf1,
+            countedUtc,
+            countedUtc.AddSeconds(42.8),
+            engagedEvidence,
+            0.998,
+            0.85,
+            41.4,
+            combatActive: true,
+            out string sustainedDuplicateReason,
+            out _),
+        "PF1 should allow the live sustained high-confidence Engaged row to support the guaranteed second goblin even when the duplicate guard peek has no consumed slot state");
+    AssertEqual("Allowed", sustainedDuplicateReason, "sustained PF Engaged duplicate support should still report the bounded allowed result");
+
     AssertFalse(
         GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
             "Journal",
@@ -6168,6 +6198,25 @@ static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
 
     AssertTrue(leoricToCathedralVariantSuppressed, "the 2026-06-13 Leoric's Passage Gem Hoarder journal variant should not recount as Cathedral Level 2 while inside the continuity window");
     AssertEqual("RecentSourceVariant:Journal->Journal", leoricToCathedralReason, "the Leoric to Cathedral carryover should be suppressed as a recent journal source variant");
+
+    bool leoricBloodThiefKilledToCathedralSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Blood Thief",
+        areaKey: "Cathedral Level 2",
+        globalEvidenceKey: "Journal|Blood Thief|JournalKill|Journal|Blood Thief|Template=Blood Thief Killed Journal.png|Kind=JournalKilled|LineBucket=11",
+        countedGoblinType: "Blood Thief",
+        countedAreaKey: "Leoric's Passage",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Blood Thief|JournalKill|Journal|Blood Thief|Template=Blood Thief Killed Journal.png|Kind=JournalKilled|LineBucket=11",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(45.4),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(35.4),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string leoricBloodThiefReason);
+
+    AssertTrue(leoricBloodThiefKilledToCathedralSuppressed, "the 2026-06-13 Leoric's Passage Blood Thief killed row should not recount as Cathedral Level 2 just after the 45-second source-variant edge");
+    AssertTrue(leoricBloodThiefReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal) || leoricBloodThiefReason.StartsWith("JournalLineBucket", StringComparison.Ordinal), "the Leoric Blood Thief carryover should still report a same visible killed-row match");
 }
 
 static void TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause()
@@ -7212,6 +7261,33 @@ static void TestSalvageClassifierAcceptsSetQualityLeftoverAnchor()
     AssertEqual("Set", target.Quality, "green leftover target should be classified as set quality");
     AssertTrue(target.ConfirmationExpected, "set-quality leftover target should expect a confirmation prompt");
     AssertTrue(result.Candidates.Any(candidate => candidate.Row == 2 && candidate.Column == 3 && candidate.Accepted && candidate.Reason == "ItemAnchor"), "set-quality leftover cell should be accepted as an item anchor");
+}
+
+static void TestSalvageClassifierDoesNotTreatStrongGreenSetCellsAsGems()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    Rectangle cell = SyntheticSalvageSlotRect(4, 3);
+    using (Graphics graphics = Graphics.FromImage(grid))
+    using (SolidBrush background = new(Color.FromArgb(14, 18, 13)))
+    using (SolidBrush strongSet = new(Color.FromArgb(85, 140, 126)))
+    using (Pen setFrame = new(Color.FromArgb(88, 148, 132), 4))
+    using (SolidBrush stackLikeText = new(Color.FromArgb(232, 232, 220)))
+    {
+        graphics.FillRectangle(background, cell);
+        graphics.FillRectangle(strongSet, cell.Left + 8, cell.Top + 12, cell.Width - 16, cell.Height - 20);
+        graphics.DrawRectangle(setFrame, cell.Left + 5, cell.Top + 5, cell.Width - 11, cell.Height - 11);
+        graphics.FillRectangle(stackLikeText, cell.Left + 42, cell.Top + 48, 3, 6);
+        graphics.FillRectangle(stackLikeText, cell.Left + 49, cell.Top + 48, 3, 6);
+    }
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    SalvageInventorySlotCandidateDiagnostic candidate = result.Candidates.Single(candidate => candidate.Row == 4 && candidate.Column == 3);
+    string metricSummary = $"reason={candidate.Reason} accepted={candidate.Accepted} quality={candidate.Quality} green={candidate.Metrics.GreenQualityPixels} regularGem={candidate.Metrics.RegularGemPixels} stack={candidate.Metrics.StackCountTextPixels} top={candidate.Metrics.TopFramePixels} colored={candidate.Metrics.ColoredFramePixels} bright={candidate.Metrics.InnerBrightPixels} sat={candidate.Metrics.InnerSaturatedPixels}";
+    AssertFalse(candidate.Reason.Equals("RegularGemNonSalvageable", StringComparison.OrdinalIgnoreCase), $"strong green set-quality cells with weak true gem-body pixels should not be skipped as normal gems; {metricSummary}");
+    AssertTrue(candidate.Accepted, $"strong green set-quality cells should remain actionable salvage leftovers; {metricSummary}");
+    AssertEqual("Set", candidate.Quality, "strong green cells should stay classified as set quality");
+    AssertTrue(candidate.ConfirmationExpected, "strong green set cells should still expect salvage confirmation");
 }
 
 static void TestSalvageClassifierRejectsDetachedFootprintWithoutAnchor()

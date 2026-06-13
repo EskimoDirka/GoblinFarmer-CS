@@ -1287,6 +1287,7 @@ namespace GoblinFarmer
     internal static class GoblinAutoCountEncounterSuppressionPolicy
     {
         private static readonly TimeSpan CrossAreaJournalVisibleRowSuppressWindow = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan CrossAreaJournalKilledVisibleRowSuppressWindow = TimeSpan.FromSeconds(75);
         private static readonly TimeSpan CrossAreaJournalContinuitySuppressWindow = TimeSpan.FromSeconds(30);
 
         public static bool ShouldSuppress(
@@ -1338,11 +1339,14 @@ namespace GoblinFarmer
             bool countedMinimap = normalizedCountedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
             bool bothMinimap = normalizedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
                 normalizedCountedSource.Equals("Minimap", StringComparison.OrdinalIgnoreCase);
+            TimeSpan visibleRowSuppressWindow = IsJournalKilledEvidence(globalEvidenceKey) || IsJournalKilledEvidence(countedEvidenceKey)
+                ? CrossAreaJournalKilledVisibleRowSuppressWindow
+                : CrossAreaJournalVisibleRowSuppressWindow;
             bool recentOrContinuouslySeen = encounterAge <= sourceVariantWindow || lastSeenAge <= sourceVariantWindow;
             bool recentCrossAreaJournalRow = sameArea ||
                 !currentJournal ||
                 !countedJournal ||
-                encounterAge <= CrossAreaJournalVisibleRowSuppressWindow;
+                encounterAge <= visibleRowSuppressWindow;
             bool continuingCrossAreaJournalRow = !sameArea &&
                 currentJournal &&
                 countedJournal &&
@@ -1484,6 +1488,12 @@ namespace GoblinFarmer
             return string.Join("|", familyParts);
         }
 
+        private static bool IsJournalKilledEvidence(string evidenceKey)
+        {
+            return !string.IsNullOrWhiteSpace(evidenceKey) &&
+                evidenceKey.Contains("Kind=JournalKilled", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool TryParseJournalEvidenceLineBucket(string evidenceKey, out int lineBucket)
         {
             lineBucket = -1;
@@ -1534,6 +1544,8 @@ namespace GoblinFarmer
     internal static class GoblinPandemoniumMultiCountDuplicatePolicy
     {
         public static readonly TimeSpan MinimumElapsedSinceLastAccepted = TimeSpan.FromSeconds(8);
+        public static readonly TimeSpan SustainedJournalEngagedDuplicateMaximumAge = TimeSpan.FromSeconds(60);
+        public const double SustainedJournalEngagedDuplicateMinimumConfidence = 0.95;
 
         public static bool ShouldBypass(
             string source,
@@ -1642,7 +1654,10 @@ namespace GoblinFarmer
                     evidenceFirstSeenAgeSeconds >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumAge.TotalSeconds &&
                     evidenceFirstSeenAgeSeconds < GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds) ||
                 (evidenceFirstSeenAgeSeconds >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds &&
-                    evidenceFirstSeenAgeSeconds <= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMaximumAge.TotalSeconds));
+                    evidenceFirstSeenAgeSeconds <= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMaximumAge.TotalSeconds) ||
+                (evidenceConfidence >= SustainedJournalEngagedDuplicateMinimumConfidence &&
+                    evidenceFirstSeenAgeSeconds >= MinimumElapsedSinceLastAccepted.TotalSeconds &&
+                    evidenceFirstSeenAgeSeconds <= SustainedJournalEngagedDuplicateMaximumAge.TotalSeconds));
         }
 
         private static string NormalizeObservationSource(string source)

@@ -520,6 +520,11 @@ namespace GoblinFarmer
                 return false;
             }
 
+            if (HasStrongSetQualityWeakGemBody(metrics))
+            {
+                return false;
+            }
+
             if (metrics.RegularGemPixels >= 300 ||
                 (metrics.RegularGemPixels >= 220 && metrics.InnerSaturatedPixels >= 500))
             {
@@ -586,6 +591,13 @@ namespace GoblinFarmer
                     metrics.OrangeQualityPixels >= LegendaryQualityPixels);
         }
 
+        private static bool HasStrongSetQualityWeakGemBody(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.GreenQualityPixels >= SetQualityContinuationGreenPixels &&
+                metrics.RegularGemPixels < 90 &&
+                metrics.InnerSaturatedPixels >= SetQualityContinuationSaturatedPixels;
+        }
+
         private static bool[,] BuildLiveGemStackClusterMap(SalvageInventorySlotMetrics[,] metrics, bool[,] knownGemLike)
         {
             bool[,] candidates = new bool[Rows, Columns];
@@ -621,6 +633,11 @@ namespace GoblinFarmer
 
         private static bool IsLiveGemStackCandidate(SalvageInventorySlotMetrics metrics)
         {
+            if (HasStrongSetQualityWeakGemBody(metrics))
+            {
+                return false;
+            }
+
             bool stackTextGem =
                 metrics.StackCountTextPixels >= 16 &&
                 metrics.TopFramePixels <= 100 &&
