@@ -6027,6 +6027,25 @@ static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
 
     AssertTrue(festeringToCathedralFalseCountSuppressed, "the 2026-06-13 Festering Woods Insufferable Miscreant journal row should not recount as Cathedral Level 1 after a pause");
     AssertEqual("JournalLineBucket:10->11", festeringToCathedralReason, "the Festering to Cathedral carryover should be suppressed as the same shifted journal row");
+
+    bool leoricToCathedralVariantSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Gem Hoarder",
+        areaKey: "Cathedral Level 2",
+        globalEvidenceKey: "Journal|Gem Hoarder|JournalEncounter|Journal|Gem Hoarder|Template=Gem Hoarder Engaged Journal.png|Kind=JournalEngaged|LineBucket=8",
+        countedGoblinType: "Gem Hoarder",
+        countedAreaKey: "Leoric's Passage",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Gem Hoarder|JournalKill|Journal|Gem Hoarder|Template=Gem Hoarder Killed Journal.png|Kind=JournalKilled|LineBucket=11",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(29),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(23),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string leoricToCathedralReason);
+
+    AssertTrue(leoricToCathedralVariantSuppressed, "the 2026-06-13 Leoric's Passage Gem Hoarder journal variant should not recount as Cathedral Level 2 while inside the continuity window");
+    AssertEqual("RecentSourceVariant:Journal->Journal", leoricToCathedralReason, "the Leoric to Cathedral carryover should be suppressed as a recent journal source variant");
 }
 
 static void TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause()

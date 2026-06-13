@@ -1286,7 +1286,7 @@ namespace GoblinFarmer
 
     internal static class GoblinAutoCountEncounterSuppressionPolicy
     {
-        private static readonly TimeSpan CrossAreaJournalVisibleRowSuppressWindow = TimeSpan.FromSeconds(20);
+        private static readonly TimeSpan CrossAreaJournalVisibleRowSuppressWindow = TimeSpan.FromSeconds(45);
 
         public static bool ShouldSuppress(
             string source,
