@@ -6378,6 +6378,10 @@ static void TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions()
     AssertTrue(evidenceSource.Contains("CurrentTitleArea", StringComparison.Ordinal), "trusted killed-only area diagnostics should identify current-title anchors");
     AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshManual", StringComparison.Ordinal), "manual refresh should log fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("JournalKilledIgnoredStale", StringComparison.Ordinal), "stale Killed journal lines should log a stale suppression reason");
+    AssertTrue(evidenceSource.Contains("JournalKilledStaleStateResetByCurrentTitleCombat", StringComparison.Ordinal), "very old stale Killed journal state should reset only when live combat has a trusted current-title area");
+    AssertTrue(evidenceSource.Contains("staleKilledOldEnoughForTitleReset", StringComparison.Ordinal), "stale Killed reset should require an old original first-seen state");
+    AssertTrue(evidenceSource.Contains("portCombatRunning", StringComparison.Ordinal), "stale Killed reset should require active combat support");
+    AssertTrue(evidenceSource.Contains("minimumResetAgeSeconds=120", StringComparison.Ordinal), "stale Killed reset diagnostics should expose the conservative age floor");
     AssertTrue(evidenceSource.Contains("freshKilledWithoutEngagedReason: \"Observation\"", StringComparison.Ordinal), "continuous observation scans should opt into fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("freshKilledWithoutEngagedReason: \"Manual\"", StringComparison.Ordinal), "manual refresh should opt into fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("clearedJournalKilled", StringComparison.Ordinal), "Reset Stats/New Game should clear Killed journal freshness state");

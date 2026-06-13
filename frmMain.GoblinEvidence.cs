@@ -953,6 +953,42 @@ namespace GoblinFarmer
                         return true;
                     }
 
+                    string staleKilledPreviousAreaKey = killedState.AreaKey;
+                    TimeSpan staleKilledPreviousFirstSeenAge = killedFirstSeenAge;
+                    bool staleKilledDifferentArea = !string.IsNullOrWhiteSpace(staleKilledPreviousAreaKey) &&
+                        !string.IsNullOrWhiteSpace(areaKey) &&
+                        !GoblinAreaResolver.NormalizedKey(staleKilledPreviousAreaKey).Equals(
+                            GoblinAreaResolver.NormalizedKey(areaKey),
+                            StringComparison.OrdinalIgnoreCase);
+                    bool staleKilledOldEnoughForTitleReset = killedFirstSeenAge >= TimeSpan.FromMinutes(2);
+                    string staleResetConfirmedAreaKey = "";
+                    string staleResetAreaAnchorReason = "";
+                    bool staleKilledHasTrustedCombatTitle = staleKilledDifferentArea &&
+                        staleKilledOldEnoughForTitleReset &&
+                        portCombatRunning &&
+                        string.Equals(freshKilledWithoutEngagedReason, "Observation", StringComparison.OrdinalIgnoreCase) &&
+                        PortFreshKilledObservationHasTrustedAreaAnchor(areaResult, areaKey, out staleResetConfirmedAreaKey, out staleResetAreaAnchorReason);
+                    if (staleKilledHasTrustedCombatTitle)
+                    {
+                        PortForgetJournalFreshnessStateForVisibleLine(killedSignature);
+                        killedState = PortRememberJournalKilledEvidence(killedSignature, goblinType, areaKey, nowUtc);
+                        killedFirstSeenAge = nowUtc - killedState.FirstSeenUtc;
+                        string staleResetDiagnosticEvent = string.Equals(staleResetAreaAnchorReason, "CurrentTitleArea", StringComparison.OrdinalIgnoreCase)
+                            ? "JournalKilledStaleStateResetByCurrentTitleCombat"
+                            : "JournalKilledStaleStateResetByTrustedCombatArea";
+                        PortLogJournalEvidenceFreshnessDiagnostic(
+                            staleResetDiagnosticEvent,
+                            template,
+                            match,
+                            displayArea,
+                            $"previousFirstSeenAgeSeconds={Math.Max(0, staleKilledPreviousFirstSeenAge.TotalSeconds):0.0}; previousArea={PortLogField(staleKilledPreviousAreaKey)}; currentArea={PortLogField(areaKey)}; confirmedArea={PortLogField(staleResetConfirmedAreaKey)}; acceptedArea={PortLogField(areaKey)}; areaAnchorReason={PortLogField(staleResetAreaAnchorReason)}; combatActive=True; staleKilledStateReset=True; minimumResetAgeSeconds=120; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        acceptedCandidate = candidate with
+                        {
+                            Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedStaleStateReset; JournalArea={displayArea}; StaleKilledStateReset={staleResetAreaAnchorReason}"
+                        };
+                        return true;
+                    }
+
                     PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc, killedState.AreaKey, killedState.FirstSeenUtc);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalKilledIgnoredStale",
