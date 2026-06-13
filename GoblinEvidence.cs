@@ -2184,6 +2184,28 @@ namespace GoblinFarmer
             return new GoblinAreaDuplicateGuardResult(currentCount < limit, currentCount, limit);
         }
 
+        public bool TryReleaseLastAccepted(string areaKey, int expectedAreaCount)
+        {
+            if (string.IsNullOrWhiteSpace(areaKey) ||
+                expectedAreaCount <= 0 ||
+                !countedAreaKeys.TryGetValue(areaKey, out int currentCount) ||
+                currentCount != expectedAreaCount)
+            {
+                return false;
+            }
+
+            if (currentCount <= 1)
+            {
+                countedAreaKeys.Remove(areaKey);
+            }
+            else
+            {
+                countedAreaKeys[areaKey] = currentCount - 1;
+            }
+
+            return true;
+        }
+
         public int Reset()
         {
             int cleared = countedAreaKeys.Count;

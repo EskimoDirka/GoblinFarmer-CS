@@ -112,6 +112,7 @@ Run("Goblin area duplicate guard allows PF exceptions twice only", TestGoblinAre
 Run("Goblin area duplicate guard allows Stinging Winds twice only", TestGoblinAreaDuplicateGuardAllowsStingingWindsTwiceOnly);
 Run("Goblin area duplicate guard keeps default one-count areas", TestGoblinAreaDuplicateGuardKeepsDefaultOneCountAreas);
 Run("Goblin area duplicate guard peek does not consume count slots", TestGoblinAreaDuplicateGuardPeekDoesNotConsumeCountSlots);
+Run("Goblin area duplicate guard can release invalid accepted slot", TestGoblinAreaDuplicateGuardCanReleaseInvalidAcceptedSlot);
 Run("Goblin manual count block list blocks explicit no-count areas", TestGoblinManualCountBlockListBlocksExplicitNoCountAreas);
 Run("Goblin observation counters are diagnostic only", TestGoblinObservationCountersAreDiagnosticOnly);
 Run("Goblin observation type reuse requires recent matching area", TestGoblinObservationTypeReuseRequiresRecentMatchingArea);
@@ -148,8 +149,8 @@ Run("Goblin auto-count same-area duplicate journal refreshes encounter state", T
 Run("Goblin auto-count suppresses shifted journal row after pause", TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause);
 Run("Goblin auto-count treats different journal templates as separate lines", TestGoblinAutoCountTreatsDifferentJournalTemplatesAsSeparateLines);
 Run("Goblin accepted manual count updates Last Observation display", TestGoblinAcceptedManualCountUpdatesLastObservationDisplay);
-Run("Goblin accepted counts clear Last Observation on area change or reset", TestGoblinAcceptedCountsClearLastObservationOnAreaChangeOrReset);
-Run("Goblin pending combat journal can replace stale Last Observation display", TestGoblinPendingCombatJournalCanReplaceStaleLastObservationDisplay);
+Run("Goblin accepted counts persist Last Observation until next count or reset", TestGoblinAcceptedCountsPersistLastObservationUntilNextCountOrReset);
+Run("Goblin pending combat journal cannot replace accepted Last Observation display", TestGoblinPendingCombatJournalCannotReplaceAcceptedLastObservationDisplay);
 Run("Goblin non-counting idle journal cannot publish Last Observation", TestGoblinNonCountingIdleJournalCannotPublishLastObservation);
 Run("Goblin stale journal freshness policy suppresses old visible lines", TestGoblinStaleJournalFreshnessPolicySuppressesOldVisibleLines);
 Run("Goblin area-changed killed journal uses short first-seen lock window", TestGoblinAreaChangedKilledJournalUsesShortFirstSeenLockWindow);
@@ -178,6 +179,7 @@ Run("Salvage classifier accepts low-color unidentified legendary with muted top 
 Run("Salvage classifier accepts unidentified legendary template", TestSalvageClassifierAcceptsUnidentifiedLegendaryTemplate);
 Run("Salvage classifier accepts unidentified set template", TestSalvageClassifierAcceptsUnidentifiedSetTemplate);
 Run("Salvage classifier accepts unidentified question-mark item above gem stack", TestSalvageClassifierAcceptsUnidentifiedQuestionMarkAboveGemStack);
+Run("Salvage classifier accepts low-orange blue question-mark item", TestSalvageClassifierAcceptsLowOrangeBlueQuestionMarkItem);
 Run("Salvage classifier rejects compact Marquise Topaz stack", TestSalvageClassifierRejectsCompactMarquiseTopazStack);
 Run("Salvage classifier rejects muted Marquise Diamond stack as legendary", TestSalvageClassifierRejectsMutedMarquiseDiamondStackAsLegendary);
 Run("Salvage classifier uses top cell for weak top footprint", TestSalvageClassifierUsesTopCellForWeakTopFootprint);
@@ -4276,6 +4278,26 @@ static void TestGoblinAreaDuplicateGuardPeekDoesNotConsumeCountSlots()
     AssertFalse(guard.Peek(weeping).Accepted, "default area observation should suppress after one real count");
 }
 
+static void TestGoblinAreaDuplicateGuardCanReleaseInvalidAcceptedSlot()
+{
+    GoblinAreaDuplicateGuard guard = new();
+    string cathedralLevel3 = GoblinAreaResolver.Resolve("Cathedral Level 3").AreaKey;
+    string pf2 = GoblinAreaResolver.Resolve("Pandemonium Fortress Level 2").AreaKey;
+
+    AssertTrue(guard.TryAccept(cathedralLevel3, out GoblinAreaDuplicateGuardResult accepted), "first Cathedral Level 3 count should be accepted");
+    AssertEqual(1, accepted.AreaCount, "default one-count area should report count one");
+    AssertTrue(guard.TryReleaseLastAccepted(cathedralLevel3, accepted.AreaCount), "invalid total rollback should release the just-accepted default area slot");
+    AssertTrue(guard.TryAccept(cathedralLevel3), "released default area slot should be available for a future real count");
+    AssertFalse(guard.TryReleaseLastAccepted(cathedralLevel3, accepted.AreaCount + 1), "rollback should not release when the current count does not match the expected just-accepted count");
+
+    AssertTrue(guard.TryAccept(pf2), "PF2 first slot should accept");
+    AssertTrue(guard.TryAccept(pf2, out GoblinAreaDuplicateGuardResult pfSecond), "PF2 second slot should accept");
+    AssertTrue(guard.TryReleaseLastAccepted(pf2, pfSecond.AreaCount), "invalid second PF count should release only the second slot");
+    GoblinAreaDuplicateGuardResult pfPeek = guard.Peek(pf2);
+    AssertEqual(1, pfPeek.AreaCount, "PF2 rollback should leave the first accepted slot intact");
+    AssertTrue(guard.TryAccept(pf2), "PF2 released second slot should accept again");
+}
+
 static void AssertPandemoniumAreaLimit(GoblinAreaDuplicateGuard guard, string areaName)
 {
     string areaKey = GoblinAreaResolver.Resolve(areaName).AreaKey;
@@ -5428,17 +5450,11 @@ static void TestGoblinAutoCountFreshCrossAreaJournalDuplicateBypassIsNarrow()
 {
     string repoRoot = FindRepositoryRootForTests();
     string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
-    string helper = ExtractMethodBody(autoCountSource, "private static bool PortShouldBypassFreshCrossAreaJournalDuplicateSuppression");
     string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
 
-    AssertTrue(autoCountMethod.Contains("FreshCrossAreaJournalDuplicateBypass", StringComparison.Ordinal), "fresh cross-area journal duplicate bypass should be logged in the encounter suppression match");
-    AssertTrue(helper.Contains("PortNormalizeGoblinObservationSource(observation.Source).Equals(\"Journal\"", StringComparison.Ordinal), "bypass should apply only to journal evidence");
-    AssertTrue(helper.Contains("JournalEncounter", StringComparison.Ordinal), "bypass should be limited to fresh Engaged/Encounter journal rows, not killed-only stale rows");
-    AssertTrue(helper.Contains("matchReason.StartsWith(\"JournalLineBucket\"", StringComparison.Ordinal), "bypass should only respond to same-visible-line duplicate suppression");
-    AssertTrue(helper.Contains("minimumNewAreaEvidenceAgeSeconds = 1.0", StringComparison.Ordinal), "bypass should require the new-area journal row to persist briefly");
-    AssertTrue(helper.Contains("maximumFreshBypassAgeSeconds = 12.0", StringComparison.Ordinal), "bypass should stay inside a short freshness window");
-    AssertTrue(helper.Contains("minimumFreshJournalConfidence = 0.95", StringComparison.Ordinal), "bypass should require high-confidence journal evidence");
-    AssertTrue(helper.Contains("GoblinAreaResolver.NormalizedKey(areaKey).Equals", StringComparison.Ordinal), "bypass should not affect same-area duplicate suppression");
+    AssertFalse(autoCountSource.Contains("PortShouldBypassFreshCrossAreaJournalDuplicateSuppression", StringComparison.Ordinal), "same-visible-row journal evidence should not bypass cross-area duplicate suppression");
+    AssertFalse(autoCountMethod.Contains("FreshCrossAreaJournalDuplicateBypass", StringComparison.Ordinal), "cross-area journal duplicate suppression should not create fresh pseudo-counts in later areas");
+    AssertTrue(autoCountMethod.Contains("EncounterAlreadyAutoCounted", StringComparison.Ordinal), "same goblin/type journal duplicates should stay suppressed after an accepted encounter");
 }
 
 static void TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded()
@@ -5697,10 +5713,13 @@ static void TestGoblinAutoCountNotificationsRequirePositiveTotals()
     int acceptedIndex = autoCountMethod.IndexOf("GoblinAutoCountAccepted", StringComparison.Ordinal);
     int guardIndex = autoCountMethod.IndexOf("if (total <= 0)", StringComparison.Ordinal);
     int notificationIndex = autoCountMethod.IndexOf("PortShowSplash(", StringComparison.Ordinal);
-    AssertTrue(guardIndex > acceptedIndex, "positive-total notification guard should run after count acceptance is known");
+    AssertTrue(guardIndex >= 0, "positive-total validation should be explicit");
+    AssertTrue(acceptedIndex > guardIndex, "invalid totals should be discarded before accepted count logs and Last Observation publication");
     AssertTrue(notificationIndex > guardIndex, "auto-count splash notifications should only run after positive-total validation");
     AssertTrue(autoCountMethod.IndexOf("PortTryApplyRecentMinimapJournalConfirmationReliability", StringComparison.Ordinal) < autoCountMethod.IndexOf("portGoblinAreaDuplicateGuard.TryAccept", StringComparison.Ordinal), "recent-minimap journal confirmation must continue into the normal area-count acceptance path");
-    AssertTrue(autoCountMethod.Contains("AutoCountNotificationSkipped", StringComparison.Ordinal), "invalid totals should be diagnosed instead of showing user-facing notifications");
+    AssertTrue(autoCountMethod.Contains("AutoCountAcceptedDiscarded", StringComparison.Ordinal), "invalid totals should be diagnosed instead of publishing accepted UI state");
+    AssertTrue(autoCountMethod.Contains("TryReleaseLastAccepted(area.AreaKey, guardResult.AreaCount)", StringComparison.Ordinal), "invalid totals should release the duplicate-guard slot they just consumed");
+    AssertTrue(autoCountMethod.Contains("duplicateGuardReleased=", StringComparison.Ordinal), "invalid-total discard diagnostics should report duplicate-guard rollback");
     AssertTrue(autoCountMethod.Contains("reason=InvalidTotal", StringComparison.Ordinal), "invalid-total notification suppression should log a clear reason");
 }
 
@@ -5991,7 +6010,7 @@ static void TestGoblinAcceptedManualCountUpdatesLastObservationDisplay()
     AssertTrue(sessionStatsSource.Contains("ConfirmedAreaChanged", StringComparison.Ordinal), "confirmed area changes should log Last Observation area synchronization");
 }
 
-static void TestGoblinAcceptedCountsClearLastObservationOnAreaChangeOrReset()
+static void TestGoblinAcceptedCountsPersistLastObservationUntilNextCountOrReset()
 {
     string repoRoot = FindRepositoryRootForTests();
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
@@ -6001,30 +6020,30 @@ static void TestGoblinAcceptedCountsClearLastObservationOnAreaChangeOrReset()
     string preserveIncomingMethod = ExtractMethodBody(sessionStatsSource, "private bool PortShouldPreserveDisplayedObservationAgainstIncoming");
 
     AssertTrue(autoCountSource.Contains("PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, \"AutomaticCountAccepted\", guardResult)", StringComparison.Ordinal), "accepted automatic counts should publish the Last Observation as Counted");
-    AssertTrue(acceptedPublishMethod.Contains("persistUntilAreaChangeOrNextAcceptedCount=True", StringComparison.Ordinal), "accepted count update logs should document the current-area display policy");
+    AssertTrue(acceptedPublishMethod.Contains("persistUntilNextAcceptedCountOrNewGame=True", StringComparison.Ordinal), "accepted count update logs should document the persistent display policy");
     AssertTrue(clearMethod.Contains("PortDisplayedObservationIsAcceptedCount(previousObservation)", StringComparison.Ordinal), "clear/no-candidate paths should preserve the last accepted count before general clear handling");
     AssertTrue(clearMethod.Contains("AcceptedCountPersistent", StringComparison.Ordinal), "clear skips should identify accepted-count persistence");
     AssertTrue(clearMethod.Contains("currentAreaKey=", StringComparison.Ordinal), "accepted-count persistence logs should include the current area for route-change diagnostics");
     AssertTrue(clearMethod.Contains("acceptedDisplayAreaChanged=", StringComparison.Ordinal), "accepted Last Observation clear diagnostics should include route area changes");
-    AssertTrue(clearMethod.Contains("TeleportConfirmedAreaChanged", StringComparison.Ordinal), "teleport area changes should clear accepted Last Observation instead of leaking stale goblins into the next area");
-    AssertTrue(clearMethod.Contains("portDisplayedGoblinObservationStatus = \"AreaChanged\";", StringComparison.Ordinal), "confirmed route area changes should clear accepted Last Observation before the next area display");
+    AssertFalse(clearMethod.Contains("normalizedReason.Equals(\"TeleportConfirmedAreaChanged\"", StringComparison.Ordinal), "teleport area changes should not clear an accepted Last Observation");
+    AssertFalse(clearMethod.Contains("portDisplayedGoblinObservationStatus = \"AreaChanged\";", StringComparison.Ordinal), "confirmed route area changes should not clear an accepted Last Observation");
     AssertTrue(preserveIncomingMethod.Contains("PortDisplayedObservationIsAcceptedCount(displayedObservation)", StringComparison.Ordinal), "suppressed/stale incoming observations should not replace an accepted-count display");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinEvidenceObservationState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear the accepted Last Observation");
     AssertTrue(sessionStatsSource.Contains("PortResetGoblinEvidenceObservationState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear the accepted Last Observation like Reset Stats");
     AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("preservedAcceptedDisplay", StringComparison.Ordinal), "New Game should not preserve accepted Last Observation display state");
 }
 
-static void TestGoblinPendingCombatJournalCanReplaceStaleLastObservationDisplay()
+static void TestGoblinPendingCombatJournalCannotReplaceAcceptedLastObservationDisplay()
 {
     string repoRoot = FindRepositoryRootForTests();
     string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
     string preserveIncomingMethod = ExtractMethodBody(sessionStatsSource, "private bool PortShouldPreserveDisplayedObservationAgainstIncoming");
     string pendingReplaceMethod = ExtractMethodBody(sessionStatsSource, "private bool PortFreshObservationShouldReplaceAcceptedDisplay");
 
-    AssertTrue(preserveIncomingMethod.Contains("PortFreshObservationShouldReplaceAcceptedDisplay(incomingObservation, displayedObservation)", StringComparison.Ordinal), "accepted Last Observation persistence should yield to fresh incoming evidence");
-    AssertTrue(pendingReplaceMethod.Contains("portCombatRunning", StringComparison.Ordinal), "pending journal display replacement should require active combat");
-    AssertTrue(pendingReplaceMethod.Contains("incomingObservation.WouldCount", StringComparison.Ordinal), "fresh count-eligible evidence should replace a stale accepted display before the count finalizes");
-    AssertTrue(pendingReplaceMethod.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "only reliability-pending journal evidence should replace stale accepted display");
+    AssertTrue(preserveIncomingMethod.Contains("PortFreshObservationShouldReplaceAcceptedDisplay(incomingObservation, displayedObservation)", StringComparison.Ordinal), "accepted Last Observation persistence should use the shared replacement gate");
+    AssertTrue(pendingReplaceMethod.Contains("incomingObservation.WouldCount", StringComparison.Ordinal), "only counted incoming observations should be considered for replacing accepted display");
+    AssertTrue(pendingReplaceMethod.Contains("incomingObservation.Reason.Equals(\"Counted\"", StringComparison.Ordinal), "pending or eligible-but-not-counted evidence should not replace accepted display");
+    AssertFalse(pendingReplaceMethod.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "pending journal evidence should not replace accepted display before a confirmed count");
     AssertTrue(pendingReplaceMethod.Contains("LastObservationFreshEvidenceReplacesAcceptedDisplay", StringComparison.Ordinal), "replacement path should log explicit stale-display diagnostics");
 }
 
@@ -6455,6 +6474,27 @@ static void DrawSyntheticUnidentifiedQuestionMarkCell(Bitmap bitmap, int row, in
     for (int i = 0; i < 14; i++)
     {
         int x = cell.Left + 5 + (i * 4);
+        graphics.FillRectangle(lightMark, x, cell.Top + 47, 3, 17);
+    }
+}
+
+static void DrawSyntheticLowOrangeBlueQuestionMarkCell(Bitmap bitmap, int row, int column)
+{
+    Rectangle cell = SyntheticSalvageSlotRect(row, column);
+    using Graphics graphics = Graphics.FromImage(bitmap);
+    using SolidBrush background = new(Color.FromArgb(16, 14, 10));
+    using SolidBrush mutedOrange = new(Color.FromArgb(90, 56, 32));
+    using SolidBrush brightBlue = new(Color.FromArgb(72, 166, 255));
+    using SolidBrush lightMark = new(Color.FromArgb(180, 150, 100));
+    using Font question = new(FontFamily.GenericSansSerif, 28, FontStyle.Bold, GraphicsUnit.Pixel);
+
+    graphics.FillRectangle(background, cell);
+    graphics.FillRectangle(mutedOrange, cell.Left + 14, cell.Top + 18, cell.Width - 28, cell.Height - 22);
+    graphics.FillEllipse(brightBlue, cell.Left + 18, cell.Top + 12, 32, 36);
+    graphics.DrawString("?", question, lightMark, cell.Left + 23, cell.Top + 18);
+    for (int i = 0; i < 15; i++)
+    {
+        int x = cell.Left + 4 + (i * 4);
         graphics.FillRectangle(lightMark, x, cell.Top + 47, 3, 17);
     }
 }
@@ -7352,6 +7392,23 @@ static void TestSalvageClassifierAcceptsUnidentifiedQuestionMarkAboveGemStack()
         AssertFalse(gem.Accepted, $"gem stack row {row} should remain non-salvageable");
         AssertEqual("RegularGemNonSalvageable", gem.Reason, $"gem stack row {row} should still use the regular gem skip reason");
     }
+}
+
+static void TestSalvageClassifierAcceptsLowOrangeBlueQuestionMarkItem()
+{
+    using Bitmap grid = CreateSyntheticSalvageGrid();
+    DrawSyntheticLowOrangeBlueQuestionMarkCell(grid, 1, 1);
+    DrawSyntheticMutedMarquiseDiamondStackLikeCell(grid, 2, 1);
+
+    SalvageInventorySlotScanResult result = SalvageInventorySlotClassifier.Scan(grid, new Rectangle(0, 0, grid.Width, grid.Height));
+
+    SalvageInventorySlotCandidateDiagnostic unidentified = result.Candidates.Single(candidate => candidate.Row == 1 && candidate.Column == 1);
+    AssertTrue(unidentified.Accepted, "low-orange blue question-mark unidentified item should be accepted as salvageable");
+    AssertEqual("Legendary", unidentified.Quality, "low-orange blue question-mark unidentified item should use legendary confirmation handling");
+    AssertTrue(unidentified.ConfirmationExpected, "low-orange blue question-mark unidentified item should require confirmation");
+
+    SalvageInventorySlotCandidateDiagnostic diamond = result.Candidates.Single(candidate => candidate.Row == 2 && candidate.Column == 1);
+    AssertFalse(diamond.Accepted, "adjacent muted diamond stack should remain non-salvageable");
 }
 
 static void TestSalvageClassifierRejectsCompactMarquiseTopazStack()

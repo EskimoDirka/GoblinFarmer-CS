@@ -489,11 +489,18 @@ namespace GoblinFarmer
 
         private static bool IsUnidentifiedQuestionMarkAnchor(SalvageInventorySlotMetrics metrics)
         {
+            bool strongOrangeQuestionMark =
+                metrics.OrangeQualityPixels >= 180 &&
+                metrics.ColoredFramePixels >= 1000;
+            bool blueQuestionMarkWithoutTopFrame =
+                metrics.OrangeQualityPixels >= 60 &&
+                metrics.ColoredFramePixels >= 850 &&
+                metrics.TopFramePixels <= 40;
+
             return metrics.StackCountTextPixels >= 140 &&
                 metrics.RegularGemPixels < 220 &&
                 metrics.GreenQualityPixels < 160 &&
-                metrics.OrangeQualityPixels >= 180 &&
-                metrics.ColoredFramePixels >= 1000 &&
+                (strongOrangeQuestionMark || blueQuestionMarkWithoutTopFrame) &&
                 metrics.InnerBrightPixels >= 700 &&
                 metrics.InnerSaturatedPixels >= 650;
         }

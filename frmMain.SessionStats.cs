@@ -319,7 +319,7 @@ namespace GoblinFarmer
                 portDisplayedGoblinObservationStickyUntilUtc = DateTime.UtcNow + PortManualGoblinCountDisplayHold;
             }
 
-            AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(observation.GoblinType)} areaKey={PortLogField(PortDisplayLocation(observation.AreaKey))} displayLocation={PortLogField(PortDisplayLocation(observation.DisplayLocation))} wouldCount=True reason=Counted duplicateState={PortLogField(duplicateState)} displayHoldSeconds={PortManualGoblinCountDisplayHold.TotalSeconds:0} persistUntilAreaChangeOrNextAcceptedCount=True");
+            AppLogger.Info($"GoblinTracker: LastObservationUpdated source={PortLogField(observationSource)} goblinType={PortLogField(observation.GoblinType)} areaKey={PortLogField(PortDisplayLocation(observation.AreaKey))} displayLocation={PortLogField(PortDisplayLocation(observation.DisplayLocation))} wouldCount=True reason=Counted duplicateState={PortLogField(duplicateState)} displayHoldSeconds={PortManualGoblinCountDisplayHold.TotalSeconds:0} persistUntilNextAcceptedCountOrNewGame=True");
             AppLogger.Info($"GoblinTracker: LastObservationUiRefreshRequested source={PortLogField(observationSource)} goblinType={PortLogField(observation.GoblinType)} areaKey={PortLogField(PortDisplayLocation(observation.AreaKey))} reason=Counted invokeRequired={InvokeRequired}");
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
@@ -1124,22 +1124,9 @@ namespace GoblinFarmer
                 {
                     bool acceptedDisplayAreaChanged = !string.IsNullOrWhiteSpace(currentAreaKey) &&
                         !PortDisplayedObservationMatchesCurrentArea(previousObservation!, currentAreaKey);
-                    if (normalizedReason.Equals("TeleportConfirmedAreaChanged", StringComparison.OrdinalIgnoreCase) ||
-                        normalizedReason.Equals("ConfirmedAreaChanged", StringComparison.OrdinalIgnoreCase) ||
-                        acceptedDisplayAreaChanged)
-                    {
-                        portDisplayedGoblinObservation = null;
-                        portDisplayedGoblinObservationStatus = "AreaChanged";
-                        portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
-                        normalizedReason = "AreaChanged";
-                        areaChanged = true;
-                    }
-                    else
-                    {
                     double remainingMs = Math.Max(0, (portDisplayedGoblinObservationStickyUntilUtc - nowUtc).TotalMilliseconds);
-                    AppLogger.Info($"GoblinTracker: LastObservationClearSkipped reason={PortLogField(normalizedReason)} preserveKind=AcceptedCountPersistent preservedSource={PortLogField(previousObservation?.Source ?? "")} preservedGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} preservedReason={PortLogField(previousObservation?.Reason ?? "")} currentAreaKey={PortLogField(currentAreaKey)} acceptedDisplayAreaChanged={acceptedDisplayAreaChanged} remainingMs={remainingMs:0}");
+                    AppLogger.Info($"GoblinTracker: LastObservationClearSkipped reason={PortLogField(normalizedReason)} preserveKind=AcceptedCountPersistent preservedSource={PortLogField(previousObservation?.Source ?? "")} preservedGoblinType={PortLogField(previousObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(previousObservation?.AreaKey ?? "")} preservedReason={PortLogField(previousObservation?.Reason ?? "")} currentAreaKey={PortLogField(currentAreaKey)} acceptedDisplayAreaChanged={acceptedDisplayAreaChanged} remainingMs={remainingMs:0} persistUntilNextAcceptedCountOrNewGame=True");
                     return;
-                    }
                 }
 
                 areaChanged = areaChanged ||
@@ -1250,11 +1237,9 @@ namespace GoblinFarmer
             GoblinObservationRecord incomingObservation,
             GoblinObservationRecord displayedObservation)
         {
-            bool freshAcceptedCandidate = incomingObservation.WouldCount;
-            bool freshPendingJournal = portCombatRunning &&
-                incomingObservation.Source.Equals("Journal", StringComparison.OrdinalIgnoreCase) &&
-                incomingObservation.Reason.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation, StringComparison.OrdinalIgnoreCase);
-            if (!freshAcceptedCandidate && !freshPendingJournal)
+            bool freshAcceptedCandidate = incomingObservation.WouldCount &&
+                incomingObservation.Reason.Equals("Counted", StringComparison.OrdinalIgnoreCase);
+            if (!freshAcceptedCandidate)
             {
                 return false;
             }

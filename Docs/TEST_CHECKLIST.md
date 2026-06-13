@@ -31,10 +31,10 @@ Current active validation lives in `Docs/TODO.md`. This checklist is a compact s
 - Cave Of The Moon Clan Level 1/2, Eastern Channel Level 1/2, Western Channel Level 1/2, and Caverns of Frost Level 1/2 remain separate where expected.
 - Battlefields journal history does not replay stale/non-goblin rows into a fresh count.
 - Journal logs include name-validation/history-row/history-input suppression when those protections fire.
-- Suppressed/duplicate automatic-count paths do not show user-facing notifications, and an invalid automatic-count total logs `AutoCountNotificationSkipped reason=InvalidTotal`.
+- Suppressed/duplicate automatic-count paths do not show user-facing notifications, and an invalid automatic-count total logs `AutoCountAcceptedDiscarded reason=InvalidTotal` before any accepted-count UI or splash is published, with `duplicateGuardReleased=True` when the just-consumed area slot is released.
 - Auto-count notifications are single-slot ordered: queued/displayed/dropped events are mirrored into `GoblinTrackerEvents.jsonl`, superseded payloads log `SupersededByNewerNotification`, and over-age payloads log `StaleQueuedNotification`.
 - Non-counting idle Journal evidence cannot repopulate Last Observation while combat is inactive; expected diagnostic is `LastObservationUpdateSkippedPublishGuard`.
-- Fresh incoming countable or pending-combat evidence can replace an old accepted Last Observation display before the count fully accepts; expected diagnostic is `LastObservationFreshEvidenceReplacesAcceptedDisplay`.
+- Accepted Last Observation persists across route/title/teleport area changes until the next accepted goblin or New Game/Reset Stats. Pending or duplicate Journal evidence must not replace it before a confirmed count publishes; area-change clears should log `LastObservationClearSkipped preserveKind=AcceptedCountPersistent`.
 - Treasure/Odious minimap template and color evidence must agree before minimap-only counting; mismatches should log `GoblinEvidenceMinimapColorDisagreement` and wait for safer evidence instead of showing the wrong goblin type.
 - Gelatinous Sire Journal Engaged/Killed templates use the targeted lower threshold from the 2026-06-11 PF2 diagnostics; other goblin journal templates keep the global threshold.
 - Area-changed Journal Killed confirmations require a same-type Engaged anchor inside the short first-seen area-lock window; older cross-area killed rows should suppress with `KilledEvidenceStaleWithoutFreshEngagedAnchor` while same-area journal freshness remains unchanged.
