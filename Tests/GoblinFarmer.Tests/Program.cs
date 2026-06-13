@@ -4513,6 +4513,8 @@ static void TestGoblinObservationUiStateLogsUpdateAndClear()
     AssertTrue(sessionStatsSource.Contains("LastObservationCleared", StringComparison.Ordinal), "reset and non-accepted clear paths should log LastObservationCleared when the UI state changes");
     AssertTrue(evidenceSource.Contains("PortMarkGoblinObservationNoCurrent(\"No current observation\")", StringComparison.Ordinal), "no-candidate scans should route through the Last Observation state helper");
     AssertTrue(evidenceSource.Contains("private const int GoblinEvidenceScanIntervalMs = 500", StringComparison.Ordinal), "observation scan interval should be responsive enough for live diagnostic feedback without loosening evidence thresholds");
+    AssertTrue(evidenceSource.Contains("combatPrioritizesJournal = portCombatRunning || portCombatStopping", StringComparison.Ordinal), "combat scans should prioritize Journal evidence so accepted notifications are not delayed behind full minimap scans");
+    AssertTrue(evidenceSource.Contains("CombatJournalDecisive", StringComparison.Ordinal), "decisive combat Journal evidence should short-circuit minimap fallback for lower notification latency");
 }
 
 static void TestGoblinTrackerStatsUiRefreshesAfterCountChanges()
@@ -5142,6 +5144,9 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "automatic counting should require reliable evidence before incrementing");
     AssertTrue(autoCountSource.Contains("PortObservationPendingJournalPromotedByReliability", StringComparison.Ordinal), "sustained active Engaged journal evidence should be able to promote a pending observation into the normal count guards");
     AssertTrue(autoCountSource.Contains("JournalEngagedHighConfidenceFreshCombat", StringComparison.Ordinal), "high-confidence fresh Engaged journal evidence should be able to promote a pending observation without waiting for the killed line");
+    AssertTrue(autoCountSource.Contains("PortScheduleHighConfidenceJournalEngagedRetry", StringComparison.Ordinal), "first-frame high-confidence Engaged journal evidence should retry after the existing tiny settle window instead of waiting for the next full scanner cycle");
+    AssertTrue(autoCountSource.Contains("HighConfidenceJournalEngagedRetryScheduled", StringComparison.Ordinal), "the fast Engaged retry should log explicit latency diagnostics");
+    AssertTrue(evidenceModelSource.Contains("internal static string ExtractEvidenceSignatureValue", StringComparison.Ordinal), "evidence-signature Kind parsing should be shared by reliability policy and the fast retry gate");
     AssertTrue(autoCountSource.Contains("FirstSeenCombatActive", StringComparison.Ordinal), "automatic counting should remember whether a journal evidence signature first appeared while combat was active");
     AssertTrue(autoCountSource.Contains("portCombatRunning || evidenceState!.FirstSeenCombatActive", StringComparison.Ordinal), "journal reliability should still count first-combat evidence after combat drops on a later scan");
     AssertTrue(autoCountSource.Contains("evidenceFirstSeenCombatActive=", StringComparison.Ordinal), "auto-count logs should expose first-seen combat state for latency diagnostics");

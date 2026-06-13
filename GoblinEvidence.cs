@@ -1246,7 +1246,7 @@ namespace GoblinFarmer
             return source.Trim();
         }
 
-        private static string ExtractEvidenceSignatureValue(string evidenceSignature, string key)
+        internal static string ExtractEvidenceSignatureValue(string evidenceSignature, string key)
         {
             if (string.IsNullOrWhiteSpace(evidenceSignature) || string.IsNullOrWhiteSpace(key))
             {

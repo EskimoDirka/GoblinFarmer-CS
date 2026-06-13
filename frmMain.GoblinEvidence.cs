@@ -261,38 +261,49 @@ namespace GoblinFarmer
 
         private IEnumerable<GoblinEvidenceCandidate> PortDetectGoblinEvidenceCandidates(GoblinEvidenceTemplateCatalog templateCatalog)
         {
-            List<IGrouping<string, GoblinEvidenceTemplateRequirement>> sourceGroups = templateCatalog.Templates
-                .GroupBy(template => template.Source, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(group => string.Equals(group.Key, "MinimapCandidate", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            IReadOnlyList<GoblinEvidenceTemplateRequirement> journalTemplates = templateCatalog.Templates
+                .Where(template => template.Source.Equals("JournalCandidate", StringComparison.OrdinalIgnoreCase))
                 .ToList();
+            IReadOnlyList<GoblinEvidenceTemplateRequirement> minimapTemplates = templateCatalog.Templates
+                .Where(template => template.Source.Equals("MinimapCandidate", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            bool combatPrioritizesJournal = portCombatRunning || portCombatStopping;
 
             GoblinEvidenceCandidate? primaryJournalCandidate = null;
-            List<GoblinEvidenceCandidate> supportingCandidates = [];
-            foreach (IGrouping<string, GoblinEvidenceTemplateRequirement> sourceGroup in sourceGroups)
+            if (combatPrioritizesJournal)
             {
-                IReadOnlyList<GoblinEvidenceTemplateRequirement> templates = sourceGroup.ToList();
-                Rectangle scanRegion = PortGoblinEvidenceRegionForSource(sourceGroup.Key);
-                GoblinEvidenceDetectionResult detection = PortDetectBestGoblinEvidenceTemplate(templates, scanRegion);
-                GoblinEvidenceCandidate? candidate = detection.Candidate;
-                PortLogGoblinEvidenceSourceScanResult(sourceGroup.Key, scanRegion, detection, templates.Count);
-
-                if (candidate != null &&
-                    PortTryAcceptGoblinEvidenceCandidate(sourceGroup.Key, detection, freshKilledWithoutEngagedReason: "Observation", out GoblinEvidenceCandidate? acceptedCandidate))
+                primaryJournalCandidate = PortTryDetectAcceptedGoblinEvidenceCandidate("JournalCandidate", journalTemplates);
+                if (primaryJournalCandidate != null &&
+                    !PortGoblinEvidenceCandidateIsPendingJournalEngaged(primaryJournalCandidate))
                 {
-                    if (string.Equals(sourceGroup.Key, "JournalCandidate", StringComparison.OrdinalIgnoreCase))
-                    {
-                        primaryJournalCandidate = acceptedCandidate;
-                    }
-                    else
-                    {
-                        supportingCandidates.Add(acceptedCandidate!);
-                    }
+                    AppLogger.Info(
+                        "GoblinEvidenceCandidateSelection: " +
+                        "selected=Journal; " +
+                        "reason=CombatJournalDecisive; " +
+                        $"journalGoblinType={PortLogField(primaryJournalCandidate.GoblinType)}; " +
+                        $"journalConfidence={primaryJournalCandidate.Confidence:0.000}; " +
+                        $"journalKind={PortLogField(PortGoblinEvidenceNoteValue(primaryJournalCandidate.Notes, "Kind"))}");
+                    yield return primaryJournalCandidate;
+                    yield break;
                 }
+            }
+
+            GoblinEvidenceCandidate? strongMinimapCandidate = null;
+            GoblinEvidenceCandidate? supportingMinimapCandidate = PortTryDetectAcceptedGoblinEvidenceCandidate("MinimapCandidate", minimapTemplates);
+            if (supportingMinimapCandidate != null)
+            {
+                strongMinimapCandidate = PortGoblinEvidenceCandidateIsStrongMinimap(supportingMinimapCandidate)
+                    ? supportingMinimapCandidate
+                    : null;
+            }
+
+            if (!combatPrioritizesJournal)
+            {
+                primaryJournalCandidate = PortTryDetectAcceptedGoblinEvidenceCandidate("JournalCandidate", journalTemplates);
             }
 
             if (primaryJournalCandidate != null)
             {
-                GoblinEvidenceCandidate? strongMinimapCandidate = supportingCandidates.FirstOrDefault(PortGoblinEvidenceCandidateIsStrongMinimap);
                 if (PortGoblinEvidenceCandidateIsPendingJournalEngaged(primaryJournalCandidate) &&
                     strongMinimapCandidate != null)
                 {
@@ -314,10 +325,31 @@ namespace GoblinFarmer
                 yield break;
             }
 
-            foreach (GoblinEvidenceCandidate candidate in supportingCandidates)
+            if (supportingMinimapCandidate != null)
             {
-                yield return candidate;
+                yield return supportingMinimapCandidate;
             }
+        }
+
+        private GoblinEvidenceCandidate? PortTryDetectAcceptedGoblinEvidenceCandidate(
+            string source,
+            IReadOnlyList<GoblinEvidenceTemplateRequirement> templates)
+        {
+            if (templates.Count == 0)
+            {
+                return null;
+            }
+
+            Rectangle scanRegion = PortGoblinEvidenceRegionForSource(source);
+            GoblinEvidenceDetectionResult detection = PortDetectBestGoblinEvidenceTemplate(templates, scanRegion);
+            PortLogGoblinEvidenceSourceScanResult(source, scanRegion, detection, templates.Count);
+            if (detection.Candidate != null &&
+                PortTryAcceptGoblinEvidenceCandidate(source, detection, freshKilledWithoutEngagedReason: "Observation", out GoblinEvidenceCandidate? acceptedCandidate))
+            {
+                return acceptedCandidate;
+            }
+
+            return null;
         }
 
         private static bool PortGoblinEvidenceCandidateIsPendingJournalEngaged(GoblinEvidenceCandidate candidate)

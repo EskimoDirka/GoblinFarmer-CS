@@ -419,6 +419,18 @@ namespace GoblinFarmer
                         ["enableObservationMode"] = AppSettings.GoblinTracker.EnableObservationMode,
                         ["enableAutomaticCounting"] = AppSettings.GoblinTracker.EnableAutomaticCounting,
                     });
+                PortScheduleHighConfidenceJournalEngagedRetry(
+                    observation,
+                    area,
+                    evidenceSignature,
+                    evidenceImagePath,
+                    rankedSamples,
+                    evidenceNotes,
+                    suppressionReason,
+                    evidenceReliability,
+                    evidenceFirstSeenAgeSeconds,
+                    evidenceFirstSeenCombatActive,
+                    evidenceHash);
                 return false;
             }
 
@@ -590,6 +602,89 @@ namespace GoblinFarmer
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return true;
+        }
+
+        private void PortScheduleHighConfidenceJournalEngagedRetry(
+            GoblinObservationRecord observation,
+            GoblinAreaResolution area,
+            string evidenceSignature,
+            string evidenceImagePath,
+            IReadOnlyList<ImageRecognitionSampleCandidate>? rankedSamples,
+            string evidenceNotes,
+            string suppressionReason,
+            string evidenceReliability,
+            double evidenceFirstSeenAgeSeconds,
+            bool evidenceFirstSeenCombatActive,
+            string evidenceHash)
+        {
+            if (!suppressionReason.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation, StringComparison.OrdinalIgnoreCase) ||
+                !evidenceReliability.Equals("JournalEngagedOnly", StringComparison.OrdinalIgnoreCase) ||
+                !observation.Source.Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                observation.EvidenceConfidence < GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumConfidence ||
+                evidenceFirstSeenAgeSeconds >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumAge.TotalSeconds ||
+                !(portCombatRunning || evidenceFirstSeenCombatActive))
+            {
+                return;
+            }
+
+            string evidenceKind = GoblinAutoCountEvidenceReliabilityPolicy.ExtractEvidenceSignatureValue(evidenceSignature, "Kind");
+            if (!evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngaged), StringComparison.OrdinalIgnoreCase) &&
+                !evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngagedAndKilled), StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            int retryDelayMs = (int)Math.Ceiling(GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumAge.TotalMilliseconds);
+            AppLogger.Info(
+                "GoblinTracker: HighConfidenceJournalEngagedRetryScheduled " +
+                $"delayMs={retryDelayMs}; " +
+                $"source={PortLogField(observation.Source)}; " +
+                $"goblinType={PortLogField(observation.GoblinType)}; " +
+                $"areaKey={PortLogField(PortDisplayLocation(area.AreaKey))}; " +
+                $"evidenceFirstSeenAgeSeconds={evidenceFirstSeenAgeSeconds:0.000}; " +
+                $"evidenceConfidence={observation.EvidenceConfidence:0.000}; " +
+                $"evidenceHash={PortLogField(evidenceHash)}");
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    Thread.Sleep(retryDelayMs);
+                    if (!PortGoblinObservationScannerEnabled() ||
+                        !PortGoblinAutomaticCountingEnabled() ||
+                        !IsDiabloRunning() ||
+                        !PortDiabloIsActive())
+                    {
+                        AppLogger.Info(
+                            "GoblinTracker: HighConfidenceJournalEngagedRetrySkipped " +
+                            "reason=RuntimeNotEligible; " +
+                            $"source={PortLogField(observation.Source)}; " +
+                            $"goblinType={PortLogField(observation.GoblinType)}; " +
+                            $"areaKey={PortLogField(PortDisplayLocation(area.AreaKey))}; " +
+                            $"evidenceHash={PortLogField(evidenceHash)}");
+                        return;
+                    }
+
+                    bool counted = PortTryRecordAutomaticGoblinCount(
+                        observation,
+                        area,
+                        evidenceSignature,
+                        evidenceImagePath,
+                        rankedSamples,
+                        evidenceNotes);
+                    AppLogger.Info(
+                        "GoblinTracker: HighConfidenceJournalEngagedRetryComplete " +
+                        $"counted={counted}; " +
+                        $"source={PortLogField(observation.Source)}; " +
+                        $"goblinType={PortLogField(observation.GoblinType)}; " +
+                        $"areaKey={PortLogField(PortDisplayLocation(area.AreaKey))}; " +
+                        $"evidenceHash={PortLogField(evidenceHash)}");
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("High-confidence journal engaged retry failed.", ex);
+                }
+            });
         }
 
         private void PortCaptureAcceptedGoblinEvidenceBestSamples(
