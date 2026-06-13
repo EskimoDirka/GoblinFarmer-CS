@@ -533,7 +533,10 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
     AssertTrue(overlaySource.Contains("PortLocationKey(lastAcceptedAreaKey)", StringComparison.Ordinal), "accepted area should be normalized before comparing");
     AssertTrue(overlaySource.Contains("PortLocationKey(acceptedRouteAreaKey)", StringComparison.Ordinal), "accepted route context should be normalized for sub-area Go Next checks");
     AssertTrue(overlaySource.Contains("PortLocationKey(currentConfirmedLocation)", StringComparison.Ordinal), "current confirmed area should be normalized before comparing");
-    AssertTrue(overlaySource.Contains("PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, state.AcceptedRouteAreaKey, portLastConfirmedLocation)", StringComparison.Ordinal), "Go Next should be recomputed from current confirmed area on every timer refresh");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayDetectedAreaFreshness", StringComparison.Ordinal), "Go Next should support a short fresh-location resolver override");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow)", StringComparison.Ordinal), "Go Next should use fresh detected current area before falling back to route state");
+    AssertTrue(overlaySource.Contains("return portLastConfirmedLocation;", StringComparison.Ordinal), "Go Next should fall back to current confirmed route area when no fresh detected area is available");
+    AssertTrue(sessionStatsSource.Contains("PortRememberGoblinOverlayDetectedArea(currentAreaResult.Area.AreaKey, nowUtc, observationSource, \"CurrentAreaResolver\")", StringComparison.Ordinal), "candidate observation should update overlay current area from the resolver before Journal evidence area overrides");
     AssertTrue(overlaySource.Contains("acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase)", StringComparison.Ordinal), "Go Next should stay Y for accepted sub-areas while their route context is still current");
 
     AssertTrue(overlaySource.Contains("FindDiabloWindow()", StringComparison.Ordinal), "overlay should follow the Diablo window");
@@ -552,6 +555,7 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
     AssertFalse(releaseSource.Contains("PortSetGoblinOverlayAcceptedCount(total,", StringComparison.Ordinal), "manual/debug count code should not update live overlay state");
 
     AssertTrue(resetStatsMethod.Contains("PortResetGoblinOverlayState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear overlay accepted-count state");
+    AssertTrue(overlaySource.Contains("portGoblinOverlayCurrentDetectedAreaKey = \"\";", StringComparison.Ordinal), "overlay reset should clear fresh detected area state");
     AssertTrue(newGameMethod.Contains("PortResetGoblinOverlayState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear overlay accepted-count state");
     AssertTrue(releaseSource.Contains("PortDisposeGoblinOverlay();", StringComparison.Ordinal), "form close should dispose the overlay during quiet shutdown");
 }

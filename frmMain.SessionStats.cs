@@ -337,11 +337,14 @@ namespace GoblinFarmer
             IReadOnlyList<ImageRecognitionSampleCandidate>? rankedSamples = null)
         {
             string observationSource = PortNormalizeGoblinObservationSource(source);
-            PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea(observationSource);
+            DateTime nowUtc = DateTime.UtcNow;
+            PortGoblinTrackerAreaResolution currentAreaResult = PortResolveCurrentGoblinArea(observationSource);
+            PortRememberGoblinOverlayDetectedArea(currentAreaResult.Area.AreaKey, nowUtc, observationSource, "CurrentAreaResolver");
+            PortGoblinTrackerAreaResolution areaResult = currentAreaResult;
             if (observationSource.Equals("Journal", StringComparison.OrdinalIgnoreCase))
             {
                 areaResult = PortApplyJournalEvidenceAreaFromNotes(areaResult, evidenceNotes, "ObservationCandidate");
-                areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, DateTime.UtcNow, "ObservationCandidate");
+                areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, nowUtc, "ObservationCandidate");
                 areaResult = PortApplyJournalSuppressedMinimapAreaAnchor(goblinType, areaResult, DateTime.UtcNow, "ObservationCandidate");
             }
 
@@ -349,7 +352,6 @@ namespace GoblinFarmer
             goblinType = GoblinTypeNormalizer.Normalize(goblinType);
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
-            DateTime nowUtc = DateTime.UtcNow;
             string currentAreaAtDetection = PortResolvedAreaKey(portLastConfirmedLocation);
             string staleArea = PortGoblinEvidenceNoteValue(evidenceNotes, "staleArea");
             string titleResolverOverride = PortGoblinEvidenceNoteValue(evidenceNotes, "TitleResolverOverride");

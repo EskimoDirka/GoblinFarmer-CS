@@ -8,10 +8,13 @@ namespace GoblinFarmer
         private const int PortGoblinOverlayTopInset = 8;
         private const int PortGoblinOverlayWidth = 1060;
         private const int PortGoblinOverlayHeight = 46;
+        private static readonly TimeSpan PortGoblinOverlayDetectedAreaFreshness = TimeSpan.FromSeconds(3);
         private readonly object portGoblinOverlayLock = new();
         private Form? portGoblinOverlayForm;
         private PortGoblinOverlayTextControl? portGoblinOverlayTextControl;
         private PortGoblinOverlayAcceptedCountState? portGoblinOverlayAcceptedCount;
+        private string portGoblinOverlayCurrentDetectedAreaKey = "";
+        private DateTime portGoblinOverlayCurrentDetectedAreaUtc = DateTime.MinValue;
 
         private sealed record PortGoblinOverlayAcceptedCountState(
             int Count,
@@ -188,7 +191,8 @@ namespace GoblinFarmer
                 return new(0, "--", "--", false);
             }
 
-            bool goNext = PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, state.AcceptedRouteAreaKey, portLastConfirmedLocation);
+            string currentAreaForGoNext = PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow);
+            bool goNext = PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, state.AcceptedRouteAreaKey, currentAreaForGoNext);
             return new(state.Count, state.GoblinType, state.DisplayArea, goNext);
         }
 
@@ -216,6 +220,53 @@ namespace GoblinFarmer
                 acceptedKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase) ||
                 (!string.IsNullOrWhiteSpace(acceptedRouteKey) &&
                 acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private string PortGoblinOverlayCurrentAreaForGoNext(DateTime nowUtc)
+        {
+            lock (portGoblinOverlayLock)
+            {
+                if (!string.IsNullOrWhiteSpace(portGoblinOverlayCurrentDetectedAreaKey) &&
+                    portGoblinOverlayCurrentDetectedAreaUtc != DateTime.MinValue &&
+                    nowUtc - portGoblinOverlayCurrentDetectedAreaUtc <= PortGoblinOverlayDetectedAreaFreshness)
+                {
+                    return portGoblinOverlayCurrentDetectedAreaKey;
+                }
+            }
+
+            return portLastConfirmedLocation;
+        }
+
+        private void PortRememberGoblinOverlayDetectedArea(string areaKey, DateTime detectedUtc, string source, string reason)
+        {
+            if (!AppSettings.IsVsDebugProfile || string.IsNullOrWhiteSpace(areaKey))
+            {
+                return;
+            }
+
+            string normalizedAreaKey = PortLocationKey(areaKey);
+            if (string.IsNullOrWhiteSpace(normalizedAreaKey))
+            {
+                return;
+            }
+
+            bool changed;
+            lock (portGoblinOverlayLock)
+            {
+                changed = !normalizedAreaKey.Equals(portGoblinOverlayCurrentDetectedAreaKey, StringComparison.OrdinalIgnoreCase);
+                portGoblinOverlayCurrentDetectedAreaKey = normalizedAreaKey;
+                portGoblinOverlayCurrentDetectedAreaUtc = detectedUtc;
+            }
+
+            if (changed)
+            {
+                AppLogger.Info(
+                    "GoblinOverlayDetectedAreaUpdated: " +
+                    $"areaKey={PortLogField(PortDisplayLocation(areaKey))}; " +
+                    $"source={PortLogField(source)}; " +
+                    $"reason={PortLogField(reason)}; " +
+                    $"detectedUtc={detectedUtc:O}");
+            }
         }
 
         private void PortSetGoblinOverlayAcceptedCount(
@@ -260,6 +311,8 @@ namespace GoblinFarmer
             lock (portGoblinOverlayLock)
             {
                 portGoblinOverlayAcceptedCount = null;
+                portGoblinOverlayCurrentDetectedAreaKey = "";
+                portGoblinOverlayCurrentDetectedAreaUtc = DateTime.MinValue;
             }
 
             if (portGoblinOverlayTextControl != null && !portGoblinOverlayTextControl.IsDisposed)
