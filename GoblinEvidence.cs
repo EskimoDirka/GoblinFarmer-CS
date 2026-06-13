@@ -628,6 +628,16 @@ namespace GoblinFarmer
         int CurrentAreaCount,
         double EvidenceConfidence = 0);
 
+    internal sealed record GoblinMinimapAreaAnchorState(
+        string GoblinType,
+        string AreaKey,
+        string DisplayLocation,
+        DateTime SeenUtc,
+        double EvidenceConfidence,
+        string SuppressionReason,
+        string CurrentAreaAtDetection,
+        string EvidenceHash);
+
     internal sealed record GoblinDecisionTraceRecord(
         DateTime TimestampUtc,
         string CorrelationId,

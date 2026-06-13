@@ -140,6 +140,7 @@ Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAuto
 Run("Goblin auto-count notifications require positive totals", TestGoblinAutoCountNotificationsRequirePositiveTotals);
 Run("Goblin auto-count notification queue drops stale or superseded payloads", TestGoblinAutoCountNotificationQueueDropsStaleOrSupersededPayloads);
 Run("Goblin auto-count stale journal does not block fresh cross-area minimap", TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap);
+Run("Goblin low-margin minimap anchors delayed journal area", TestGoblinLowMarginMinimapAnchorsDelayedJournalArea);
 Run("Goblin auto-count old cross-area journal row expires", TestGoblinAutoCountOldCrossAreaJournalRowExpires);
 Run("Goblin auto-count same-area duplicate journal refreshes encounter state", TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState);
 Run("Goblin auto-count suppresses shifted journal row after pause", TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause);
@@ -4540,7 +4541,7 @@ static void TestGoblinAutomaticCountingGateDefaultsDisabled()
     AssertTrue(appSettingsSource.Contains("GoblinTracker.EnableAutomaticCounting={GoblinTracker.EnableAutomaticCounting}", StringComparison.Ordinal), "startup AppSettings logs should expose the automatic-count setting");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableObservationMode", StringComparison.Ordinal), "automatic counting should require Observation Mode");
     AssertTrue(automaticEnabledMethod.Contains("AppSettings.GoblinTracker.EnableAutomaticCounting", StringComparison.Ordinal), "automatic counting should require the explicit automatic-count setting");
-    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath, rankedSamples)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper with evidence identity, image path, and ranked recognition samples");
+    AssertTrue(observeMethod.Contains("PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath, rankedSamples, evidenceNotes)", StringComparison.Ordinal), "observation candidates should pass through the gated automatic-count helper with evidence identity, image path, ranked recognition samples, and evidence notes");
     AssertTrue(autoCountMethod.Contains("bool autoCountingEnabled = PortGoblinAutomaticCountingEnabled()", StringComparison.Ordinal), "automatic count helper should snapshot the effective gate");
     AssertTrue(autoCountMethod.Contains("AutomaticCountingDisabled", StringComparison.Ordinal), "automatic count helper should skip incrementing when the gate is disabled");
     AssertTrue(autoCountMethod.Contains("GoblinAutoCountSkippedDisabled", StringComparison.Ordinal), "disabled automatic counts should log that evidence was tracked but no count was attempted");
@@ -5631,6 +5632,43 @@ static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
 
     AssertFalse(freshMinimapSuppressed, "fresh minimap evidence in a new area should not be suppressed by a prior-area journal row");
     AssertTrue(string.IsNullOrWhiteSpace(freshMinimapReason), "fresh cross-area minimap evidence should not report a stale journal match reason");
+}
+
+static void TestGoblinLowMarginMinimapAnchorsDelayedJournalArea()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+    string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
+    string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
+    string anchorMethod = ExtractMethodBody(sessionStatsSource, "private PortGoblinTrackerAreaResolution PortApplyJournalSuppressedMinimapAreaAnchor");
+    string rememberMethod = ExtractMethodBody(sessionStatsSource, "private void PortRememberSuppressedMinimapAreaAnchor");
+    string freshnessMethod = ExtractMethodBody(evidenceSource, "private bool PortTryAcceptGoblinEvidenceCandidate");
+
+    AssertTrue(evidenceModelSource.Contains("GoblinMinimapAreaAnchorState", StringComparison.Ordinal), "suppressed minimap anchors should use a structured state record");
+    AssertTrue(automationSource.Contains("PortAutomaticGoblinSuppressedMinimapAreaAnchorWindow = TimeSpan.FromSeconds(45)", StringComparison.Ordinal), "suppressed minimap area anchors should stay bounded to the journal freshness window");
+    AssertTrue(automationSource.Contains("portSuppressedMinimapAreaAnchorByType", StringComparison.Ordinal), "tracker should keep a same-goblin-type suppressed minimap anchor");
+    AssertTrue(autoCountMethod.Contains("suppressionReason.Equals(\"MinimapAreaChangedLowMargin\"", StringComparison.Ordinal), "only the low-margin cross-area minimap suppression should seed this anchor");
+    AssertTrue(autoCountMethod.Contains("PortRememberSuppressedMinimapAreaAnchor", StringComparison.Ordinal), "low-margin minimap suppression should remember the first-seen area for later journal confirmation");
+    AssertTrue(rememberMethod.Contains("SuppressedMinimapAreaAnchorRemembered", StringComparison.Ordinal), "anchor creation should be logged explicitly");
+    AssertTrue(rememberMethod.Contains("titleResolverOverride=BlockedUntilFreshJournal", StringComparison.Ordinal), "anchor creation should explain that it does not count until fresh journal support arrives");
+    AssertTrue(anchorMethod.Contains("JournalEvidenceAreaAnchoredToRecentMinimap", StringComparison.Ordinal), "journal evidence should log when it inherits a recent suppressed minimap area");
+    AssertTrue(anchorMethod.Contains("BlockedByFreshMinimapAnchor", StringComparison.Ordinal), "journal area diagnostics should report that the later title/current resolver was blocked");
+    AssertTrue(sessionStatsSource.Contains("anchor.EvidenceConfidence < PortAutomaticGoblinMinimapCountMinimumConfidenceFor", StringComparison.Ordinal), "anchors should still require normal minimap confidence");
+    AssertTrue(anchorMethod.Contains("GoblinManualCountBlockList.IsBlocked", StringComparison.Ordinal), "anchors should not bypass blocked-area protection");
+    AssertTrue(evidenceSource.Contains("PortApplyJournalSuppressedMinimapAreaAnchor(goblinType, areaResult, nowUtc, \"JournalFreshness\")", StringComparison.Ordinal), "freshness evaluation should apply the anchor before deciding the journal area");
+    AssertTrue(observeMethod.Contains("PortApplyJournalSuppressedMinimapAreaAnchor(goblinType, areaResult, DateTime.UtcNow, \"ObservationCandidate\")", StringComparison.Ordinal), "observation/count path should reapply the same anchor from candidate notes");
+    AssertTrue(evidenceSource.Contains("journalAreaAnchoredToSuppressedMinimap", StringComparison.Ordinal), "killed journal freshness should know when the area came from a fresh minimap anchor");
+    AssertTrue(evidenceSource.Contains("!journalAreaAnchoredToSuppressedMinimap &&", StringComparison.Ordinal), "anchored killed journal evidence should not be rejected just because the route-confirmed area is stale");
+    AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshMinimapAreaAnchor", StringComparison.Ordinal), "anchored killed journal acceptance should be diagnostic by name");
+    AssertTrue(evidenceSource.Contains("TitleResolverOverride=BlockedByFreshMinimapAnchor", StringComparison.Ordinal), "accepted candidate notes should carry the blocked title-resolver state into auto-count diagnostics");
+    AssertTrue(autoCountMethod.Contains("currentAreaAtDetection", StringComparison.Ordinal), "accepted/suppressed auto-count diagnostics should include current area at detection");
+    AssertTrue(autoCountMethod.Contains("staleArea", StringComparison.Ordinal), "accepted/suppressed auto-count diagnostics should include stale visible-line area when present");
+    AssertTrue(autoCountMethod.Contains("titleResolverOverride", StringComparison.Ordinal), "accepted/suppressed auto-count diagnostics should include whether a later resolver override was blocked");
+    AssertTrue(evidenceSource.Contains("clearedSuppressedMinimapAreaAnchors", StringComparison.Ordinal), "Reset Stats and New Game should clear suppressed minimap anchors");
 }
 
 static void TestGoblinAutoCountOldCrossAreaJournalRowExpires()

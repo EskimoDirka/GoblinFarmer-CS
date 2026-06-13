@@ -749,8 +749,13 @@ namespace GoblinFarmer
 
             PortGoblinTrackerAreaResolution areaResult = PortResolveCurrentGoblinArea("Journal");
             areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, nowUtc, "JournalFreshness");
+            areaResult = PortApplyJournalSuppressedMinimapAreaAnchor(goblinType, areaResult, nowUtc, "JournalFreshness");
             string areaKey = areaResult.Area.Resolved ? areaResult.Area.AreaKey : "";
             string displayArea = areaResult.Area.Resolved ? areaResult.Area.DisplayLocation : "Unknown";
+            bool journalAreaAnchoredToSuppressedMinimap = areaResult.DisambiguationReason.Equals("RecentSuppressedMinimapAreaAnchor", StringComparison.OrdinalIgnoreCase);
+            string titleResolverOverrideNote = journalAreaAnchoredToSuppressedMinimap
+                ? "; TitleResolverOverride=BlockedByFreshMinimapAnchor"
+                : "";
 
             if (isEngagedSignal)
             {
@@ -803,7 +808,7 @@ namespace GoblinFarmer
                             $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(firstSeenAreaKey)}; currentArea={PortLogField(areaKey)}; recentMinimapArea={PortLogField(recentMinimap.AreaKey)}; recentMinimapAgeSeconds={recentMinimapAgeSeconds:0.0}; recentMinimapConfidence={recentMinimap.EvidenceConfidence:0.000}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                         acceptedCandidate = candidate with
                         {
-                            Notes = $"{candidate.Notes}; JournalFreshness=EngagedAcceptedRecentMinimapConfirmation; JournalArea={displayArea}"
+                            Notes = $"{candidate.Notes}; JournalFreshness=EngagedAcceptedRecentMinimapConfirmation; JournalArea={displayArea}{titleResolverOverrideNote}"
                         };
                         return true;
                     }
@@ -830,7 +835,7 @@ namespace GoblinFarmer
                             $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(firstSeenAreaKey)}; currentArea={PortLogField(areaKey)}; recentMinimapArea={PortLogField(recentMinimap.AreaKey)}; recentMinimapAgeSeconds={recentMinimapAgeSeconds:0.0}; recentMinimapConfidence={recentMinimap.EvidenceConfidence:0.000}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                         acceptedCandidate = candidate with
                         {
-                            Notes = $"{candidate.Notes}; JournalFreshness=EngagedAcceptedRecentMinimapConfirmation; JournalArea={displayArea}"
+                            Notes = $"{candidate.Notes}; JournalFreshness=EngagedAcceptedRecentMinimapConfirmation; JournalArea={displayArea}{titleResolverOverrideNote}"
                         };
                         return true;
                     }
@@ -858,7 +863,7 @@ namespace GoblinFarmer
                     $"firstSeenAgeSeconds={firstSeenAge.TotalSeconds:0.0}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                 acceptedCandidate = candidate with
                 {
-                    Notes = $"{candidate.Notes}; JournalFreshness=EngagedAccepted; JournalArea={displayArea}"
+                    Notes = $"{candidate.Notes}; JournalFreshness=EngagedAccepted; JournalArea={displayArea}{titleResolverOverrideNote}"
                 };
                 return true;
             }
@@ -909,6 +914,7 @@ namespace GoblinFarmer
                 {
                     bool acceptedForManualRefresh = string.Equals(freshKilledWithoutEngagedReason, "Manual", StringComparison.OrdinalIgnoreCase);
                     if (!acceptedForManualRefresh &&
+                        !journalAreaAnchoredToSuppressedMinimap &&
                         !PortFreshKilledObservationAreaMatchesConfirmedArea(areaKey, out string confirmedAreaKey))
                     {
                         PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc, killedState.AreaKey, killedState.FirstSeenUtc);
@@ -924,16 +930,18 @@ namespace GoblinFarmer
                     string freshnessReason = acceptedForManualRefresh ? "Manual" : "Observation";
                     string diagnosticEventName = acceptedForManualRefresh
                         ? "JournalKilledAcceptedFreshManual"
-                        : "JournalKilledAcceptedFreshObservation";
+                        : journalAreaAnchoredToSuppressedMinimap
+                            ? "JournalKilledAcceptedFreshMinimapAreaAnchor"
+                            : "JournalKilledAcceptedFreshObservation";
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         diagnosticEventName,
                         template,
                         match,
                         displayArea,
-                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; acceptedArea={PortLogField(areaKey)}; areaChangedDuringPendingEvidence=False; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; acceptedArea={PortLogField(areaKey)}; areaChangedDuringPendingEvidence=False; titleResolverOverride={(journalAreaAnchoredToSuppressedMinimap ? "BlockedByFreshMinimapAnchor" : "None")}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                     acceptedCandidate = candidate with
                     {
-                        Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedFresh{freshnessReason}; JournalArea={displayArea}"
+                        Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedFresh{freshnessReason}; JournalArea={displayArea}{titleResolverOverrideNote}"
                     };
                     return true;
                 }
@@ -973,7 +981,7 @@ namespace GoblinFarmer
                     $"recentEngagedArea={PortLogField(recentEngaged!.AreaKey)}; recentEngagedAgeSeconds={Math.Max(0, (nowUtc - recentEngaged.SeenUtc).TotalSeconds):0.0}; currentArea={PortLogField(areaKey)}; acceptedArea={PortLogField(areaKey)}; areaChangedDuringPendingEvidence=False; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                 acceptedCandidate = candidate with
                 {
-                    Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedAfterEngaged; JournalArea={displayArea}"
+                    Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedAfterEngaged; JournalArea={displayArea}{titleResolverOverrideNote}"
                 };
                 return true;
             }
@@ -2395,6 +2403,7 @@ namespace GoblinFarmer
             int autoCountEvidenceCleared;
             int autoCountEncounterCleared;
             int recentMinimapObservationsCleared;
+            int suppressedMinimapAreaAnchorsCleared;
             lock (portGoblinEvidenceLock)
             {
                 evidenceCooldownsCleared = portLastGoblinEvidenceByType.Count;
@@ -2429,9 +2438,11 @@ namespace GoblinFarmer
                 autoCountEvidenceCleared = portGoblinAutoCountEvidenceBySignature.Count;
                 autoCountEncounterCleared = portGoblinAutoCountEncounterByGoblinType.Count;
                 recentMinimapObservationsCleared = portRecentMinimapGoblinObservationByType.Count;
+                suppressedMinimapAreaAnchorsCleared = portSuppressedMinimapAreaAnchorByType.Count;
                 portGoblinAutoCountEvidenceBySignature.Clear();
                 portGoblinAutoCountEncounterByGoblinType.Clear();
                 portRecentMinimapGoblinObservationByType.Clear();
+                portSuppressedMinimapAreaAnchorByType.Clear();
                 hadManualObservation = portLastGoblinObservationForManualCount != null;
                 hadDisplayedObservation = portDisplayedGoblinObservation != null || !string.IsNullOrWhiteSpace(portDisplayedGoblinObservationStatus);
                 portLastGoblinObservationForManualCount = null;
@@ -2440,7 +2451,7 @@ namespace GoblinFarmer
                 portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
             }
 
-            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedJournalKilled={journalKilledCleared} resetCarryoverSuppressionsRemembered={resetCarryoverRemembered} clearedAutoCountEvidence={autoCountEvidenceCleared} clearedAutoCountEncounters={autoCountEncounterCleared} clearedRecentMinimapObservations={recentMinimapObservationsCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
+            AppLogger.Info($"GoblinTracker: Evidence observation state reset reason='{PortLogField(reason)}' clearedEvidenceCooldowns={evidenceCooldownsCleared} clearedMissingTemplateCooldowns={missingTemplateCooldownsCleared} clearedScanDiagnostics={scanDiagnosticsCleared} clearedDetectorDiagnostics={detectorDiagnosticsCleared} clearedJournalFirstSeen={journalFirstSeenCleared} clearedJournalEngaged={journalEngagedCleared} clearedStaleJournalSuppressed={staleJournalSuppressedCleared} clearedJournalKilled={journalKilledCleared} resetCarryoverSuppressionsRemembered={resetCarryoverRemembered} clearedAutoCountEvidence={autoCountEvidenceCleared} clearedAutoCountEncounters={autoCountEncounterCleared} clearedRecentMinimapObservations={recentMinimapObservationsCleared} clearedSuppressedMinimapAreaAnchors={suppressedMinimapAreaAnchorsCleared} clearedManualObservation={hadManualObservation} clearedDisplayedObservation={hadDisplayedObservation}");
             AppLogger.Info($"GoblinTracker: LastObservationCleared reason={PortLogField(reason)} previousDisplayed={hadDisplayedObservation}");
         }
 

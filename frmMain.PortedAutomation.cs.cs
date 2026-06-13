@@ -58,6 +58,7 @@ namespace GoblinFarmer
         private static readonly TimeSpan PortAutomaticGoblinJournalEncounterSuppressWindow = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan PortAutomaticGoblinSourceVariantSuppressWindow = TimeSpan.FromSeconds(45);
         private static readonly TimeSpan PortAutomaticGoblinRecentMinimapJournalConfirmationWindow = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan PortAutomaticGoblinSuppressedMinimapAreaAnchorWindow = TimeSpan.FromSeconds(45);
         private const double PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence = 0.65;
         private static readonly TimeSpan PortGoblinDecisionBundleSuppressionThrottleWindow = TimeSpan.FromSeconds(30);
         private GoblinObservationRecord? portLastGoblinObservationForManualCount;
@@ -65,6 +66,7 @@ namespace GoblinFarmer
         private string portDisplayedGoblinObservationStatus = "";
         private DateTime portDisplayedGoblinObservationStickyUntilUtc = DateTime.MinValue;
         private readonly Dictionary<string, GoblinObservationRecord> portRecentMinimapGoblinObservationByType = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, GoblinMinimapAreaAnchorState> portSuppressedMinimapAreaAnchorByType = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PortGoblinAutoCountEvidenceState> portGoblinAutoCountEvidenceBySignature = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PortGoblinAutoCountEncounterState> portGoblinAutoCountEncounterByGoblinType = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DateTime> portGoblinDecisionBundleLastSavedByKey = new(StringComparer.OrdinalIgnoreCase);

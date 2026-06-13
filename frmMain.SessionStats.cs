@@ -340,6 +340,7 @@ namespace GoblinFarmer
             {
                 areaResult = PortApplyJournalEvidenceAreaFromNotes(areaResult, evidenceNotes, "ObservationCandidate");
                 areaResult = PortApplyJournalMinimapAreaOverride(goblinType, areaResult, DateTime.UtcNow, "ObservationCandidate");
+                areaResult = PortApplyJournalSuppressedMinimapAreaAnchor(goblinType, areaResult, DateTime.UtcNow, "ObservationCandidate");
             }
 
             GoblinAreaResolution area = areaResult.Area;
@@ -347,6 +348,9 @@ namespace GoblinFarmer
             string areaKey = PortDisplayLocation(area.AreaKey);
             string displayLocation = PortDisplayLocation(area.DisplayLocation);
             DateTime nowUtc = DateTime.UtcNow;
+            string currentAreaAtDetection = PortResolvedAreaKey(portLastConfirmedLocation);
+            string staleArea = PortGoblinEvidenceNoteValue(evidenceNotes, "staleArea");
+            string titleResolverOverride = PortGoblinEvidenceNoteValue(evidenceNotes, "TitleResolverOverride");
             string reason = "Eligible";
             string duplicateState = "Available";
             string globalEvidenceKey = PortGoblinAutoCountGlobalEvidenceKey(evidenceSignature, observationSource, goblinType);
@@ -502,8 +506,8 @@ namespace GoblinFarmer
                 }
             }
 
-            AppLogger.Info($"GoblinTracker: GoblinObservationCandidate source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} wouldCount={wouldCount} reason={reason} evidenceHash={PortGoblinEvidenceHash(globalEvidenceKey)} encounterMatch={PortLogField(encounterSuppressionMatch)}");
-            AppLogger.Info($"GoblinTracker: GoblinObservationSummary source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState} areaLimit={guardResult.AreaLimit} currentAreaCount={guardResult.AreaCount} evidenceConfidence={evidenceConfidence:0.000} evidenceHash={PortGoblinEvidenceHash(globalEvidenceKey)} encounterMatch={PortLogField(encounterSuppressionMatch)}");
+            AppLogger.Info($"GoblinTracker: GoblinObservationCandidate source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} currentAreaAtDetection={PortLogField(currentAreaAtDetection)} staleArea={PortLogField(staleArea)} titleResolverOverride={PortLogField(titleResolverOverride)} wouldCount={wouldCount} reason={reason} evidenceHash={PortGoblinEvidenceHash(globalEvidenceKey)} encounterMatch={PortLogField(encounterSuppressionMatch)}");
+            AppLogger.Info($"GoblinTracker: GoblinObservationSummary source={PortLogField(observationSource)} goblinType={PortLogField(goblinType)} areaKey={areaKey} displayLocation={displayLocation} currentAreaAtDetection={PortLogField(currentAreaAtDetection)} staleArea={PortLogField(staleArea)} titleResolverOverride={PortLogField(titleResolverOverride)} wouldCount={wouldCount} reason={reason} duplicateState={duplicateState} areaLimit={guardResult.AreaLimit} currentAreaCount={guardResult.AreaCount} evidenceConfidence={evidenceConfidence:0.000} evidenceHash={PortGoblinEvidenceHash(globalEvidenceKey)} encounterMatch={PortLogField(encounterSuppressionMatch)}");
             PortWriteGoblinTrackerJsonEvent(
                 "GoblinObservationCandidate",
                 new Dictionary<string, object?>
@@ -512,6 +516,9 @@ namespace GoblinFarmer
                     ["goblinType"] = goblinType,
                     ["areaKey"] = areaKey,
                     ["displayLocation"] = displayLocation,
+                    ["currentAreaAtDetection"] = currentAreaAtDetection,
+                    ["staleArea"] = staleArea,
+                    ["titleResolverOverride"] = titleResolverOverride,
                     ["wouldCount"] = wouldCount,
                     ["reason"] = reason,
                     ["duplicateState"] = duplicateState,
@@ -534,7 +541,7 @@ namespace GoblinFarmer
                         : "LastObservationUpdateSkippedPreserved";
                 AppLogger.Info($"GoblinTracker: {eventName} incomingSource={PortLogField(observationSource)} incomingGoblinType={PortLogField(goblinType)} incomingAreaKey={areaKey} incomingReason={PortLogField(reason)} incomingDuplicateState={PortLogField(duplicateState)} preserveKind={PortLogField(displaySkipKind)} allowObservationPublish={allowObservationPublish} combatActive={portCombatRunning} combatStopping={portCombatStopping} automationRunning={isAutomationRunning} diabloRunning={IsDiabloRunning()} diabloActive={PortDiabloIsActive()} preservedSource={PortLogField(preservedObservation?.Source ?? "")} preservedGoblinType={PortLogField(preservedObservation?.GoblinType ?? "")} preservedAreaKey={PortLogField(preservedObservation?.AreaKey ?? "")} preservedReason={PortLogField(preservedObservation?.Reason ?? "")} remainingMs={manualHoldRemainingMs:0}");
             }
-            PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath, rankedSamples);
+            PortTryRecordAutomaticGoblinCount(observation, area, evidenceSignature, evidenceImagePath, rankedSamples, evidenceNotes);
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();
             return wouldCount;
@@ -632,6 +639,174 @@ namespace GoblinFarmer
                     : areaResult.AmbiguityGroup,
                 DisambiguationReason = overrideDecision.Reason,
             };
+        }
+
+        private PortGoblinTrackerAreaResolution PortApplyJournalSuppressedMinimapAreaAnchor(
+            string goblinType,
+            PortGoblinTrackerAreaResolution areaResult,
+            DateTime nowUtc,
+            string reason)
+        {
+            if (!PortTryGetSuppressedMinimapAreaAnchor(
+                goblinType,
+                nowUtc,
+                out GoblinMinimapAreaAnchorState anchor,
+                out double anchorAgeSeconds))
+            {
+                return areaResult;
+            }
+
+            if (!areaResult.Area.Resolved ||
+                string.Equals(
+                    GoblinAreaResolver.NormalizedKey(areaResult.Area.AreaKey),
+                    GoblinAreaResolver.NormalizedKey(anchor.AreaKey),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return areaResult;
+            }
+
+            GoblinAreaResolution anchorArea = GoblinAreaResolver.Resolve(anchor.AreaKey);
+            if (!anchorArea.Resolved || GoblinManualCountBlockList.IsBlocked(anchorArea.AreaKey))
+            {
+                return areaResult;
+            }
+
+            AppLogger.Info(
+                "GoblinTracker: JournalEvidenceAreaAnchoredToRecentMinimap " +
+                $"reason={PortLogField(reason)} " +
+                $"goblinType={PortLogField(GoblinTypeNormalizer.Normalize(goblinType))} " +
+                $"originalAreaKey={PortLogField(PortDisplayLocation(areaResult.Area.AreaKey))} " +
+                $"acceptedArea={PortLogField(PortDisplayLocation(anchorArea.AreaKey))} " +
+                $"firstSeenArea={PortLogField(PortDisplayLocation(anchor.AreaKey))} " +
+                $"currentAreaAtDetection={PortLogField(PortDisplayLocation(anchor.CurrentAreaAtDetection))} " +
+                $"titleResolverOverride=BlockedByFreshMinimapAnchor " +
+                $"anchorAgeSeconds={anchorAgeSeconds:0.0} " +
+                $"anchorConfidence={anchor.EvidenceConfidence:0.000} " +
+                $"anchorSuppressionReason={PortLogField(anchor.SuppressionReason)} " +
+                $"anchorEvidenceHash={anchor.EvidenceHash} " +
+                $"maxAgeSeconds={PortAutomaticGoblinSuppressedMinimapAreaAnchorWindow.TotalSeconds:0}");
+            PortWriteGoblinTrackerJsonEvent(
+                "JournalEvidenceAreaAnchoredToRecentMinimap",
+                new Dictionary<string, object?>
+                {
+                    ["reason"] = reason,
+                    ["goblinType"] = GoblinTypeNormalizer.Normalize(goblinType),
+                    ["originalAreaKey"] = PortDisplayLocation(areaResult.Area.AreaKey),
+                    ["firstSeenArea"] = PortDisplayLocation(anchor.AreaKey),
+                    ["acceptedArea"] = PortDisplayLocation(anchorArea.AreaKey),
+                    ["notificationDisplayArea"] = PortDisplayLocation(anchorArea.DisplayLocation),
+                    ["currentAreaAtDetection"] = PortDisplayLocation(anchor.CurrentAreaAtDetection),
+                    ["titleResolverOverride"] = "BlockedByFreshMinimapAnchor",
+                    ["anchorAgeSeconds"] = anchorAgeSeconds,
+                    ["anchorConfidence"] = anchor.EvidenceConfidence,
+                    ["anchorSuppressionReason"] = anchor.SuppressionReason,
+                    ["anchorEvidenceHash"] = anchor.EvidenceHash,
+                    ["maxAgeSeconds"] = PortAutomaticGoblinSuppressedMinimapAreaAnchorWindow.TotalSeconds,
+                });
+
+            return areaResult with
+            {
+                Area = anchorArea,
+                AmbiguityGroup = string.IsNullOrWhiteSpace(areaResult.AmbiguityGroup)
+                    ? "SuppressedMinimapAreaAnchor"
+                    : areaResult.AmbiguityGroup,
+                DisambiguationReason = "RecentSuppressedMinimapAreaAnchor",
+            };
+        }
+
+        private void PortRememberSuppressedMinimapAreaAnchor(
+            GoblinObservationRecord observation,
+            GoblinAreaResolution area,
+            string currentAreaAtDetection,
+            string suppressionReason,
+            DateTime nowUtc,
+            string evidenceHash)
+        {
+            if (!observation.Source.Equals("Minimap", StringComparison.OrdinalIgnoreCase) ||
+                !area.Resolved ||
+                string.IsNullOrWhiteSpace(observation.GoblinType) ||
+                string.IsNullOrWhiteSpace(area.AreaKey))
+            {
+                return;
+            }
+
+            string normalizedGoblinType = GoblinTypeNormalizer.Normalize(observation.GoblinType);
+            GoblinMinimapAreaAnchorState anchor = new(
+                normalizedGoblinType,
+                area.AreaKey,
+                area.DisplayLocation,
+                nowUtc,
+                observation.EvidenceConfidence,
+                suppressionReason,
+                currentAreaAtDetection,
+                evidenceHash);
+            lock (portGoblinTrackerLock)
+            {
+                portSuppressedMinimapAreaAnchorByType[normalizedGoblinType] = anchor;
+            }
+
+            AppLogger.Info(
+                "GoblinTracker: SuppressedMinimapAreaAnchorRemembered " +
+                $"source=Minimap " +
+                $"goblinType={PortLogField(normalizedGoblinType)} " +
+                $"firstSeenArea={PortLogField(PortDisplayLocation(area.AreaKey))} " +
+                $"currentAreaAtDetection={PortLogField(PortDisplayLocation(currentAreaAtDetection))} " +
+                $"acceptedArea=None " +
+                $"notificationDisplayArea=None " +
+                $"titleResolverOverride=BlockedUntilFreshJournal " +
+                $"reason={PortLogField(suppressionReason)} " +
+                $"evidenceConfidence={observation.EvidenceConfidence:0.000} " +
+                $"evidenceHash={evidenceHash} " +
+                $"maxAgeSeconds={PortAutomaticGoblinSuppressedMinimapAreaAnchorWindow.TotalSeconds:0}");
+            PortWriteGoblinTrackerJsonEvent(
+                "SuppressedMinimapAreaAnchorRemembered",
+                new Dictionary<string, object?>
+                {
+                    ["source"] = "Minimap",
+                    ["goblinType"] = normalizedGoblinType,
+                    ["firstSeenArea"] = PortDisplayLocation(area.AreaKey),
+                    ["currentAreaAtDetection"] = PortDisplayLocation(currentAreaAtDetection),
+                    ["acceptedArea"] = null,
+                    ["notificationDisplayArea"] = null,
+                    ["titleResolverOverride"] = "BlockedUntilFreshJournal",
+                    ["reason"] = suppressionReason,
+                    ["evidenceConfidence"] = observation.EvidenceConfidence,
+                    ["evidenceHash"] = evidenceHash,
+                    ["maxAgeSeconds"] = PortAutomaticGoblinSuppressedMinimapAreaAnchorWindow.TotalSeconds,
+                });
+        }
+
+        private bool PortTryGetSuppressedMinimapAreaAnchor(
+            string goblinType,
+            DateTime nowUtc,
+            out GoblinMinimapAreaAnchorState anchor,
+            out double anchorAgeSeconds)
+        {
+            anchor = default!;
+            anchorAgeSeconds = -1;
+            string normalizedGoblinType = GoblinTypeNormalizer.Normalize(goblinType);
+            if (string.IsNullOrWhiteSpace(normalizedGoblinType))
+            {
+                return false;
+            }
+
+            lock (portGoblinTrackerLock)
+            {
+                if (!portSuppressedMinimapAreaAnchorByType.TryGetValue(normalizedGoblinType, out GoblinMinimapAreaAnchorState? candidate))
+                {
+                    return false;
+                }
+
+                anchor = candidate;
+            }
+
+            if (anchor.EvidenceConfidence < PortAutomaticGoblinMinimapCountMinimumConfidenceFor(normalizedGoblinType))
+            {
+                return false;
+            }
+
+            anchorAgeSeconds = Math.Max(0, (nowUtc - anchor.SeenUtc).TotalSeconds);
+            return anchorAgeSeconds <= PortAutomaticGoblinSuppressedMinimapAreaAnchorWindow.TotalSeconds;
         }
 
         private bool PortTryGetRecentMinimapJournalConfirmation(
