@@ -134,6 +134,7 @@ Run("Goblin journal evidence area reaches observation count path", TestGoblinJou
 Run("Goblin automatic count reliability requires killed or minimap confirmation", TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmation);
 Run("Goblin engaged journal can count after recent minimap confirmation", TestGoblinEngagedJournalCanCountAfterRecentMinimapConfirmation);
 Run("Goblin auto-count source variant suppression uses recent last-seen state", TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState);
+Run("Goblin auto-count fresh cross-area journal duplicate bypass is narrow", TestGoblinAutoCountFreshCrossAreaJournalDuplicateBypassIsNarrow);
 Run("Goblin PF multi-count duplicate bypass stays bounded", TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded);
 Run("Goblin auto-count minimap collision allows new areas", TestGoblinAutoCountMinimapCollisionAllowsNewAreas);
 Run("Goblin auto-count delayed journal after minimap suppresses", TestGoblinAutoCountDelayedJournalAfterMinimapSuppresses);
@@ -465,8 +466,9 @@ static void TestVsDebugFormShowsObsStatusPanel()
     AssertTrue(formSource.Contains("PortUpdateObsStatusGroup();", StringComparison.Ordinal), "status timer should refresh OBS display state");
     AssertTrue(obsStatusSource.Contains("Name = \"grpObsStatus\"", StringComparison.Ordinal), "OBS status group should have a stable control name");
     AssertTrue(obsStatusSource.Contains("Text = \"OBS Status\"", StringComparison.Ordinal), "OBS status group should have the requested title");
-    AssertTrue(obsStatusSource.Contains("Recording Started:", StringComparison.Ordinal), "OBS status group should show recording start time");
-    AssertTrue(obsStatusSource.Contains("Recording Ended:", StringComparison.Ordinal), "OBS status group should show recording end time");
+    AssertTrue(obsStatusSource.Contains("Start:", StringComparison.Ordinal), "OBS status group should show recording start time");
+    AssertTrue(obsStatusSource.Contains("Stop:", StringComparison.Ordinal), "OBS status group should show recording stop time");
+    AssertTrue(obsStatusSource.Contains("ToString(\"h:mm tt\"", StringComparison.Ordinal), "OBS status times should use the short AM/PM display format");
     AssertTrue(obsStatusSource.Contains("Process.GetProcessesByName(\"obs64\")", StringComparison.Ordinal), "OBS status should observe the OBS process");
     AssertTrue(obsStatusSource.Contains("Auto Record Diablo.log", StringComparison.Ordinal), "OBS status should read the local monitor log");
     AssertTrue(obsStatusSource.Contains("OBS recording started.", StringComparison.Ordinal), "OBS status should parse recording start events");
@@ -5115,6 +5117,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress", StringComparison.Ordinal), "automatic counting should share a testable encounter suppression policy");
     AssertTrue(autoCountSource.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "automatic counting should require reliable evidence before incrementing");
     AssertTrue(autoCountSource.Contains("PortObservationPendingJournalPromotedByReliability", StringComparison.Ordinal), "sustained active Engaged journal evidence should be able to promote a pending observation into the normal count guards");
+    AssertTrue(autoCountSource.Contains("JournalEngagedHighConfidenceFreshCombat", StringComparison.Ordinal), "high-confidence fresh Engaged journal evidence should be able to promote a pending observation without waiting for the killed line");
     AssertTrue(autoCountMethod.Contains("MinimapAreaChangedLowMargin", StringComparison.Ordinal), "borderline minimap evidence should not count a new area when the confirmed area still points elsewhere");
     AssertTrue(autoCountMethod.Contains("MinimapAreaChangedConfidenceMargin", StringComparison.Ordinal), "area-changed minimap suppression should use an explicit conservative margin");
     AssertTrue(observeMethod.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "observation summaries should show pending Engaged-only journal evidence before auto-count attempts run");
@@ -5174,6 +5177,54 @@ static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmati
         "Engaged-only journal evidence should report the pending-confirmation reason");
     AssertEqual("JournalEngagedOnly", engagedReliability, "Engaged-only journal reliability should be explicit in logs and JSONL");
     AssertEqual(1.0, GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds, "active combat journal evidence should be eligible after the shortened live-test latency window");
+    AssertEqual(0.95, GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumConfidence, "high-confidence active-combat journal evidence should use a conservative confidence floor");
+    AssertEqual(25.0, GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumAge.TotalMilliseconds, "high-confidence active-combat journal evidence should wait a tiny settle window before counting");
+
+    AssertFalse(
+        GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+            "Journal",
+            "JournalEncounter|Journal|Gem Hoarder|Template=Gem Hoarder Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
+            evidenceFirstSeenAgeSeconds: 0,
+            combatActive: true,
+            evidenceConfidence: 0.958,
+            out string zeroAgeHighConfidenceReason,
+            out _),
+        "exact first-frame high-confidence Engaged journal evidence should still wait for a minimal settle interval");
+    AssertEqual(
+        GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation,
+        zeroAgeHighConfidenceReason,
+        "zero-age high-confidence Engaged journal evidence should report the pending-confirmation reason");
+
+    AssertTrue(
+        GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+            "Journal",
+            "JournalEncounter|Journal|Gem Hoarder|Template=Gem Hoarder Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
+            evidenceFirstSeenAgeSeconds: 0.2,
+            combatActive: true,
+            evidenceConfidence: 0.958,
+            out string highConfidenceEngagedReason,
+            out string highConfidenceEngagedReliability),
+        "fresh high-confidence Engaged journal evidence during active combat should count before waiting for the Killed line");
+    AssertEqual("", highConfidenceEngagedReason, "high-confidence fresh Engaged journal evidence should not return a suppression reason");
+    AssertEqual(
+        GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombat,
+        highConfidenceEngagedReliability,
+        "high-confidence fresh Engaged journal reliability should be explicit");
+
+    AssertFalse(
+        GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
+            "Journal",
+            "JournalEncounter|Journal|Gem Hoarder|Template=Gem Hoarder Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
+            evidenceFirstSeenAgeSeconds: 0.2,
+            combatActive: true,
+            evidenceConfidence: 0.949,
+            out string belowHighConfidenceReason,
+            out _),
+        "fresh Engaged journal evidence just below the confidence floor should keep waiting for stronger confirmation");
+    AssertEqual(
+        GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation,
+        belowHighConfidenceReason,
+        "below-floor fresh Engaged journal evidence should report the pending-confirmation reason");
 
     AssertTrue(
         GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount(
@@ -5181,6 +5232,7 @@ static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmati
             "JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
             evidenceFirstSeenAgeSeconds: 1.2,
             combatActive: true,
+            evidenceConfidence: 0.910,
             out string sustainedEngagedReason,
             out string sustainedEngagedReliability),
         "same-area active Engaged journal evidence sustained past the confirmation window should count");
@@ -5196,6 +5248,7 @@ static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmati
             "JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
             evidenceFirstSeenAgeSeconds: 12,
             combatActive: true,
+            evidenceConfidence: 0.990,
             out string oldEngagedReason,
             out _),
         "old Engaged journal evidence should not become countable after the sustained confirmation window");
@@ -5249,6 +5302,7 @@ static void TestGoblinEngagedJournalCanCountAfterRecentMinimapConfirmation()
     AssertTrue(autoCountSource.Contains("PortTryApplyRecentMinimapJournalConfirmationReliability", StringComparison.Ordinal), "recent minimap confirmation should be a reliability promotion, not a terminal accepted branch");
     AssertTrue(autoCountSource.Contains("continuesThroughDuplicateGuard=True", StringComparison.Ordinal), "recent minimap confirmation should log that normal duplicate/count acceptance still runs");
     AssertTrue(autoCountSource.Contains("PortObservationPendingJournalPromotedByReliability", StringComparison.Ordinal), "pending journal observations should be promotable by reliability");
+    AssertTrue(autoCountSource.Contains("JournalEngagedHighConfidenceFreshCombat", StringComparison.Ordinal), "pending journal promotion should include the high-confidence fresh-combat reliability path");
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationWindow", StringComparison.Ordinal), "recent minimap confirmation should be bounded by a short window");
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence", StringComparison.Ordinal), "recent minimap confirmation should keep a minimum confidence floor");
     AssertTrue(evidenceSource.Contains("JournalEngagedAcceptedRecentMinimapConfirmation", StringComparison.Ordinal), "stale-looking Engaged journal rows should only bypass freshness when a recent same-area minimap supports them");
@@ -5295,6 +5349,23 @@ static void TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState()
         out _);
 
     AssertFalse(oldVariantSuppressed, "a same-type journal row with no bucket match and no recent last-seen continuity should not be globally blocked forever");
+}
+
+static void TestGoblinAutoCountFreshCrossAreaJournalDuplicateBypassIsNarrow()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
+    string helper = ExtractMethodBody(autoCountSource, "private static bool PortShouldBypassFreshCrossAreaJournalDuplicateSuppression");
+    string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
+
+    AssertTrue(autoCountMethod.Contains("FreshCrossAreaJournalDuplicateBypass", StringComparison.Ordinal), "fresh cross-area journal duplicate bypass should be logged in the encounter suppression match");
+    AssertTrue(helper.Contains("PortNormalizeGoblinObservationSource(observation.Source).Equals(\"Journal\"", StringComparison.Ordinal), "bypass should apply only to journal evidence");
+    AssertTrue(helper.Contains("JournalEncounter", StringComparison.Ordinal), "bypass should be limited to fresh Engaged/Encounter journal rows, not killed-only stale rows");
+    AssertTrue(helper.Contains("matchReason.StartsWith(\"JournalLineBucket\"", StringComparison.Ordinal), "bypass should only respond to same-visible-line duplicate suppression");
+    AssertTrue(helper.Contains("minimumNewAreaEvidenceAgeSeconds = 1.0", StringComparison.Ordinal), "bypass should require the new-area journal row to persist briefly");
+    AssertTrue(helper.Contains("maximumFreshBypassAgeSeconds = 12.0", StringComparison.Ordinal), "bypass should stay inside a short freshness window");
+    AssertTrue(helper.Contains("minimumFreshJournalConfidence = 0.95", StringComparison.Ordinal), "bypass should require high-confidence journal evidence");
+    AssertTrue(helper.Contains("GoblinAreaResolver.NormalizedKey(areaKey).Equals", StringComparison.Ordinal), "bypass should not affect same-area duplicate suppression");
 }
 
 static void TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded()
@@ -6076,8 +6147,10 @@ static void TestGoblinRefreshLogsFreshAndStaleKilledJournalDecisions()
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
 
     AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshObservation", StringComparison.Ordinal), "continuous observation scans should log fresh Killed journal acceptance");
+    AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshTitleArea", StringComparison.Ordinal), "fresh killed-only scans should allow a strong current-title area when route-confirmed area lags");
     AssertTrue(evidenceSource.Contains("JournalKilledIgnoredFreshObservationAreaUnconfirmed", StringComparison.Ordinal), "continuous observation killed-only scans should reject unconfirmed area drift before counting");
-    AssertTrue(evidenceSource.Contains("PortFreshKilledObservationAreaMatchesConfirmedArea", StringComparison.Ordinal), "fresh killed-only observation scans should require a confirmed same-area anchor");
+    AssertTrue(evidenceSource.Contains("PortFreshKilledObservationHasTrustedAreaAnchor", StringComparison.Ordinal), "fresh killed-only observation scans should require a trusted same-area anchor");
+    AssertTrue(evidenceSource.Contains("CurrentTitleArea", StringComparison.Ordinal), "trusted killed-only area diagnostics should identify current-title anchors");
     AssertTrue(evidenceSource.Contains("JournalKilledAcceptedFreshManual", StringComparison.Ordinal), "manual refresh should log fresh Killed journal acceptance");
     AssertTrue(evidenceSource.Contains("JournalKilledIgnoredStale", StringComparison.Ordinal), "stale Killed journal lines should log a stale suppression reason");
     AssertTrue(evidenceSource.Contains("freshKilledWithoutEngagedReason: \"Observation\"", StringComparison.Ordinal), "continuous observation scans should opt into fresh Killed journal acceptance");
@@ -6622,6 +6695,8 @@ static void TestSalvageLoopUsesBoundedConfirmationWaitAndTimingLogs()
     AssertTrue(townSource.Contains("expectedConfirmationMisses=", StringComparison.Ordinal), "salvage summary should report missed expected confirmations");
     AssertTrue(townSource.Contains("regularGemSkips=", StringComparison.Ordinal), "salvage summary should report regular gem skips");
     AssertTrue(townSource.Contains("retainedRegularGemCount=", StringComparison.Ordinal), "salvage summary should report retained regular gem count");
+    AssertTrue(townSource.Contains("skipReason=NoActionableSalvageTargets", StringComparison.Ordinal), "no-target salvage scans should explicitly let the caller continue to stash or game-exit flow");
+    AssertTrue(townSource.Contains("callerContinues=True", StringComparison.Ordinal), "no-target salvage diagnostics should state that the caller continues after a successful skip");
     AssertTrue(townSource.Contains("phase=", StringComparison.Ordinal), "salvage summary should identify the salvage phase");
     AssertTrue(townSource.Contains("RegularGemSkipped", StringComparison.Ordinal), "regular gems should be skipped by the leftover salvage loop");
     AssertTrue(townSource.Contains("salvageSuccess=", StringComparison.Ordinal), "salvage summary should report the final success state");

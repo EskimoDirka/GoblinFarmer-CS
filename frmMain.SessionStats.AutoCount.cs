@@ -162,6 +162,16 @@ namespace GoblinFarmer
                         guardResult = pfGuardResult;
                         encounterSuppressionMatch = "PfMultiCountDuplicateBypass";
                     }
+                    else if (PortShouldBypassFreshCrossAreaJournalDuplicateSuppression(
+                        observation,
+                        area.AreaKey,
+                        globalEvidenceKey,
+                        encounterState,
+                        encounterSuppressionMatch,
+                        evidenceFirstSeenAgeSeconds))
+                    {
+                        encounterSuppressionMatch = $"{encounterSuppressionMatch};FreshCrossAreaJournalDuplicateBypass";
+                    }
                     else
                     {
                         suppressionReason = "EncounterAlreadyAutoCounted";
@@ -200,6 +210,7 @@ namespace GoblinFarmer
                         autoEvidenceKey,
                         evidenceFirstSeenAgeSeconds,
                         portCombatRunning,
+                        observation.EvidenceConfidence,
                         out reliabilityReason,
                         out evidenceReliability)))
                 {
@@ -426,6 +437,7 @@ namespace GoblinFarmer
                     autoEvidenceKey,
                     evidenceFirstSeenAgeSeconds,
                     portCombatRunning,
+                    observation.EvidenceConfidence,
                     out reliabilityReason,
                     out evidenceReliability);
             }
@@ -637,7 +649,8 @@ namespace GoblinFarmer
             return evidenceReliabilityAllowsCount &&
                 observation.Source.Contains("Journal", StringComparison.OrdinalIgnoreCase) &&
                 observation.Reason.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalPendingKilledOrMinimapConfirmation, StringComparison.OrdinalIgnoreCase) &&
-                (evidenceReliability.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombat, StringComparison.OrdinalIgnoreCase) ||
+                (evidenceReliability.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombat, StringComparison.OrdinalIgnoreCase) ||
+                evidenceReliability.Equals(GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombat, StringComparison.OrdinalIgnoreCase) ||
                 evidenceReliability.Equals("JournalEngagedRecentMinimapConfirmation", StringComparison.OrdinalIgnoreCase));
         }
 
@@ -843,6 +856,46 @@ namespace GoblinFarmer
                 PortAutomaticGoblinJournalEncounterSuppressWindow,
                 PortAutomaticGoblinSourceVariantSuppressWindow,
                 out matchReason);
+        }
+
+        private static bool PortShouldBypassFreshCrossAreaJournalDuplicateSuppression(
+            GoblinObservationRecord observation,
+            string areaKey,
+            string globalEvidenceKey,
+            PortGoblinAutoCountEncounterState? encounterState,
+            string matchReason,
+            double evidenceFirstSeenAgeSeconds)
+        {
+            if (encounterState == null ||
+                string.IsNullOrWhiteSpace(areaKey) ||
+                string.IsNullOrWhiteSpace(encounterState.AreaKey) ||
+                !PortNormalizeGoblinObservationSource(observation.Source).Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                !GoblinTypeNormalizer.Normalize(encounterState.GoblinType).Equals(GoblinTypeNormalizer.Normalize(observation.GoblinType), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (GoblinAreaResolver.NormalizedKey(areaKey).Equals(
+                GoblinAreaResolver.NormalizedKey(encounterState.AreaKey),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            bool sameVisibleJournalRowSuppression = matchReason.StartsWith("JournalLineBucket", StringComparison.OrdinalIgnoreCase) ||
+                matchReason.StartsWith("SameEvidenceKey", StringComparison.OrdinalIgnoreCase);
+            if (!sameVisibleJournalRowSuppression ||
+                !globalEvidenceKey.Contains("JournalEncounter", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            const double minimumNewAreaEvidenceAgeSeconds = 1.0;
+            const double maximumFreshBypassAgeSeconds = 12.0;
+            const double minimumFreshJournalConfidence = 0.95;
+            return evidenceFirstSeenAgeSeconds >= minimumNewAreaEvidenceAgeSeconds &&
+                evidenceFirstSeenAgeSeconds <= maximumFreshBypassAgeSeconds &&
+                observation.EvidenceConfidence >= minimumFreshJournalConfidence;
         }
 
         private static bool PortIsGoblinObservationEvidenceSource(string source)

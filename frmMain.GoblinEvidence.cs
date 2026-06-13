@@ -913,9 +913,15 @@ namespace GoblinFarmer
                 if (!recentEngagedMatches && !recentEngagedFreshAnyArea && !string.IsNullOrWhiteSpace(freshKilledWithoutEngagedReason))
                 {
                     bool acceptedForManualRefresh = string.Equals(freshKilledWithoutEngagedReason, "Manual", StringComparison.OrdinalIgnoreCase);
+                    string confirmedAreaKey = "";
+                    string areaAnchorReason = acceptedForManualRefresh
+                        ? "ManualRefresh"
+                        : journalAreaAnchoredToSuppressedMinimap
+                            ? "FreshMinimapAreaAnchor"
+                            : "";
                     if (!acceptedForManualRefresh &&
                         !journalAreaAnchoredToSuppressedMinimap &&
-                        !PortFreshKilledObservationAreaMatchesConfirmedArea(areaKey, out string confirmedAreaKey))
+                        !PortFreshKilledObservationHasTrustedAreaAnchor(areaResult, areaKey, out confirmedAreaKey, out areaAnchorReason))
                     {
                         PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc, killedState.AreaKey, killedState.FirstSeenUtc);
                         PortLogJournalEvidenceFreshnessDiagnostic(
@@ -932,13 +938,15 @@ namespace GoblinFarmer
                         ? "JournalKilledAcceptedFreshManual"
                         : journalAreaAnchoredToSuppressedMinimap
                             ? "JournalKilledAcceptedFreshMinimapAreaAnchor"
-                            : "JournalKilledAcceptedFreshObservation";
+                            : string.Equals(areaAnchorReason, "CurrentTitleArea", StringComparison.OrdinalIgnoreCase)
+                                ? "JournalKilledAcceptedFreshTitleArea"
+                                : "JournalKilledAcceptedFreshObservation";
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         diagnosticEventName,
                         template,
                         match,
                         displayArea,
-                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; acceptedArea={PortLogField(areaKey)}; areaChangedDuringPendingEvidence=False; titleResolverOverride={(journalAreaAnchoredToSuppressedMinimap ? "BlockedByFreshMinimapAnchor" : "None")}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
+                        $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; confirmedArea={PortLogField(confirmedAreaKey)}; acceptedArea={PortLogField(areaKey)}; areaChangedDuringPendingEvidence=False; titleResolverOverride={(journalAreaAnchoredToSuppressedMinimap ? "BlockedByFreshMinimapAnchor" : "None")}; areaAnchorReason={PortLogField(areaAnchorReason)}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}");
                     acceptedCandidate = candidate with
                     {
                         Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedFresh{freshnessReason}; JournalArea={displayArea}{titleResolverOverrideNote}"
@@ -998,6 +1006,35 @@ namespace GoblinFarmer
                 GoblinAreaResolver.NormalizedKey(areaKey).Equals(
                     GoblinAreaResolver.NormalizedKey(confirmedAreaKey),
                     StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool PortFreshKilledObservationHasTrustedAreaAnchor(
+            PortGoblinTrackerAreaResolution areaResult,
+            string areaKey,
+            out string confirmedAreaKey,
+            out string areaAnchorReason)
+        {
+            areaAnchorReason = "";
+            if (PortFreshKilledObservationAreaMatchesConfirmedArea(areaKey, out confirmedAreaKey))
+            {
+                areaAnchorReason = "ConfirmedRouteArea";
+                return true;
+            }
+
+            if (areaResult.Area.Resolved &&
+                !string.IsNullOrWhiteSpace(areaKey) &&
+                !string.IsNullOrWhiteSpace(areaResult.BestName) &&
+                areaResult.BestConfidence >= PortCurrentLocationConfidence &&
+                GoblinAreaResolver.NormalizedKey(areaResult.Area.AreaKey).Equals(
+                    GoblinAreaResolver.NormalizedKey(areaKey),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                areaAnchorReason = "CurrentTitleArea";
+                return true;
+            }
+
+            areaAnchorReason = "UntrustedArea";
+            return false;
         }
 
         private GoblinJournalKilledState PortRememberJournalKilledEvidence(

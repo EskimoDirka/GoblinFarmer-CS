@@ -20,7 +20,7 @@ Do not create alternate debug package generators without explicit approval.
 
 Reviewed video evidence should be folded into the normal debug package, not a separate package format. By default, `Scripts\Create Debug Package.bat` attempts to find the newest OBS/attached recording under `Video Clip Review`, align high-value log events to video offsets, and extract selected frames into `ReviewEvidence`. Pass selected timestamps and notes to `Scripts\create-debug-package.ps1` using `-ReviewVideoPath`, `-ReviewTimestamp`, `-ReviewNotesPath`, `-ReviewNotesUrl`, and optional `-ReviewEvidenceFolder` when the automatic alignment misses something. Full video files remain outside ZIPs by default. The default live-test notes source is the shared Google Sheet: `https://docs.google.com/spreadsheets/d/1y4qj2gwqmtMxiG3t-epvyjaPoW7TM74bOcbeFyGn9kw/edit?gid=0#gid=0`.
 
-The VS Debug OBS Status group is passive. It may show the latest local OBS monitor state, start time, and end time from `Video Clip Review\Auto Record Diablo.log` and the `obs64` process, but it must not launch OBS or start/stop recording.
+The VS Debug OBS Status group is passive. It may show the latest local OBS monitor state plus `Start` and `Stop` times from `Video Clip Review\Auto Record Diablo.log` and the `obs64` process, but it must not launch OBS or start/stop recording.
 
 ## Useful Logs And Evidence
 

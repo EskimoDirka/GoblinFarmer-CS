@@ -312,8 +312,8 @@ namespace GoblinFarmer
             if (cachedSlots.Count == 0)
             {
                 AddWorkflowStep("First filled inventory slot not found");
-                AddWorkflowStep("Salvage skipped: no filled inventory slots found.");
-                AppLogger.Info($"Salvage inventory scan: phase={PortLogField(phase)}; cachedSlotCount=0; regularGemSkips=0; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan");
+                AddWorkflowStep("Salvage skipped: no actionable salvage targets found.");
+                AppLogger.Info($"Salvage inventory scan: phase={PortLogField(phase)}; cachedSlotCount=0; regularGemSkips=0; retainedRegularGemCount={portLastRegularGemCandidateCount}; inventoryScanMs={inventoryScanPerf.ElapsedMilliseconds}; cacheMode=SingleInventoryScan; skipReason=NoActionableSalvageTargets; callerContinues=True");
                 PortLogPostSalvageLeftoverWarning(phase);
                 if (closeAfterSalvage)
                 {

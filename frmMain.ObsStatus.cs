@@ -28,8 +28,8 @@ namespace GoblinFarmer
             };
 
             lblObsStatus = PortCreateObsStatusLabel("OBS Status: Unknown", 24);
-            lblObsRecordingStarted = PortCreateObsStatusLabel("Recording Started: --", 50);
-            lblObsRecordingEnded = PortCreateObsStatusLabel("Recording Ended: --", 76);
+            lblObsRecordingStarted = PortCreateObsStatusLabel("Start: --", 50);
+            lblObsRecordingEnded = PortCreateObsStatusLabel("Stop: --", 76);
 
             portObsStatusGroup.Controls.Add(lblObsStatus);
             portObsStatusGroup.Controls.Add(lblObsRecordingStarted);
@@ -60,8 +60,8 @@ namespace GoblinFarmer
 
             ObsStatusSnapshot snapshot = PortReadObsStatusSnapshot();
             lblObsStatus.Text = $"OBS Status: {snapshot.Status}";
-            lblObsRecordingStarted.Text = $"Recording Started: {PortFormatObsStatusTime(snapshot.LastRecordingStartedLocal)}";
-            lblObsRecordingEnded.Text = $"Recording Ended: {PortFormatObsStatusTime(snapshot.LastRecordingEndedLocal)}";
+            lblObsRecordingStarted.Text = $"Start: {PortFormatObsStatusTime(snapshot.LastRecordingStartedLocal)}";
+            lblObsRecordingEnded.Text = $"Stop: {PortFormatObsStatusTime(snapshot.LastRecordingEndedLocal)}";
         }
 
         private static ObsStatusSnapshot PortReadObsStatusSnapshot()
@@ -181,7 +181,7 @@ namespace GoblinFarmer
         private static string PortFormatObsStatusTime(DateTime? timestamp)
         {
             return timestamp.HasValue
-                ? timestamp.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                ? timestamp.Value.ToString("h:mm tt", CultureInfo.InvariantCulture)
                 : "--";
         }
 

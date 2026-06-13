@@ -1559,6 +1559,7 @@ namespace GoblinFarmer
                     evidenceSignature,
                     Math.Max(0, (step.TimestampUtc - state.FirstSeenUtc).TotalSeconds),
                     combatActive: true,
+                    candidate.Confidence,
                     out string reliabilityReason,
                     out _))
                 {

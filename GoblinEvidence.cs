@@ -1140,15 +1140,19 @@ namespace GoblinFarmer
     {
         public const string JournalPendingKilledOrMinimapConfirmation = "JournalPendingKilledOrMinimapConfirmation";
         public const string JournalEngagedSustainedActiveCombat = "JournalEngagedSustainedActiveCombat";
+        public const string JournalEngagedHighConfidenceFreshCombat = "JournalEngagedHighConfidenceFreshCombat";
         public const string JournalEvidenceKindUnknown = "JournalEvidenceKindUnknown";
         public static readonly TimeSpan JournalEngagedSustainedActiveCombatMinimumAge = TimeSpan.FromSeconds(1);
         public static readonly TimeSpan JournalEngagedSustainedActiveCombatMaximumAge = TimeSpan.FromSeconds(8);
+        public static readonly TimeSpan JournalEngagedHighConfidenceFreshCombatMinimumAge = TimeSpan.FromMilliseconds(25);
+        public const double JournalEngagedHighConfidenceFreshCombatMinimumConfidence = 0.95;
 
         public static bool AllowsAutomaticCount(
             string source,
             string evidenceSignature,
             double evidenceFirstSeenAgeSeconds,
             bool combatActive,
+            double evidenceConfidence,
             out string reason,
             out string reliability)
         {
@@ -1177,6 +1181,15 @@ namespace GoblinFarmer
             if (evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngaged), StringComparison.OrdinalIgnoreCase) ||
                 evidenceKind.Equals(nameof(GoblinEvidenceTemplateKind.JournalEngagedAndKilled), StringComparison.OrdinalIgnoreCase))
             {
+                if (combatActive &&
+                    evidenceConfidence >= JournalEngagedHighConfidenceFreshCombatMinimumConfidence &&
+                    evidenceFirstSeenAgeSeconds >= JournalEngagedHighConfidenceFreshCombatMinimumAge.TotalSeconds &&
+                    evidenceFirstSeenAgeSeconds < JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds)
+                {
+                    reliability = JournalEngagedHighConfidenceFreshCombat;
+                    return true;
+                }
+
                 if (combatActive &&
                     evidenceFirstSeenAgeSeconds >= JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds &&
                     evidenceFirstSeenAgeSeconds <= JournalEngagedSustainedActiveCombatMaximumAge.TotalSeconds)
@@ -1208,6 +1221,7 @@ namespace GoblinFarmer
                 evidenceSignature,
                 evidenceFirstSeenAgeSeconds: 0,
                 combatActive: false,
+                evidenceConfidence: 0,
                 out reason,
                 out reliability);
         }
@@ -1611,8 +1625,11 @@ namespace GoblinFarmer
                 evidenceKey.Contains("Kind=JournalEngagedAndKilled", StringComparison.OrdinalIgnoreCase);
             return engagedEvidence &&
                 combatActive &&
-                evidenceFirstSeenAgeSeconds >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds &&
-                evidenceFirstSeenAgeSeconds <= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMaximumAge.TotalSeconds;
+                ((evidenceConfidence >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumConfidence &&
+                    evidenceFirstSeenAgeSeconds >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedHighConfidenceFreshCombatMinimumAge.TotalSeconds &&
+                    evidenceFirstSeenAgeSeconds < GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds) ||
+                (evidenceFirstSeenAgeSeconds >= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMinimumAge.TotalSeconds &&
+                    evidenceFirstSeenAgeSeconds <= GoblinAutoCountEvidenceReliabilityPolicy.JournalEngagedSustainedActiveCombatMaximumAge.TotalSeconds));
         }
 
         private static string NormalizeObservationSource(string source)
