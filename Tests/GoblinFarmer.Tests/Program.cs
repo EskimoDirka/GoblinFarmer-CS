@@ -5201,6 +5201,8 @@ static void TestGoblinJournalEvidenceAreaReachesObservationCountPath()
     AssertTrue(sessionStatsSource.Contains("GoblinTracker: JournalEvidenceAreaApplied", StringComparison.Ordinal), "journal area handoff should log explicit diagnostics when applied");
     AssertTrue(sessionStatsSource.Contains("ChannelTitleOutranksOlderJournalArea", StringComparison.Ordinal), "fresh channel title evidence should not be overwritten by an older different-channel JournalArea note");
     AssertTrue(sessionStatsSource.Contains("PortAreDifferentAncientWaterwayChannelAreas", StringComparison.Ordinal), "journal area handoff should explicitly guard different channel levels");
+    AssertTrue(sessionStatsSource.Contains("PandemoniumTitleOutranksOlderJournalArea", StringComparison.Ordinal), "fresh PF title evidence should not be overwritten by an older different-level PF JournalArea note");
+    AssertTrue(sessionStatsSource.Contains("PortAreDifferentPandemoniumFortressAreas", StringComparison.Ordinal), "journal area handoff should explicitly guard PF1/PF2 level drift");
     AssertTrue(observeMethod.IndexOf("PortApplyJournalEvidenceAreaFromNotes", StringComparison.Ordinal) < observeMethod.IndexOf("PortApplyJournalMinimapAreaOverride", StringComparison.Ordinal), "journal evidence area should be applied before the existing minimap channel override");
 }
 
@@ -5620,6 +5622,25 @@ static void TestGoblinPandemoniumMultiCountDuplicateBypassStaysBounded()
         GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
             "Journal",
             pf2,
+            currentAreaCount: 0,
+            areaLimit: 2,
+            countedAreaKey: pf1,
+            countedUtc,
+            countedUtc.AddSeconds(10),
+            engagedEvidence,
+            0.98,
+            0.85,
+            0.5,
+            combatActive: true,
+            out string siblingReason,
+            out _),
+        "PF2 should allow fresh journal evidence even when the previous same-type accepted encounter was in PF1");
+    AssertEqual("Allowed", siblingReason, "PF sibling-area bypass should still report the standard allowed result");
+
+    AssertTrue(
+        GoblinPandemoniumMultiCountDuplicatePolicy.ShouldBypass(
+            "Journal",
+            pf2,
             pf2PeekAfterFirst.AreaCount,
             pf2PeekAfterFirst.AreaLimit,
             pf2,
@@ -5839,7 +5860,10 @@ static void TestGoblinLowMarginMinimapAnchorsDelayedJournalArea()
     AssertTrue(rememberMethod.Contains("titleResolverOverride=BlockedUntilFreshJournal", StringComparison.Ordinal), "anchor creation should explain that it does not count until fresh journal support arrives");
     AssertTrue(anchorMethod.Contains("JournalEvidenceAreaAnchoredToRecentMinimap", StringComparison.Ordinal), "journal evidence should log when it inherits a recent suppressed minimap area");
     AssertTrue(anchorMethod.Contains("BlockedByFreshMinimapAnchor", StringComparison.Ordinal), "journal area diagnostics should report that the later title/current resolver was blocked");
-    AssertTrue(sessionStatsSource.Contains("anchor.EvidenceConfidence < PortAutomaticGoblinMinimapCountMinimumConfidenceFor", StringComparison.Ordinal), "anchors should still require normal minimap confidence");
+    AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinMinimapCountMinimumConfidenceFor(goblinType)", StringComparison.Ordinal), "default anchor lookup should still require normal minimap confidence");
+    AssertTrue(sessionStatsSource.Contains("double minimumConfidence", StringComparison.Ordinal), "suppressed minimap anchor lookup should support a narrower lowered confidence floor for killed-journal confirmation");
+    AssertTrue(evidenceSource.Contains("KilledLineAnchoredToRecentMinimap", StringComparison.Ordinal), "a stale killed journal line should be recoverable only when anchored to a recent same-area minimap candidate");
+    AssertTrue(evidenceSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence", StringComparison.Ordinal), "killed-journal anchor recovery should use the existing recent-minimap confirmation floor");
     AssertTrue(anchorMethod.Contains("GoblinManualCountBlockList.IsBlocked", StringComparison.Ordinal), "anchors should not bypass blocked-area protection");
     AssertTrue(evidenceSource.Contains("PortApplyJournalSuppressedMinimapAreaAnchor(goblinType, areaResult, nowUtc, \"JournalFreshness\")", StringComparison.Ordinal), "freshness evaluation should apply the anchor before deciding the journal area");
     AssertTrue(observeMethod.Contains("PortApplyJournalSuppressedMinimapAreaAnchor(goblinType, areaResult, DateTime.UtcNow, \"ObservationCandidate\")", StringComparison.Ordinal), "observation/count path should reapply the same anchor from candidate notes");
@@ -5933,6 +5957,25 @@ static void TestGoblinAutoCountOldCrossAreaJournalRowExpires()
 
     AssertFalse(fullyExpiredVisibleRowSuppressed, "a same-template journal row should expire once it is no longer continuously seen");
     AssertTrue(string.IsNullOrWhiteSpace(fullyExpiredReason), "fully expired cross-area journal rows should not report a duplicate reason");
+
+    bool northernHighlandsFreshJournalSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Northern Highlands",
+        globalEvidenceKey: "Journal|Treasure Goblin|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=9",
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Cave Of The Moon Clan Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Treasure Goblin|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=11",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(47),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(34),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string northernHighlandsReason);
+
+    AssertFalse(northernHighlandsFreshJournalSuppressed, "the 2026-06-13 Northern Highlands Treasure Goblin should not be suppressed by an older Cave Level 1 journal row after the carryover row has not been seen for over 30 seconds");
+    AssertTrue(string.IsNullOrWhiteSpace(northernHighlandsReason), "fresh Northern Highlands evidence should not report a stale Cave duplicate reason");
 
     bool southernToCaveFalseCountSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
         source: "Journal",

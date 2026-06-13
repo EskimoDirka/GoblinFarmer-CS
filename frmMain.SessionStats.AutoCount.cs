@@ -381,6 +381,7 @@ namespace GoblinFarmer
                         $"suppressionReason={PortLogField(suppressionReason)} " +
                         $"source={PortLogField(observation.Source)} " +
                         $"goblinType={PortLogField(observation.GoblinType)} " +
+                        $"previousAcceptedArea={PortLogField(PortDisplayLocation(encounterState?.AreaKey ?? ""))} " +
                         $"evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} " +
                         $"evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))}");
                 }
@@ -448,6 +449,7 @@ namespace GoblinFarmer
                     $"elapsedSinceLastAcceptedSeconds={pfMultiCountDuplicateElapsedSeconds:0.0} " +
                     $"source={PortLogField(observation.Source)} " +
                     $"goblinType={PortLogField(observation.GoblinType)} " +
+                    $"previousAcceptedArea={PortLogField(PortDisplayLocation(encounterState?.AreaKey ?? ""))} " +
                     $"evidenceHash={PortGoblinEvidenceHash(autoEvidenceKey)} " +
                     $"evidenceSignature={PortLogField(PortShortEvidenceSignature(autoEvidenceKey))}");
             }

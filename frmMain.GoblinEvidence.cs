@@ -1288,12 +1288,6 @@ namespace GoblinFarmer
             out string details)
         {
             details = "";
-            if (template.Kind == GoblinEvidenceTemplateKind.JournalKilled)
-            {
-                details = $"{staleVisibleLineDetails}; bypassAllowed=False; bypassReason=KilledLineRequiresFreshAnchor";
-                return false;
-            }
-
             string staleArea = PortGoblinEvidenceNoteValue(staleVisibleLineDetails, "staleArea");
             if (string.IsNullOrWhiteSpace(staleArea))
             {
@@ -1307,6 +1301,40 @@ namespace GoblinFarmer
             if (string.IsNullOrWhiteSpace(currentArea))
             {
                 details = $"{staleVisibleLineDetails}; bypassAllowed=False; bypassReason=UnresolvedCurrentArea";
+                return false;
+            }
+
+            if (template.Kind == GoblinEvidenceTemplateKind.JournalKilled)
+            {
+                if (PortTryGetSuppressedMinimapAreaAnchor(
+                    goblinType,
+                    nowUtc,
+                    PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence,
+                    out GoblinMinimapAreaAnchorState anchor,
+                    out double anchorAgeSeconds) &&
+                    GoblinAreaResolver.NormalizedKey(anchor.AreaKey).Equals(
+                        GoblinAreaResolver.NormalizedKey(currentArea),
+                        StringComparison.OrdinalIgnoreCase) &&
+                    !GoblinAreaResolver.NormalizedKey(staleArea).Equals(
+                        GoblinAreaResolver.NormalizedKey(currentArea),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    PortForgetJournalFreshnessStateForVisibleLine(signature);
+                    details =
+                        $"{staleVisibleLineDetails}; " +
+                        $"currentArea={PortLogField(currentArea)}; " +
+                        $"bypassAllowed=True; " +
+                        $"bypassReason=KilledLineAnchoredToRecentMinimap; " +
+                        $"anchorArea={PortLogField(anchor.AreaKey)}; " +
+                        $"anchorAgeSeconds={anchorAgeSeconds:0.0}; " +
+                        $"anchorConfidence={anchor.EvidenceConfidence:0.000}; " +
+                        $"anchorMinConfidence={PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence:0.000}; " +
+                        $"templateKind={PortLogField(template.Kind.ToString())}; " +
+                        $"matchLineBucket={PortJournalEvidenceLineBucket(match.MatchPoint)}";
+                    return true;
+                }
+
+                details = $"{staleVisibleLineDetails}; currentArea={PortLogField(currentArea)}; bypassAllowed=False; bypassReason=KilledLineRequiresFreshAnchor";
                 return false;
             }
 

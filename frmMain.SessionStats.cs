@@ -585,6 +585,20 @@ namespace GoblinFarmer
                 return areaResult;
             }
 
+            if (PortAreDifferentPandemoniumFortressAreas(areaResult.Area.AreaKey, resolvedJournalArea.AreaKey) &&
+                areaResult.BestConfidence >= PortCurrentLocationConfidence)
+            {
+                AppLogger.Info(
+                    "GoblinTracker: JournalEvidenceAreaIgnored " +
+                    $"reason={PortLogField(reason)} " +
+                    $"originalAreaKey={PortLogField(PortDisplayLocation(areaResult.Area.AreaKey))} " +
+                    $"journalAreaKey={PortLogField(PortDisplayLocation(resolvedJournalArea.AreaKey))} " +
+                    $"bestConfidence={areaResult.BestConfidence:0.000} " +
+                    $"threshold={PortCurrentLocationConfidence:0.000} " +
+                    "ignoredReason=PandemoniumTitleOutranksOlderJournalArea");
+                return areaResult;
+            }
+
             AppLogger.Info(
                 "GoblinTracker: JournalEvidenceAreaApplied " +
                 $"reason={PortLogField(reason)} " +
@@ -606,6 +620,15 @@ namespace GoblinFarmer
         {
             return PortIsAncientWaterwayChannelArea(firstAreaKey) &&
                 PortIsAncientWaterwayChannelArea(secondAreaKey) &&
+                !GoblinAreaResolver.NormalizedKey(firstAreaKey).Equals(
+                    GoblinAreaResolver.NormalizedKey(secondAreaKey),
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool PortAreDifferentPandemoniumFortressAreas(string firstAreaKey, string secondAreaKey)
+        {
+            return GoblinPandemoniumMultiCountDuplicatePolicy.IsPandemoniumFortressTwoCountArea(firstAreaKey) &&
+                GoblinPandemoniumMultiCountDuplicatePolicy.IsPandemoniumFortressTwoCountArea(secondAreaKey) &&
                 !GoblinAreaResolver.NormalizedKey(firstAreaKey).Equals(
                     GoblinAreaResolver.NormalizedKey(secondAreaKey),
                     StringComparison.OrdinalIgnoreCase);
@@ -817,6 +840,21 @@ namespace GoblinFarmer
             out GoblinMinimapAreaAnchorState anchor,
             out double anchorAgeSeconds)
         {
+            return PortTryGetSuppressedMinimapAreaAnchor(
+                goblinType,
+                nowUtc,
+                PortAutomaticGoblinMinimapCountMinimumConfidenceFor(goblinType),
+                out anchor,
+                out anchorAgeSeconds);
+        }
+
+        private bool PortTryGetSuppressedMinimapAreaAnchor(
+            string goblinType,
+            DateTime nowUtc,
+            double minimumConfidence,
+            out GoblinMinimapAreaAnchorState anchor,
+            out double anchorAgeSeconds)
+        {
             anchor = default!;
             anchorAgeSeconds = -1;
             string normalizedGoblinType = GoblinTypeNormalizer.Normalize(goblinType);
@@ -835,7 +873,7 @@ namespace GoblinFarmer
                 anchor = candidate;
             }
 
-            if (anchor.EvidenceConfidence < PortAutomaticGoblinMinimapCountMinimumConfidenceFor(normalizedGoblinType))
+            if (anchor.EvidenceConfidence < minimumConfidence)
             {
                 return false;
             }

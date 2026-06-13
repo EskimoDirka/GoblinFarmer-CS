@@ -1287,6 +1287,7 @@ namespace GoblinFarmer
     internal static class GoblinAutoCountEncounterSuppressionPolicy
     {
         private static readonly TimeSpan CrossAreaJournalVisibleRowSuppressWindow = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan CrossAreaJournalContinuitySuppressWindow = TimeSpan.FromSeconds(30);
 
         public static bool ShouldSuppress(
             string source,
@@ -1345,7 +1346,7 @@ namespace GoblinFarmer
             bool continuingCrossAreaJournalRow = !sameArea &&
                 currentJournal &&
                 countedJournal &&
-                lastSeenAge <= sourceVariantWindow;
+                lastSeenAge <= CrossAreaJournalContinuitySuppressWindow;
             bool sameVisibleJournalRowCanSuppress = recentCrossAreaJournalRow || continuingCrossAreaJournalRow;
 
             if (encounterAge <= encounterSuppressWindow &&
@@ -1571,8 +1572,15 @@ namespace GoblinFarmer
                 return false;
             }
 
+            bool sameAcceptedArea = !string.IsNullOrWhiteSpace(countedAreaKey) &&
+                GoblinAreaResolver.NormalizedKey(areaKey).Equals(
+                    GoblinAreaResolver.NormalizedKey(countedAreaKey),
+                    StringComparison.OrdinalIgnoreCase);
+            bool siblingPandemoniumAcceptedArea = !sameAcceptedArea &&
+                IsPandemoniumFortressTwoCountArea(areaKey) &&
+                IsPandemoniumFortressTwoCountArea(countedAreaKey);
             if (string.IsNullOrWhiteSpace(countedAreaKey) ||
-                !GoblinAreaResolver.NormalizedKey(areaKey).Equals(GoblinAreaResolver.NormalizedKey(countedAreaKey), StringComparison.OrdinalIgnoreCase))
+                (!sameAcceptedArea && !siblingPandemoniumAcceptedArea))
             {
                 reason = "PreviousAcceptedDifferentArea";
                 return false;
