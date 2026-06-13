@@ -100,6 +100,7 @@ namespace GoblinFarmer
             }
 
             Controls.Add(portSettingsGroup);
+            PortInitializeObsStatusGroup();
             PortApplyDebugModeUi();
         }
 

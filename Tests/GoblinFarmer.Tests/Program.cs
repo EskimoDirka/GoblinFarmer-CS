@@ -31,7 +31,7 @@ Run("VS Debug/dev profile suppresses first-run setup and forces internal debug d
 Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectRootConfigPreferred);
 Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
 Run("VS Debug startup has no external recorder dependency", TestVsDebugStartupHasNoExternalRecorderDependency);
-Run("VS Debug form omits external recorder status panel", TestVsDebugFormOmitsExternalRecorderStatusPanel);
+Run("VS Debug form shows OBS status panel", TestVsDebugFormShowsObsStatusPanel);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -449,28 +449,30 @@ static void TestVsDebugStartupHasNoExternalRecorderDependency()
     string programSource = File.ReadAllText(Path.Combine(repoRoot, "Program.cs"));
 
     AssertFalse(File.Exists(Path.Combine(repoRoot, "LocalToolStartup.cs")), "local recorder startup helper should be removed");
-    string oldScriptName = string.Concat("Auto", " Record ", "Diablo", ".ps1");
     string oldStartupToken = string.Concat("Auto", "Record");
-    AssertFalse(File.Exists(Path.Combine(repoRoot, "Scripts", "Local Tools", oldScriptName)), "local recorder script should be removed");
     AssertFalse(programSource.Contains("LocalToolStartup", StringComparison.Ordinal), "app startup should not launch local recording tooling");
     AssertFalse(programSource.Contains(oldStartupToken, StringComparison.Ordinal), "app startup should not request a recorder monitor");
 }
 
-static void TestVsDebugFormOmitsExternalRecorderStatusPanel()
+static void TestVsDebugFormShowsObsStatusPanel()
 {
     string repoRoot = FindRepositoryRootForTests();
     string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Release.cs"));
     string formSource = File.ReadAllText(Path.Combine(repoRoot, "Form1.cs"));
+    string obsStatusSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.ObsStatus.cs"));
 
-    string oldGroupName = string.Concat("grp", "O", "bs", "Status");
-    string oldRefreshMethod = string.Concat("PortUpdate", "O", "bs", "StatusDisplay");
-    string oldProcessName = string.Concat("o", "bs", "64");
-    string oldLogName = string.Concat("o", "bs", "-diablo-auto", "-", "record.log");
-    AssertFalse(releaseSource.Contains(oldGroupName, StringComparison.Ordinal), "VS Debug form should not create a recorder status group");
-    AssertFalse(releaseSource.Contains(oldRefreshMethod, StringComparison.Ordinal), "recorder status refresh code should be removed");
-    AssertFalse(releaseSource.Contains(oldProcessName, StringComparison.OrdinalIgnoreCase), "form should not inspect recorder processes");
-    AssertFalse(releaseSource.Contains(oldLogName, StringComparison.OrdinalIgnoreCase), "form should not read recorder logs");
-    AssertFalse(formSource.Contains(oldRefreshMethod, StringComparison.Ordinal), "status timer should not refresh recorder state");
+    AssertTrue(releaseSource.Contains("PortInitializeObsStatusGroup();", StringComparison.Ordinal), "VS Debug form should initialize the OBS status group after settings are created");
+    AssertTrue(formSource.Contains("PortUpdateObsStatusGroup();", StringComparison.Ordinal), "status timer should refresh OBS display state");
+    AssertTrue(obsStatusSource.Contains("Name = \"grpObsStatus\"", StringComparison.Ordinal), "OBS status group should have a stable control name");
+    AssertTrue(obsStatusSource.Contains("Text = \"OBS Status\"", StringComparison.Ordinal), "OBS status group should have the requested title");
+    AssertTrue(obsStatusSource.Contains("Recording Started:", StringComparison.Ordinal), "OBS status group should show recording start time");
+    AssertTrue(obsStatusSource.Contains("Recording Ended:", StringComparison.Ordinal), "OBS status group should show recording end time");
+    AssertTrue(obsStatusSource.Contains("Process.GetProcessesByName(\"obs64\")", StringComparison.Ordinal), "OBS status should observe the OBS process");
+    AssertTrue(obsStatusSource.Contains("Auto Record Diablo.log", StringComparison.Ordinal), "OBS status should read the local monitor log");
+    AssertTrue(obsStatusSource.Contains("OBS recording started.", StringComparison.Ordinal), "OBS status should parse recording start events");
+    AssertTrue(obsStatusSource.Contains("OBS recording stopped.", StringComparison.Ordinal), "OBS status should parse recording stop events");
+    AssertFalse(obsStatusSource.Contains("StartRecord", StringComparison.Ordinal), "OBS status UI must not control OBS recording");
+    AssertFalse(obsStatusSource.Contains("StopRecord", StringComparison.Ordinal), "OBS status UI must not control OBS recording");
 }
 
 static void TestMissingDiabloPathKeepsStartupInSetupRequired()

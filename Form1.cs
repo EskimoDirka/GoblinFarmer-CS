@@ -102,6 +102,7 @@ namespace GoblinFarmer
             PortUpdateSessionStats();
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateDiagnosticOverlay(diabloRunning);
+            PortUpdateObsStatusGroup();
         }
 
         private void PortUpdateDiabloRuntimeMonitor(bool diabloRunning)
