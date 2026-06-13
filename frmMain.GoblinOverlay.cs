@@ -56,7 +56,7 @@ namespace GoblinFarmer
                     ControlStyles.ResizeRedraw |
                     ControlStyles.UserPaint,
                     true);
-                BackColor = Color.Transparent;
+                BackColor = Color.FromArgb(24, 24, 24);
                 ForeColor = Color.White;
             }
 
@@ -75,32 +75,33 @@ namespace GoblinFarmer
                 base.OnPaint(e);
                 e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-                (string Text, Color Color)[] segments =
+                const float sectionGap = 28f;
+                (string Text, Color Color, float GapAfter)[] segments =
                 [
-                    ("Count:", Color.Red),
-                    ($" {total}  ", Color.Red),
-                    ("Goblin:", Color.Gold),
-                    ($" {goblinType}  ", Color.Gold),
-                    ("Area:", Color.LightGreen),
-                    ($" {area}  ", Color.LightGreen),
-                    ("Go Next:", Color.White),
-                    ($" {(goNext ? "Y" : "N")}", goNext ? Color.LimeGreen : Color.Red),
+                    ("Count:", Color.Red, 0f),
+                    ($" {total}", Color.Red, sectionGap),
+                    ("Goblin:", Color.Gold, 0f),
+                    ($" {goblinType}", Color.Gold, sectionGap),
+                    ("Area:", Color.LightGreen, 0f),
+                    ($" {area}", Color.LightGreen, sectionGap),
+                    ("Go Next:", Color.White, 0f),
+                    ($" {(goNext ? "Y" : "N")}", goNext ? Color.LimeGreen : Color.Red, 0f),
                 ];
 
                 using StringFormat format = StringFormat.GenericTypographic;
                 float totalWidth = 0;
-                foreach ((string text, _) in segments)
+                foreach ((string text, _, float gapAfter) in segments)
                 {
-                    totalWidth += e.Graphics.MeasureString(text, Font, int.MaxValue, format).Width;
+                    totalWidth += e.Graphics.MeasureString(text, Font, int.MaxValue, format).Width + gapAfter;
                 }
 
                 float x = Math.Max(0, (ClientSize.Width - totalWidth) / 2f);
                 float y = Math.Max(0, (ClientSize.Height - Font.Height) / 2f) - 1f;
-                foreach ((string text, Color color) in segments)
+                foreach ((string text, Color color, float gapAfter) in segments)
                 {
                     using SolidBrush brush = new(color);
                     e.Graphics.DrawString(text, Font, brush, x, y, format);
-                    x += e.Graphics.MeasureString(text, Font, int.MaxValue, format).Width;
+                    x += e.Graphics.MeasureString(text, Font, int.MaxValue, format).Width + gapAfter;
                 }
             }
         }
@@ -131,7 +132,7 @@ namespace GoblinFarmer
                 Name = "ctlGoblinOverlayText",
                 Dock = DockStyle.Fill,
                 ForeColor = Color.White,
-                BackColor = Color.Transparent,
+                BackColor = Color.FromArgb(24, 24, 24),
                 Font = new Font(Font.FontFamily, 16.0f, FontStyle.Bold),
             };
             portGoblinOverlayTextControl.SetOverlayState(0, "--", "--", false);

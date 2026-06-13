@@ -515,13 +515,16 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
     AssertFalse(overlaySource.Contains("SetCursorPos", StringComparison.Ordinal), "overlay must not move the cursor");
 
     AssertTrue(overlaySource.Contains("PortGoblinOverlayTextControl", StringComparison.Ordinal), "overlay should use a custom painted text control for colored sections");
+    AssertTrue(overlaySource.Contains("BackColor = Color.FromArgb(24, 24, 24)", StringComparison.Ordinal), "custom overlay control should use an opaque child background because base Control rejects transparent background colors");
+    AssertFalse(overlaySource.Contains("BackColor = Color.Transparent", StringComparison.Ordinal), "custom overlay control should not set a transparent BackColor at startup");
     AssertTrue(overlaySource.Contains("Font = new Font(Font.FontFamily, 16.0f, FontStyle.Bold)", StringComparison.Ordinal), "overlay font should be larger for live readability");
-    AssertTrue(overlaySource.Contains("(\"Count:\", Color.Red)", StringComparison.Ordinal), "Count label should render red");
-    AssertTrue(overlaySource.Contains("($\" {total}  \", Color.Red)", StringComparison.Ordinal), "Count value should render red");
-    AssertTrue(overlaySource.Contains("(\"Goblin:\", Color.Gold)", StringComparison.Ordinal), "Goblin label should render gold");
-    AssertTrue(overlaySource.Contains("($\" {goblinType}  \", Color.Gold)", StringComparison.Ordinal), "Goblin value should render gold");
-    AssertTrue(overlaySource.Contains("(\"Area:\", Color.LightGreen)", StringComparison.Ordinal), "Area label should render light green");
-    AssertTrue(overlaySource.Contains("($\" {area}  \", Color.LightGreen)", StringComparison.Ordinal), "Area value should render light green");
+    AssertTrue(overlaySource.Contains("const float sectionGap = 28f", StringComparison.Ordinal), "overlay should use explicit painted gaps between sections instead of relying on trailing spaces");
+    AssertTrue(overlaySource.Contains("(\"Count:\", Color.Red, 0f)", StringComparison.Ordinal), "Count label should render red");
+    AssertTrue(overlaySource.Contains("($\" {total}\", Color.Red, sectionGap)", StringComparison.Ordinal), "Count value should render red and add a section gap");
+    AssertTrue(overlaySource.Contains("(\"Goblin:\", Color.Gold, 0f)", StringComparison.Ordinal), "Goblin label should render gold");
+    AssertTrue(overlaySource.Contains("($\" {goblinType}\", Color.Gold, sectionGap)", StringComparison.Ordinal), "Goblin value should render gold and add a section gap");
+    AssertTrue(overlaySource.Contains("(\"Area:\", Color.LightGreen, 0f)", StringComparison.Ordinal), "Area label should render light green");
+    AssertTrue(overlaySource.Contains("($\" {area}\", Color.LightGreen, sectionGap)", StringComparison.Ordinal), "Area value should render light green and add a section gap");
     AssertTrue(overlaySource.Contains("goNext ? Color.LimeGreen : Color.Red", StringComparison.Ordinal), "Go Next Y/N value should render green/red");
     AssertTrue(overlaySource.Contains("PortFormatGoblinOverlayText", StringComparison.Ordinal), "overlay should have a focused text formatter");
     AssertTrue(overlaySource.Contains("Count: {Math.Max(0, total)}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? \"Y\" : \"N\")}", StringComparison.Ordinal), "overlay text should use the requested single-line label contract");
