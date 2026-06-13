@@ -553,6 +553,7 @@ namespace GoblinFarmer
                 total,
                 observation.GoblinType,
                 area.AreaKey,
+                currentAreaAtAcceptance,
                 displayLocation,
                 observation.Source,
                 countAcceptedUtc);

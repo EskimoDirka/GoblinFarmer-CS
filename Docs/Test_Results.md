@@ -6,6 +6,7 @@ This file records recent validation runs that are useful for release readiness r
 
 - Scope covered: passive VS Debug-only click-through Goblin overlay centered over Diablo.
 - Fix coverage: overlay initializes only for VS Debug, hides when Diablo is missing/minimized, formats `Count/Goblin/Area/Go Next`, updates only after successful automatic counts, excludes `Sim Count`/debug simulation paths, recomputes `Go Next` from current confirmed location, and resets on Reset Stats/New Game.
+- Follow-up coverage: `Video Clip Review\2026-06-13 13-20-42.mkv` showed a Cave of the Moon Clan Level 1 Treasure Goblin count where the accepted area was the Cave sub-area but the route-confirmed context was still Southern Highlands, so `Go Next` stayed `N`. The overlay now stores the route context at acceptance and treats that as valid for `Go Next=Y` until the confirmed route context changes; the overlay text is also custom-painted with larger colored sections.
 - Live validation still needed: confirm the overlay is positioned correctly over the real Diablo window on the current dual-monitor layout and remains click-through during route/combat input.
 
 Validation commands:

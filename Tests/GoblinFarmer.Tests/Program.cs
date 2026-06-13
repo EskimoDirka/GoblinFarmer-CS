@@ -514,13 +514,24 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
     AssertFalse(overlaySource.Contains("mouse_event", StringComparison.Ordinal), "overlay must not click");
     AssertFalse(overlaySource.Contains("SetCursorPos", StringComparison.Ordinal), "overlay must not move the cursor");
 
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayTextControl", StringComparison.Ordinal), "overlay should use a custom painted text control for colored sections");
+    AssertTrue(overlaySource.Contains("Font = new Font(Font.FontFamily, 16.0f, FontStyle.Bold)", StringComparison.Ordinal), "overlay font should be larger for live readability");
+    AssertTrue(overlaySource.Contains("(\"Count:\", Color.Red)", StringComparison.Ordinal), "Count label should render red");
+    AssertTrue(overlaySource.Contains("($\" {total}  \", Color.Red)", StringComparison.Ordinal), "Count value should render red");
+    AssertTrue(overlaySource.Contains("(\"Goblin:\", Color.Gold)", StringComparison.Ordinal), "Goblin label should render gold");
+    AssertTrue(overlaySource.Contains("($\" {goblinType}  \", Color.Gold)", StringComparison.Ordinal), "Goblin value should render gold");
+    AssertTrue(overlaySource.Contains("(\"Area:\", Color.LightGreen)", StringComparison.Ordinal), "Area label should render light green");
+    AssertTrue(overlaySource.Contains("($\" {area}  \", Color.LightGreen)", StringComparison.Ordinal), "Area value should render light green");
+    AssertTrue(overlaySource.Contains("goNext ? Color.LimeGreen : Color.Red", StringComparison.Ordinal), "Go Next Y/N value should render green/red");
     AssertTrue(overlaySource.Contains("PortFormatGoblinOverlayText", StringComparison.Ordinal), "overlay should have a focused text formatter");
     AssertTrue(overlaySource.Contains("Count: {Math.Max(0, total)}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? \"Y\" : \"N\")}", StringComparison.Ordinal), "overlay text should use the requested single-line label contract");
-    AssertTrue(overlaySource.Contains("PortFormatGoblinOverlayText(0, \"--\", \"--\", false)", StringComparison.Ordinal), "overlay default state should be Count 0, blank goblin/area, and Go Next N");
+    AssertTrue(overlaySource.Contains("SetOverlayState(0, \"--\", \"--\", false)", StringComparison.Ordinal), "overlay default state should be Count 0, blank goblin/area, and Go Next N");
     AssertTrue(overlaySource.Contains("PortGoblinOverlayShouldGoNext", StringComparison.Ordinal), "overlay should isolate Go Next comparison logic");
     AssertTrue(overlaySource.Contains("PortLocationKey(lastAcceptedAreaKey)", StringComparison.Ordinal), "accepted area should be normalized before comparing");
+    AssertTrue(overlaySource.Contains("PortLocationKey(acceptedRouteAreaKey)", StringComparison.Ordinal), "accepted route context should be normalized for sub-area Go Next checks");
     AssertTrue(overlaySource.Contains("PortLocationKey(currentConfirmedLocation)", StringComparison.Ordinal), "current confirmed area should be normalized before comparing");
-    AssertTrue(overlaySource.Contains("PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, portLastConfirmedLocation)", StringComparison.Ordinal), "Go Next should be recomputed from current confirmed area on every timer refresh");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, state.AcceptedRouteAreaKey, portLastConfirmedLocation)", StringComparison.Ordinal), "Go Next should be recomputed from current confirmed area on every timer refresh");
+    AssertTrue(overlaySource.Contains("acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase)", StringComparison.Ordinal), "Go Next should stay Y for accepted sub-areas while their route context is still current");
 
     AssertTrue(overlaySource.Contains("FindDiabloWindow()", StringComparison.Ordinal), "overlay should follow the Diablo window");
     AssertTrue(overlaySource.Contains("IsIconic(diabloWindow)", StringComparison.Ordinal), "overlay should hide while Diablo is minimized");
@@ -529,6 +540,7 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
     AssertTrue(overlaySource.Contains("rect.Top + PortGoblinOverlayTopInset", StringComparison.Ordinal), "overlay should sit at the top of Diablo with a small inset");
 
     AssertTrue(autoCountMethod.Contains("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "successful automatic counts should update overlay state");
+    AssertTrue(autoCountMethod.Contains("currentAreaAtAcceptance,", StringComparison.Ordinal), "overlay should capture route context at count acceptance for sub-area Go Next checks");
     AssertTrue(autoCountMethod.IndexOf("GoblinAutoCountAccepted", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "overlay should update only after automatic count acceptance");
     AssertTrue(autoCountMethod.IndexOf("if (total <= 0)", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "overlay should not update when accepted count total is invalid");
     AssertTrue(autoCountMethod.Contains("PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, \"AutomaticCountAccepted\", guardResult);", StringComparison.Ordinal), "existing accepted observation publish should remain separate");

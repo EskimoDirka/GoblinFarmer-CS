@@ -6,17 +6,18 @@ namespace GoblinFarmer
     public partial class frmMain
     {
         private const int PortGoblinOverlayTopInset = 8;
-        private const int PortGoblinOverlayWidth = 760;
-        private const int PortGoblinOverlayHeight = 34;
+        private const int PortGoblinOverlayWidth = 1060;
+        private const int PortGoblinOverlayHeight = 46;
         private readonly object portGoblinOverlayLock = new();
         private Form? portGoblinOverlayForm;
-        private Label? portGoblinOverlayLabel;
+        private PortGoblinOverlayTextControl? portGoblinOverlayTextControl;
         private PortGoblinOverlayAcceptedCountState? portGoblinOverlayAcceptedCount;
 
         private sealed record PortGoblinOverlayAcceptedCountState(
             int Count,
             string GoblinType,
             string AcceptedAreaKey,
+            string AcceptedRouteAreaKey,
             string DisplayArea,
             string Source,
             DateTime AcceptedUtc);
@@ -36,6 +37,70 @@ namespace GoblinFarmer
                     CreateParams createParams = base.CreateParams;
                     createParams.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT;
                     return createParams;
+                }
+            }
+        }
+
+        private sealed class PortGoblinOverlayTextControl : Control
+        {
+            private int total;
+            private string goblinType = "--";
+            private string area = "--";
+            private bool goNext;
+
+            public PortGoblinOverlayTextControl()
+            {
+                SetStyle(
+                    ControlStyles.AllPaintingInWmPaint |
+                    ControlStyles.OptimizedDoubleBuffer |
+                    ControlStyles.ResizeRedraw |
+                    ControlStyles.UserPaint,
+                    true);
+                BackColor = Color.Transparent;
+                ForeColor = Color.White;
+            }
+
+            public void SetOverlayState(int total, string goblinType, string area, bool goNext)
+            {
+                this.total = Math.Max(0, total);
+                this.goblinType = string.IsNullOrWhiteSpace(goblinType) ? "--" : goblinType.Trim();
+                this.area = string.IsNullOrWhiteSpace(area) ? "--" : area.Trim();
+                this.goNext = goNext;
+                Text = PortFormatGoblinOverlayText(this.total, this.goblinType, this.area, goNext);
+                Invalidate();
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+                (string Text, Color Color)[] segments =
+                [
+                    ("Count:", Color.Red),
+                    ($" {total}  ", Color.Red),
+                    ("Goblin:", Color.Gold),
+                    ($" {goblinType}  ", Color.Gold),
+                    ("Area:", Color.LightGreen),
+                    ($" {area}  ", Color.LightGreen),
+                    ("Go Next:", Color.White),
+                    ($" {(goNext ? "Y" : "N")}", goNext ? Color.LimeGreen : Color.Red),
+                ];
+
+                using StringFormat format = StringFormat.GenericTypographic;
+                float totalWidth = 0;
+                foreach ((string text, _) in segments)
+                {
+                    totalWidth += e.Graphics.MeasureString(text, Font, int.MaxValue, format).Width;
+                }
+
+                float x = Math.Max(0, (ClientSize.Width - totalWidth) / 2f);
+                float y = Math.Max(0, (ClientSize.Height - Font.Height) / 2f) - 1f;
+                foreach ((string text, Color color) in segments)
+                {
+                    using SolidBrush brush = new(color);
+                    e.Graphics.DrawString(text, Font, brush, x, y, format);
+                    x += e.Graphics.MeasureString(text, Font, int.MaxValue, format).Width;
                 }
             }
         }
@@ -61,20 +126,17 @@ namespace GoblinFarmer
                 Height = PortGoblinOverlayHeight,
             };
 
-            portGoblinOverlayLabel = new Label
+            portGoblinOverlayTextControl = new PortGoblinOverlayTextControl
             {
-                Name = "lblGoblinOverlay",
+                Name = "ctlGoblinOverlayText",
                 Dock = DockStyle.Fill,
                 ForeColor = Color.White,
                 BackColor = Color.Transparent,
-                Font = new Font(Font.FontFamily, 12.0f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter,
-                AutoEllipsis = true,
-                UseMnemonic = false,
-                Text = PortFormatGoblinOverlayText(0, "--", "--", false),
+                Font = new Font(Font.FontFamily, 16.0f, FontStyle.Bold),
             };
+            portGoblinOverlayTextControl.SetOverlayState(0, "--", "--", false);
 
-            portGoblinOverlayForm.Controls.Add(portGoblinOverlayLabel);
+            portGoblinOverlayForm.Controls.Add(portGoblinOverlayTextControl);
         }
 
         private void PortUpdateGoblinOverlay(bool diabloRunning)
@@ -95,16 +157,13 @@ namespace GoblinFarmer
             }
 
             PortInitializeGoblinOverlay();
-            if (portGoblinOverlayForm == null || portGoblinOverlayLabel == null)
+            if (portGoblinOverlayForm == null || portGoblinOverlayTextControl == null)
             {
                 return;
             }
 
-            string text = PortBuildGoblinOverlayText();
-            if (!string.Equals(portGoblinOverlayLabel.Text, text, StringComparison.Ordinal))
-            {
-                portGoblinOverlayLabel.Text = text;
-            }
+            PortGoblinOverlayDisplayState displayState = PortBuildGoblinOverlayDisplayState();
+            portGoblinOverlayTextControl.SetOverlayState(displayState.Count, displayState.GoblinType, displayState.Area, displayState.GoNext);
 
             int diabloWidth = rect.Right - rect.Left;
             portGoblinOverlayForm.Left = rect.Left + (diabloWidth - portGoblinOverlayForm.Width) / 2;
@@ -115,7 +174,7 @@ namespace GoblinFarmer
             }
         }
 
-        private string PortBuildGoblinOverlayText()
+        private PortGoblinOverlayDisplayState PortBuildGoblinOverlayDisplayState()
         {
             PortGoblinOverlayAcceptedCountState? state;
             lock (portGoblinOverlayLock)
@@ -125,12 +184,14 @@ namespace GoblinFarmer
 
             if (state == null)
             {
-                return PortFormatGoblinOverlayText(0, "--", "--", false);
+                return new(0, "--", "--", false);
             }
 
-            bool goNext = PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, portLastConfirmedLocation);
-            return PortFormatGoblinOverlayText(state.Count, state.GoblinType, state.DisplayArea, goNext);
+            bool goNext = PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, state.AcceptedRouteAreaKey, portLastConfirmedLocation);
+            return new(state.Count, state.GoblinType, state.DisplayArea, goNext);
         }
+
+        private sealed record PortGoblinOverlayDisplayState(int Count, string GoblinType, string Area, bool GoNext);
 
         private static string PortFormatGoblinOverlayText(int total, string goblinType, string area, bool goNext)
         {
@@ -139,7 +200,7 @@ namespace GoblinFarmer
             return $"Count: {Math.Max(0, total)}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? "Y" : "N")}";
         }
 
-        private bool PortGoblinOverlayShouldGoNext(string lastAcceptedAreaKey, string currentConfirmedLocation)
+        private bool PortGoblinOverlayShouldGoNext(string lastAcceptedAreaKey, string acceptedRouteAreaKey, string currentConfirmedLocation)
         {
             if (string.IsNullOrWhiteSpace(lastAcceptedAreaKey) ||
                 string.IsNullOrWhiteSpace(currentConfirmedLocation))
@@ -148,15 +209,19 @@ namespace GoblinFarmer
             }
 
             string acceptedKey = PortLocationKey(lastAcceptedAreaKey);
+            string acceptedRouteKey = PortLocationKey(acceptedRouteAreaKey);
             string currentKey = PortLocationKey(currentConfirmedLocation);
             return !string.IsNullOrWhiteSpace(acceptedKey) &&
-                acceptedKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase);
+                acceptedKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(acceptedRouteKey) &&
+                acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase));
         }
 
         private void PortSetGoblinOverlayAcceptedCount(
             int total,
             string goblinType,
             string acceptedAreaKey,
+            string acceptedRouteAreaKey,
             string displayArea,
             string source,
             DateTime acceptedUtc)
@@ -172,6 +237,7 @@ namespace GoblinFarmer
                     total,
                     string.IsNullOrWhiteSpace(goblinType) ? "--" : goblinType.Trim(),
                     PortLocationKey(acceptedAreaKey),
+                    PortLocationKey(acceptedRouteAreaKey),
                     string.IsNullOrWhiteSpace(displayArea) ? "--" : displayArea.Trim(),
                     string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim(),
                     acceptedUtc);
@@ -182,6 +248,7 @@ namespace GoblinFarmer
                 $"total={total}; " +
                 $"goblinType={PortLogField(goblinType)}; " +
                 $"acceptedAreaKey={PortLogField(PortDisplayLocation(acceptedAreaKey))}; " +
+                $"acceptedRouteAreaKey={PortLogField(PortDisplayLocation(acceptedRouteAreaKey))}; " +
                 $"displayArea={PortLogField(displayArea)}; " +
                 $"source={PortLogField(source)}; " +
                 $"acceptedUtc={acceptedUtc:O}");
@@ -194,9 +261,9 @@ namespace GoblinFarmer
                 portGoblinOverlayAcceptedCount = null;
             }
 
-            if (portGoblinOverlayLabel != null && !portGoblinOverlayLabel.IsDisposed)
+            if (portGoblinOverlayTextControl != null && !portGoblinOverlayTextControl.IsDisposed)
             {
-                portGoblinOverlayLabel.Text = PortFormatGoblinOverlayText(0, "--", "--", false);
+                portGoblinOverlayTextControl.SetOverlayState(0, "--", "--", false);
             }
 
             AppLogger.Info($"GoblinOverlayReset: reason={PortLogField(reason)}");
@@ -215,7 +282,7 @@ namespace GoblinFarmer
             PortHideGoblinOverlay();
             portGoblinOverlayForm?.Dispose();
             portGoblinOverlayForm = null;
-            portGoblinOverlayLabel = null;
+            portGoblinOverlayTextControl = null;
         }
     }
 }
