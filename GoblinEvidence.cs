@@ -1342,6 +1342,11 @@ namespace GoblinFarmer
                 !currentJournal ||
                 !countedJournal ||
                 encounterAge <= CrossAreaJournalVisibleRowSuppressWindow;
+            bool continuingCrossAreaJournalRow = !sameArea &&
+                currentJournal &&
+                countedJournal &&
+                lastSeenAge <= sourceVariantWindow;
+            bool sameVisibleJournalRowCanSuppress = recentCrossAreaJournalRow || continuingCrossAreaJournalRow;
 
             if (encounterAge <= encounterSuppressWindow &&
                 !string.IsNullOrWhiteSpace(globalEvidenceKey) &&
@@ -1359,7 +1364,7 @@ namespace GoblinFarmer
                 else if (sameArea ||
                     (!currentMinimap || !countedJournal) &&
                     (!currentJournal && !countedJournal || recentOrContinuouslySeen) &&
-                    recentCrossAreaJournalRow)
+                    sameVisibleJournalRowCanSuppress)
                 {
                     matchReason = "SameEvidenceKey";
                     return true;
@@ -1369,7 +1374,7 @@ namespace GoblinFarmer
             if (encounterAge <= encounterSuppressWindow &&
                 currentJournal &&
                 countedJournal &&
-                recentCrossAreaJournalRow &&
+                sameVisibleJournalRowCanSuppress &&
                 JournalEvidenceBucketsMatch(globalEvidenceKey, countedEvidenceKey, out int currentBucket, out int countedBucket))
             {
                 matchReason = $"JournalLineBucket:{currentBucket}->{countedBucket}";

@@ -5441,8 +5441,8 @@ static void TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState()
         sourceVariantWindow: TimeSpan.FromSeconds(20),
         out string matchReason);
 
-    AssertFalse(suppressed, "refreshed stale journal text should not keep suppressing another area's same-type journal evidence after the short cross-area carryover expires");
-    AssertTrue(string.IsNullOrWhiteSpace(matchReason), "expired cross-area journal carryover should not report a duplicate reason");
+    AssertTrue(suppressed, "continuously visible same-row journal text should stay tied to the counted encounter during the source-variant continuity window");
+    AssertTrue(matchReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal) || matchReason.StartsWith("JournalLineBucket", StringComparison.Ordinal), "continuing cross-area journal carryover should report the visible row match");
 
     bool oldVariantSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
         source: "Journal",
@@ -5787,8 +5787,8 @@ static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
         sourceVariantWindow: TimeSpan.FromSeconds(45),
         out string staleJournalReason);
 
-    AssertFalse(staleJournalSuppressed, "old same-type journal text should not suppress after the cross-area carryover expires");
-    AssertTrue(string.IsNullOrWhiteSpace(staleJournalReason), "expired old visible journal text should not report an exact evidence match");
+    AssertTrue(staleJournalSuppressed, "old same-type journal text should keep suppressing journal-only recounts while the same row is continuously visible");
+    AssertTrue(staleJournalReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal) || staleJournalReason.StartsWith("JournalLineBucket", StringComparison.Ordinal), "continuing old visible journal text should report the row match");
     AssertFalse(
         GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
             "Journal",
@@ -5912,8 +5912,46 @@ static void TestGoblinAutoCountOldCrossAreaJournalRowExpires()
         sourceVariantWindow: TimeSpan.FromSeconds(45),
         out string refreshedOldReason);
 
-    AssertFalse(refreshedOldVisibleRowSuppressed, "same-area duplicate refreshes from the first channel level should not keep blocking a later real Treasure Goblin in another channel level");
-    AssertTrue(string.IsNullOrWhiteSpace(refreshedOldReason), "expired cross-area journal rows should ignore refreshed same-area last-seen time");
+    AssertTrue(refreshedOldVisibleRowSuppressed, "a continuously visible same-template journal row should remain attached to the prior encounter during the source-variant continuity window");
+    AssertTrue(refreshedOldReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal) || refreshedOldReason.StartsWith("JournalLineBucket", StringComparison.Ordinal), "continuing cross-area journal suppression should explain the visible row match");
+
+    bool fullyExpiredVisibleRowSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Eastern Channel Level 2",
+        globalEvidenceKey: treasureJournal,
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Western Channel Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: treasureJournal,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(87),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(47),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string fullyExpiredReason);
+
+    AssertFalse(fullyExpiredVisibleRowSuppressed, "a same-template journal row should expire once it is no longer continuously seen");
+    AssertTrue(string.IsNullOrWhiteSpace(fullyExpiredReason), "fully expired cross-area journal rows should not report a duplicate reason");
+
+    bool southernToCaveFalseCountSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Cave Of The Moon Clan Level 2",
+        globalEvidenceKey: "Journal|Treasure Goblin|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=",
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Southern Highlands",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Treasure Goblin|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(29),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(23),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string southernToCaveReason);
+
+    AssertTrue(southernToCaveFalseCountSuppressed, "the 2026-06-13 Southern Highlands Treasure Goblin journal row should not recount as Cave of the Moon Clan Level 2 while continuously visible");
+    AssertEqual("SameEvidenceKey", southernToCaveReason, "the Southern to Cave carryover should be suppressed as the same journal evidence");
 }
 
 static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
@@ -5949,8 +5987,46 @@ static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
         sourceVariantWindow: TimeSpan.FromSeconds(45),
         out string matchReason);
 
-    AssertFalse(staleJournalSuppressed, "same-area duplicate refresh should not extend cross-area journal suppression beyond the short carryover window");
-    AssertTrue(string.IsNullOrWhiteSpace(matchReason), "expired cross-area journal suppression should not report a stale row match");
+    AssertTrue(staleJournalSuppressed, "same-area duplicate refresh should keep the same visible journal row attached to the counted encounter during the continuity window");
+    AssertTrue(matchReason.StartsWith("JournalLineBucket", StringComparison.Ordinal) || matchReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal), "continuing visible-row suppression should report a stale row match");
+
+    bool expiredJournalSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Odious Collector",
+        areaKey: "Rakkis Crossing",
+        globalEvidenceKey: "Journal|Odious Collector|JournalEncounter|Journal|Odious Collector|Template=Odious Collector Engaged Journal.png|Kind=JournalEngaged|LineBucket=10",
+        countedGoblinType: "Odious Collector",
+        countedAreaKey: "Black Canyon Mines",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Odious Collector|JournalEncounter|Journal|Odious Collector|Template=Odious Collector Engaged Journal.png|Kind=JournalEngaged|LineBucket=11",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(98),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(47),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string expiredReason);
+
+    AssertFalse(expiredJournalSuppressed, "same-area duplicate refresh should still expire once the visible row is no longer being seen");
+    AssertTrue(string.IsNullOrWhiteSpace(expiredReason), "expired cross-area journal suppression should not report a stale row match");
+
+    bool festeringToCathedralFalseCountSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Insufferable Miscreant",
+        areaKey: "Cathedral Level 1",
+        globalEvidenceKey: "Journal|Insufferable Miscreant|JournalKill|Journal|Insufferable Miscreant|Template=Insufferable Miscreant Killed Journal.png|Kind=JournalKilled|LineBucket=10",
+        countedGoblinType: "Insufferable Miscreant",
+        countedAreaKey: "The Festering Woods",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Insufferable Miscreant|JournalKill|Journal|Insufferable Miscreant|Template=Insufferable Miscreant Killed Journal.png|Kind=JournalKilled|LineBucket=11",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(24),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(10),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string festeringToCathedralReason);
+
+    AssertTrue(festeringToCathedralFalseCountSuppressed, "the 2026-06-13 Festering Woods Insufferable Miscreant journal row should not recount as Cathedral Level 1 after a pause");
+    AssertEqual("JournalLineBucket:10->11", festeringToCathedralReason, "the Festering to Cathedral carryover should be suppressed as the same shifted journal row");
 }
 
 static void TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause()
