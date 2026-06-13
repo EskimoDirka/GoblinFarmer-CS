@@ -102,6 +102,7 @@ namespace GoblinFarmer
             bool[,] occupied = new bool[Rows, Columns];
             bool[,] unidentifiedLegendaryLike = new bool[Rows, Columns];
             bool[,] unidentifiedSetLike = new bool[Rows, Columns];
+            bool[,] unidentifiedQuestionMarkLike = new bool[Rows, Columns];
             SalvageInventorySlotMetrics[,] metrics = new SalvageInventorySlotMetrics[Rows, Columns];
             DrawingPoint[,] points = new DrawingPoint[Rows, Columns];
             using Mat? unidentifiedLegendaryTemplate = TryLoadUnidentifiedTemplate(unidentifiedLegendaryTemplatePath, slotWidth, slotHeight);
@@ -119,7 +120,10 @@ namespace GoblinFarmer
                 {
                     Rectangle local = InventoryGridLayout.SlotRectangle(inventoryGrid, row, column);
                     SalvageInventorySlotMetrics slotMetrics = MeasureSlot(inventoryGrid, local);
-                    unidentifiedLegendaryLike[row, column] = IsUnidentifiedTemplateMatch(bgrGrid, unidentifiedLegendaryTemplate, local);
+                    unidentifiedQuestionMarkLike[row, column] = IsUnidentifiedQuestionMarkAnchor(slotMetrics);
+                    unidentifiedLegendaryLike[row, column] =
+                        IsUnidentifiedTemplateMatch(bgrGrid, unidentifiedLegendaryTemplate, local) ||
+                        unidentifiedQuestionMarkLike[row, column];
                     unidentifiedSetLike[row, column] = IsUnidentifiedTemplateMatch(bgrGrid, unidentifiedSetTemplate, local);
                     metrics[row, column] = slotMetrics;
                     points[row, column] = InventoryGridLayout.SlotScreenPoint(screenGrid, local);
@@ -149,7 +153,8 @@ namespace GoblinFarmer
             {
                 for (int column = 0; column < Columns; column++)
                 {
-                    regularGemLike[row, column] = regularGemLike[row, column] || liveGemStackLike[row, column];
+                    regularGemLike[row, column] = !unidentifiedQuestionMarkLike[row, column] &&
+                        (regularGemLike[row, column] || liveGemStackLike[row, column]);
                 }
             }
 
@@ -480,6 +485,17 @@ namespace GoblinFarmer
                 metrics.ColoredFramePixels <= 900 &&
                 metrics.InnerBrightPixels >= 1000 &&
                 metrics.InnerSaturatedPixels <= 160;
+        }
+
+        private static bool IsUnidentifiedQuestionMarkAnchor(SalvageInventorySlotMetrics metrics)
+        {
+            return metrics.StackCountTextPixels >= 140 &&
+                metrics.RegularGemPixels < 220 &&
+                metrics.GreenQualityPixels < 160 &&
+                metrics.OrangeQualityPixels >= 180 &&
+                metrics.ColoredFramePixels >= 1000 &&
+                metrics.InnerBrightPixels >= 700 &&
+                metrics.InnerSaturatedPixels >= 650;
         }
 
         private static bool IsSetQualityFootprint(SalvageInventorySlotMetrics metrics)

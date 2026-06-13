@@ -194,7 +194,8 @@ namespace GoblinFarmer
             bool Counted,
             string AreaKey,
             string GoblinType,
-            string Source);
+            string Source,
+            bool FirstSeenCombatActive);
         private sealed record PortGoblinAutoCountEncounterState(
             DateTime CountedUtc,
             DateTime LastSeenUtc,

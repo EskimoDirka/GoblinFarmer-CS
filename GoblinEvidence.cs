@@ -1650,6 +1650,124 @@ namespace GoblinFarmer
         }
     }
 
+    internal static class GoblinPandemoniumSecondSlotJournalReliabilityPolicy
+    {
+        public const string Reliability = "PandemoniumSecondSlotJournalEngaged";
+        public const double MinimumConfidence = 0.90;
+        public static readonly TimeSpan MaximumFirstSeenAge = TimeSpan.FromSeconds(8);
+
+        public static bool AllowsAutomaticCount(
+            string source,
+            string evidenceKey,
+            string areaKey,
+            int currentAreaCount,
+            int areaLimit,
+            string currentAreaAtAcceptance,
+            string firstSeenArea,
+            double evidenceFirstSeenAgeSeconds,
+            double evidenceConfidence,
+            out string reason,
+            out string reliability)
+        {
+            reason = "";
+            reliability = "";
+
+            if (!GoblinPandemoniumMultiCountDuplicatePolicy.IsPandemoniumFortressTwoCountArea(areaKey))
+            {
+                reason = "NotPandemoniumFortressTwoCountArea";
+                return false;
+            }
+
+            if (areaLimit != 2)
+            {
+                reason = "AreaLimitNotTwo";
+                return false;
+            }
+
+            if (currentAreaCount <= 0)
+            {
+                reason = "NoPriorPandemoniumCount";
+                return false;
+            }
+
+            if (currentAreaCount >= areaLimit)
+            {
+                reason = "AreaLimitReached";
+                return false;
+            }
+
+            if (!string.Equals(NormalizeObservationSource(source), "Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = "SourceNotJournal";
+                return false;
+            }
+
+            bool engagedEvidence = evidenceKey.Contains("Kind=JournalEngaged", StringComparison.OrdinalIgnoreCase) ||
+                evidenceKey.Contains("Kind=JournalEngagedAndKilled", StringComparison.OrdinalIgnoreCase);
+            if (!engagedEvidence)
+            {
+                reason = "EvidenceNotJournalEngaged";
+                return false;
+            }
+
+            if (evidenceConfidence < MinimumConfidence)
+            {
+                reason = "ConfidenceTooLow";
+                return false;
+            }
+
+            if (evidenceFirstSeenAgeSeconds < 0 ||
+                evidenceFirstSeenAgeSeconds > MaximumFirstSeenAge.TotalSeconds)
+            {
+                reason = "EvidenceFirstSeenAgeOutOfRange";
+                return false;
+            }
+
+            if (!AreaMatches(areaKey, currentAreaAtAcceptance))
+            {
+                reason = "CurrentAreaMismatch";
+                return false;
+            }
+
+            if (!AreaMatches(areaKey, firstSeenArea))
+            {
+                reason = "FirstSeenAreaMismatch";
+                return false;
+            }
+
+            reliability = Reliability;
+            return true;
+        }
+
+        private static bool AreaMatches(string expectedAreaKey, string actualAreaKey)
+        {
+            if (string.IsNullOrWhiteSpace(expectedAreaKey) || string.IsNullOrWhiteSpace(actualAreaKey))
+            {
+                return false;
+            }
+
+            return GoblinAreaResolver.NormalizedKey(expectedAreaKey)
+                .Equals(GoblinAreaResolver.NormalizedKey(actualAreaKey), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeObservationSource(string source)
+        {
+            if (string.Equals(source, "JournalCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Journal", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Journal";
+            }
+
+            if (string.Equals(source, "MinimapCandidate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "Minimap", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Minimap";
+            }
+
+            return string.IsNullOrWhiteSpace(source) ? "Unknown" : source.Trim();
+        }
+    }
+
     internal static class GoblinTypeNormalizer
     {
         private static readonly Dictionary<string, string> CanonicalTypes = BuildCanonicalTypes();
