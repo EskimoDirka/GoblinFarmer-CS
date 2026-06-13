@@ -574,6 +574,17 @@ namespace GoblinFarmer
                 return areaResult;
             }
 
+            if (PortAreDifferentAncientWaterwayChannelAreas(areaResult.Area.AreaKey, resolvedJournalArea.AreaKey))
+            {
+                AppLogger.Info(
+                    "GoblinTracker: JournalEvidenceAreaIgnored " +
+                    $"reason={PortLogField(reason)} " +
+                    $"originalAreaKey={PortLogField(PortDisplayLocation(areaResult.Area.AreaKey))} " +
+                    $"journalAreaKey={PortLogField(PortDisplayLocation(resolvedJournalArea.AreaKey))} " +
+                    "ignoredReason=ChannelTitleOutranksOlderJournalArea");
+                return areaResult;
+            }
+
             AppLogger.Info(
                 "GoblinTracker: JournalEvidenceAreaApplied " +
                 $"reason={PortLogField(reason)} " +
@@ -589,6 +600,30 @@ namespace GoblinFarmer
                     : areaResult.AmbiguityGroup,
                 DisambiguationReason = "JournalEvidenceArea",
             };
+        }
+
+        private static bool PortAreDifferentAncientWaterwayChannelAreas(string firstAreaKey, string secondAreaKey)
+        {
+            return PortIsAncientWaterwayChannelArea(firstAreaKey) &&
+                PortIsAncientWaterwayChannelArea(secondAreaKey) &&
+                !GoblinAreaResolver.NormalizedKey(firstAreaKey).Equals(
+                    GoblinAreaResolver.NormalizedKey(secondAreaKey),
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool PortIsAncientWaterwayChannelArea(string areaKey)
+        {
+            string normalized = GoblinAreaResolver.NormalizedKey(areaKey);
+            return normalized == GoblinAreaResolver.NormalizedKey("Western Channel Level 1") ||
+                normalized == GoblinAreaResolver.NormalizedKey("Western Channel Level 2") ||
+                normalized == GoblinAreaResolver.NormalizedKey("Eastern Channel Level 1") ||
+                normalized == GoblinAreaResolver.NormalizedKey("Eastern Channel Level 2");
+        }
+
+        private static bool PortIsAncientWaterwayParentForChannelArea(string channelAreaKey, string currentAreaKey)
+        {
+            return PortIsAncientWaterwayChannelArea(channelAreaKey) &&
+                GoblinAreaResolver.NormalizedKey(currentAreaKey) == GoblinAreaResolver.NormalizedKey("Ancient Waterway");
         }
 
         private PortGoblinTrackerAreaResolution PortApplyJournalMinimapAreaOverride(

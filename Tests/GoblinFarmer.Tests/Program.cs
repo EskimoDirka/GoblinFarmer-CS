@@ -3101,6 +3101,13 @@ static void TestCombatMenuWatcherClosesBountyMenuWithEscapeOnly()
     AssertTrue(watcherMethod.Contains("closeMethod=EscapeOnly", StringComparison.Ordinal), "bounty menu diagnostics should show Escape-only behavior");
     AssertTrue(watcherMethod.Contains("menuClosedConfirmed=", StringComparison.Ordinal), "bounty menu diagnostics should confirm the menu closed");
     AssertTrue(watcherMethod.Contains("combatStillActive=", StringComparison.Ordinal), "bounty menu diagnostics should report combat state after Escape");
+    AssertTrue(watcherMethod.Contains("Event Complete.png", StringComparison.Ordinal), "Event Complete should be detected from an explicit template in the Bounty menu scan region");
+    AssertTrue(watcherMethod.Contains("templatePaths", StringComparison.Ordinal), "combat menu watcher should evaluate explicit completion-menu templates");
+    AssertFalse(watcherMethod.Contains("PortTryDetectCompletionMenuTitleByVisualSignature", StringComparison.Ordinal), "combat menu clearing must not send Escape from the unsafe broad visual signature fallback");
+    AssertFalse(watcherMethod.Contains("VisualSignature", StringComparison.Ordinal), "combat menu clearing should not report visual-signature close decisions until a safe template-backed detector exists");
+    AssertTrue(watcherMethod.Contains("VisualFallbackDisabledAfterCombatFalsePositive", StringComparison.Ordinal), "diagnostics should explain that the visual fallback is disabled after the combat false-positive regression");
+    string projectFile = File.ReadAllText(Path.Combine(repoRoot, "GoblinFarmer.csproj"));
+    AssertTrue(projectFile.Contains("Images\\Combat\\Event Complete.png", StringComparison.Ordinal), "Event Complete template should be copied to build output");
 }
 
 static string FindRepositoryRootForTests()
@@ -5152,6 +5159,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(autoCountSource.Contains("evidenceFirstSeenCombatActive=", StringComparison.Ordinal), "auto-count logs should expose first-seen combat state for latency diagnostics");
     AssertTrue(autoCountMethod.Contains("MinimapAreaChangedLowMargin", StringComparison.Ordinal), "borderline minimap evidence should not count a new area when the confirmed area still points elsewhere");
     AssertTrue(autoCountMethod.Contains("MinimapAreaChangedConfidenceMargin", StringComparison.Ordinal), "area-changed minimap suppression should use an explicit conservative margin");
+    AssertTrue(autoCountMethod.Contains("evidenceAreaIsCurrentAncientWaterwayChannel", StringComparison.Ordinal), "Ancient Waterway child-channel minimap evidence should not be delayed by the parent route label");
     AssertTrue(observeMethod.Contains("GoblinAutoCountEvidenceReliabilityPolicy.AllowsAutomaticCount", StringComparison.Ordinal), "observation summaries should show pending Engaged-only journal evidence before auto-count attempts run");
     AssertTrue(evidenceModelSource.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "Engaged-only journal evidence should have an explicit pending-confirmation reason");
     AssertTrue(autoCountSource.Contains("refreshEncounterLastSeen", StringComparison.Ordinal), "suppressed source variants should refresh encounter last-seen state instead of expiring from the original count time");
@@ -5191,6 +5199,8 @@ static void TestGoblinJournalEvidenceAreaReachesObservationCountPath()
     AssertTrue(observeMethod.Contains("PortApplyJournalEvidenceAreaFromNotes(areaResult, evidenceNotes, \"ObservationCandidate\")", StringComparison.Ordinal), "journal evidence should apply its resolved JournalArea before count decisions");
     AssertTrue(sessionStatsSource.Contains("PortGoblinEvidenceNoteValue(evidenceNotes, \"JournalArea\")", StringComparison.Ordinal), "journal area handoff should use the existing evidence-note parser");
     AssertTrue(sessionStatsSource.Contains("GoblinTracker: JournalEvidenceAreaApplied", StringComparison.Ordinal), "journal area handoff should log explicit diagnostics when applied");
+    AssertTrue(sessionStatsSource.Contains("ChannelTitleOutranksOlderJournalArea", StringComparison.Ordinal), "fresh channel title evidence should not be overwritten by an older different-channel JournalArea note");
+    AssertTrue(sessionStatsSource.Contains("PortAreDifferentAncientWaterwayChannelAreas", StringComparison.Ordinal), "journal area handoff should explicitly guard different channel levels");
     AssertTrue(observeMethod.IndexOf("PortApplyJournalEvidenceAreaFromNotes", StringComparison.Ordinal) < observeMethod.IndexOf("PortApplyJournalMinimapAreaOverride", StringComparison.Ordinal), "journal evidence area should be applied before the existing minimap channel override");
 }
 
@@ -5338,6 +5348,8 @@ static void TestGoblinEngagedJournalCanCountAfterRecentMinimapConfirmation()
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationWindow", StringComparison.Ordinal), "recent minimap confirmation should be bounded by a short window");
     AssertTrue(sessionStatsSource.Contains("PortAutomaticGoblinRecentMinimapJournalConfirmationMinimumConfidence", StringComparison.Ordinal), "recent minimap confirmation should keep a minimum confidence floor");
     AssertTrue(evidenceSource.Contains("JournalEngagedAcceptedRecentMinimapConfirmation", StringComparison.Ordinal), "stale-looking Engaged journal rows should only bypass freshness when a recent same-area minimap supports them");
+    AssertTrue(evidenceSource.Contains("JournalKilledAcceptedRecentMinimapConfirmation", StringComparison.Ordinal), "stale-looking Killed journal rows should be able to pair with a recent same-area minimap hit before stale visible-line suppression drops the encounter");
+    AssertTrue(evidenceSource.Contains("JournalFreshness=KilledAcceptedRecentMinimapConfirmation", StringComparison.Ordinal), "recent-minimap Killed journal acceptance should carry explicit freshness metadata into auto-count");
 }
 
 static void TestGoblinPandemoniumSecondSlotJournalEngagedCanCountAfterCombatStops()
@@ -5429,8 +5441,8 @@ static void TestGoblinAutoCountSourceVariantSuppressionUsesRecentLastSeenState()
         sourceVariantWindow: TimeSpan.FromSeconds(20),
         out string matchReason);
 
-    AssertTrue(suppressed, "journal evidence should remain suppressed when the prior counted encounter was just seen as stale text, even after 20 seconds from the original count");
-    AssertTrue(matchReason.StartsWith("JournalLineBucket", StringComparison.Ordinal) || matchReason.StartsWith("RecentSourceVariantLastSeen", StringComparison.Ordinal), "suppression should explain whether it matched by row bucket or recent last-seen source variant");
+    AssertFalse(suppressed, "refreshed stale journal text should not keep suppressing another area's same-type journal evidence after the short cross-area carryover expires");
+    AssertTrue(string.IsNullOrWhiteSpace(matchReason), "expired cross-area journal carryover should not report a duplicate reason");
 
     bool oldVariantSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
         source: "Journal",
@@ -5775,8 +5787,8 @@ static void TestGoblinAutoCountStaleJournalDoesNotBlockFreshCrossAreaMinimap()
         sourceVariantWindow: TimeSpan.FromSeconds(45),
         out string staleJournalReason);
 
-    AssertTrue(staleJournalSuppressed, "old same-type journal text should still suppress after moving into another area");
-    AssertEqual("SameEvidenceKey", staleJournalReason, "old visible journal text should explain the exact evidence match");
+    AssertFalse(staleJournalSuppressed, "old same-type journal text should not suppress after the cross-area carryover expires");
+    AssertTrue(string.IsNullOrWhiteSpace(staleJournalReason), "expired old visible journal text should not report an exact evidence match");
     AssertFalse(
         GoblinAutoCountEncounterSuppressionPolicy.ShouldRefreshEncounterLastSeenAfterSuppression(
             "Journal",
@@ -5883,6 +5895,25 @@ static void TestGoblinAutoCountOldCrossAreaJournalRowExpires()
 
     AssertFalse(oldVisibleRowSuppressed, "an old same-template journal row in a new area should not block a later real Treasure Goblin indefinitely");
     AssertTrue(string.IsNullOrWhiteSpace(oldReason), "expired cross-area journal rows should not report a duplicate reason");
+
+    bool refreshedOldVisibleRowSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Eastern Channel Level 2",
+        globalEvidenceKey: treasureJournal,
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Western Channel Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: treasureJournal,
+        countedUtc: nowUtc - TimeSpan.FromSeconds(47),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(3),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string refreshedOldReason);
+
+    AssertFalse(refreshedOldVisibleRowSuppressed, "same-area duplicate refreshes from the first channel level should not keep blocking a later real Treasure Goblin in another channel level");
+    AssertTrue(string.IsNullOrWhiteSpace(refreshedOldReason), "expired cross-area journal rows should ignore refreshed same-area last-seen time");
 }
 
 static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
@@ -5918,8 +5949,8 @@ static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
         sourceVariantWindow: TimeSpan.FromSeconds(45),
         out string matchReason);
 
-    AssertTrue(staleJournalSuppressed, "same visible journal row should suppress after a counted area's duplicate journal evidence refreshed the encounter last-seen state");
-    AssertTrue(matchReason.StartsWith("JournalLineBucket", StringComparison.Ordinal) || matchReason.StartsWith("SameEvidenceKey", StringComparison.Ordinal), "stale Rakkis journal suppression should explain the journal evidence match");
+    AssertFalse(staleJournalSuppressed, "same-area duplicate refresh should not extend cross-area journal suppression beyond the short carryover window");
+    AssertTrue(string.IsNullOrWhiteSpace(matchReason), "expired cross-area journal suppression should not report a stale row match");
 }
 
 static void TestGoblinAutoCountSuppressesShiftedJournalRowAfterPause()

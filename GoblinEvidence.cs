@@ -1341,8 +1341,7 @@ namespace GoblinFarmer
             bool recentCrossAreaJournalRow = sameArea ||
                 !currentJournal ||
                 !countedJournal ||
-                encounterAge <= CrossAreaJournalVisibleRowSuppressWindow ||
-                lastSeenAge <= CrossAreaJournalVisibleRowSuppressWindow;
+                encounterAge <= CrossAreaJournalVisibleRowSuppressWindow;
 
             if (encounterAge <= encounterSuppressWindow &&
                 !string.IsNullOrWhiteSpace(globalEvidenceKey) &&
@@ -1378,6 +1377,7 @@ namespace GoblinFarmer
             }
 
             if (recentOrContinuouslySeen &&
+                recentCrossAreaJournalRow &&
                 (sameArea || !currentMinimap || !countedJournal) &&
                 (currentJournal ||
                 countedJournal ||

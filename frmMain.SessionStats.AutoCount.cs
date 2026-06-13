@@ -55,6 +55,9 @@ namespace GoblinFarmer
                 !GoblinAreaResolver.NormalizedKey(area.AreaKey).Equals(
                     GoblinAreaResolver.NormalizedKey(currentAreaAtAcceptance),
                     StringComparison.OrdinalIgnoreCase);
+            bool evidenceAreaIsCurrentAncientWaterwayChannel = PortIsAncientWaterwayParentForChannelArea(
+                area.AreaKey,
+                currentAreaAtAcceptance);
 
             lock (portGoblinTrackerLock)
             {
@@ -186,6 +189,7 @@ namespace GoblinFarmer
                 else if (string.IsNullOrWhiteSpace(suppressionReason) &&
                     observation.Source.Equals("Minimap", StringComparison.OrdinalIgnoreCase) &&
                     evidenceAreaDiffersFromCurrent &&
+                    !evidenceAreaIsCurrentAncientWaterwayChannel &&
                     observation.EvidenceConfidence > 0 &&
                     observation.EvidenceConfidence <= minimapAutoCountMinimumConfidence + MinimapAreaChangedConfidenceMargin)
                 {

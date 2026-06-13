@@ -1096,23 +1096,32 @@ namespace GoblinFarmer
 
         private void PortCombatMenuWatcherLoop(CancellationToken token)
         {
-            string imagePath = Img("Combat", "Bounty Menu Title.png");
+            string bountyMenuImagePath = Img("Combat", "Bounty Menu Title.png");
+            string eventCompleteImagePath = Img("Combat", "Event Complete.png");
             string scanRegionImagePath = Img("Combat", "Bounty Complete Scan Region.png");
-            if (!File.Exists(imagePath))
+            List<string> templatePaths = new()
             {
-                AppLogger.Info($"CombatMenuWatcherDisabled: reason=bounty title template missing; imagePath={imagePath}; combatActive={portCombatRunning}");
+                bountyMenuImagePath,
+                eventCompleteImagePath,
+            };
+            templatePaths = templatePaths
+                .Where(File.Exists)
+                .ToList();
+            if (templatePaths.Count == 0)
+            {
+                AppLogger.Info($"CombatMenuWatcherDisabled: reason=completion templates missing; bountyImagePath={bountyMenuImagePath}; eventCompleteImagePath={eventCompleteImagePath}; combatActive={portCombatRunning}");
                 return;
             }
 
-            Rectangle? referenceRegion = PortScanRegionForImage(imagePath);
+            Rectangle? referenceRegion = PortScanRegionForImage(bountyMenuImagePath);
             if (!referenceRegion.HasValue)
             {
-                AppLogger.Info($"CombatMenuWatcherDisabled: reason=bounty scan region missing; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; scanRegionImageExists={File.Exists(scanRegionImagePath)}; combatActive={portCombatRunning}");
+                AppLogger.Info($"CombatMenuWatcherDisabled: reason=bounty scan region missing; imagePath={bountyMenuImagePath}; scanRegionImagePath={scanRegionImagePath}; scanRegionImageExists={File.Exists(scanRegionImagePath)}; combatActive={portCombatRunning}");
                 return;
             }
 
-            string imageName = Path.GetFileName(imagePath);
-            AppLogger.Info($"CombatMenuWatcherStarted: target=Bounty menu; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; scanRegionImageExists={File.Exists(scanRegionImagePath)}; referenceRegion={FormatRectangle(referenceRegion.Value)}; threshold={PortBountyMenuConfidence:0.000}; pollIntervalMs={AppSettings.Bounty.PollIntervalMs}; escapeCooldownMs={AppSettings.Bounty.EscapeCooldownMs}; combatActive={portCombatRunning}");
+            string templateNames = string.Join(",", templatePaths.Select(Path.GetFileName));
+            AppLogger.Info($"CombatMenuWatcherStarted: target=Bounty/Event Complete menu; templateNames={PortLogField(templateNames)}; bountyImagePath={bountyMenuImagePath}; eventCompleteImagePath={eventCompleteImagePath}; scanRegionImagePath={scanRegionImagePath}; scanRegionImageExists={File.Exists(scanRegionImagePath)}; referenceRegion={FormatRectangle(referenceRegion.Value)}; threshold={PortBountyMenuConfidence:0.000}; pollIntervalMs={AppSettings.Bounty.PollIntervalMs}; escapeCooldownMs={AppSettings.Bounty.EscapeCooldownMs}; combatActive={portCombatRunning}");
 
             while (!token.IsCancellationRequested && portCombatRunning)
             {
@@ -1122,28 +1131,48 @@ namespace GoblinFarmer
                     continue;
                 }
 
-                double confidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion.Value);
-                if (confidence >= PortBountyMenuConfidence)
+                string matchedImagePath = "";
+                double confidence = double.MinValue;
+                foreach (string templatePath in templatePaths)
+                {
+                    double candidateConfidence = PortBestTemplateConfidenceInDiabloRegion(templatePath, referenceRegion.Value);
+                    if (candidateConfidence > confidence)
+                    {
+                        confidence = candidateConfidence;
+                        matchedImagePath = templatePath;
+                    }
+                }
+
+                bool templateMatched = confidence >= PortBountyMenuConfidence;
+                double visualScore = 0;
+                string visualReason = "VisualFallbackDisabledAfterCombatFalsePositive";
+
+                if (templateMatched)
                 {
                     long nowTicks = DateTime.UtcNow.Ticks;
                     long lastCloseTicks = Interlocked.Read(ref portLastBountyMenuCloseTicks);
                     if (nowTicks - lastCloseTicks >= TimeSpan.FromMilliseconds(AppSettings.Bounty.EscapeCooldownMs).Ticks)
                     {
                         Interlocked.Exchange(ref portLastBountyMenuCloseTicks, nowTicks);
-                        AppLogger.Info($"BountyMenuDetected: confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource=CombatMenuWatcher; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; diabloActive=True; automationCancelled=false");
+                        string detectionSource = "Template";
+                        string imageName = Path.GetFileName(matchedImagePath);
+                        AppLogger.Info($"BountyMenuDetected: confidence={confidence:0.000}; visualScore={visualScore:0.000}; threshold={PortBountyMenuConfidence:0.000}; detectionSource=CombatMenuWatcher; completionDetectionSource={detectionSource}; visualReason={PortLogField(visualReason)}; imagePath={matchedImagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; diabloActive=True; automationCancelled=false");
                         PortPressEscapeForAutomation("BountyMenuCombatWatcher");
-                        AppLogger.Info($"BountyMenuEscapeSent: source=CombatMenuWatcher; confidence={confidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=True");
+                        AppLogger.Info($"BountyMenuEscapeSent: source=CombatMenuWatcher; confidence={confidence:0.000}; visualScore={visualScore:0.000}; threshold={PortBountyMenuConfidence:0.000}; completionDetectionSource={detectionSource}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=True");
                         Thread.Sleep(120);
-                        double postEscapeConfidence = PortBestTemplateConfidenceInDiabloRegion(imagePath, referenceRegion.Value);
+                        double postEscapeConfidence = templatePaths
+                            .Select(templatePath => PortBestTemplateConfidenceInDiabloRegion(templatePath, referenceRegion.Value))
+                            .DefaultIfEmpty(0)
+                            .Max();
                         bool menuClosedConfirmed = postEscapeConfidence < PortBountyMenuConfidence;
-                        AppLogger.Info($"BountyMenuClearSent: closeMethod=EscapeOnly; source=CombatMenuWatcher; confidence={confidence:0.000}; postEscapeConfidence={postEscapeConfidence:0.000}; threshold={PortBountyMenuConfidence:0.000}; enterSent=False; escapeSent=True; menuClosedConfirmed={menuClosedConfirmed}; combatStillActive={portCombatRunning && !portCombatStopping}; imagePath={imagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=True");
+                        AppLogger.Info($"BountyMenuClearSent: closeMethod=EscapeOnly; source=CombatMenuWatcher; confidence={confidence:0.000}; visualScore={visualScore:0.000}; postEscapeConfidence={postEscapeConfidence:0.000}; postVisualScore=0.000; postVisualReason={PortLogField(visualReason)}; threshold={PortBountyMenuConfidence:0.000}; completionDetectionSource={detectionSource}; enterSent=False; escapeSent=True; menuClosedConfirmed={menuClosedConfirmed}; combatStillActive={portCombatRunning && !portCombatStopping}; imagePath={matchedImagePath}; scanRegionImagePath={scanRegionImagePath}; imageName={imageName}; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; automationCancelled=false; injectedEscape=True");
                     }
                 }
 
                 Thread.Sleep(AppSettings.Bounty.PollIntervalMs);
             }
 
-            AppLogger.Info($"CombatMenuWatcherStopped: target=Bounty menu; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; cancelled={token.IsCancellationRequested}");
+            AppLogger.Info($"CombatMenuWatcherStopped: target=Bounty/Event Complete menu; combatActive={portCombatRunning}; combatStopping={portCombatStopping}; cancelled={token.IsCancellationRequested}");
         }
 
         private bool PortCombatClickIsSafe()

@@ -930,8 +930,29 @@ namespace GoblinFarmer
                     !string.IsNullOrWhiteSpace(recentEngaged.AreaKey) &&
                     !string.IsNullOrWhiteSpace(areaKey) &&
                     !string.Equals(recentEngaged.AreaKey, areaKey, StringComparison.OrdinalIgnoreCase);
+                bool recentMinimapKilledConfirmation = PortTryGetRecentMinimapJournalConfirmation(
+                    goblinType,
+                    areaKey,
+                    nowUtc,
+                    out GoblinObservationRecord recentMinimap,
+                    out double recentMinimapAgeSeconds);
                 if (!killedFreshInCurrentArea && !recentEngagedMatches && !recentEngagedFreshAnyArea)
                 {
+                    if (recentMinimapKilledConfirmation)
+                    {
+                        PortLogJournalEvidenceFreshnessDiagnostic(
+                            "JournalKilledAcceptedRecentMinimapConfirmation",
+                            template,
+                            match,
+                            displayArea,
+                            $"firstSeenAgeSeconds={killedFirstSeenAge.TotalSeconds:0.0}; firstSeenArea={PortLogField(killedState.AreaKey)}; currentArea={PortLogField(areaKey)}; acceptedArea={PortLogField(areaKey)}; areaChangedDuringPendingEvidence=False; recentMinimapArea={PortLogField(recentMinimap.AreaKey)}; recentMinimapAgeSeconds={recentMinimapAgeSeconds:0.0}; recentMinimapConfidence={recentMinimap.EvidenceConfidence:0.000}; freshnessWindowSeconds={GoblinJournalEvidenceFreshWindow.TotalSeconds:0}; recentMinimapWindowSeconds={PortAutomaticGoblinRecentMinimapJournalConfirmationWindow.TotalSeconds:0}");
+                        acceptedCandidate = candidate with
+                        {
+                            Notes = $"{candidate.Notes}; JournalFreshness=KilledAcceptedRecentMinimapConfirmation; JournalArea={displayArea}{titleResolverOverrideNote}"
+                        };
+                        return true;
+                    }
+
                     PortRememberStaleSuppressedJournalEvidence(killedSignature, nowUtc, killedState.AreaKey, killedState.FirstSeenUtc);
                     PortLogJournalEvidenceFreshnessDiagnostic(
                         "JournalKilledIgnoredStale",
