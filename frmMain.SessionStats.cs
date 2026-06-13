@@ -37,6 +37,7 @@ namespace GoblinFarmer
             PortResetGoblinAreaDuplicateGuard("NewGameCreated");
             PortResetGoblinAutoCountEvidenceState("NewGameCreated");
             PortResetGoblinEvidenceObservationState("NewGameCreated");
+            PortResetGoblinOverlayState("NewGameCreated");
             AppLogger.Info("GoblinTracker: Session statistics reset reason='NewGameCreated'");
             PortUpdateSessionStats();
         }
@@ -90,6 +91,7 @@ namespace GoblinFarmer
             PortResetGoblinAreaDuplicateGuard("TrackerStatsReset");
             PortResetGoblinAutoCountEvidenceState("TrackerStatsReset");
             PortResetGoblinEvidenceObservationState("TrackerStatsReset");
+            PortResetGoblinOverlayState("TrackerStatsReset");
             AppLogger.Info("GoblinTracker: Session statistics reset");
             PortWriteSessionMetadata(logSuccess: false);
             PortUpdateGoblinTrackerStats();

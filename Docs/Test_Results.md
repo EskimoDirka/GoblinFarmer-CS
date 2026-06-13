@@ -2,6 +2,28 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-13 VS Debug In-Game Goblin Overlay
+
+- Scope covered: passive VS Debug-only click-through Goblin overlay centered over Diablo.
+- Fix coverage: overlay initializes only for VS Debug, hides when Diablo is missing/minimized, formats `Count/Goblin/Area/Go Next`, updates only after successful automatic counts, excludes `Sim Count`/debug simulation paths, recomputes `Go Next` from current confirmed location, and resets on Reset Stats/New Game.
+- Live validation still needed: confirm the overlay is positioned correctly over the real Diablo window on the current dual-monitor layout and remains click-through during route/combat input.
+
+Validation commands:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+git diff --check
+```
+
+Results:
+
+- `dotnet build GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including `VS Debug in-game goblin overlay is passive and live-count only`.
+- `git diff --check`: passed with LF-to-CRLF normalization warnings only.
+
 ## 2026-06-11 111859 Live Review Fix Pass
 
 - Review inputs: `DebugPackages\GoblinFarmer_Debug_20260611_111859.zip` and `Video Clip Review\2026-06-11 10-39-48.mkv`.

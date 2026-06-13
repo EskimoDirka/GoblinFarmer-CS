@@ -549,6 +549,13 @@ namespace GoblinFarmer
                     ["enableAutomaticCounting"] = AppSettings.GoblinTracker.EnableAutomaticCounting,
                 });
             PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, "AutomaticCountAccepted", guardResult);
+            PortSetGoblinOverlayAcceptedCount(
+                total,
+                observation.GoblinType,
+                area.AreaKey,
+                displayLocation,
+                observation.Source,
+                countAcceptedUtc);
             PortCaptureAcceptedGoblinEvidenceBestSamples(
                 observation,
                 area,

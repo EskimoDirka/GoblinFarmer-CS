@@ -319,6 +319,7 @@ namespace GoblinFarmer
             PortApplyHotkeyPreferences();
             PortWireHotkeyPreferences();
             PortInitializeGoblinTrackerDebugPreferenceControls();
+            PortInitializeGoblinOverlay();
             chkKeepDebugScreenshots.Checked = AppSettings.Debug.EnableDebugScreenshots;
             chkKeepDebugScreenshots.CheckedChanged += (_, _) =>
             {
@@ -734,6 +735,7 @@ namespace GoblinFarmer
             PortHideSplash();
             portSplashTimer?.Dispose();
             portSplashForm?.Dispose();
+            PortDisposeGoblinOverlay();
             PortStopGoblinObservationScanner("app closing");
             PortStopAllAutomation("app closing");
             PortStopCombat("app closing");

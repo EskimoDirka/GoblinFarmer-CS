@@ -32,6 +32,7 @@ Run("VS Debug/dev profile prefers project-root AppSettings", TestVsDebugProjectR
 Run("VS Debug/dev profile prefers ignored local AppSettings", TestVsDebugProjectLocalConfigPreferred);
 Run("VS Debug startup has no external recorder dependency", TestVsDebugStartupHasNoExternalRecorderDependency);
 Run("VS Debug form shows OBS status panel", TestVsDebugFormShowsObsStatusPanel);
+Run("VS Debug in-game goblin overlay is passive and live-count only", TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly);
 Run("Missing Diablo path keeps startup in setup required", TestMissingDiabloPathKeepsStartupInSetupRequired);
 Run("VS Debug blank project-root Diablo path attempts discovery", TestVsDebugBlankProjectRootDiabloPathAttemptsDiscovery);
 Run("Diablo discovery finds custom drive root install", TestDiabloDiscoveryFindsCustomDriveRootInstall);
@@ -479,6 +480,65 @@ static void TestVsDebugFormShowsObsStatusPanel()
     AssertTrue(obsStatusSource.Contains("OBS recording stopped.", StringComparison.Ordinal), "OBS status should parse recording stop events");
     AssertFalse(obsStatusSource.Contains("StartRecord", StringComparison.Ordinal), "OBS status UI must not control OBS recording");
     AssertFalse(obsStatusSource.Contains("StopRecord", StringComparison.Ordinal), "OBS status UI must not control OBS recording");
+}
+
+static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string overlayPath = Path.Combine(repoRoot, "frmMain.GoblinOverlay.cs");
+    string overlaySource = File.ReadAllText(overlayPath);
+    string releaseSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
+    string formSource = File.ReadAllText(Path.Combine(repoRoot, "Form1.cs"));
+    string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
+    string sessionStatsSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.cs"));
+    string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
+    string simulationMethod = ExtractMethodBody(releaseSource, "private void PortSimulateGoblinTrackerVsDebugCount");
+    string resetStatsMethod = ExtractMethodBody(sessionStatsSource, "private void PortResetGoblinTrackerStats");
+    string newGameMethod = ExtractMethodBody(sessionStatsSource, "private void PortIncrementGamesCreated");
+
+    AssertTrue(File.Exists(overlayPath), "VS Debug goblin overlay should live in a dedicated form partial");
+    AssertTrue(releaseSource.Contains("PortInitializeGoblinOverlay();", StringComparison.Ordinal), "runtime startup should initialize the overlay helper without adding a release setting");
+    AssertTrue(formSource.Contains("PortUpdateGoblinOverlay(diabloRunning);", StringComparison.Ordinal), "1-second status timer should refresh overlay visibility and text");
+    AssertTrue(overlaySource.Contains("if (!AppSettings.IsVsDebugProfile", StringComparison.Ordinal), "overlay should be gated to VS Debug profile");
+    AssertFalse(overlaySource.Contains("Promote", StringComparison.Ordinal), "overlay should not use promotion/debug package settings");
+
+    AssertTrue(overlaySource.Contains("PortNoActivateGoblinOverlayForm", StringComparison.Ordinal), "overlay should use its own no-activate form");
+    AssertTrue(overlaySource.Contains("WS_EX_NOACTIVATE", StringComparison.Ordinal), "overlay should not activate or steal focus");
+    AssertTrue(overlaySource.Contains("WS_EX_TOOLWINDOW", StringComparison.Ordinal), "overlay should stay out of Alt-Tab/taskbar surfaces");
+    AssertTrue(overlaySource.Contains("WS_EX_TRANSPARENT", StringComparison.Ordinal), "overlay should be click-through");
+    AssertTrue(overlaySource.Contains("protected override bool ShowWithoutActivation => true", StringComparison.Ordinal), "overlay should show without activation");
+    AssertTrue(overlaySource.Contains("FormBorderStyle = FormBorderStyle.None", StringComparison.Ordinal), "overlay should be borderless");
+    AssertTrue(overlaySource.Contains("ShowInTaskbar = false", StringComparison.Ordinal), "overlay should not create a taskbar entry");
+    AssertTrue(overlaySource.Contains("TopMost = true", StringComparison.Ordinal), "overlay should remain over Diablo while visible");
+    AssertFalse(overlaySource.Contains("SendKeys", StringComparison.Ordinal), "overlay must not send keys");
+    AssertFalse(overlaySource.Contains("mouse_event", StringComparison.Ordinal), "overlay must not click");
+    AssertFalse(overlaySource.Contains("SetCursorPos", StringComparison.Ordinal), "overlay must not move the cursor");
+
+    AssertTrue(overlaySource.Contains("PortFormatGoblinOverlayText", StringComparison.Ordinal), "overlay should have a focused text formatter");
+    AssertTrue(overlaySource.Contains("Count: {Math.Max(0, total)}  Goblin: {displayGoblinType}  Area: {displayArea}  Go Next: {(goNext ? \"Y\" : \"N\")}", StringComparison.Ordinal), "overlay text should use the requested single-line label contract");
+    AssertTrue(overlaySource.Contains("PortFormatGoblinOverlayText(0, \"--\", \"--\", false)", StringComparison.Ordinal), "overlay default state should be Count 0, blank goblin/area, and Go Next N");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayShouldGoNext", StringComparison.Ordinal), "overlay should isolate Go Next comparison logic");
+    AssertTrue(overlaySource.Contains("PortLocationKey(lastAcceptedAreaKey)", StringComparison.Ordinal), "accepted area should be normalized before comparing");
+    AssertTrue(overlaySource.Contains("PortLocationKey(currentConfirmedLocation)", StringComparison.Ordinal), "current confirmed area should be normalized before comparing");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, portLastConfirmedLocation)", StringComparison.Ordinal), "Go Next should be recomputed from current confirmed area on every timer refresh");
+
+    AssertTrue(overlaySource.Contains("FindDiabloWindow()", StringComparison.Ordinal), "overlay should follow the Diablo window");
+    AssertTrue(overlaySource.Contains("IsIconic(diabloWindow)", StringComparison.Ordinal), "overlay should hide while Diablo is minimized");
+    AssertTrue(overlaySource.Contains("PortTryGetDiabloRect(out RECT rect)", StringComparison.Ordinal), "overlay should position from Diablo rect");
+    AssertTrue(overlaySource.Contains("rect.Left + (diabloWidth - portGoblinOverlayForm.Width) / 2", StringComparison.Ordinal), "overlay should be centered over Diablo");
+    AssertTrue(overlaySource.Contains("rect.Top + PortGoblinOverlayTopInset", StringComparison.Ordinal), "overlay should sit at the top of Diablo with a small inset");
+
+    AssertTrue(autoCountMethod.Contains("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "successful automatic counts should update overlay state");
+    AssertTrue(autoCountMethod.IndexOf("GoblinAutoCountAccepted", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "overlay should update only after automatic count acceptance");
+    AssertTrue(autoCountMethod.IndexOf("if (total <= 0)", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal), "overlay should not update when accepted count total is invalid");
+    AssertTrue(autoCountMethod.Contains("PortPublishAcceptedGoblinCountObservation(area, observation.GoblinType, observation.Source, \"AutomaticCountAccepted\", guardResult);", StringComparison.Ordinal), "existing accepted observation publish should remain separate");
+    AssertTrue(autoCountMethod.IndexOf("PortSetGoblinOverlayAcceptedCount(", StringComparison.Ordinal) < autoCountMethod.IndexOf("PortCaptureAcceptedGoblinEvidenceBestSamples", StringComparison.Ordinal), "overlay update should stay in the accepted-count success flow");
+    AssertFalse(simulationMethod.Contains("PortSetGoblinOverlayAcceptedCount", StringComparison.Ordinal), "VS Debug Sim Count must not update live overlay state");
+    AssertFalse(releaseSource.Contains("PortSetGoblinOverlayAcceptedCount(total,", StringComparison.Ordinal), "manual/debug count code should not update live overlay state");
+
+    AssertTrue(resetStatsMethod.Contains("PortResetGoblinOverlayState(\"TrackerStatsReset\")", StringComparison.Ordinal), "Reset Stats should clear overlay accepted-count state");
+    AssertTrue(newGameMethod.Contains("PortResetGoblinOverlayState(\"NewGameCreated\")", StringComparison.Ordinal), "New Game should clear overlay accepted-count state");
+    AssertTrue(releaseSource.Contains("PortDisposeGoblinOverlay();", StringComparison.Ordinal), "form close should dispose the overlay during quiet shutdown");
 }
 
 static void TestMissingDiabloPathKeepsStartupInSetupRequired()

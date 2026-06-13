@@ -22,6 +22,8 @@ Reviewed video evidence should be folded into the normal debug package, not a se
 
 The VS Debug OBS Status group is passive. It may show the latest local OBS monitor state plus `Start` and `Stop` times from `Video Clip Review\Auto Record Diablo.log` and the `obs64` process, but it must not launch OBS or start/stop recording.
 
+The VS Debug in-game Goblin overlay is also passive. It is a click-through, no-activate topmost window over Diablo that displays accepted automatic-count state only; it must not send input, change routing, alter count acceptance, or update from `Sim Count`/debug simulation paths.
+
 ## Useful Logs And Evidence
 
 - Human-readable logs show route, timing, hotkey, combat, town, and Goblin Tracker decisions.
