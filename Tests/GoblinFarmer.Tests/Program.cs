@@ -5628,6 +5628,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
     string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+    string encounterSuppressionPolicySource = File.ReadAllText(Path.Combine(repoRoot, "GoblinAutoCountEncounterSuppressionPolicy.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
     string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
@@ -5670,10 +5671,10 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(evidenceModelSource.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "Engaged-only journal evidence should have an explicit pending-confirmation reason");
     AssertTrue(autoCountSource.Contains("refreshEncounterLastSeen", StringComparison.Ordinal), "suppressed source variants should refresh encounter last-seen state instead of expiring from the original count time");
     AssertTrue(autoCountSource.Contains("EvidenceKey = string.IsNullOrWhiteSpace(globalEvidenceKey)", StringComparison.Ordinal), "suppressed source variants should refresh the encounter evidence key so old journal rows cannot replay after area changes");
-    AssertTrue(evidenceModelSource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
-    AssertTrue(evidenceModelSource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
-    AssertTrue(evidenceModelSource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
-    AssertTrue(evidenceModelSource.Contains("RecentSourceVariantLastSeen", StringComparison.Ordinal), "source variants should remain suppressed while the same stale encounter is still being seen");
+    AssertTrue(encounterSuppressionPolicySource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
+    AssertTrue(encounterSuppressionPolicySource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
+    AssertTrue(encounterSuppressionPolicySource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
+    AssertTrue(encounterSuppressionPolicySource.Contains("RecentSourceVariantLastSeen", StringComparison.Ordinal), "source variants should remain suppressed while the same stale encounter is still being seen");
     AssertTrue(autoCountSource.Contains("PortGoblinEvidenceHash", StringComparison.Ordinal), "accepted and suppressed auto-count logs should include a compact evidence hash");
     AssertTrue(autoCountMethod.Contains("encounterMatch=", StringComparison.Ordinal), "auto-count logs should include the duplicate encounter match reason");
     AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");

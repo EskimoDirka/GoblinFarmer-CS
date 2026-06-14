@@ -2,6 +2,25 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-14 Goblin Evidence Policy Refactor
+
+- Scope: Phase 2 refactor start. Mechanically extracted Goblin Evidence policy types into `GoblinCountAreaPolicies.cs`, `GoblinJournalFreshnessPolicy.cs`, and `GoblinAutoCountEncounterSuppressionPolicy.cs`.
+- Behavior note: no production behavior, auto-count thresholds, scanner execution, overlay behavior, combat, routing, repair, salvage, gem-stash, Kadala, make-new-game, replay execution, package replay policy, package format, or OBS control behavior changed.
+
+Validation commands:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix
+git diff --check
+```
+
+Results:
+
+- Passed in the source worktree before commit: both builds, full console harness, AutoCount Matrix with `scenarios=9`, `steps=21`, `failed=0`, and `git diff --check` with LF-to-CRLF normalization warnings only.
+
 ## 2026-06-14 Auto-Count Stabilization Tooling Pass
 
 - Scope: tooling and coverage only. No runtime auto-count acceptance policy, scanner execution, overlay display, combat, route, town, repair, salvage, gem stash, Kadala, or make-new-game behavior was changed.
