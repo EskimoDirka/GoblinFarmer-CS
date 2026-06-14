@@ -106,6 +106,7 @@ Run("Debug package limits observation diagnostic crops", TestDebugPackageLimitsO
 Run("Debug package limits goblin evidence event screenshots", TestDebugPackageLimitsGoblinEvidenceEventScreenshots);
 Run("Debug package includes success screenshots only with opt-in", TestDebugPackageIncludesSuccessScreenshotsWithOptIn);
 Run("Debug package includes built-in analysis reports", TestDebugPackageIncludesBuiltInAnalysisReports);
+Run("Auto-count review notes triage updates package from video notes", TestAutoCountReviewNotesTriageUpdatesPackageFromVideoNotes);
 Run("Debug package includes reviewed video evidence when requested", TestDebugPackageIncludesReviewedVideoEvidenceWhenRequested);
 Run("Debug package auto-aligns video review evidence by default", TestDebugPackageAutoAlignsVideoReviewEvidenceByDefault);
 Run("Debug package includes size summary report", TestDebugPackageIncludesSizeSummaryReport);
@@ -4307,6 +4308,100 @@ static void TestDebugPackageIncludesBuiltInAnalysisReports()
     }
 }
 
+static void TestAutoCountReviewNotesTriageUpdatesPackageFromVideoNotes()
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
+    string packageRoot = Path.Combine(testRoot, "PackageRoot");
+    string packagesRoot = Path.Combine(testRoot, "DebugPackages");
+    string videoRoot = Path.Combine(testRoot, "Video Clip Review");
+    string scenarioDraftRoot = Path.Combine(testRoot, "AutoCountScenarioDrafts");
+    string logs = Path.Combine(packageRoot, "Logs");
+    string goblinEvidenceRoot = Path.Combine(packageRoot, "Debug", "GoblinEvidence");
+    string decisionBundle = Path.Combine(goblinEvidenceRoot, "DecisionBundles", "20260607_120005_BloodThief");
+    Directory.CreateDirectory(logs);
+    Directory.CreateDirectory(packagesRoot);
+    Directory.CreateDirectory(videoRoot);
+    Directory.CreateDirectory(decisionBundle);
+
+    try
+    {
+        File.WriteAllLines(Path.Combine(logs, "GoblinFarmer.log"),
+        [
+            "[2026-06-07 12:00:01.000] GoblinAutoCountAccepted source=Journal; goblinType=Treasure Goblin; areaKey=Cave Of The Moon Clan Level 2; decision=Accepted; reason=Eligible; evidenceHash=abc123; countToDisplayMs=24",
+            "[2026-06-07 12:00:05.000] GoblinAutoCountSuppressed source=Journal; goblinType=Blood Thief; areaKey=Cathedral Level 2; decision=Suppressed; reason=EncounterAlreadyAutoCounted; evidenceHash=stale456; evidenceConfidence=0.960",
+            "[2026-06-07 12:00:06.000] GoblinLatencyTrace stage=NotificationDisplayed; goblinType=Blood Thief; areaKey=Cathedral Level 2; countToDisplayMs=34; detectedToDisplayMs=90",
+        ]);
+        File.WriteAllLines(Path.Combine(goblinEvidenceRoot, "GoblinTrackerEvents.jsonl"),
+        [
+            "{\"timestamp\":\"2026-06-07T12:00:05.0000000-05:00\",\"event\":\"GoblinAutoCountSuppressed\",\"source\":\"Journal\",\"goblinType\":\"Blood Thief\",\"areaKey\":\"Cathedral Level 2\",\"reason\":\"EncounterAlreadyAutoCounted\",\"evidenceHash\":\"stale456\"}",
+        ]);
+        File.WriteAllText(Path.Combine(decisionBundle, "decision-trace.txt"), "GoblinAutoCountSuppressed stale456 Blood Thief Cathedral Level 2 EncounterAlreadyAutoCounted");
+        File.WriteAllText(Path.Combine(decisionBundle, "BloodThief_Journal.png"), "placeholder journal crop");
+        File.WriteAllText(Path.Combine(decisionBundle, "BloodThief_Minimap.png"), "placeholder minimap crop");
+
+        string sourcePackage = Path.Combine(packagesRoot, "GoblinFarmer_Debug_20260607_120010.zip");
+        ZipFile.CreateFromDirectory(packageRoot, sourcePackage);
+        string videoPath = Path.Combine(videoRoot, "2026-06-07 12-00-00.mkv");
+        File.WriteAllText(videoPath, "fake video; filename timestamp is enough for triage alignment");
+
+        string repoRoot = FindRepositoryRootForTests();
+        string scriptPath = Path.Combine(repoRoot, "Scripts", "add-auto-count-review-notes.ps1");
+        string outputPath = Path.Combine(packagesRoot, "GoblinFarmer_Debug_20260607_120010_AutoCountNotes.zip");
+        using Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -DebugPackagesRoot \"{packagesRoot}\" -VideoReviewRoot \"{videoRoot}\" -ReviewTimestamp \"00:00:05=Cathedral stale Blood Thief false count\" -ReviewNote \"PF2 second goblin note without timestamp\" -OutputPath \"{outputPath}\" -ScenarioDraftRoot \"{scenarioDraftRoot}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("Could not start auto-count review notes script");
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit(60000);
+        AssertEqual(0, process.ExitCode, $"auto-count review notes script should succeed. stdout={output}; stderr={error}");
+        AssertTrue(File.Exists(outputPath), "updated debug package should be written beside the source package");
+        AssertTrue(output.Contains("Scenario draft: created", StringComparison.OrdinalIgnoreCase), "auto-count review notes script should create a draft matrix scenario package automatically");
+        AssertTrue(Directory.Exists(scenarioDraftRoot), "scenario draft root should be created automatically");
+        string[] draftScenarioFiles = Directory.GetFiles(scenarioDraftRoot, "draft-scenario.txt", SearchOption.AllDirectories);
+        string[] draftExplanationFiles = Directory.GetFiles(scenarioDraftRoot, "draft-explanation.md", SearchOption.AllDirectories);
+        AssertEqual(1, draftScenarioFiles.Length, "one draft scenario file should be created");
+        AssertEqual(1, draftExplanationFiles.Length, "one draft explanation file should be created");
+        string draftScenario = File.ReadAllText(draftScenarioFiles[0]);
+        string draftExplanation = File.ReadAllText(draftExplanationFiles[0]);
+        AssertTrue(draftScenario.Contains("Draft only", StringComparison.OrdinalIgnoreCase), "draft scenario should remain review-only");
+        AssertTrue(draftExplanation.Contains("Cathedral stale Blood Thief", StringComparison.OrdinalIgnoreCase), "draft explanation should carry review notes");
+
+        using ZipArchive archive = ZipFile.OpenRead(outputPath);
+        string markdown = ReadRequiredZipText(archive, "AutoCountReviewNotes/auto-count-review-notes.md");
+        string json = ReadRequiredZipText(archive, "AutoCountReviewNotes/auto-count-review-notes.json");
+        string validation = ReadRequiredZipText(archive, "AutoCountReviewNotes/validation.txt");
+
+        AssertTrue(markdown.Contains("Auto-Count Review Notes Triage", StringComparison.OrdinalIgnoreCase), "markdown should identify the review-notes triage report");
+        AssertTrue(markdown.Contains("Review video:", StringComparison.OrdinalIgnoreCase), "markdown should record the selected review video");
+        AssertTrue(markdown.Contains("Video start source: FilenameTimestamp", StringComparison.OrdinalIgnoreCase), "markdown should align timestamps from the OBS filename");
+        AssertTrue(markdown.Contains("Cathedral stale Blood Thief", StringComparison.OrdinalIgnoreCase), "markdown should include supplied notes");
+        AssertTrue(markdown.Contains("SuppressedCandidates", StringComparison.OrdinalIgnoreCase), "markdown should group suppressed candidates");
+        AssertTrue(markdown.Contains("Suppression reasons", StringComparison.OrdinalIgnoreCase), "markdown should summarize suppression reasons");
+        AssertTrue(markdown.Contains("DecisionBundle", StringComparison.OrdinalIgnoreCase), "markdown should reference decision bundles");
+        AssertTrue(markdown.Contains("Package Size Policy", StringComparison.OrdinalIgnoreCase), "markdown should document bounded package behavior");
+        AssertTrue(json.Contains("\"ReviewVideoPath\"", StringComparison.OrdinalIgnoreCase), "json should include the selected review video path");
+        AssertTrue(json.Contains("\"VideoStartSource\"", StringComparison.OrdinalIgnoreCase), "json should include video start source");
+        AssertTrue(json.Contains("\"Notes\"", StringComparison.OrdinalIgnoreCase), "json should include note reports");
+        AssertTrue(json.Contains("\"EvidenceReferences\"", StringComparison.OrdinalIgnoreCase), "json should include evidence references");
+        AssertTrue(validation.Contains("Full videos are not added", StringComparison.OrdinalIgnoreCase), "validation should state that videos stay out of the package");
+        AssertFalse(archive.Entries.Any(entry => entry.FullName.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) || entry.FullName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)), "updated package should not include full video files");
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
+    }
+}
+
 static void TestDebugPackageIncludesReviewedVideoEvidenceWhenRequested()
 {
     string testRoot = Path.Combine(Path.GetTempPath(), "GoblinFarmer.PackageTests", Guid.NewGuid().ToString("N"));
@@ -5453,6 +5548,7 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     string cleanupDeleteLauncher = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "Cleanup Project Delete.bat"));
     string cleanupScriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "cleanup-project.ps1"));
     string debugAnalysisToolsSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "debug-analysis-tools.ps1"));
+    string reviewNotesScriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "add-auto-count-review-notes.ps1"));
     string[] expectedBatchScripts =
     [
         "Cleanup Project.bat",
@@ -5461,6 +5557,7 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     ];
     string[] expectedActivePowerShellScripts =
     [
+        "add-auto-count-review-notes.ps1",
         "cleanup-project.ps1",
         "create-debug-package.ps1",
         "debug-analysis-tools.ps1",
@@ -5590,12 +5687,21 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinEvidenceHealthContent", StringComparison.Ordinal), "shared debug helper should build the evidence health report");
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaAutoCountTriageData", StringComparison.Ordinal), "shared debug helper should build auto-count triage data");
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaAutoCountTriageMarkdownContent", StringComparison.Ordinal), "shared debug helper should build auto-count triage markdown");
+    AssertTrue(debugAnalysisToolsSource.Contains("New-DgaAutoCountReviewNotesTriageData", StringComparison.Ordinal), "shared debug helper should build note-scoped auto-count triage data");
+    AssertTrue(debugAnalysisToolsSource.Contains("New-DgaAutoCountReviewNotesMarkdownContent", StringComparison.Ordinal), "shared debug helper should build note-scoped auto-count triage markdown");
     AssertTrue(packageScript.Contains("goblin-auto-count-triage.md", StringComparison.Ordinal), "debug package script should include auto-count triage markdown");
     AssertTrue(packageScript.Contains("goblin-auto-count-triage.json", StringComparison.Ordinal), "debug package script should include auto-count triage JSON");
+    AssertTrue(reviewNotesScriptSource.Contains("DebugPackages", StringComparison.Ordinal), "review-notes triage helper should search the standard debug package folder");
+    AssertTrue(reviewNotesScriptSource.Contains("Video Clip Review", StringComparison.Ordinal), "review-notes triage helper should search the standard OBS clip folder");
+    AssertTrue(reviewNotesScriptSource.Contains("ReviewVideoPath", StringComparison.Ordinal), "review-notes triage helper should accept an explicit reviewed video path");
+    AssertTrue(reviewNotesScriptSource.Contains("AutoCountReviewNotes", StringComparison.Ordinal), "review-notes triage helper should write reports into a bounded package subfolder");
+    AssertTrue(reviewNotesScriptSource.Contains("Full videos are not added", StringComparison.Ordinal), "review-notes triage helper should keep full videos out of packages");
+    AssertFalse(packageScript.Contains("add-auto-count-review-notes.ps1", StringComparison.Ordinal), "normal debug package creation should not automatically invoke review-notes triage");
     AssertTrue(projectSource.Contains("Scripts\\create-debug-package.ps1", StringComparison.Ordinal), "release/export ZIP package script should remain published");
     AssertTrue(projectSource.Contains("Scripts\\Create Debug Package.bat", StringComparison.Ordinal), "release/export ZIP package launcher should remain published");
     AssertTrue(projectSource.Contains("Scripts\\debug-analysis-tools.ps1", StringComparison.Ordinal), "shared debug package helper should remain published because the package script dot-sources it");
     AssertTrue(projectSource.Contains("Scripts\\draft-auto-count-scenario.ps1", StringComparison.Ordinal), "auto-count scenario draft helper should be copied to VS Debug and Release publish outputs");
+    AssertTrue(projectSource.Contains("Scripts\\add-auto-count-review-notes.ps1", StringComparison.Ordinal), "auto-count review notes helper should be copied to VS Debug and Release publish outputs");
     string[] activeBatchScripts = Directory.GetFiles(Path.Combine(repoRoot, "Scripts"), "*.bat", SearchOption.TopDirectoryOnly)
         .Select(Path.GetFileName)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
@@ -5628,6 +5734,7 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     string autoCountSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.SessionStats.AutoCount.cs"));
     string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
     string evidenceModelSource = File.ReadAllText(Path.Combine(repoRoot, "GoblinEvidence.cs"));
+    string encounterSuppressionPolicySource = File.ReadAllText(Path.Combine(repoRoot, "GoblinAutoCountEncounterSuppressionPolicy.cs"));
     string automationSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.PortedAutomation.cs.cs"));
     string observeMethod = ExtractMethodBody(sessionStatsSource, "private bool PortObserveGoblinCandidate");
     string autoCountMethod = ExtractMethodBody(autoCountSource, "private bool PortTryRecordAutomaticGoblinCount");
@@ -5670,10 +5777,10 @@ static void TestGoblinAutomaticCountingRequiresFreshArmedEvidence()
     AssertTrue(evidenceModelSource.Contains("JournalPendingKilledOrMinimapConfirmation", StringComparison.Ordinal), "Engaged-only journal evidence should have an explicit pending-confirmation reason");
     AssertTrue(autoCountSource.Contains("refreshEncounterLastSeen", StringComparison.Ordinal), "suppressed source variants should refresh encounter last-seen state instead of expiring from the original count time");
     AssertTrue(autoCountSource.Contains("EvidenceKey = string.IsNullOrWhiteSpace(globalEvidenceKey)", StringComparison.Ordinal), "suppressed source variants should refresh the encounter evidence key so old journal rows cannot replay after area changes");
-    AssertTrue(evidenceModelSource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
-    AssertTrue(evidenceModelSource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
-    AssertTrue(evidenceModelSource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
-    AssertTrue(evidenceModelSource.Contains("RecentSourceVariantLastSeen", StringComparison.Ordinal), "source variants should remain suppressed while the same stale encounter is still being seen");
+    AssertTrue(encounterSuppressionPolicySource.Contains("SameEvidenceKey", StringComparison.Ordinal), "encounter suppression should still compare exact area-independent evidence keys");
+    AssertTrue(encounterSuppressionPolicySource.Contains("JournalLineBucket", StringComparison.Ordinal), "encounter suppression should treat nearby journal row buckets as the same visible row");
+    AssertTrue(encounterSuppressionPolicySource.Contains("RecentSourceVariant", StringComparison.Ordinal), "encounter suppression should block quick Journal/Minimap variants from double-counting one encounter");
+    AssertTrue(encounterSuppressionPolicySource.Contains("RecentSourceVariantLastSeen", StringComparison.Ordinal), "source variants should remain suppressed while the same stale encounter is still being seen");
     AssertTrue(autoCountSource.Contains("PortGoblinEvidenceHash", StringComparison.Ordinal), "accepted and suppressed auto-count logs should include a compact evidence hash");
     AssertTrue(autoCountMethod.Contains("encounterMatch=", StringComparison.Ordinal), "auto-count logs should include the duplicate encounter match reason");
     AssertTrue(autoCountMethod.Contains("StaleEvidence", StringComparison.Ordinal), "automatic counting should suppress stale evidence signatures");

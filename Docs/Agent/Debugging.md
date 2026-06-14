@@ -21,6 +21,16 @@ Do not create alternate debug package generators without explicit approval.
 
 Reviewed video evidence should be folded into the normal debug package, not a separate package format. By default, `Scripts\Create Debug Package.bat` attempts to find the newest OBS/attached recording under `Video Clip Review`, align high-value log events to video offsets, and extract selected frames into `ReviewEvidence`. Pass selected timestamps and notes to `Scripts\create-debug-package.ps1` using `-ReviewVideoPath`, `-ReviewTimestamp`, `-ReviewNotesPath`, `-ReviewNotesUrl`, and optional `-ReviewEvidenceFolder` when the automatic alignment misses something. Full video files remain outside ZIPs by default. The default live-test notes source is the shared Google Sheet: `https://docs.google.com/spreadsheets/d/1y4qj2gwqmtMxiG3t-epvyjaPoW7TM74bOcbeFyGn9kw/edit?gid=0#gid=0`.
 
+After a video review, use `Scripts\add-auto-count-review-notes.ps1` with only the review notes/timestamps during normal work. If `-DebugPackagePath` or `-ReviewVideoPath` is omitted, the helper searches the standard repo-local `DebugPackages\` and `Video Clip Review\` folders and chooses the newest matching ZIP/video. Example:
+
+```powershell
+.\Scripts\add-auto-count-review-notes.ps1 -ReviewTimestamp "00:07:11=Cathedral Level 2 stale Blood Thief false count" -ReviewTimestamp "00:15:32=PF1 first goblin Go Next should stay N"
+```
+
+The helper writes a new `*_AutoCountNotes.zip` by default and adds `AutoCountReviewNotes\auto-count-review-notes.md`, `AutoCountReviewNotes\auto-count-review-notes.json`, and `AutoCountReviewNotes\validation.txt`. It also automatically creates a review-only AutoCount Matrix draft under `Debug\AutoCountScenarioDrafts` from the same package and notes; use `-SkipScenarioDraft` only for unusual cases where no draft is wanted. It groups accepted counts, suppressed candidates, pending evidence, stale Journal rows, suppression reasons, DecisionBundle/GoblinTrackerEvents references, Journal/Minimap crop references, notification traces, and likely review targets. It references existing package evidence only; full videos and bulk image folders remain excluded.
+
+For the `debug review` shortcut phrase, follow `Docs\Agent\Debug_Review_Automation.md`. That workflow reads the Google Doc `Video Review`, parses `Area` / `Timestamp` / `Note` blocks, and runs the helper with only parsed notes so the newest debug package and video are selected automatically.
+
 The VS Debug OBS Status group is passive. It may show the latest local OBS monitor state plus `Start` and `Stop` times from `Video Clip Review\Auto Record Diablo.log` and the `obs64` process, but it must not launch OBS or start/stop recording.
 
 The VS Debug in-game Goblin overlay is also passive. It is a click-through, no-activate topmost window over Diablo that displays accepted automatic-count state only; it must not send input, change routing, alter count acceptance, or update from `Sim Count`/debug simulation paths.
@@ -53,6 +63,7 @@ The VS Debug in-game Goblin overlay is also passive. It is a click-through, no-a
 - Replay must not run during startup, VS Debug startup, scanner execution, route workflows, package creation, form close, or automated live testing.
 - Log-only replay validates recorded policy/workflow decisions. Image-recognition replay requires curated frames/crops from `ReviewEvidence`; logs alone cannot validate pixel classifier changes. Replay still does not validate real-time scanner timing, sound playback, mouse click-through, or Diablo focus behavior.
 - Auto-count triage reports are generated during debug package analysis. They group accepted counts, suppressions, pending evidence, stale Journal rows, duplicate/area-limit/blocked-area suppressions, area-resolution changes, and latency traces from whichever package sources exist.
+- Note-scoped auto-count triage reports and review-only matrix drafts are added explicitly after review with `Scripts\add-auto-count-review-notes.ps1`; this helper must not run from startup, scanner workflows, route automation, package creation, form close, or live testing.
 - Use `Scripts\draft-auto-count-scenario.ps1 -DebugPackagePath <zip-or-folder> -Timestamp <hh:mm:ss> -ReviewNotes <text>` to create a review-only scenario draft under `Debug\AutoCountScenarioDrafts`. The draft helper must not modify production policy or committed test fixtures; promote scenarios manually only after the assertion is understood.
 - Use the explicit test-harness command `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix` to run the curated AutoCount Matrix. It is policy replay only and must not be invoked by startup, scanners, route workflows, package creation, or VS Debug form startup.
 

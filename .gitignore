@@ -434,6 +434,7 @@ Screenshots/
 DebugPackages/
 /Video Clip Review/
 /Debug Evidence/
+/.tmp.driveupload/
 /ProjectBrain/
 Sessions/
 debug-screenshots/
@@ -465,6 +466,7 @@ Scripts/Local Tools/
 !Scripts/Create Debug Package.bat
 !Scripts/debug-analysis-tools.ps1
 !Scripts/draft-auto-count-scenario.ps1
+!Scripts/add-auto-count-review-notes.ps1
 !Scripts/cleanup-project.ps1
 !Scripts/Cleanup Project.bat
 !Scripts/Cleanup Project Delete.bat

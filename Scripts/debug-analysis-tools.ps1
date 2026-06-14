@@ -22,6 +22,9 @@ $script:DgaTrackerMarkers = @(
     "GoblinLatencyTrace",
     "GoblinOverlayDetectedAreaUpdated",
     "GoblinOverlayUpdated",
+    "GoblinAutoCountNotificationQueued",
+    "GoblinAutoCountNotificationDisplayed",
+    "GoblinAutoCountNotificationDropped",
     "GoblinEvidenceJournalEngagedPromotedToKilledCompanion",
     "GoblinEvidenceJournalKilledCompanionRejected"
 )
@@ -71,6 +74,64 @@ function Get-DgaFiles {
     }
 
     return @(Get-ChildItem -LiteralPath $path -File -Recurse -ErrorAction SilentlyContinue)
+}
+
+function Test-DgaPathUnder {
+    param(
+        [string]$Path,
+        [string]$Root
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Root)) {
+        return $false
+    }
+
+    try {
+        $pathFull = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+        $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+        return $pathFull.Equals($rootFull, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $pathFull.StartsWith($rootFull + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $pathFull.StartsWith($rootFull + [System.IO.Path]::AltDirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    catch {
+        return $false
+    }
+}
+
+function New-DgaEvidenceIndex {
+    param([string]$Root)
+
+    $allFiles = @(Get-DgaFiles $Root)
+    $logsRoot = Join-Path $Root "Logs"
+    $goblinEvidenceRoot = Join-Path $Root "Debug\GoblinEvidence"
+    $decisionBundleRoot = Join-Path $Root "Debug\GoblinEvidence\DecisionBundles"
+    $reviewEvidenceRoot = Join-Path $Root "ReviewEvidence"
+
+    $logs = @($allFiles |
+        Where-Object { (Test-DgaPathUnder $_.FullName $logsRoot) -and ($_.Extension -eq ".log" -or $_.Extension -eq ".txt") } |
+        Sort-Object LastWriteTime, Name)
+    $goblinEvidenceFiles = @($allFiles | Where-Object { Test-DgaPathUnder $_.FullName $goblinEvidenceRoot })
+    $decisionBundleFiles = @($allFiles | Where-Object { Test-DgaPathUnder $_.FullName $decisionBundleRoot })
+    $reviewEvidenceFiles = @($allFiles | Where-Object { Test-DgaPathUnder $_.FullName $reviewEvidenceRoot })
+    $eventFiles = @($goblinEvidenceFiles | Where-Object { $_.Name.Equals("GoblinTrackerEvents.jsonl", [System.StringComparison]::OrdinalIgnoreCase) })
+    $decisionTraceFiles = @($decisionBundleFiles | Where-Object { $_.Name.Equals("decision-trace.txt", [System.StringComparison]::OrdinalIgnoreCase) })
+    $reviewFrames = @($reviewEvidenceFiles | Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
+    $journalCrops = @($allFiles | Where-Object { $_.Name.IndexOf("Journal", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
+    $minimapCrops = @($allFiles | Where-Object { $_.Name.IndexOf("Minimap", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
+
+    return [pscustomobject]@{
+        Root = $Root
+        AllFiles = $allFiles
+        Logs = $logs
+        GoblinEvidenceFiles = $goblinEvidenceFiles
+        GoblinTrackerEventsJsonlFiles = $eventFiles
+        DecisionBundleFiles = $decisionBundleFiles
+        DecisionTraceFiles = $decisionTraceFiles
+        ReviewEvidenceFiles = $reviewEvidenceFiles
+        ReviewEvidenceFrames = $reviewFrames
+        JournalCrops = $journalCrops
+        MinimapCrops = $minimapCrops
+    }
 }
 
 function Get-DgaFileTotals {
@@ -591,13 +652,7 @@ function New-DgaAutoCountTriageData {
     param([string]$Root)
 
     $rows = @(Get-DgaAutoCountTriageRows $Root)
-    $allFiles = @(Get-DgaFiles $Root)
-    $eventFiles = @(Get-DgaFiles $Root "Debug\GoblinEvidence" | Where-Object { $_.Name.Equals("GoblinTrackerEvents.jsonl", [System.StringComparison]::OrdinalIgnoreCase) })
-    $decisionBundles = @(Get-DgaFiles $Root "Debug\GoblinEvidence\DecisionBundles" | Where-Object { $_.Name.Equals("decision-trace.txt", [System.StringComparison]::OrdinalIgnoreCase) })
-    $reviewEvidenceFiles = @(Get-DgaFiles $Root "ReviewEvidence")
-    $reviewFrames = @($reviewEvidenceFiles | Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
-    $journalCrops = @($allFiles | Where-Object { $_.Name.IndexOf("Journal", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
-    $minimapCrops = @($allFiles | Where-Object { $_.Name.IndexOf("Minimap", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
+    $evidenceIndex = New-DgaEvidenceIndex $Root
 
     $accepted = @($rows | Where-Object { $_.Event -eq "GoblinAutoCountAccepted" -or $_.Event -eq "GoblinCountAccepted" })
     $suppressed = @($rows | Where-Object { $_.Event -eq "GoblinAutoCountSuppressed" -or $_.Event -eq "GoblinCountSuppressed" })
@@ -666,13 +721,13 @@ function New-DgaAutoCountTriageData {
         Generated = (Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")
         Root = $Root
         SourceAvailability = [pscustomobject]@{
-            Logs = @(Get-DgaAllLogs $Root).Count
-            GoblinTrackerEventsJsonl = $eventFiles.Count
-            DecisionBundles = $decisionBundles.Count
-            ReviewEvidenceFiles = $reviewEvidenceFiles.Count
-            ReviewEvidenceFrames = $reviewFrames.Count
-            JournalCrops = $journalCrops.Count
-            MinimapCrops = $minimapCrops.Count
+            Logs = $evidenceIndex.Logs.Count
+            GoblinTrackerEventsJsonl = $evidenceIndex.GoblinTrackerEventsJsonlFiles.Count
+            DecisionBundles = $evidenceIndex.DecisionTraceFiles.Count
+            ReviewEvidenceFiles = $evidenceIndex.ReviewEvidenceFiles.Count
+            ReviewEvidenceFrames = $evidenceIndex.ReviewEvidenceFrames.Count
+            JournalCrops = $evidenceIndex.JournalCrops.Count
+            MinimapCrops = $evidenceIndex.MinimapCrops.Count
         }
         Groups = [pscustomobject]@{
             AcceptedCounts = $accepted.Count
@@ -748,6 +803,649 @@ function New-DgaAutoCountTriageMarkdownContent {
     return $lines
 }
 
+function Convert-DgaReviewTimestampToSeconds {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return -1.0
+    }
+
+    $trimmed = $Value.Trim()
+    $parts = @($trimmed -split ':')
+    if ($parts.Count -lt 2 -or $parts.Count -gt 3) {
+        return -1.0
+    }
+
+    $hours = 0.0
+    $minutes = 0.0
+    $seconds = 0.0
+    try {
+        if ($parts.Count -eq 3) {
+            $hours = [double]::Parse($parts[0], [System.Globalization.CultureInfo]::InvariantCulture)
+            $minutes = [double]::Parse($parts[1], [System.Globalization.CultureInfo]::InvariantCulture)
+            $seconds = [double]::Parse($parts[2], [System.Globalization.CultureInfo]::InvariantCulture)
+        }
+        else {
+            $minutes = [double]::Parse($parts[0], [System.Globalization.CultureInfo]::InvariantCulture)
+            $seconds = [double]::Parse($parts[1], [System.Globalization.CultureInfo]::InvariantCulture)
+        }
+    }
+    catch {
+        return -1.0
+    }
+
+    return ($hours * 3600.0) + ($minutes * 60.0) + $seconds
+}
+
+function Try-ParseDgaLocalTime {
+    param(
+        [string]$Value,
+        [ref]$Parsed
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $false
+    }
+
+    $styles = [System.Globalization.DateTimeStyles]::AllowWhiteSpaces -bor [System.Globalization.DateTimeStyles]::AssumeLocal
+    $candidate = [DateTime]::MinValue
+    if ([DateTime]::TryParse($Value, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$candidate)) {
+        $Parsed.Value = $candidate
+        return $true
+    }
+
+    return $false
+}
+
+function Get-DgaReviewVideoStart {
+    param([string]$Root)
+
+    $manifestPath = Join-Path $Root "ReviewEvidence\manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $text = [string]$manifest.AutoReviewVideoStartLocal
+        if ([string]::IsNullOrWhiteSpace($text)) {
+            $text = [string]$manifest.VideoStartLocal
+        }
+
+        $parsed = [DateTime]::MinValue
+        if (Try-ParseDgaLocalTime $text ([ref]$parsed)) {
+            return $parsed
+        }
+    }
+    catch {
+        return $null
+    }
+
+    return $null
+}
+
+function Find-DgaFfprobeCommand {
+    $command = Get-Command ffprobe -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $command = Get-Command ffprobe.cmd -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    return ""
+}
+
+function Get-DgaVideoDurationSeconds {
+    param([string]$VideoPath)
+
+    $ffprobe = Find-DgaFfprobeCommand
+    if ([string]::IsNullOrWhiteSpace($ffprobe) -or -not (Test-Path -LiteralPath $VideoPath -PathType Leaf)) {
+        return 0.0
+    }
+
+    try {
+        $output = & $ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $VideoPath 2>$null
+        $text = (@($output) | Select-Object -First 1).ToString()
+        $duration = 0.0
+        if ([double]::TryParse($text, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$duration)) {
+            return [Math]::Max(0.0, $duration)
+        }
+    }
+    catch {
+        return 0.0
+    }
+
+    return 0.0
+}
+
+function Try-ParseDgaVideoStartFromName {
+    param(
+        [string]$FileName,
+        [ref]$StartTime
+    )
+
+    $match = [regex]::Match(
+        $FileName,
+        '(?<year>20\d{2})[.\-_](?<month>\d{2})[.\-_](?<day>\d{2})[\s_\-]+(?<hour>\d{2})[.\-_:](?<minute>\d{2})[.\-_:](?<second>\d{2})(?:[.\-_:](?<fraction>\d{1,3}))?')
+    if (-not $match.Success) {
+        return $false
+    }
+
+    try {
+        $fraction = if ($match.Groups["fraction"].Success) { $match.Groups["fraction"].Value.PadRight(3, '0').Substring(0, 3) } else { "000" }
+        $text = "$($match.Groups["year"].Value)-$($match.Groups["month"].Value)-$($match.Groups["day"].Value) $($match.Groups["hour"].Value):$($match.Groups["minute"].Value):$($match.Groups["second"].Value).$fraction"
+        $StartTime.Value = [DateTime]::ParseExact($text, "yyyy-MM-dd HH:mm:ss.fff", [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeLocal)
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-DgaReviewVideoStartFromPath {
+    param([string]$ReviewVideoPath)
+
+    if ([string]::IsNullOrWhiteSpace($ReviewVideoPath) -or -not (Test-Path -LiteralPath $ReviewVideoPath -PathType Leaf)) {
+        return $null
+    }
+
+    $file = Get-Item -LiteralPath $ReviewVideoPath
+    $parsedStart = [DateTime]::MinValue
+    if (Try-ParseDgaVideoStartFromName $file.Name ([ref]$parsedStart)) {
+        return [pscustomobject]@{
+            Start = $parsedStart
+            Source = "FilenameTimestamp"
+            DurationSeconds = 0.0
+        }
+    }
+
+    $durationSeconds = Get-DgaVideoDurationSeconds $file.FullName
+    if ($durationSeconds -gt 0) {
+        return [pscustomobject]@{
+            Start = $file.LastWriteTime.AddSeconds(-1 * $durationSeconds)
+            Source = "LastWriteMinusFfprobeDuration"
+            DurationSeconds = $durationSeconds
+        }
+    }
+
+    return [pscustomobject]@{
+        Start = $file.CreationTime
+        Source = "CreationTimeFallback"
+        DurationSeconds = 0.0
+    }
+}
+
+function Split-DgaReviewEntry {
+    param(
+        [string]$Value,
+        [int]$Index,
+        [string]$Source
+    )
+
+    $timestamp = ""
+    $note = $Value.Trim()
+    $separatorIndex = $note.IndexOf("=")
+    if ($separatorIndex -ge 0) {
+        $timestamp = $note.Substring(0, $separatorIndex).Trim()
+        $note = $note.Substring($separatorIndex + 1).Trim()
+    }
+    elseif ($note -match '^\s*(?<timestamp>(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d{1,3})?)\s*[-:]\s*(?<note>.*)$') {
+        $timestamp = $matches["timestamp"].Trim()
+        $note = $matches["note"].Trim()
+    }
+
+    [pscustomobject]@{
+        Index = $Index
+        Timestamp = $timestamp
+        Note = $note
+        Source = $Source
+        Raw = $Value
+    }
+}
+
+function Get-DgaReviewNoteEntries {
+    param(
+        [string[]]$ReviewTimestamp = @(),
+        [string[]]$ReviewNote = @(),
+        [string]$ReviewNotesPath = ""
+    )
+
+    $entries = New-Object System.Collections.Generic.List[object]
+    $index = 0
+    foreach ($value in @($ReviewTimestamp)) {
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            continue
+        }
+
+        $index++
+        [void]$entries.Add((Split-DgaReviewEntry $value $index "ReviewTimestamp"))
+    }
+
+    foreach ($value in @($ReviewNote)) {
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            continue
+        }
+
+        $index++
+        [void]$entries.Add((Split-DgaReviewEntry $value $index "ReviewNote"))
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ReviewNotesPath) -and (Test-Path -LiteralPath $ReviewNotesPath -PathType Leaf)) {
+        foreach ($line in Get-Content -LiteralPath $ReviewNotesPath -ErrorAction SilentlyContinue) {
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+
+            $index++
+            [void]$entries.Add((Split-DgaReviewEntry $line $index "ReviewNotesPath"))
+        }
+    }
+
+    return $entries.ToArray()
+}
+
+function Get-DgaReviewTerms {
+    param([object]$Note)
+
+    $terms = New-Object System.Collections.Generic.List[string]
+    foreach ($value in @($Note.Note, $Note.Timestamp)) {
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            continue
+        }
+
+        foreach ($part in ($value -split '[^A-Za-z0-9]+')) {
+            if ($part.Length -lt 4) {
+                continue
+            }
+
+            if (@("area", "note", "timestamp", "goblin", "count", "should", "when", "with").Contains($part.ToLowerInvariant())) {
+                continue
+            }
+
+            if (-not $terms.Contains($part)) {
+                $terms.Add($part)
+            }
+        }
+    }
+
+    return $terms.ToArray()
+}
+
+function Test-DgaTextMatchesAnyTerm {
+    param(
+        [string]$Text,
+        [string[]]$Terms
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    foreach ($term in @($Terms)) {
+        if (-not [string]::IsNullOrWhiteSpace($term) -and
+            $Text.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-DgaNoteTargetTime {
+    param(
+        [object]$Note,
+        [object]$VideoStart
+    )
+
+    $parsed = [DateTime]::MinValue
+    if (Try-ParseDgaLocalTime $Note.Timestamp ([ref]$parsed)) {
+        return $parsed
+    }
+
+    $offsetSeconds = Convert-DgaReviewTimestampToSeconds $Note.Timestamp
+    if ($offsetSeconds -ge 0 -and $null -ne $VideoStart) {
+        return ([DateTime]$VideoStart).AddSeconds($offsetSeconds)
+    }
+
+    return $null
+}
+
+function Get-DgaRowsForReviewNote {
+    param(
+        [object[]]$Rows,
+        [object]$Note,
+        [object]$VideoStart,
+        [int]$WindowSeconds,
+        [int]$MaxRows
+    )
+
+    $targetTime = Get-DgaNoteTargetTime -Note $Note -VideoStart $VideoStart
+    $terms = @(Get-DgaReviewTerms $Note)
+    $matches = New-Object System.Collections.Generic.List[object]
+    foreach ($row in @($Rows)) {
+        $include = $false
+        if ($null -ne $targetTime) {
+            $rowTime = [DateTime]::MinValue
+            if (Try-ParseDgaLocalTime $row.Timestamp ([ref]$rowTime)) {
+                $include = [Math]::Abs(($rowTime - ([DateTime]$targetTime)).TotalSeconds) -le $WindowSeconds
+            }
+        }
+
+        if (-not $include -and $terms.Count -gt 0) {
+            $include = Test-DgaTextMatchesAnyTerm $row.Details $terms
+        }
+
+        if ($include) {
+            $matches.Add($row)
+        }
+    }
+
+    return @($matches | Sort-Object Timestamp, File, Line | Select-Object -First $MaxRows)
+}
+
+function Get-DgaSuppressionReasonSummary {
+    param([object[]]$Rows)
+
+    $reasons = New-Object System.Collections.Generic.List[string]
+    foreach ($row in @($Rows)) {
+        $isSuppressionEvent = $row.Event -eq "GoblinAutoCountSuppressed" -or $row.Event -eq "GoblinCountSuppressed"
+        $hasSuppressionMarker = Test-DgaRowMatchesAny $row @("Suppress", "Duplicate", "Stale", "BlockedArea", "AreaLimitReached")
+        if (-not $isSuppressionEvent -and -not $hasSuppressionMarker) {
+            continue
+        }
+
+        $reason = if ([string]::IsNullOrWhiteSpace($row.Reason)) { $row.Decision } else { $row.Reason }
+        if ([string]::IsNullOrWhiteSpace($reason)) { $reason = "Unknown" }
+        $reasons.Add($reason)
+    }
+
+    return @($reasons |
+        Group-Object |
+        Sort-Object -Property @{ Expression = "Count"; Descending = $true }, @{ Expression = "Name"; Ascending = $true } |
+        ForEach-Object { [pscustomobject]@{ Reason = $_.Name; Count = $_.Count } })
+}
+
+function Get-DgaEvidenceReferencesForReviewNote {
+    param(
+        [string]$Root,
+        [object]$Note,
+        [object[]]$Rows,
+        [int]$MaxReferences,
+        [object]$EvidenceIndex = $null
+    )
+
+    if ($null -eq $EvidenceIndex) {
+        $EvidenceIndex = New-DgaEvidenceIndex $Root
+    }
+
+    $terms = New-Object System.Collections.Generic.List[string]
+    foreach ($term in @(Get-DgaReviewTerms $Note)) {
+        if (-not $terms.Contains($term)) {
+            $terms.Add($term)
+        }
+    }
+
+    foreach ($row in @($Rows)) {
+        foreach ($value in @($row.Evidence, $row.GoblinType, $row.Area, $row.Reason)) {
+            if ([string]::IsNullOrWhiteSpace($value)) {
+                continue
+            }
+
+            foreach ($part in ($value -split '[^A-Za-z0-9]+')) {
+                if ($part.Length -ge 4 -and -not $terms.Contains($part)) {
+                    $terms.Add($part)
+                }
+            }
+        }
+    }
+
+    $references = New-Object System.Collections.Generic.List[object]
+    foreach ($file in @($EvidenceIndex.DecisionBundleFiles |
+        Where-Object { $_.Extension -match '^\.(txt|json|png|jpg|jpeg|bmp)$' } |
+        Sort-Object FullName)) {
+        $relative = Get-DgaPackageRelativePath $Root $file.FullName
+        $text = $relative
+        if ($file.Extension -match '^\.(txt|json)$') {
+            try {
+                $text = $text + " " + (Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop)
+            }
+            catch {
+            }
+        }
+
+        if ($terms.Count -eq 0 -or (Test-DgaTextMatchesAnyTerm $text $terms)) {
+            $references.Add([pscustomobject]@{
+                Kind = "DecisionBundle"
+                Path = $relative
+                SizeBytes = $file.Length
+            })
+        }
+
+        if ($references.Count -ge $MaxReferences) {
+            break
+        }
+    }
+
+    foreach ($file in @($EvidenceIndex.GoblinEvidenceFiles |
+        Where-Object {
+            ($_.Name.IndexOf("Journal", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+             $_.Name.IndexOf("Minimap", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+             $_.Name.Equals("GoblinTrackerEvents.jsonl", [System.StringComparison]::OrdinalIgnoreCase)) -and
+            $_.FullName.IndexOf("DecisionBundles", [System.StringComparison]::OrdinalIgnoreCase) -lt 0
+        } |
+        Sort-Object FullName)) {
+        if ($references.Count -ge $MaxReferences) {
+            break
+        }
+
+        $references.Add([pscustomobject]@{
+            Kind = if ($file.Name.Equals("GoblinTrackerEvents.jsonl", [System.StringComparison]::OrdinalIgnoreCase)) { "GoblinTrackerEvents" } else { "JournalMinimapCrop" }
+            Path = Get-DgaPackageRelativePath $Root $file.FullName
+            SizeBytes = $file.Length
+        })
+    }
+
+    return $references.ToArray()
+}
+
+function New-DgaAutoCountReviewNotesTriageData {
+    param(
+        [string]$Root,
+        [string]$ReviewVideoPath = "",
+        [string[]]$ReviewTimestamp = @(),
+        [string[]]$ReviewNote = @(),
+        [string]$ReviewNotesPath = "",
+        [int]$WindowSeconds = 20,
+        [int]$MaxRowsPerNote = 80,
+        [int]$MaxEvidenceReferencesPerNote = 40
+    )
+
+    $rows = @(Get-DgaAutoCountTriageRows $Root)
+    $notes = @(Get-DgaReviewNoteEntries -ReviewTimestamp $ReviewTimestamp -ReviewNote $ReviewNote -ReviewNotesPath $ReviewNotesPath)
+    $evidenceIndex = New-DgaEvidenceIndex $Root
+    $videoStart = $null
+    $videoStartSource = ""
+    $resolvedReviewVideoPath = ""
+    if (-not [string]::IsNullOrWhiteSpace($ReviewVideoPath) -and (Test-Path -LiteralPath $ReviewVideoPath -PathType Leaf)) {
+        $resolvedReviewVideoPath = [System.IO.Path]::GetFullPath($ReviewVideoPath)
+        $videoStartInfo = Get-DgaReviewVideoStartFromPath $resolvedReviewVideoPath
+        if ($null -ne $videoStartInfo) {
+            $videoStart = $videoStartInfo.Start
+            $videoStartSource = $videoStartInfo.Source
+        }
+    }
+
+    if ($null -eq $videoStart) {
+        $videoStart = Get-DgaReviewVideoStart $Root
+        if ($null -ne $videoStart) {
+            $videoStartSource = "PackageReviewEvidenceManifest"
+        }
+    }
+
+    $noteReports = New-Object System.Collections.Generic.List[object]
+    foreach ($note in $notes) {
+        $noteRows = @(Get-DgaRowsForReviewNote -Rows $rows -Note $note -VideoStart $videoStart -WindowSeconds $WindowSeconds -MaxRows $MaxRowsPerNote)
+        $targets = @($noteRows | ForEach-Object {
+            if (Test-DgaRowMatchesAny $_ @("HighConfidence", "confidence=0.8", "confidence=0.9", "Stale", "Duplicate", "AreaLimitReached", "BlockedArea", "currentAreaAtAcceptance", "JournalPending", "Notification", "GoblinLatencyTrace")) {
+                New-DgaTriageReviewTarget $_ "NoteScopedReviewTarget" "Matched note window or note keywords with auto-count risk marker"
+            }
+        } | Select-Object -First 40)
+
+        $targetTime = Get-DgaNoteTargetTime -Note $note -VideoStart $videoStart
+        $targetLocalTime = if ($null -ne $targetTime) { ([DateTime]$targetTime).ToString("yyyy-MM-dd HH:mm:ss.fff zzz") } else { "" }
+        $missingSources = New-Object System.Collections.Generic.List[string]
+        if ($evidenceIndex.DecisionBundleFiles.Count -eq 0) {
+            $missingSources.Add("DecisionBundles missing")
+        }
+
+        if ($evidenceIndex.GoblinTrackerEventsJsonlFiles.Count -eq 0) {
+            $missingSources.Add("GoblinTrackerEvents.jsonl missing")
+        }
+
+        if ($evidenceIndex.JournalCrops.Count -eq 0) {
+            $missingSources.Add("Journal crops missing")
+        }
+
+        if ($evidenceIndex.MinimapCrops.Count -eq 0) {
+            $missingSources.Add("Minimap crops missing")
+        }
+
+        $noteReports.Add([pscustomobject]@{
+            Index = $note.Index
+            Timestamp = $note.Timestamp
+            Note = $note.Note
+            Source = $note.Source
+            TargetLocalTime = $targetLocalTime
+            Groups = [pscustomobject]@{
+                AcceptedCounts = @($noteRows | Where-Object { $_.Event -eq "GoblinAutoCountAccepted" -or $_.Event -eq "GoblinCountAccepted" }).Count
+                SuppressedCandidates = @($noteRows | Where-Object { $_.Event -eq "GoblinAutoCountSuppressed" -or $_.Event -eq "GoblinCountSuppressed" }).Count
+                PendingEvidence = @($noteRows | Where-Object { Test-DgaRowMatchesAny $_ @("JournalPending", "PendingKilled", "PendingMinimap") }).Count
+                StaleJournalRows = @($noteRows | Where-Object { Test-DgaRowMatchesAny $_ @("Stale", "Carryover", "HistoryRow") }).Count
+                NotificationTraces = @($noteRows | Where-Object { Test-DgaRowMatchesAny $_ @("GoblinLatencyTrace", "GoblinAutoCountNotificationQueued", "GoblinAutoCountNotificationDisplayed", "GoblinAutoCountNotificationDropped") }).Count
+            }
+            SuppressionReasons = @(Get-DgaSuppressionReasonSummary $noteRows)
+            Events = @($noteRows | Select-Object -First $MaxRowsPerNote)
+            EvidenceReferences = @(Get-DgaEvidenceReferencesForReviewNote -Root $Root -Note $note -Rows $noteRows -MaxReferences $MaxEvidenceReferencesPerNote -EvidenceIndex $evidenceIndex)
+            LikelyReviewTargets = $targets
+            MissingSources = $missingSources.ToArray()
+        })
+    }
+
+    [pscustomobject]@{
+        Generated = (Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")
+        Root = $Root
+        ReviewVideoPath = $resolvedReviewVideoPath
+        WindowSeconds = $WindowSeconds
+        VideoStartLocal = if ($null -ne $videoStart) { ([DateTime]$videoStart).ToString("yyyy-MM-dd HH:mm:ss.fff zzz") } else { "" }
+        VideoStartSource = $videoStartSource
+        SourceAvailability = [pscustomobject]@{
+            Logs = $evidenceIndex.Logs.Count
+            GoblinTrackerEventsJsonl = $evidenceIndex.GoblinTrackerEventsJsonlFiles.Count
+            DecisionBundles = $evidenceIndex.DecisionTraceFiles.Count
+            JournalCrops = $evidenceIndex.JournalCrops.Count
+            MinimapCrops = $evidenceIndex.MinimapCrops.Count
+        }
+        Notes = $noteReports.ToArray()
+        PackageSizePolicy = [pscustomobject]@{
+            Included = "AutoCountReviewNotes/auto-count-review-notes.md and AutoCountReviewNotes/auto-count-review-notes.json"
+            Excluded = "Full videos, bulk source image folders, and duplicated evidence image folders"
+            Notes = "Reports reference existing package evidence paths and cap rows/evidence references per note."
+        }
+    }
+}
+
+function New-DgaAutoCountReviewNotesMarkdownContent {
+    param([object]$Data)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# Auto-Count Review Notes Triage")
+    $lines.Add("")
+    $lines.Add("Generated: $($Data.Generated)")
+    $lines.Add("Root: $($Data.Root)")
+    $lines.Add("Review video: $(if ([string]::IsNullOrWhiteSpace($Data.ReviewVideoPath)) { 'not supplied' } else { $Data.ReviewVideoPath })")
+    $lines.Add("Window seconds: $($Data.WindowSeconds)")
+    $lines.Add("Video start: $(if ([string]::IsNullOrWhiteSpace($Data.VideoStartLocal)) { 'unavailable' } else { $Data.VideoStartLocal })")
+    $lines.Add("Video start source: $(if ([string]::IsNullOrWhiteSpace($Data.VideoStartSource)) { 'unavailable' } else { $Data.VideoStartSource })")
+    $lines.Add("")
+    $lines.Add("## Source Availability")
+    foreach ($property in $Data.SourceAvailability.PSObject.Properties) {
+        $lines.Add("- $($property.Name): $($property.Value)")
+    }
+
+    $lines.Add("")
+    $lines.Add("## Notes")
+    if (@($Data.Notes).Count -eq 0) {
+        $lines.Add("- No review notes or timestamps were supplied.")
+    }
+
+    foreach ($note in @($Data.Notes)) {
+        $lines.Add("")
+        $lines.Add("### Note $($note.Index)")
+        $lines.Add("- Timestamp: $(if ([string]::IsNullOrWhiteSpace($note.Timestamp)) { 'none' } else { $note.Timestamp })")
+        $lines.Add("- Target local time: $(if ([string]::IsNullOrWhiteSpace($note.TargetLocalTime)) { 'unavailable' } else { $note.TargetLocalTime })")
+        $lines.Add("- Note: $(Convert-DgaMarkdownCell $note.Note)")
+        $lines.Add("- Source: $($note.Source)")
+        $lines.Add("")
+        $lines.Add("Groups:")
+        foreach ($property in $note.Groups.PSObject.Properties) {
+            $lines.Add("- $($property.Name): $($property.Value)")
+        }
+
+        $lines.Add("")
+        $lines.Add("Suppression reasons:")
+        if (@($note.SuppressionReasons).Count -eq 0) {
+            $lines.Add("- none")
+        }
+        else {
+            foreach ($reason in @($note.SuppressionReasons)) {
+                $lines.Add("- $($reason.Reason): $($reason.Count)")
+            }
+        }
+
+        $lines.Add("")
+        $lines.Add("Likely review targets:")
+        if (@($note.LikelyReviewTargets).Count -eq 0) {
+            $lines.Add("- none")
+        }
+        else {
+            $lines.Add("| Time | Event | Goblin | Area | Decision | Reason | Log | Why |")
+            $lines.Add("| --- | --- | --- | --- | --- | --- | --- | --- |")
+            foreach ($target in @($note.LikelyReviewTargets | Select-Object -First 25)) {
+                $lines.Add("| $(Convert-DgaMarkdownCell $target.Timestamp) | $(Convert-DgaMarkdownCell $target.Event) | $(Convert-DgaMarkdownCell $target.GoblinType) | $(Convert-DgaMarkdownCell $target.Area) | $(Convert-DgaMarkdownCell $target.Decision) | $(Convert-DgaMarkdownCell $target.DecisionReason) | $(Convert-DgaMarkdownCell $target.Log) | $(Convert-DgaMarkdownCell $target.Reason) |")
+            }
+        }
+
+        $lines.Add("")
+        $lines.Add("Evidence references:")
+        if (@($note.EvidenceReferences).Count -eq 0) {
+            $lines.Add("- none")
+        }
+        else {
+            foreach ($reference in @($note.EvidenceReferences | Select-Object -First 40)) {
+                $lines.Add("- $($reference.Kind): `$($reference.Path)` ($($reference.SizeBytes) bytes)")
+            }
+        }
+
+        if (@($note.MissingSources).Count -gt 0) {
+            $lines.Add("")
+            $lines.Add("Missing sources:")
+            foreach ($missing in @($note.MissingSources)) {
+                $lines.Add("- $missing")
+            }
+        }
+    }
+
+    $lines.Add("")
+    $lines.Add("## Package Size Policy")
+    $lines.Add("- Included: $($Data.PackageSizePolicy.Included)")
+    $lines.Add("- Excluded: $($Data.PackageSizePolicy.Excluded)")
+    $lines.Add("- Notes: $($Data.PackageSizePolicy.Notes)")
+    return $lines
+}
+
 function Write-DgaAnalysisFiles {
     param(
         [string]$Root,
@@ -788,6 +1486,20 @@ function Get-DgaLatestDebugPackage {
     }
 
     return Get-ChildItem -LiteralPath $DebugPackagesRoot -Filter "GoblinFarmer_Debug_*.zip" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike "*_AutoCountNotes.zip" } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+}
+
+function Get-DgaLatestReviewVideo {
+    param([string]$VideoReviewRoot)
+
+    if (-not (Test-Path -LiteralPath $VideoReviewRoot -PathType Container)) {
+        return $null
+    }
+
+    return Get-ChildItem -LiteralPath $VideoReviewRoot -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -match '^\.(mkv|mp4|mov|avi)$' } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 }

@@ -23,6 +23,7 @@
 ## Operating Rules
 
 - Read `Docs/Project_Status.md` before code or workflow changes, then read the relevant agent docs before touching related areas.
+- If the user says `debug review`, follow `Docs/Agent/Debug_Review_Automation.md` after the standard read order.
 - Update `Docs/Project_Status.md` after code, script, workflow, or documentation changes.
 - Do not commit, push, create branches, merge, tag, or create GitHub releases unless explicitly requested.
 - Do not install Agent Zero or add a new agent framework for this project.

@@ -107,7 +107,7 @@ Recommended cleanup order: run dry-run first, prune `bin`/`obj` and test build o
 
 - Treat every user live-test run as a VS Debug run unless the user explicitly says otherwise.
 - Review the latest named/provided debug package and live-test notes before changing code.
-- VS Debug has no external recorder status group. Live run videos are recorded separately with NVIDIA and attached for debug review alongside the package and shared Google Sheet notes.
+- VS Debug has a passive OBS Status group that observes the local OBS process and monitor log only; it must not start, stop, launch, or configure recording. Live run videos are recorded separately by the local OBS monitor and reviewed alongside the package and shared Google Sheet notes.
 - For Goblin Tracker next tests, list route-specific scenarios in official route order first, then general reset, stale evidence, display, classification, package, and documentation checks.
 - Use VS Debug `Capture` only when image-recognition evidence is visibly needed.
 - Use automatic decision bundles and encounter captures for normal Goblin Tracker debugging.

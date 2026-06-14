@@ -2,11 +2,42 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-14 Codebase Health Audit And Safe Cleanup
+
+- Scope: health refactoring optimization Prompts 1 and 2. Prompt 1 added `CODEBASE_HEALTH_AUDIT.md` as a read-only audit. Prompt 2 applied only low-risk documentation cleanup from that audit.
+- Prompt 3 review: focused dead-code searches covered OBS/startup leftovers, duplicate package writers, retired Next Tests/Review Files flows, legacy replay paths, best-sample helper wiring, and goblin suppression helpers. No production code was removed because remaining hits were compatibility paths, active helper wiring, or regression guard tests.
+- Prompt 4 plan: added `REFACTOR_PLAN.md` with phased extraction targets for Goblin Evidence policy, replay harness, debug package scripts, town workflows, and settings, plus validation gates for each phase.
+- Prompt 5 audit: added `PERFORMANCE_AUDIT.md`; the recommended low-risk implementation candidate is internal evidence indexing for debug-analysis tooling.
+- Prompt 6 optimization: `Scripts\debug-analysis-tools.ps1` now builds a reusable internal evidence index for auto-count triage and review-note evidence references, reducing repeated package file enumeration without changing report/package schema.
+- Phase 2 refactor start: mechanically extracted Goblin Evidence policy types into focused files: `GoblinCountAreaPolicies.cs`, `GoblinJournalFreshnessPolicy.cs`, and `GoblinAutoCountEncounterSuppressionPolicy.cs`.
+- Behavior note: no production behavior, auto-count thresholds, scanner execution, overlay behavior, combat, routing, repair, salvage, gem-stash, Kadala, make-new-game, replay execution, package replay policy, package format, or OBS control behavior changed.
+- Documentation cleanup: `Docs\Agent\Maintenance.md` now lists the current tracked debug-review helper scripts and explains that current inventory replay package evidence is log-first under `Debug\ReplayLogs` plus curated `ReviewEvidence`; `Docs\ProjectBrain\Debug_And_Testing.md` now describes the passive OBS Status group accurately.
+
+Validation commands:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix
+git diff --check
+```
+
+Results:
+
+- Prompt 1 initial validation: both builds passed, full harness passed, AutoCount Matrix passed with `scenarios=9`, `steps=21`, `failed=0`, and `git diff --check` passed with LF-to-CRLF normalization warnings only.
+- Prompt 2 final validation after documentation cleanup: both builds passed, full harness passed, AutoCount Matrix passed with `scenarios=9`, `steps=21`, `failed=0`, and `git diff --check` passed with LF-to-CRLF normalization warnings only.
+- Prompt 6 smoke validation: dot-sourced `Scripts\debug-analysis-tools.ps1`, created an evidence index for the workspace, and ran `Scripts\add-auto-count-review-notes.ps1 -ReviewTimestamp "00:00:01=performance index validation smoke"` successfully against the newest standard debug package/video.
+- Final Prompt 1-6 validation: `dotnet build GoblinFarmer.csproj` passed; `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false` passed; full console harness passed; AutoCount Matrix passed with `scenarios=9`, `steps=21`, `failed=0`; `git diff --check` passed with LF-to-CRLF normalization warnings only.
+- Phase 2 refactor validation: `dotnet build GoblinFarmer.csproj` passed; `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false` passed; full console harness passed; AutoCount Matrix passed with `scenarios=9`, `steps=21`, `failed=0`; `git diff --check` passed with LF-to-CRLF normalization warnings only.
+
 ## 2026-06-14 Auto-Count Stabilization Tooling Pass
 
 - Scope: tooling and coverage only. No runtime auto-count acceptance policy, scanner execution, overlay display, combat, route, town, repair, salvage, gem stash, Kadala, or make-new-game behavior was changed.
+- Follow-up workflow note: the `debug review` shortcut is documented in `Docs\Agent\Debug_Review_Automation.md` and linked from `AGENTS.md`, `Docs\Agent\Debugging.md`, and `Docs\Project_Status.md`. It uses the Google Drive connector to read the `Video Review` Google Doc, then runs the existing notes-only package/matrix helper against the newest standard debug package and video clip.
 - Added coverage: explicit AutoCount Matrix scenarios for Southern Highlands -> Cave Level 1 stale Journal, Ruined Cistern -> Ancient Waterway blocked context, Cave Level 1 -> Level 2 independent counts, Cathedral stale Journal row, Northern Highlands fresh Journal after old empty-bucket Cave row, PF2 first/second/third count behavior, Stinging Winds two-count behavior, New Game carryover, and Minimap-to-Journal source variants.
 - Added package analysis: `goblin-auto-count-triage.md` and `goblin-auto-count-triage.json` are generated in debug packages from available logs/events/DecisionBundles/ReviewEvidence/crops, and missing sources are reported instead of failing package creation.
+- Added review-note package updater: `Scripts\add-auto-count-review-notes.ps1` searches the standard `DebugPackages\` and `Video Clip Review\` folders when paths are omitted, aligns supplied timestamps/notes to the selected clip, writes `AutoCountReviewNotes\auto-count-review-notes.md`, `.json`, and `validation.txt` into a new updated package ZIP without including full videos, and automatically creates a review-only AutoCount Matrix draft under `Debug\AutoCountScenarioDrafts`.
 - Added draft workflow: `Scripts\draft-auto-count-scenario.ps1` accepts a debug package path, timestamps, and notes, then writes review-only draft files under `Debug\AutoCountScenarioDrafts` or a caller-supplied output folder.
 - Package-size note: new auto-count stabilization artifacts are text/JSON/docs only. A smoke package reported `goblin-auto-count-triage.md`, `goblin-auto-count-triage.json`, and `Docs\AutoCount_Matrix.md`; full videos and bulk image folders stayed excluded. Example triage generation against `DebugPackages\GoblinFarmer_Debug_20260614_071706.zip` produced `goblin-auto-count-triage.md` at `17,664` bytes and `goblin-auto-count-triage.json` at `444,112` bytes.
 - Live-only notes: scanner timing, Diablo focus/input, notification rendering, OBS/overlay UI, missing-frame issues, and real same-type cross-area Minimap collision shapes still require live review or captured DecisionBundles.
@@ -23,12 +54,14 @@ git diff --check
 
 Results:
 
+- `rg -n "debug review|Debug_Review_Automation|Video Review" AGENTS.md Docs`: passed; trigger phrase and runbook links are present.
 - `Scripts\draft-auto-count-scenario.ps1` smoke run: passed; created `draft-scenario.txt` and `draft-explanation.md` in a temp output folder only.
 - `Scripts\create-debug-package.ps1` smoke run with a temp runtime root: passed; included auto-count triage reports and reported package size.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Scripts\add-auto-count-review-notes.ps1 -ReviewTimestamp "00:00:01=validation smoke note for notes-only auto-count workflow"`: passed; selected `DebugPackages\GoblinFarmer_Debug_20260614_071706.zip` and `Video Clip Review\2026-06-14 07-05-08.mkv`, wrote `DebugPackages\GoblinFarmer_Debug_20260614_071706_AutoCountNotes.zip`, reported one note processed with Markdown `9,232` bytes and JSON `162,929` bytes, and created `Debug\AutoCountScenarioDrafts\goblinfarmer-debug-20260614-071706-20260614-132938`.
 - `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix`: passed with `scenarios=9`, `steps=21`, `failed=0`, `passed=True`.
 - `dotnet build GoblinFarmer.csproj`: passed.
 - `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
-- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including AutoCount Matrix, debug package triage, draft-helper, and package-bound assertions.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including AutoCount Matrix, debug package triage, review-note package updater, draft-helper, and package-bound assertions.
 - `git diff --check`: passed with LF-to-CRLF normalization warnings only.
 
 ## 2026-06-14 071706 Live Review Fix Pass
