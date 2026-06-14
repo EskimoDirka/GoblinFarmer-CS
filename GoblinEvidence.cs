@@ -1351,7 +1351,11 @@ namespace GoblinFarmer
                 currentJournal &&
                 countedJournal &&
                 lastSeenAge <= CrossAreaJournalContinuitySuppressWindow;
-            bool sameVisibleJournalRowCanSuppress = recentCrossAreaJournalRow || continuingCrossAreaJournalRow;
+            bool crossAreaJournalBucketsMatch = currentJournal &&
+                countedJournal &&
+                JournalEvidenceBucketsMatch(globalEvidenceKey, countedEvidenceKey, out _, out _);
+            bool sameVisibleJournalRowCanSuppress = recentCrossAreaJournalRow ||
+                (continuingCrossAreaJournalRow && crossAreaJournalBucketsMatch);
 
             if (encounterAge <= encounterSuppressWindow &&
                 !string.IsNullOrWhiteSpace(globalEvidenceKey) &&

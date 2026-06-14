@@ -2,6 +2,57 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-14 064418 Live Review Fix Pass
+
+- Review inputs: `DebugPackages\GoblinFarmer_Debug_20260614_064418.zip` and `Video Clip Review\2026-06-14 06-38-57.mkv`.
+- Issues covered: Cave of the Moon Clan Level 1 overlay `Go Next` changed from `N` to `Y` after leaving Southern Highlands, Northern Highlands Treasure Goblin Journal evidence was suppressed as an expired empty-bucket Cave Level 1 duplicate, and repair flow clicked the salvage tab even though no inventory items were salvageable.
+- Fix coverage: overlay `Go Next` now prefers a fresh title-resolved area that differs from both accepted area and accepted route context; cross-area Journal duplicate continuity only extends beyond the stale visible-row window when non-empty line buckets match; repair flow now preflights salvage targets with the production classifier and skips opening the salvage tab when zero actionable non-gem targets are found.
+- Replay note: `--debug-package-replay` loaded the attached package successfully with one replay log and no failures.
+- Live validation still needed: confirm Cave Level 1 stays `Go Next: N`, a fresh Northern Highlands Treasure Goblin can count after an expired empty-bucket prior Journal signature, and empty-inventory town prep logs `salvageTabClickSkipped=True` without selecting the salvage tab.
+
+Validation commands:
+
+```powershell
+dotnet build .\GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay ".\DebugPackages\GoblinFarmer_Debug_20260614_064418.zip"
+git diff --check
+```
+
+Results:
+
+- `dotnet build .\GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including the new empty-bucket cross-area Journal expiry and repair-flow salvage preflight coverage.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay ".\DebugPackages\GoblinFarmer_Debug_20260614_064418.zip"`: passed with one replay log loaded and no failures.
+- `git diff --check`: passed with LF-to-CRLF normalization warnings only.
+
+## 2026-06-13 175405 Overlay Review Fix Pass
+
+- Review inputs: `DebugPackages\GoblinFarmer_Debug_20260613_175405.zip` and `Video Clip Review\2026-06-13 17-34-00.mkv`.
+- Issue covered: after a Ruined Cistern Gilded Baron count, the overlay kept `Go Next: Y` after teleporting to plain Ancient Waterway even though Ancient Waterway is a blocked no-count/no-next current area.
+- Fix coverage: overlay `Go Next` now allows confirmed current location to override fresh detected context when the confirmed area differs from the accepted area and is either outside the accepted route context or explicitly blocked. This keeps Southern Highlands -> Cave title-area handling intact while forcing plain Ancient Waterway transitions back to `N`.
+- Live validation still needed: confirm the next Ruined Cistern -> Ancient Waterway transition flips `Go Next` to `N` on the next status refresh after the teleport/title update.
+
+Validation commands:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+git diff --check
+```
+
+Results:
+
+- `dotnet build GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including the updated overlay source-contract coverage for blocked confirmed-area override.
+- `git diff --check`: passed with LF-to-CRLF normalization warnings only.
+
 ## 2026-06-13 164257 Live Review Fix Pass
 
 - Review inputs: `DebugPackages\GoblinFarmer_Debug_20260613_164257.zip` and `Video Clip Review\2026-06-13 16-23-12.mkv`.

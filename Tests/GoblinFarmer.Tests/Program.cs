@@ -207,6 +207,7 @@ Run("Gem stash promoted templates load through sidecar metadata", TestGemStashPr
 Run("Gem stash best-sample capture is success-only and guarded", TestGemStashBestSampleCaptureIsSuccessOnlyAndGuarded);
 Run("Gem stash town flow is non-fatal after salvage", TestGemStashTownFlowIsNonFatalAfterSalvage);
 Run("Gem stash preflight skips stash travel when no gems exist", TestGemStashPreflightSkipsStashTravelWhenNoGemsExist);
+Run("Repair flow preflights salvage before opening salvage tab", TestRepairFlowPreflightsSalvageBeforeOpeningSalvageTab);
 Run("Gem stash travel wait happens after stash coordinate click", TestGemStashTravelWaitHappensAfterStashCoordinateClick);
 Run("Repair flow samples repair button before clicking", TestRepairFlowSamplesRepairButtonBeforeClicking);
 Run("Repair flow verifies repair completion", TestRepairFlowVerifiesRepairCompletion);
@@ -539,10 +540,15 @@ static void TestVsDebugInGameGoblinOverlayIsPassiveAndLiveCountOnly()
     AssertTrue(overlaySource.Contains("PortLocationKey(acceptedRouteAreaKey)", StringComparison.Ordinal), "accepted route context should be normalized for sub-area Go Next checks");
     AssertTrue(overlaySource.Contains("PortLocationKey(currentConfirmedLocation)", StringComparison.Ordinal), "current confirmed area should be normalized before comparing");
     AssertTrue(overlaySource.Contains("PortGoblinOverlayDetectedAreaFreshness = TimeSpan.FromSeconds(90)", StringComparison.Ordinal), "Go Next should keep recent title-resolved areas long enough for route state lag after sub-area transitions");
-    AssertTrue(overlaySource.Contains("PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow)", StringComparison.Ordinal), "Go Next should use fresh detected current area before falling back to route state");
-    AssertTrue(overlaySource.Contains("return portLastConfirmedLocation;", StringComparison.Ordinal), "Go Next should fall back to current confirmed route area when no fresh detected area is available");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow, state)", StringComparison.Ordinal), "Go Next should use fresh detected current area before falling back to route state");
+    AssertTrue(overlaySource.Contains("string currentConfirmedLocation = portLastConfirmedLocation;", StringComparison.Ordinal), "Go Next should snapshot the current confirmed route area before resolving stale/fresh overlay context");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayFreshDetectedArea(nowUtc)", StringComparison.Ordinal), "Go Next should snapshot the fresh title-resolved area before trusting route state");
+    AssertTrue(overlaySource.Contains("!detectedMatchesAcceptedContext", StringComparison.Ordinal), "Go Next should prefer a fresh detected area that differs from the accepted route context");
+    AssertTrue(overlaySource.Contains(": currentConfirmedLocation;", StringComparison.Ordinal), "Go Next should fall back to current confirmed route area when no fresh detected area is available");
     AssertTrue(sessionStatsSource.Contains("PortRememberGoblinOverlayDetectedArea(currentAreaResult.Area.AreaKey, nowUtc, observationSource, \"CurrentAreaResolver\")", StringComparison.Ordinal), "candidate observation should update overlay current area from the resolver before Journal evidence area overrides");
     AssertTrue(overlaySource.Contains("acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase)", StringComparison.Ordinal), "Go Next should stay Y for accepted sub-areas while their route context is still current");
+    AssertTrue(overlaySource.Contains("PortGoblinOverlayConfirmedAreaOverridesFreshDetectedArea", StringComparison.Ordinal), "Go Next should let confirmed route changes override fresh detected context when needed");
+    AssertTrue(overlaySource.Contains("GoblinManualCountBlockList.IsBlocked(currentKey)", StringComparison.Ordinal), "blocked confirmed areas such as Ancient Waterway should force Go Next back to N even when route context matches");
     AssertTrue(overlaySource.Contains("PortGoblinOverlayWaitingForPandemoniumSecondGoblin", StringComparison.Ordinal), "PF1/PF2 should keep Go Next N until the second guaranteed goblin slot is filled");
     AssertTrue(overlaySource.Contains("state.AreaCount > 0", StringComparison.Ordinal), "PF overlay wait should only apply after the first accepted PF count");
     AssertTrue(overlaySource.Contains("state.AreaCount < state.AreaLimit", StringComparison.Ordinal), "PF overlay wait should clear when the two-count limit is filled");
@@ -6104,6 +6110,25 @@ static void TestGoblinAutoCountOldCrossAreaJournalRowExpires()
 
     AssertTrue(southernToCaveFalseCountSuppressed, "the 2026-06-13 Southern Highlands Treasure Goblin journal row should not recount as Cave of the Moon Clan Level 2 while continuously visible");
     AssertEqual("SameEvidenceKey", southernToCaveReason, "the Southern to Cave carryover should be suppressed as the same journal evidence");
+
+    bool northernHighlandsEmptyBucketJournalSuppressed = GoblinAutoCountEncounterSuppressionPolicy.ShouldSuppress(
+        source: "Journal",
+        goblinType: "Treasure Goblin",
+        areaKey: "Northern Highlands",
+        globalEvidenceKey: "Journal|Treasure Goblin|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=",
+        countedGoblinType: "Treasure Goblin",
+        countedAreaKey: "Cave Of The Moon Clan Level 1",
+        countedSource: "Journal",
+        countedEvidenceKey: "Journal|Treasure Goblin|JournalEncounter|Journal|Treasure Goblin|Template=Treasure Goblin Engaged Journal.png|Kind=JournalEngaged|LineBucket=",
+        countedUtc: nowUtc - TimeSpan.FromSeconds(49),
+        lastSeenUtc: nowUtc - TimeSpan.FromSeconds(3),
+        nowUtc: nowUtc,
+        encounterSuppressWindow: TimeSpan.FromMinutes(10),
+        sourceVariantWindow: TimeSpan.FromSeconds(45),
+        out string northernHighlandsEmptyBucketReason);
+
+    AssertFalse(northernHighlandsEmptyBucketJournalSuppressed, "the 2026-06-14 Northern Highlands Treasure Goblin should not stay suppressed by an empty-bucket Cave Level 1 journal signature after the 45-second visible-row window");
+    AssertTrue(string.IsNullOrWhiteSpace(northernHighlandsEmptyBucketReason), "expired empty-bucket cross-area journal signatures should not report a duplicate reason");
 }
 
 static void TestGoblinAutoCountSameAreaDuplicateJournalRefreshesEncounterState()
@@ -8215,6 +8240,26 @@ static void TestGemStashPreflightSkipsStashTravelWhenNoGemsExist()
     AssertTrue(preflightMethod.Contains("stashTravelSkipped=True", StringComparison.Ordinal), "zero-target preflight should log that stash travel was skipped");
     AssertTrue(preflightMethod.Contains("new PortGemStashResult(\"NoGemsFound\"", StringComparison.Ordinal), "zero-target preflight should report NoGemsFound");
     AssertFalse(preflightMethod.Contains("PortSafeLeftClick(stashPoint)", StringComparison.Ordinal), "preflight must not click or travel to the stash");
+}
+
+static void TestRepairFlowPreflightsSalvageBeforeOpeningSalvageTab()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string townSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.Town.cs"));
+    string repairFlow = ExtractMethodBody(townSource, "private bool PortRunRepairFlow");
+    string salvagePreflightMethod = ExtractMethodBody(townSource, "private bool PortShouldRunSalvageFromOpenTownUi");
+    string salvageMethod = ExtractMethodBody(townSource, "private bool PortSalvageInventoryFromOpenBlacksmith");
+
+    int preflightIndex = repairFlow.IndexOf("PortShouldRunSalvageFromOpenTownUi(token, out salvagePreflight)", StringComparison.Ordinal);
+    int salvageIndex = repairFlow.IndexOf("PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: false)", StringComparison.Ordinal);
+    AssertTrue(preflightIndex >= 0, "repair flow should preflight salvage targets before opening the salvage tab");
+    AssertTrue(salvageIndex > preflightIndex, "repair flow should only enter the salvage UI after the salvage preflight finds targets");
+    AssertTrue(salvagePreflightMethod.Contains("PreSalvageInventoryScan", StringComparison.Ordinal), "salvage preflight should use the production inventory classifier while town UI is open");
+    AssertTrue(salvagePreflightMethod.Contains("targetCount == 0", StringComparison.Ordinal), "salvage preflight should branch on zero accepted salvage targets");
+    AssertTrue(salvagePreflightMethod.Contains("salvageTabClickSkipped=True", StringComparison.Ordinal), "zero-target salvage preflight should log that the salvage tab click was skipped");
+    AssertTrue(salvagePreflightMethod.Contains("NoActionableSalvageTargets", StringComparison.Ordinal), "zero-target salvage preflight should report a clear skip reason");
+    AssertFalse(salvagePreflightMethod.Contains("\"Salvage Tab\"", StringComparison.Ordinal), "salvage preflight must not click the salvage tab");
+    AssertTrue(salvageMethod.Contains("\"Salvage Tab\"", StringComparison.Ordinal), "direct salvage should still open the salvage tab after repair preflight passes or manual salvage is invoked");
 }
 
 static void TestGemStashTravelWaitHappensAfterStashCoordinateClick()

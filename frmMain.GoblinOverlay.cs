@@ -198,7 +198,7 @@ namespace GoblinFarmer
             }
 
             DiagnosticsSessionSnapshot snapshot = DebugManager.Session.Snapshot(DateTime.Now);
-            string currentAreaForGoNext = PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow);
+            string currentAreaForGoNext = PortGoblinOverlayCurrentAreaForGoNext(DateTime.UtcNow, state);
             bool goNext = PortGoblinOverlayShouldGoNext(state.AcceptedAreaKey, state.AcceptedRouteAreaKey, currentAreaForGoNext);
             if (goNext && PortGoblinOverlayWaitingForPandemoniumSecondGoblin(state))
             {
@@ -242,7 +242,37 @@ namespace GoblinFarmer
                 GoblinPandemoniumMultiCountDuplicatePolicy.IsPandemoniumFortressTwoCountArea(state.AcceptedAreaKey);
         }
 
-        private string PortGoblinOverlayCurrentAreaForGoNext(DateTime nowUtc)
+        private string PortGoblinOverlayCurrentAreaForGoNext(DateTime nowUtc, PortGoblinOverlayAcceptedCountState? state)
+        {
+            string currentConfirmedLocation = portLastConfirmedLocation;
+            string freshDetectedArea = PortGoblinOverlayFreshDetectedArea(nowUtc);
+            if (state != null && !string.IsNullOrWhiteSpace(freshDetectedArea))
+            {
+                string detectedKey = PortLocationKey(freshDetectedArea);
+                string acceptedKey = PortLocationKey(state.AcceptedAreaKey);
+                string acceptedRouteKey = PortLocationKey(state.AcceptedRouteAreaKey);
+                bool detectedMatchesAcceptedContext =
+                    !string.IsNullOrWhiteSpace(detectedKey) &&
+                    (detectedKey.Equals(acceptedKey, StringComparison.OrdinalIgnoreCase) ||
+                    detectedKey.Equals(acceptedRouteKey, StringComparison.OrdinalIgnoreCase));
+
+                if (!detectedMatchesAcceptedContext)
+                {
+                    return freshDetectedArea;
+                }
+            }
+
+            if (state != null && PortGoblinOverlayConfirmedAreaOverridesFreshDetectedArea(state, currentConfirmedLocation))
+            {
+                return currentConfirmedLocation;
+            }
+
+            return !string.IsNullOrWhiteSpace(freshDetectedArea)
+                ? freshDetectedArea
+                : currentConfirmedLocation;
+        }
+
+        private string PortGoblinOverlayFreshDetectedArea(DateTime nowUtc)
         {
             lock (portGoblinOverlayLock)
             {
@@ -254,7 +284,39 @@ namespace GoblinFarmer
                 }
             }
 
-            return portLastConfirmedLocation;
+            return "";
+        }
+
+        private bool PortGoblinOverlayConfirmedAreaOverridesFreshDetectedArea(
+            PortGoblinOverlayAcceptedCountState state,
+            string currentConfirmedLocation)
+        {
+            if (string.IsNullOrWhiteSpace(currentConfirmedLocation))
+            {
+                return false;
+            }
+
+            string currentKey = PortLocationKey(currentConfirmedLocation);
+            if (string.IsNullOrWhiteSpace(currentKey))
+            {
+                return false;
+            }
+
+            string acceptedKey = PortLocationKey(state.AcceptedAreaKey);
+            if (!string.IsNullOrWhiteSpace(acceptedKey) &&
+                acceptedKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string acceptedRouteKey = PortLocationKey(state.AcceptedRouteAreaKey);
+            if (string.IsNullOrWhiteSpace(acceptedRouteKey) ||
+                !acceptedRouteKey.Equals(currentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return GoblinManualCountBlockList.IsBlocked(currentKey);
         }
 
         private void PortRememberGoblinOverlayDetectedArea(string areaKey, DateTime detectedUtc, string source, string reason)

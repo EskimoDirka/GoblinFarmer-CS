@@ -39,6 +39,7 @@ namespace GoblinFarmer
         private sealed record PortBulkSalvageColorSample(bool Active, int ActivePixels, int SampledPixels, double ActiveRatio);
         private sealed record PortRepairButtonVisualSample(bool Active, string VisualState, PortBulkSalvageColorSample CenterSample, PortBulkSalvageColorSample WideSample, string DiagnosticCropPath);
         private sealed record PortBulkSalvageResult(string Category, string Outcome, bool ClickSent, bool PromptFound, bool EnterSent, bool PromptCleared, PortBulkSalvageColorSample ColorSample, long ElapsedMs);
+        private sealed record PortSalvagePreflightResult(string Outcome, int TargetCount, int CandidateCount, int RegularGemCount, long ElapsedMs);
         private sealed record PortGemStashResult(string Outcome, int InitialTargets, int SlotsClicked, int RecoveryPasses, int RemainingTargets, long ElapsedMs);
 
         private bool PortRepairGearFromOpenBlacksmith(CancellationToken token, bool closeAfterRepair, Stopwatch repairWorkflow, out long repairMenuOpenedWorkflowElapsedMs)
@@ -212,11 +213,20 @@ namespace GoblinFarmer
                 }
 
                 AddWorkflowStep("Checking inventory for salvage");
-                if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: false))
+                PortSalvagePreflightResult salvagePreflight;
+                if (PortShouldRunSalvageFromOpenTownUi(token, out salvagePreflight))
                 {
-                    DebugManager.Session.RecordSalvageFailure("Salvage failed during repair flow");
-                    return PortWorkflowFailed("Salvaging");
+                    if (!PortSalvageInventoryFromOpenBlacksmith(token, closeAfterSalvage: false))
+                    {
+                        DebugManager.Session.RecordSalvageFailure("Salvage failed during repair flow");
+                        return PortWorkflowFailed("Salvaging");
+                    }
                 }
+                else if (token.IsCancellationRequested)
+                {
+                    return PortWorkflowFailed("Salvage preflight");
+                }
+                AppLogger.Info($"Salvage repair-flow preflight result: outcome={PortLogField(salvagePreflight.Outcome)}; targetCount={salvagePreflight.TargetCount}; candidateCount={salvagePreflight.CandidateCount}; retainedRegularGemCount={salvagePreflight.RegularGemCount}; elapsedMs={salvagePreflight.ElapsedMs}");
 
                 AddWorkflowStep("Checking inventory for gem stashing");
                 PortGemStashResult stashResult;
@@ -240,6 +250,37 @@ namespace GoblinFarmer
             {
                 AppLogger.Info($"Repair workflow timing: totalRepairWorkflowDurationMs={repairWorkflow.ElapsedMilliseconds}; completed={completed}; waitAfterArrivalMs={readiness.PostArrivalWaitMs}; timeUntilRepairStationDetectedMs={(blacksmithOpen.Opened ? blacksmithOpen.WorkflowElapsedMs.ToString() : "Unknown")}; timeUntilRepairMenuOpenedMs={(repairMenuOpenedWorkflowElapsedMs >= 0 ? repairMenuOpenedWorkflowElapsedMs.ToString() : "Unknown")}; blacksmithAttempts={blacksmithOpen.Attempts}");
             }
+        }
+
+        private bool PortShouldRunSalvageFromOpenTownUi(CancellationToken token, out PortSalvagePreflightResult result)
+        {
+            Stopwatch preflightPerf = Stopwatch.StartNew();
+            result = new PortSalvagePreflightResult("PreflightUnknown", 0, 0, 0, 0);
+            if (token.IsCancellationRequested)
+            {
+                result = new PortSalvagePreflightResult("Cancelled", 0, 0, 0, preflightPerf.ElapsedMilliseconds);
+                return false;
+            }
+
+            SalvageInventorySlotScanResult scan = PortScanSalvageInventorySlots(
+                logCandidates: true,
+                updateRegularGemCandidateCount: true,
+                "PreSalvageInventoryScan");
+            int targetCount = scan.Targets.Count(target => !target.Quality.Equals("RegularGem", StringComparison.OrdinalIgnoreCase));
+            int regularGemCount = portLastRegularGemCandidateCount;
+            preflightPerf.Stop();
+
+            if (targetCount == 0)
+            {
+                AddWorkflowStep("Salvage skipped: no actionable salvage targets found.");
+                AppLogger.Info($"Salvage preflight skipped: outcome=NoActionableSalvageTargets; targetCount=0; candidateCount={scan.Candidates.Count}; retainedRegularGemCount={regularGemCount}; elapsedMs={preflightPerf.ElapsedMilliseconds}; salvageTabClickSkipped=True; cacheMode=SingleInventoryScan");
+                result = new PortSalvagePreflightResult("NoActionableSalvageTargets", 0, scan.Candidates.Count, regularGemCount, preflightPerf.ElapsedMilliseconds);
+                return false;
+            }
+
+            AppLogger.Info($"Salvage preflight accepted: outcome=TargetsFound; targetCount={targetCount}; candidateCount={scan.Candidates.Count}; retainedRegularGemCount={regularGemCount}; elapsedMs={preflightPerf.ElapsedMilliseconds}; salvageTabClickSkipped=False; cacheMode=SingleInventoryScan");
+            result = new PortSalvagePreflightResult("TargetsFound", targetCount, scan.Candidates.Count, regularGemCount, preflightPerf.ElapsedMilliseconds);
+            return true;
         }
 
         private bool PortSalvageInventoryFromOpenBlacksmith(CancellationToken token, bool closeAfterSalvage)
