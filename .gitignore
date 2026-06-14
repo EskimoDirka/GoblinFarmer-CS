@@ -464,6 +464,7 @@ Scripts/Local Tools/
 !Scripts/create-debug-package.ps1
 !Scripts/Create Debug Package.bat
 !Scripts/debug-analysis-tools.ps1
+!Scripts/draft-auto-count-scenario.ps1
 !Scripts/cleanup-project.ps1
 !Scripts/Cleanup Project.bat
 !Scripts/Cleanup Project Delete.bat

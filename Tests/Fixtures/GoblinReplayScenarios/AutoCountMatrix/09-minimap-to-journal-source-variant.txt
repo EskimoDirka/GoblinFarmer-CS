@@ -1,0 +1,5 @@
+Scenario=Minimap to Journal source variant
+Step=Battlefields fresh minimap|Scan|Area=Battlefields|Minimap=Treasure Goblin Minimap.png|AdvanceSeconds=1
+# MatrixStep=Battlefields fresh minimap|Counted=true|Decision=Count|Reason=Eligible|Source=MinimapCandidate|GoblinType=Treasure Goblin|Area=Battlefields|FreshnessBucket=Fresh
+Step=Fields delayed journal variant|Scan|Area=Fields of Slaughter|Journal=Treasure Goblin Killed Journal.png|JournalLineBucket=10|AdvanceSeconds=20
+# MatrixStep=Fields delayed journal variant|Counted=false|Decision=Duplicate|Reason=EncounterAlreadyAutoCounted|Source=JournalCandidate|GoblinType=Treasure Goblin|Area=Fields of Slaughter|FreshnessBucket=Duplicate

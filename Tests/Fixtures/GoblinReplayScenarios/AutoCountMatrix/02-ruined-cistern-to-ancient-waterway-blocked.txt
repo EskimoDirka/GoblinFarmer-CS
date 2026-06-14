@@ -1,0 +1,5 @@
+Scenario=Ruined Cistern to Ancient Waterway blocked
+Step=Ruined Cistern fresh killed|Scan|Area=Ruined Cistern|Journal=Gilded Baron Killed Journal.png|JournalLineBucket=10|AdvanceSeconds=1
+# MatrixStep=Ruined Cistern fresh killed|Counted=true|Decision=Count|Reason=Eligible|Source=JournalCandidate|GoblinType=Gilded Baron|Area=Ruined Cistern|FreshnessBucket=Fresh
+Step=Ancient Waterway blocked killed|Scan|Area=Ancient Waterway|Journal=Treasure Goblin Killed Journal.png|JournalLineBucket=9|AdvanceSeconds=8
+# MatrixStep=Ancient Waterway blocked killed|Counted=false|Decision=Block|Reason=BlockedArea|Source=JournalCandidate|GoblinType=Treasure Goblin|Area=Ancient Waterway|FreshnessBucket=Blocked

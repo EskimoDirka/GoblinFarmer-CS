@@ -434,6 +434,18 @@ namespace GoblinFarmer
                 return new GoblinEvidenceDetectionResult(null, bestTemplate, bestImagePath, bestMatch, rankedSamples);
             }
 
+            string companionPromotionNotes = "";
+            if (PortTryPromoteJournalEngagedToKilledCompanion(
+                scanContext,
+                rankedMatches,
+                ref bestTemplate,
+                ref bestImagePath,
+                ref bestMatch,
+                out string promotionNotes))
+            {
+                companionPromotionNotes = promotionNotes;
+            }
+
             string journalNameValidationNotes = "";
             if (!PortTryValidateGoblinJournalNameMatch(
                 bestTemplate,
@@ -511,11 +523,90 @@ namespace GoblinFarmer
                 bestTemplate.Type,
                 bestMatch.Confidence,
                 bestTemplate.Source,
-                $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}{journalNameValidationNotes}{PortMinimapColorNotes(bestTemplate, bestMatch)}",
+                $"Template={bestTemplate.FileName}; Kind={bestTemplate.Kind}; Threshold={bestTemplate.Threshold:0.000}; MatchPoint={FormatPoint(bestMatch.MatchPoint)}; ScreenMatchPoint={FormatPoint(bestMatch.ScreenMatchPoint)}{journalNameValidationNotes}{companionPromotionNotes}{PortMinimapColorNotes(bestTemplate, bestMatch)}",
                 goblinType,
                 rankedSamples);
             PortRecordGoblinEvidenceTiming($"DetectBest:{PortNormalizeGoblinObservationSource(bestTemplate.Source)}", sourceStopwatch.Elapsed);
             return new GoblinEvidenceDetectionResult(candidate, bestTemplate, bestImagePath, bestMatch, rankedSamples);
+        }
+
+        private bool PortTryPromoteJournalEngagedToKilledCompanion(
+            GoblinEvidenceScanContext scanContext,
+            IReadOnlyList<(GoblinEvidenceTemplateRequirement Template, string ImagePath, GoblinEvidenceTemplateMatch Match)> rankedMatches,
+            ref GoblinEvidenceTemplateRequirement bestTemplate,
+            ref string bestImagePath,
+            ref GoblinEvidenceTemplateMatch bestMatch,
+            out string promotionNotes)
+        {
+            promotionNotes = "";
+            if (!PortNormalizeGoblinObservationSource(bestTemplate.Source).Equals("Journal", StringComparison.OrdinalIgnoreCase) ||
+                bestTemplate.Kind != GoblinEvidenceTemplateKind.JournalEngaged)
+            {
+                return false;
+            }
+
+            string engagedGoblinType = GoblinTypeNormalizer.Normalize(bestTemplate.GoblinType);
+            GoblinEvidenceTemplateRequirement engagedTemplate = bestTemplate;
+            GoblinEvidenceTemplateMatch engagedMatch = bestMatch;
+            int engagedBucket = PortJournalEvidenceLineBucket(engagedMatch.MatchPoint);
+            foreach ((GoblinEvidenceTemplateRequirement Template, string ImagePath, GoblinEvidenceTemplateMatch Match) companion in rankedMatches
+                .Where(companion =>
+                    companion.Template.Kind == GoblinEvidenceTemplateKind.JournalKilled &&
+                    GoblinTypeNormalizer.Normalize(companion.Template.GoblinType).Equals(engagedGoblinType, StringComparison.OrdinalIgnoreCase) &&
+                    companion.Match.Confidence >= companion.Template.Threshold &&
+                    PortJournalEvidenceAppearsInActiveFeed(companion.Match) &&
+                    companion.Match.MatchPoint.Y >= engagedMatch.MatchPoint.Y &&
+                    PortJournalEvidenceLineBucket(companion.Match.MatchPoint) - engagedBucket <= 2)
+                .OrderByDescending(companion => companion.Match.Confidence))
+            {
+                if (!PortTryValidateGoblinJournalNameMatch(
+                    companion.Template,
+                    companion.ImagePath,
+                    scanContext,
+                    companion.Match,
+                    out double companionNameConfidence,
+                    out Point companionNameMatchPoint,
+                    out string companionNameValidationReason))
+                {
+                    AppLogger.Info(
+                        "GoblinEvidenceJournalKilledCompanionRejected: " +
+                        $"engagedTemplate={PortLogField(engagedTemplate.FileName)}; " +
+                        $"killedTemplate={PortLogField(companion.Template.FileName)}; " +
+                        $"goblinType={PortLogField(engagedGoblinType)}; " +
+                        $"engagedConfidence={engagedMatch.Confidence:0.000}; " +
+                        $"killedConfidence={companion.Match.Confidence:0.000}; " +
+                        $"engagedLineBucket={engagedBucket}; " +
+                        $"killedLineBucket={PortJournalEvidenceLineBucket(companion.Match.MatchPoint)}; " +
+                        $"reason={PortLogField(companionNameValidationReason)}; " +
+                        $"nameConfidence={companionNameConfidence:0.000}; " +
+                        $"nameMatchPoint={FormatPoint(companionNameMatchPoint)}");
+                    continue;
+                }
+
+                AppLogger.Info(
+                    "GoblinEvidenceJournalEngagedPromotedToKilledCompanion: " +
+                    $"engagedTemplate={PortLogField(engagedTemplate.FileName)}; " +
+                    $"killedTemplate={PortLogField(companion.Template.FileName)}; " +
+                    $"goblinType={PortLogField(engagedGoblinType)}; " +
+                    $"engagedConfidence={engagedMatch.Confidence:0.000}; " +
+                    $"killedConfidence={companion.Match.Confidence:0.000}; " +
+                    $"engagedLineBucket={engagedBucket}; " +
+                    $"killedLineBucket={PortJournalEvidenceLineBucket(companion.Match.MatchPoint)}; " +
+                    $"nameConfidence={companionNameConfidence:0.000}; " +
+                    $"nameMatchPoint={FormatPoint(companionNameMatchPoint)}");
+
+                promotionNotes =
+                    $"; CompanionPromotion=JournalEngagedToKilled; " +
+                    $"CompanionEngagedTemplate={engagedTemplate.FileName}; " +
+                    $"CompanionEngagedConfidence={engagedMatch.Confidence:0.000}; " +
+                    $"CompanionEngagedLineBucket={engagedBucket}";
+                bestTemplate = companion.Template;
+                bestImagePath = companion.ImagePath;
+                bestMatch = companion.Match;
+                return true;
+            }
+
+            return false;
         }
 
         private static IReadOnlyList<ImageRecognitionSampleCandidate> PortBuildGoblinEvidenceBestSampleCandidates(

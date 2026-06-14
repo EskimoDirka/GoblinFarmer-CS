@@ -2,6 +2,63 @@
 
 This file records recent validation runs that are useful for release readiness review. `Docs/Project_Status.md` remains the source of truth for current behavior and open state.
 
+## 2026-06-14 Auto-Count Stabilization Tooling Pass
+
+- Scope: tooling and coverage only. No runtime auto-count acceptance policy, scanner execution, overlay display, combat, route, town, repair, salvage, gem stash, Kadala, or make-new-game behavior was changed.
+- Added coverage: explicit AutoCount Matrix scenarios for Southern Highlands -> Cave Level 1 stale Journal, Ruined Cistern -> Ancient Waterway blocked context, Cave Level 1 -> Level 2 independent counts, Cathedral stale Journal row, Northern Highlands fresh Journal after old empty-bucket Cave row, PF2 first/second/third count behavior, Stinging Winds two-count behavior, New Game carryover, and Minimap-to-Journal source variants.
+- Added package analysis: `goblin-auto-count-triage.md` and `goblin-auto-count-triage.json` are generated in debug packages from available logs/events/DecisionBundles/ReviewEvidence/crops, and missing sources are reported instead of failing package creation.
+- Added draft workflow: `Scripts\draft-auto-count-scenario.ps1` accepts a debug package path, timestamps, and notes, then writes review-only draft files under `Debug\AutoCountScenarioDrafts` or a caller-supplied output folder.
+- Package-size note: new auto-count stabilization artifacts are text/JSON/docs only. A smoke package reported `goblin-auto-count-triage.md`, `goblin-auto-count-triage.json`, and `Docs\AutoCount_Matrix.md`; full videos and bulk image folders stayed excluded. Example triage generation against `DebugPackages\GoblinFarmer_Debug_20260614_071706.zip` produced `goblin-auto-count-triage.md` at `17,664` bytes and `goblin-auto-count-triage.json` at `444,112` bytes.
+- Live-only notes: scanner timing, Diablo focus/input, notification rendering, OBS/overlay UI, missing-frame issues, and real same-type cross-area Minimap collision shapes still require live review or captured DecisionBundles.
+
+Validation commands:
+
+```powershell
+dotnet build GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix
+git diff --check
+```
+
+Results:
+
+- `Scripts\draft-auto-count-scenario.ps1` smoke run: passed; created `draft-scenario.txt` and `draft-explanation.md` in a temp output folder only.
+- `Scripts\create-debug-package.ps1` smoke run with a temp runtime root: passed; included auto-count triage reports and reported package size.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix`: passed with `scenarios=9`, `steps=21`, `failed=0`, `passed=True`.
+- `dotnet build GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including AutoCount Matrix, debug package triage, draft-helper, and package-bound assertions.
+- `git diff --check`: passed with LF-to-CRLF normalization warnings only.
+
+## 2026-06-14 071706 Live Review Fix Pass
+
+- Review inputs: `DebugPackages\GoblinFarmer_Debug_20260614_071706.zip` and `Video Clip Review\2026-06-14 07-05-08.mkv`.
+- Issues covered: Highlands Cave Treasure Goblin at about `02:40` was not counted/notified even though the decision-bundle Journal crop showed both `engaged a Treasure Goblin` and `killed a Treasure Goblin`.
+- Root cause: journal template selection picked the Engaged template as the best candidate and carried `Kind=JournalEngaged` into count policy, so the visible killed line in the same crop never became `JournalKilledConfirmed`.
+- Fix coverage: Journal candidate selection now promotes an Engaged candidate to a same-crop same-type Killed companion only when the Killed match meets its normal threshold, appears in the active feed, is near/below the Engaged row, and passes the existing journal-name validation. Diagnostics log accepted promotions and rejected companion candidates.
+- Live validation still needed: confirm the next Highlands Cave or similar same-crop Engaged/Killed journal event logs `GoblinEvidenceJournalEngagedPromotedToKilledCompanion`, counts as `JournalKilledConfirmed`, and does not create stale duplicate notifications.
+
+Validation commands:
+
+```powershell
+dotnet build .\GoblinFarmer.csproj
+dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
+dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay ".\DebugPackages\GoblinFarmer_Debug_20260614_071706.zip"
+git diff --check
+```
+
+Results:
+
+- `dotnet build .\GoblinFarmer.csproj`: passed.
+- `dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet test .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false`: passed, including `Goblin journal engaged candidate promotes same-crop killed companion`.
+- `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --debug-package-replay ".\DebugPackages\GoblinFarmer_Debug_20260614_071706.zip"`: passed with one replay log loaded and no failures.
+- `git diff --check`: passed with LF-to-CRLF normalization warnings only.
+
 ## 2026-06-14 064418 Live Review Fix Pass
 
 - Review inputs: `DebugPackages\GoblinFarmer_Debug_20260614_064418.zip` and `Video Clip Review\2026-06-14 06-38-57.mkv`.

@@ -15,6 +15,7 @@ For Goblin Tracker, Goblin Evidence, Goblin Replay, debug package, or script-pol
 ```powershell
 dotnet build .\GoblinFarmer.csproj -p:UseSharedCompilation=false
 dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false
+dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix
 git diff --check
 ```
 
@@ -37,6 +38,7 @@ Documentation-only changes may not need app runtime testing, but still validate 
 - Route-specific Goblin Tracker next tests should follow the route order from `Docs/Project_Status.md`.
 - Validate stale Journal suppression, Minimap confirmations, sustained Engaged handling, duplicate guards, area limits, Last Observation persistence, Reset Stats, and Make New Game behavior.
 - Use DecisionBundles and EncounterCaptures for evidence. Use the VS Debug `Capture` button only when image-recognition evidence is visibly needed.
+- For auto-count regressions, prefer adding or updating a small matrix scenario before changing runtime policy. The matrix validates saved decision/template policy shapes only; scanner timing, Diablo focus/input, notification rendering, OBS/overlay UI, and missing-frame issues remain live-only unless a package includes replay-ready DecisionBundles or curated ReviewEvidence.
 
 ## Repair/Salvage Validation
 

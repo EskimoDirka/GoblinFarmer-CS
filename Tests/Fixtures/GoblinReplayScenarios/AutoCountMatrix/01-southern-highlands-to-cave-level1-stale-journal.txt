@@ -1,0 +1,5 @@
+Scenario=Southern Highlands to Cave Level 1 stale Journal
+Step=Southern fresh minimap|Scan|Area=Southern Highlands|Minimap=Treasure Goblin Minimap.png|AdvanceSeconds=1
+# MatrixStep=Southern fresh minimap|Counted=true|Decision=Count|Reason=Eligible|Source=MinimapCandidate|GoblinType=Treasure Goblin|Area=Southern Highlands|FreshnessBucket=Fresh
+Step=Cave old journal same encounter|Scan|Area=Cave Of The Moon Clan Level 1|Journal=Treasure Goblin Killed Journal.png|JournalLineBucket=10|AdvanceSeconds=8
+# MatrixStep=Cave old journal same encounter|Counted=false|Decision=Duplicate|Reason=EncounterAlreadyAutoCounted|Source=JournalCandidate|GoblinType=Treasure Goblin|Area=Cave Of The Moon Clan Level 1|FreshnessBucket=Duplicate

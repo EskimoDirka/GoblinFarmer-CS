@@ -1,0 +1,6 @@
+Scenario=New Game reset carryover
+Step=Weeping fresh killed|Scan|Area=The Weeping Hollow|Journal=Blood Thief Killed Journal.png|JournalLineBucket=11|AdvanceSeconds=1
+# MatrixStep=Weeping fresh killed|Counted=true|Decision=Count|Reason=Eligible|Source=JournalCandidate|GoblinType=Blood Thief|Area=The Weeping Hollow|FreshnessBucket=Fresh
+Step=Make New Game|NewGame|AdvanceSeconds=6
+Step=Southern old visible killed|Scan|Area=Southern Highlands|Journal=Blood Thief Killed Journal.png|JournalLineBucket=8|AdvanceSeconds=1
+# MatrixStep=Southern old visible killed|Counted=false|Decision=Suppress|Reason=JournalCandidateIgnoredResetCarryover|Source=JournalCandidate|GoblinType=Blood Thief|Area=Southern Highlands|FreshnessBucket=Stale

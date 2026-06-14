@@ -116,6 +116,7 @@
     <None Remove="Scripts\create-debug-package.ps1" />
     <None Remove="Scripts\Create Debug Package.bat" />
     <None Remove="Scripts\debug-analysis-tools.ps1" />
+    <None Remove="Scripts\draft-auto-count-scenario.ps1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -410,6 +411,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <Content Include="Scripts\draft-auto-count-scenario.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <Target Name="ValidateReleasePublishScripts" AfterTargets="Publish">
@@ -422,6 +427,9 @@
     <Error
       Condition="!Exists('$(PublishDir)Scripts\debug-analysis-tools.ps1')"
       Text="Published debug analysis helper missing: $(PublishDir)Scripts\debug-analysis-tools.ps1" />
+    <Error
+      Condition="!Exists('$(PublishDir)Scripts\draft-auto-count-scenario.ps1')"
+      Text="Published auto-count scenario draft helper missing: $(PublishDir)Scripts\draft-auto-count-scenario.ps1" />
   </Target>
 
   <ItemGroup>

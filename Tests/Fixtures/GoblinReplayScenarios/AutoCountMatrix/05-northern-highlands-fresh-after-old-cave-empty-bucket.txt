@@ -1,0 +1,5 @@
+Scenario=Northern Highlands fresh Journal after old Cave empty bucket
+Step=Cave old empty-bucket killed|Scan|Area=Cave Of The Moon Clan Level 1|Journal=Treasure Goblin Killed Journal.png|JournalLineBucket=0|AdvanceSeconds=1
+# MatrixStep=Cave old empty-bucket killed|Counted=false|Decision=Suppress|Reason=JournalCandidateIgnoredHistoryRow|Source=JournalCandidate|GoblinType=Treasure Goblin|Area=Cave Of The Moon Clan Level 1|FreshnessBucket=Stale
+Step=Northern fresh killed after old empty bucket|Scan|Area=Northern Highlands|Journal=Treasure Goblin Killed Journal.png|JournalLineBucket=10|AdvanceSeconds=60
+# MatrixStep=Northern fresh killed after old empty bucket|Counted=true|Decision=Count|Reason=Eligible|Source=JournalCandidate|GoblinType=Treasure Goblin|Area=Northern Highlands|FreshnessBucket=Fresh

@@ -1,0 +1,5 @@
+Scenario=Cave Level 1 to Level 2 independent counts
+Step=Cave Level 1 fresh killed|Scan|Area=Cave Of The Moon Clan Level 1|Journal=Gem Hoarder Killed Journal.png|JournalLineBucket=10|AdvanceSeconds=1
+# MatrixStep=Cave Level 1 fresh killed|Counted=true|Decision=Count|Reason=Eligible|Source=JournalCandidate|GoblinType=Gem Hoarder|Area=Cave Of The Moon Clan Level 1|FreshnessBucket=Fresh
+Step=Cave Level 2 fresh minimap|Scan|Area=Cave Of The Moon Clan Level 2|Minimap=Gem Hoarder Minimap.png|AdvanceSeconds=12
+# MatrixStep=Cave Level 2 fresh minimap|Counted=true|Decision=Count|Reason=Eligible|Source=MinimapCandidate|GoblinType=Gem Hoarder|Area=Cave Of The Moon Clan Level 2|FreshnessBucket=Fresh

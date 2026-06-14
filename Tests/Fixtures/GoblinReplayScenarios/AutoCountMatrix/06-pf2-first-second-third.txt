@@ -1,0 +1,9 @@
+Scenario=PF2 first second third count policy
+Step=PF2 first Blood Thief|Scan|Area=Pandemonium Fortress Level 2|Minimap=Blood Thief Minimap.png|AdvanceSeconds=1
+# MatrixStep=PF2 first Blood Thief|Counted=true|Decision=Count|Reason=Eligible|Source=MinimapCandidate|GoblinType=Blood Thief|Area=Pandemonium Fortress Level 2|FreshnessBucket=Fresh
+Step=PF2 immediate duplicate Blood Thief|Scan|Area=Pandemonium Fortress Level 2|Minimap=Blood Thief Minimap.png|AdvanceSeconds=9
+# MatrixStep=PF2 immediate duplicate Blood Thief|Counted=false|Decision=Duplicate|Reason=EvidenceAlreadyAutoCounted|Source=MinimapCandidate|GoblinType=Blood Thief|Area=Pandemonium Fortress Level 2|FreshnessBucket=Duplicate
+Step=PF2 second Blood Thief|Scan|Area=Pandemonium Fortress Level 2|Minimap=Blood Thief Minimap.png|AdvanceSeconds=10
+# MatrixStep=PF2 second Blood Thief|Counted=true|Decision=Count|Reason=Eligible|Source=MinimapCandidate|GoblinType=Blood Thief|Area=Pandemonium Fortress Level 2|FreshnessBucket=Fresh
+Step=PF2 third Treasure Goblin|Scan|Area=Pandemonium Fortress Level 2|Minimap=Treasure Goblin Minimap.png|AdvanceSeconds=1
+# MatrixStep=PF2 third Treasure Goblin|Counted=false|Decision=Duplicate|Reason=AreaLimitReached|Source=MinimapCandidate|GoblinType=Treasure Goblin|Area=Pandemonium Fortress Level 2|FreshnessBucket=AreaLimit

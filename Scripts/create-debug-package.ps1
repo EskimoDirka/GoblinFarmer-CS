@@ -2196,6 +2196,7 @@ function New-DebugPackageSizeSummaryFromZip {
         $lines.Add("  Observation diagnostics: $MaxGoblinObservationDiagnosticCrops newest crops")
         $lines.Add("  Image recognition best-sample sets: $MaxImageRecognitionBestSampleSets newest accepted action folders")
         $lines.Add("  Image recognition promoted samples: $MaxImageRecognitionBestSampleSets newest sidecar-backed promoted samples")
+        $lines.Add("  Auto-count triage reports: text/JSON only, included by default")
         $lines.Add("  Replay image folders: excluded by default")
         $lines.Add("")
 
@@ -2228,6 +2229,20 @@ function New-DebugPackageSizeSummaryFromZip {
             $lines.Add("  $rank. $($entry.FullName) compressed=$(Format-ByteSize ([long]$entry.CompressedLength)) ($($entry.CompressedLength) bytes) uncompressed=$(Format-ByteSize ([long]$entry.Length)) ($($entry.Length) bytes)")
             $rank++
         }
+
+        $triageEntries = @($entries | Where-Object {
+            $_.FullName.Equals("goblin-auto-count-triage.md", [System.StringComparison]::OrdinalIgnoreCase) -or
+            $_.FullName.Equals("goblin-auto-count-triage.json", [System.StringComparison]::OrdinalIgnoreCase) -or
+            $_.FullName.Equals("Docs/AutoCount_Matrix.md", [System.StringComparison]::OrdinalIgnoreCase)
+        })
+        $triageCompressed = [long](($triageEntries | Measure-Object CompressedLength -Sum).Sum)
+        $triageUncompressed = [long](($triageEntries | Measure-Object Length -Sum).Sum)
+        $lines.Add("")
+        $lines.Add("Auto-count stabilization artifacts:")
+        $lines.Add("  files=$($triageEntries.Count) compressed=$(Format-ByteSize $triageCompressed) ($triageCompressed bytes) uncompressed=$(Format-ByteSize $triageUncompressed) ($triageUncompressed bytes)")
+        foreach ($entry in $triageEntries | Sort-Object FullName) {
+            $lines.Add("  - $($entry.FullName) compressed=$(Format-ByteSize ([long]$entry.CompressedLength)) ($($entry.CompressedLength) bytes) uncompressed=$(Format-ByteSize ([long]$entry.Length)) ($($entry.Length) bytes)")
+        }
     }
     finally {
         $archive.Dispose()
@@ -2247,8 +2262,11 @@ function New-GoblinTrackerReviewIndex {
         "debug-package-analysis.txt",
         "goblin-tracker-timeline.md",
         "goblin-evidence-health.txt",
+        "goblin-auto-count-triage.md",
+        "goblin-auto-count-triage.json",
         "goblin-tracker-summary.txt",
         "debug-package-manifest.txt",
+        "Docs\AutoCount_Matrix.md",
         "ReviewEvidence\manifest.json",
         "ReviewEvidence\issue.md",
         "route-failure-summary.txt",
@@ -2395,6 +2413,7 @@ try {
     Write-Step "Collecting documentation"
     [void](Copy-PackageFile $repoRoot $stagingRoot "AGENTS.md" "AGENTS.md")
     [void](Copy-PackageFile $repoRoot $stagingRoot "Docs\Project_Status.md" "Docs\Project_Status.md")
+    [void](Copy-PackageFile $repoRoot $stagingRoot "Docs\AutoCount_Matrix.md" "Docs\AutoCount_Matrix.md")
     [void](Copy-PackageFile $repoRoot $stagingRoot "Docs\TEST_CHECKLIST.md" "Docs\TEST_CHECKLIST.md")
     [void](Copy-PackageFile $repoRoot $stagingRoot "Docs\TODO.md" "Docs\TODO.md")
 
@@ -2947,6 +2966,7 @@ try {
             "App shutdown artifact creation: skipped by design",
             "Debug analysis files included: $debugAnalysisFilesIncluded",
             "Debug analysis generation status: $debugAnalysisGenerationStatus",
+            "Auto-count triage package policy: goblin-auto-count-triage.md and goblin-auto-count-triage.json included by default; full videos and bulk image folders remain excluded",
             "Source root: $repoRoot",
             "Resolved runtime root: $resolvedRuntimeRoot",
             "Runtime root resolution: $($runtimeRootInfo.Resolution)",
@@ -3025,6 +3045,9 @@ try {
             "- debug-package-analysis.txt included: $debugAnalysisFilesIncluded",
             "- goblin-tracker-timeline.md included: $debugAnalysisFilesIncluded",
             "- goblin-evidence-health.txt included: $debugAnalysisFilesIncluded",
+            "- goblin-auto-count-triage.md included: $debugAnalysisFilesIncluded",
+            "- goblin-auto-count-triage.json included: $debugAnalysisFilesIncluded",
+            "- Docs/AutoCount_Matrix.md",
             "- goblin-tracker-summary.txt",
             "- goblin-tracker-review.html",
             "- debug-package-size-summary.txt",
@@ -3108,6 +3131,7 @@ try {
             "- Debug/InventoryReplay/Salvage and Debug/InventoryReplay/Stash replay image folders are excluded by default; use ReviewEvidence frames/crops for image replay",
             "- Debug/ReplayLogs structured replay logs are copied when present for the current session",
             "- ReviewEvidence includes only selected review-video frames and manually supplied evidence; full video files are not copied by default",
+            "- Auto-count triage reports are text/JSON only and are summarized in debug-package-size-summary.txt under Auto-count stabilization artifacts",
             "- bin folders are not copied",
             "- obj folders are not copied",
             "- source files are not copied except selected docs and manifest inputs",
@@ -3125,6 +3149,7 @@ try {
             Write-Host "Included debug package analysis: $(Split-Path -Leaf $analysisResult.AnalysisPath)"
             Write-Host "Included Goblin Tracker timeline: $(Split-Path -Leaf $analysisResult.TimelinePath)"
             Write-Host "Included Goblin Evidence health report: $(Split-Path -Leaf $analysisResult.HealthPath)"
+            Write-Host "Included auto-count triage reports: $(Split-Path -Leaf $analysisResult.AutoCountTriageMarkdownPath), $(Split-Path -Leaf $analysisResult.AutoCountTriageJsonPath)"
         }
         catch {
             $debugAnalysisFilesIncluded = $false

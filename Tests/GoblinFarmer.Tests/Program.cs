@@ -14,6 +14,11 @@ if (TryRunInventoryReplayCommand(args, out int inventoryReplayExitCode))
     return inventoryReplayExitCode;
 }
 
+if (TryRunAutoCountMatrixCommand(args, out int autoCountMatrixExitCode))
+{
+    return autoCountMatrixExitCode;
+}
+
 if (TryRunGoblinReplayCaptureCommand(args, out int replayCommandExitCode))
 {
     return replayCommandExitCode;
@@ -76,6 +81,7 @@ Run("Goblin replay template scenario waits for killed confirmation after engaged
 Run("Goblin replay template scenario lets strong minimap override pending engaged journal", TestGoblinReplayTemplateScenarioLetsStrongMinimapOverridePendingEngagedJournal);
 Run("Goblin replay template scenario counts sustained active engaged journal", TestGoblinReplayTemplateScenarioCountsSustainedActiveEngagedJournal);
 Run("Goblin replay template scenario allows PF same-signature second minimap", TestGoblinReplayTemplateScenarioAllowsPandemoniumSameSignatureSecondMinimap);
+Run("AutoCount Matrix scenarios run through explicit replay harness", TestAutoCountMatrixScenariosRunThroughExplicitHarness);
 Run("Goblin replay capture folder command remains harness-only", TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly);
 Run("Installed/release profile with missing paths still requires first-run setup", TestReleaseProfileRequiresSetupWhenMissingPaths);
 Run("Release Goblin Tracker layout keeps observation fields separated", TestReleaseGoblinTrackerLayoutKeepsObservationFieldsSeparated);
@@ -133,6 +139,7 @@ Run("Goblin decision trace logs count stale block and duplicate", TestGoblinDeci
 Run("Debug package batch uses live evidence only", TestDebugPackageBatchUsesLiveEvidenceOnly);
 Run("Goblin automatic counting requires fresh armed evidence", TestGoblinAutomaticCountingRequiresFreshArmedEvidence);
 Run("Goblin journal evidence area reaches observation count path", TestGoblinJournalEvidenceAreaReachesObservationCountPath);
+Run("Goblin journal engaged candidate promotes same-crop killed companion", TestGoblinJournalEngagedCandidatePromotesSameCropKilledCompanion);
 Run("Goblin automatic count reliability requires killed or minimap confirmation", TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmation);
 Run("Goblin engaged journal can count after recent minimap confirmation", TestGoblinEngagedJournalCanCountAfterRecentMinimapConfirmation);
 Run("Goblin PF second-slot journal engaged can count after combat stops", TestGoblinPandemoniumSecondSlotJournalEngagedCanCountAfterCombatStops);
@@ -2393,6 +2400,36 @@ static void TestGoblinReplayTemplateScenarioAllowsPandemoniumSameSignatureSecond
     }
 }
 
+static void TestAutoCountMatrixScenariosRunThroughExplicitHarness()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string matrixRoot = Path.Combine(repoRoot, "Tests", "Fixtures", "GoblinReplayScenarios", "AutoCountMatrix");
+    string templateRoot = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string locationRoot = Path.Combine(repoRoot, "Images", "Current Location");
+    string programSource = File.ReadAllText(Path.Combine(repoRoot, "Tests", "GoblinFarmer.Tests", "Program.cs"));
+    string packageScript = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "create-debug-package.ps1"));
+    string draftScenarioScriptSource = File.ReadAllText(Path.Combine(repoRoot, "Scripts", "draft-auto-count-scenario.ps1"));
+
+    AssertTrue(Directory.Exists(matrixRoot), "AutoCount Matrix scenarios should live under committed test fixtures");
+    AssertTrue(Directory.GetFiles(matrixRoot, "*.txt").Length >= 8, "AutoCount Matrix should start with a small high-value scenario set");
+    AssertTrue(programSource.Contains("--goblin-auto-count-matrix", StringComparison.Ordinal), "AutoCount Matrix command should live in the explicit test harness CLI");
+    AssertTrue(programSource.Contains("WritesPersistentDebugFiles: False", StringComparison.Ordinal), "AutoCount Matrix command should declare no persistent debug writes");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "Form1.cs")).Contains("--goblin-auto-count-matrix", StringComparison.Ordinal), "WinForms startup should not know about AutoCount Matrix replay");
+    AssertFalse(File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs")).Contains("--goblin-auto-count-matrix", StringComparison.Ordinal), "live scanner should not know about AutoCount Matrix replay");
+    AssertFalse(packageScript.Contains("--goblin-auto-count-matrix", StringComparison.Ordinal), "debug package creation should not invoke AutoCount Matrix replay");
+    AssertFalse(packageScript.Contains("draft-auto-count-scenario.ps1", StringComparison.Ordinal), "debug package creation should not auto-draft scenarios");
+    AssertTrue(draftScenarioScriptSource.Contains("Debug\\AutoCountScenarioDrafts", StringComparison.Ordinal), "scenario draft helper should write under an ignored Debug folder by default");
+    AssertTrue(draftScenarioScriptSource.Contains("Draft only", StringComparison.Ordinal), "scenario draft helper should clearly mark generated files as review-only");
+    AssertFalse(draftScenarioScriptSource.Contains("Copy-Item") && draftScenarioScriptSource.Contains("Tests\\Fixtures\\GoblinReplayScenarios\\AutoCountMatrix"), "scenario draft helper must not promote files into committed matrix fixtures");
+
+    AutoCountMatrixRunResult result = RunAutoCountMatrixForHarness(matrixRoot, templateRoot, locationRoot);
+    AssertTrue(result.Passed, "committed AutoCount Matrix scenarios should match current production policy");
+    AssertTrue(result.Scenarios.Count >= 8, "matrix should run each committed high-value scenario file");
+    AssertTrue(result.Scenarios.SelectMany(scenario => scenario.Steps).Any(step => step.Expectation.FreshnessBucket.Equals("Stale", StringComparison.OrdinalIgnoreCase)), "matrix should include stale Journal coverage");
+    AssertTrue(result.Scenarios.SelectMany(scenario => scenario.Steps).Any(step => step.Expectation.FreshnessBucket.Equals("AreaLimit", StringComparison.OrdinalIgnoreCase)), "matrix should include area-limit coverage");
+    AssertTrue(result.Scenarios.SelectMany(scenario => scenario.Steps).Any(step => step.Expectation.FreshnessBucket.Equals("Duplicate", StringComparison.OrdinalIgnoreCase)), "matrix should include duplicate-suppression coverage");
+}
+
 static void TestGoblinReplayCaptureFolderCommandRemainsHarnessOnly()
 {
     string repoRoot = FindRepositoryRootForTests();
@@ -2661,6 +2698,363 @@ static void PrintInventoryReplayCommandHelp()
     Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --inventory-replay \"Debug\\InventoryReplay\\Stash\\GemStashInventoryReplay_...\"");
     Console.WriteLine();
     Console.WriteLine("Inventory replay is explicit/on-demand only. It runs production inventory classifiers against saved inventory-grid crops and never clicks, presses keys, or runs live automation.");
+}
+
+static bool TryRunAutoCountMatrixCommand(string[] commandArgs, out int exitCode)
+{
+    exitCode = 0;
+    if (commandArgs.Length == 0 || !commandArgs[0].Equals("--goblin-auto-count-matrix", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    string repoRoot = FindRepositoryRootForTests();
+    string matrixRoot = Path.Combine(repoRoot, "Tests", "Fixtures", "GoblinReplayScenarios", "AutoCountMatrix");
+    string templateDirectory = Path.Combine(repoRoot, "Images", "Goblin Evidence");
+    string currentLocationDirectory = Path.Combine(repoRoot, "Images", "Current Location");
+
+    for (int i = 1; i < commandArgs.Length; i++)
+    {
+        string arg = commandArgs[i];
+        if (arg.Equals("--help", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("-h", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintAutoCountMatrixCommandHelp();
+            return true;
+        }
+
+        if (arg.Equals("--path", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("--matrix", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 >= commandArgs.Length)
+            {
+                Console.Error.WriteLine("FAIL missing value for --path.");
+                exitCode = 1;
+                return true;
+            }
+
+            matrixRoot = Path.GetFullPath(commandArgs[++i], repoRoot);
+            continue;
+        }
+
+        if (arg.Equals("--templates", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("--template-dir", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 >= commandArgs.Length)
+            {
+                Console.Error.WriteLine("FAIL missing value for --templates.");
+                exitCode = 1;
+                return true;
+            }
+
+            templateDirectory = Path.GetFullPath(commandArgs[++i], repoRoot);
+            continue;
+        }
+
+        if (arg.Equals("--locations", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("--location-dir", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 >= commandArgs.Length)
+            {
+                Console.Error.WriteLine("FAIL missing value for --locations.");
+                exitCode = 1;
+                return true;
+            }
+
+            currentLocationDirectory = Path.GetFullPath(commandArgs[++i], repoRoot);
+            continue;
+        }
+
+        Console.Error.WriteLine($"FAIL unknown AutoCount Matrix option: {arg}");
+        PrintAutoCountMatrixCommandHelp();
+        exitCode = 1;
+        return true;
+    }
+
+    AutoCountMatrixRunResult result = RunAutoCountMatrixForHarness(matrixRoot, templateDirectory, currentLocationDirectory);
+    PrintAutoCountMatrixResult(result);
+    if (!result.Passed)
+    {
+        exitCode = 1;
+    }
+
+    return true;
+}
+
+static AutoCountMatrixRunResult RunAutoCountMatrixForHarness(
+    string matrixRoot,
+    string templateDirectory,
+    string currentLocationDirectory)
+{
+    List<AutoCountMatrixScenarioResult> scenarioResults = [];
+    List<string> errors = [];
+    if (!Directory.Exists(matrixRoot))
+    {
+        errors.Add($"Matrix folder missing: {matrixRoot}");
+        return new AutoCountMatrixRunResult(matrixRoot, templateDirectory, currentLocationDirectory, [], errors);
+    }
+
+    if (!Directory.Exists(templateDirectory))
+    {
+        errors.Add($"Goblin Evidence template folder missing: {templateDirectory}");
+        return new AutoCountMatrixRunResult(matrixRoot, templateDirectory, currentLocationDirectory, [], errors);
+    }
+
+    string[] scenarioFiles = Directory.GetFiles(matrixRoot, "*.txt", SearchOption.TopDirectoryOnly)
+        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    if (scenarioFiles.Length == 0)
+    {
+        errors.Add($"No AutoCount Matrix scenario files found under {matrixRoot}");
+        return new AutoCountMatrixRunResult(matrixRoot, templateDirectory, currentLocationDirectory, [], errors);
+    }
+
+    foreach (string scenarioPath in scenarioFiles)
+    {
+        GoblinReplayTemplateScenarioManifestLoadResult load =
+            GoblinReplayFixtureRunner.LoadExplicitTemplateScenarioManifestForHarness(scenarioPath);
+        List<AutoCountMatrixExpectation> expectations = LoadAutoCountMatrixExpectations(scenarioPath);
+        List<AutoCountMatrixStepResult> stepResults = [];
+        List<string> scenarioErrors = [];
+        if (!load.Loaded)
+        {
+            scenarioErrors.AddRange(load.Errors);
+            scenarioResults.Add(new AutoCountMatrixScenarioResult(scenarioPath, load.ScenarioName, false, stepResults, scenarioErrors));
+            continue;
+        }
+
+        GoblinReplayFixtureScenarioResult replayResult =
+            GoblinReplayFixtureRunner.RunExplicitTemplateScenarioForHarness(
+                load.ScenarioName,
+                load.Steps,
+                templateDirectory,
+                log: null,
+                setFrameSourceForReplay: null,
+                writeAppLog: false,
+                currentLocationTemplateDirectory: currentLocationDirectory);
+
+        foreach (AutoCountMatrixExpectation expectation in expectations)
+        {
+            GoblinReplayFixtureStepResult? actual = replayResult.Steps.FirstOrDefault(
+                step => step.StepName.Equals(expectation.StepName, StringComparison.OrdinalIgnoreCase));
+            if (actual == null)
+            {
+                stepResults.Add(new AutoCountMatrixStepResult(expectation, null, false, $"Step not found: {expectation.StepName}"));
+                continue;
+            }
+
+            string mismatch = AutoCountMatrixMismatch(expectation, actual);
+            stepResults.Add(new AutoCountMatrixStepResult(expectation, actual, string.IsNullOrWhiteSpace(mismatch), mismatch));
+        }
+
+        foreach (GoblinReplayFixtureStepResult actual in replayResult.Steps)
+        {
+            if (!expectations.Any(expectation => expectation.StepName.Equals(actual.StepName, StringComparison.OrdinalIgnoreCase)) &&
+                !actual.FrameSource.Equals("ScenarioAction", StringComparison.OrdinalIgnoreCase))
+            {
+                stepResults.Add(new AutoCountMatrixStepResult(
+                    new AutoCountMatrixExpectation(actual.StepName, null, "", "", "", "", "", ""),
+                    actual,
+                    false,
+                    "Missing MatrixStep expectation"));
+            }
+        }
+
+        scenarioResults.Add(new AutoCountMatrixScenarioResult(
+            scenarioPath,
+            load.ScenarioName,
+            stepResults.Count > 0 && stepResults.All(step => step.Passed),
+            stepResults,
+            scenarioErrors));
+    }
+
+    return new AutoCountMatrixRunResult(matrixRoot, templateDirectory, currentLocationDirectory, scenarioResults, errors);
+}
+
+static List<AutoCountMatrixExpectation> LoadAutoCountMatrixExpectations(string scenarioPath)
+{
+    List<AutoCountMatrixExpectation> expectations = [];
+    foreach (string rawLine in File.ReadLines(scenarioPath))
+    {
+        string line = rawLine.Trim();
+        const string prefix = "# MatrixStep=";
+        if (!line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            continue;
+        }
+
+        string value = line[prefix.Length..];
+        string[] parts = value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            continue;
+        }
+
+        Dictionary<string, string> fields = new(StringComparer.OrdinalIgnoreCase);
+        for (int index = 1; index < parts.Length; index++)
+        {
+            int separator = parts[index].IndexOf('=');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            fields[parts[index][..separator].Trim()] = parts[index][(separator + 1)..].Trim();
+        }
+
+        bool? counted = null;
+        if (fields.TryGetValue("Counted", out string? countedValue) &&
+            bool.TryParse(countedValue, out bool parsedCounted))
+        {
+            counted = parsedCounted;
+        }
+
+        expectations.Add(new AutoCountMatrixExpectation(
+            parts[0],
+            counted,
+            AutoCountMatrixField(fields, "Decision"),
+            AutoCountMatrixField(fields, "Reason"),
+            AutoCountMatrixField(fields, "Source"),
+            AutoCountMatrixField(fields, "GoblinType", "Goblin"),
+            AutoCountMatrixField(fields, "Area", "AcceptedArea"),
+            AutoCountMatrixField(fields, "FreshnessBucket", "EvidenceAgeBucket", "Bucket")));
+    }
+
+    return expectations;
+}
+
+static string AutoCountMatrixField(IReadOnlyDictionary<string, string> fields, params string[] names)
+{
+    foreach (string name in names)
+    {
+        if (fields.TryGetValue(name, out string? value))
+        {
+            return value;
+        }
+    }
+
+    return "";
+}
+
+static string AutoCountMatrixMismatch(AutoCountMatrixExpectation expectation, GoblinReplayFixtureStepResult actual)
+{
+    List<string> mismatches = [];
+    if (expectation.Counted.HasValue && expectation.Counted.Value != actual.Counted)
+    {
+        mismatches.Add($"counted expected={expectation.Counted.Value} actual={actual.Counted}");
+    }
+
+    Compare("decision", expectation.Decision, actual.CountDecision, exact: true);
+    Compare("reason", expectation.Reason, actual.Reason, exact: true);
+    Compare("source", expectation.Source, actual.Source, exact: true);
+    Compare("goblin", expectation.GoblinType, actual.GoblinType, exact: true);
+    Compare("area", expectation.Area, actual.AreaKey, exact: true);
+
+    string actualBucket = AutoCountMatrixFreshnessBucket(actual);
+    Compare("freshnessBucket", expectation.FreshnessBucket, actualBucket, exact: true);
+    return string.Join("; ", mismatches);
+
+    void Compare(string name, string expected, string actualValue, bool exact)
+    {
+        if (string.IsNullOrWhiteSpace(expected) ||
+            expected.Equals("Any", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        bool matches = exact
+            ? expected.Equals(actualValue, StringComparison.OrdinalIgnoreCase)
+            : actualValue.IndexOf(expected, StringComparison.OrdinalIgnoreCase) >= 0;
+        if (!matches)
+        {
+            mismatches.Add($"{name} expected={expected} actual={actualValue}");
+        }
+    }
+}
+
+static string AutoCountMatrixFreshnessBucket(GoblinReplayFixtureStepResult actual)
+{
+    string combined = $"{actual.CountDecision} {actual.Reason} {actual.FreshnessReason}";
+    if (combined.Contains("AreaLimit", StringComparison.OrdinalIgnoreCase))
+    {
+        return "AreaLimit";
+    }
+
+    if (combined.Contains("Blocked", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Blocked";
+    }
+
+    if (combined.Contains("Pending", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Pending";
+    }
+
+    if (combined.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
+        combined.Contains("AlreadyAutoCounted", StringComparison.OrdinalIgnoreCase) ||
+        combined.Contains("EvidenceAlready", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Duplicate";
+    }
+
+    if (combined.Contains("Stale", StringComparison.OrdinalIgnoreCase) ||
+        combined.Contains("Carryover", StringComparison.OrdinalIgnoreCase) ||
+        combined.Contains("HistoryRow", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Stale";
+    }
+
+    return actual.Counted ? "Fresh" : "Other";
+}
+
+static void PrintAutoCountMatrixResult(AutoCountMatrixRunResult result)
+{
+    Console.WriteLine("Goblin AutoCount Matrix Harness");
+    Console.WriteLine("Mode: ExplicitOnDemand");
+    Console.WriteLine("WritesPersistentDebugFiles: False");
+    Console.WriteLine($"MatrixRoot: {result.MatrixRoot}");
+    Console.WriteLine($"TemplateDirectory: {result.TemplateDirectory}");
+    Console.WriteLine($"CurrentLocationDirectory: {result.CurrentLocationDirectory}");
+    foreach (string error in result.Errors)
+    {
+        Console.WriteLine($"FAIL MATRIX_ERROR message=\"{error}\"");
+    }
+
+    foreach (AutoCountMatrixScenarioResult scenario in result.Scenarios)
+    {
+        Console.WriteLine($"{(scenario.Passed ? "PASS" : "FAIL")} MATRIX_SCENARIO scenario=\"{scenario.ScenarioName}\" path=\"{scenario.ScenarioPath}\" expectations={scenario.Steps.Count}");
+        foreach (string error in scenario.Errors)
+        {
+            Console.WriteLine($"ERROR scenario=\"{scenario.ScenarioName}\" message=\"{error}\"");
+        }
+
+        foreach (AutoCountMatrixStepResult step in scenario.Steps)
+        {
+            GoblinReplayFixtureStepResult? actual = step.Actual;
+            string status = step.Passed ? "PASS" : "FAIL";
+            Console.WriteLine(
+                $"{status} MATRIX_STEP scenario=\"{scenario.ScenarioName}\" step=\"{step.Expectation.StepName}\" expectedDecision={step.Expectation.Decision} actualDecision={actual?.CountDecision ?? ""} reason=\"{actual?.Reason ?? ""}\" source={actual?.Source ?? ""} goblinType=\"{actual?.GoblinType ?? ""}\" area=\"{actual?.AreaKey ?? ""}\" evidenceAge={AutoCountMatrixActualBucket(actual)} mismatch=\"{step.Mismatch}\"");
+        }
+    }
+
+    int totalSteps = result.Scenarios.Sum(scenario => scenario.Steps.Count);
+    int failedSteps = result.Scenarios.Sum(scenario => scenario.Steps.Count(step => !step.Passed));
+    Console.WriteLine($"SUMMARY scenarios={result.Scenarios.Count} steps={totalSteps} failed={failedSteps} passed={result.Passed}");
+}
+
+static string AutoCountMatrixActualBucket(GoblinReplayFixtureStepResult? actual)
+{
+    return actual == null ? "" : AutoCountMatrixFreshnessBucket(actual);
+}
+
+static void PrintAutoCountMatrixCommandHelp()
+{
+    Console.WriteLine("Usage:");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-auto-count-matrix");
+    Console.WriteLine("  dotnet run --project .\\Tests\\GoblinFarmer.Tests\\GoblinFarmer.Tests.csproj -- --goblin-auto-count-matrix --path Tests\\Fixtures\\GoblinReplayScenarios\\AutoCountMatrix");
+    Console.WriteLine();
+    Console.WriteLine("Runs committed AutoCount Matrix template scenarios through the explicit Goblin Replay harness and verifies MatrixStep expectations.");
+    Console.WriteLine("Replay remains explicit/on-demand and does not run startup, scanner, route, form, package, or live automation paths.");
 }
 
 static bool TryRunGoblinReplayCaptureCommand(string[] commandArgs, out int exitCode)
@@ -3883,6 +4277,8 @@ static void TestDebugPackageIncludesBuiltInAnalysisReports()
         string healthText = ReadRequiredZipText(archive, "goblin-evidence-health.txt");
         string manifestText = ReadRequiredZipText(archive, "debug-package-manifest.txt");
         string reviewIndexText = ReadRequiredZipText(archive, "goblin-tracker-review.html");
+        string triageText = ReadRequiredZipText(archive, "goblin-auto-count-triage.md");
+        string triageJson = ReadRequiredZipText(archive, "goblin-auto-count-triage.json");
 
         AssertTrue(analysisText.Contains("Recommended review order", StringComparison.OrdinalIgnoreCase), "analysis report should guide review order");
         AssertTrue(analysisText.Contains("GoblinCountAccepted", StringComparison.OrdinalIgnoreCase), "analysis report should summarize count markers");
@@ -3890,9 +4286,17 @@ static void TestDebugPackageIncludesBuiltInAnalysisReports()
         AssertTrue(timelineText.Contains("Cave Of The Moon Clan Level 2", StringComparison.OrdinalIgnoreCase), "timeline should include the resolved area");
         AssertTrue(healthText.Contains("DecisionBundles", StringComparison.OrdinalIgnoreCase), "evidence health report should count decision bundles");
         AssertTrue(manifestText.Contains("Debug analysis files included: True", StringComparison.OrdinalIgnoreCase), "manifest should state that analysis reports are included");
+        AssertTrue(manifestText.Contains("Auto-count triage package policy", StringComparison.OrdinalIgnoreCase), "manifest should document bounded auto-count triage inclusion");
         AssertTrue(reviewIndexText.Contains("debug-package-analysis.txt", StringComparison.OrdinalIgnoreCase), "review index should link the analysis report");
         AssertTrue(reviewIndexText.Contains("goblin-tracker-timeline.md", StringComparison.OrdinalIgnoreCase), "review index should link the tracker timeline");
         AssertTrue(reviewIndexText.Contains("goblin-evidence-health.txt", StringComparison.OrdinalIgnoreCase), "review index should link the evidence health report");
+        AssertTrue(reviewIndexText.Contains("goblin-auto-count-triage.md", StringComparison.OrdinalIgnoreCase), "review index should link the auto-count triage markdown");
+        AssertTrue(reviewIndexText.Contains("goblin-auto-count-triage.json", StringComparison.OrdinalIgnoreCase), "review index should link the auto-count triage JSON");
+        AssertTrue(triageText.Contains("Goblin Auto-Count Triage", StringComparison.OrdinalIgnoreCase), "triage markdown should identify the report");
+        AssertTrue(triageText.Contains("Source Availability", StringComparison.OrdinalIgnoreCase), "triage markdown should summarize source availability");
+        AssertTrue(triageText.Contains("Likely Review Targets", StringComparison.OrdinalIgnoreCase), "triage markdown should flag likely review targets");
+        AssertTrue(triageJson.Contains("SourceAvailability", StringComparison.OrdinalIgnoreCase), "triage JSON should include source availability");
+        AssertTrue(triageJson.Contains("ReviewTargets", StringComparison.OrdinalIgnoreCase), "triage JSON should include review targets");
     }
     finally
     {
@@ -5060,6 +5464,7 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
         "cleanup-project.ps1",
         "create-debug-package.ps1",
         "debug-analysis-tools.ps1",
+        "draft-auto-count-scenario.ps1",
     ];
     string retiredEvidenceToken = "Goblin" + ("Re" + "play");
     string retiredEvidenceName = "Goblin " + ("Re" + "play");
@@ -5183,9 +5588,14 @@ static void TestDebugPackageBatchUsesLiveEvidenceOnly()
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaDebugPackageAnalysisContent", StringComparison.Ordinal), "shared debug helper should build the package analysis report");
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinTrackerTimelineContent", StringComparison.Ordinal), "shared debug helper should build the Goblin Tracker timeline");
     AssertTrue(debugAnalysisToolsSource.Contains("New-DgaGoblinEvidenceHealthContent", StringComparison.Ordinal), "shared debug helper should build the evidence health report");
+    AssertTrue(debugAnalysisToolsSource.Contains("New-DgaAutoCountTriageData", StringComparison.Ordinal), "shared debug helper should build auto-count triage data");
+    AssertTrue(debugAnalysisToolsSource.Contains("New-DgaAutoCountTriageMarkdownContent", StringComparison.Ordinal), "shared debug helper should build auto-count triage markdown");
+    AssertTrue(packageScript.Contains("goblin-auto-count-triage.md", StringComparison.Ordinal), "debug package script should include auto-count triage markdown");
+    AssertTrue(packageScript.Contains("goblin-auto-count-triage.json", StringComparison.Ordinal), "debug package script should include auto-count triage JSON");
     AssertTrue(projectSource.Contains("Scripts\\create-debug-package.ps1", StringComparison.Ordinal), "release/export ZIP package script should remain published");
     AssertTrue(projectSource.Contains("Scripts\\Create Debug Package.bat", StringComparison.Ordinal), "release/export ZIP package launcher should remain published");
     AssertTrue(projectSource.Contains("Scripts\\debug-analysis-tools.ps1", StringComparison.Ordinal), "shared debug package helper should remain published because the package script dot-sources it");
+    AssertTrue(projectSource.Contains("Scripts\\draft-auto-count-scenario.ps1", StringComparison.Ordinal), "auto-count scenario draft helper should be copied to VS Debug and Release publish outputs");
     string[] activeBatchScripts = Directory.GetFiles(Path.Combine(repoRoot, "Scripts"), "*.bat", SearchOption.TopDirectoryOnly)
         .Select(Path.GetFileName)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
@@ -5300,6 +5710,29 @@ static void TestGoblinJournalEvidenceAreaReachesObservationCountPath()
     AssertTrue(sessionStatsSource.Contains("PandemoniumTitleOutranksOlderJournalArea", StringComparison.Ordinal), "fresh PF title evidence should not be overwritten by an older different-level PF JournalArea note");
     AssertTrue(sessionStatsSource.Contains("PortAreDifferentPandemoniumFortressAreas", StringComparison.Ordinal), "journal area handoff should explicitly guard PF1/PF2 level drift");
     AssertTrue(observeMethod.IndexOf("PortApplyJournalEvidenceAreaFromNotes", StringComparison.Ordinal) < observeMethod.IndexOf("PortApplyJournalMinimapAreaOverride", StringComparison.Ordinal), "journal evidence area should be applied before the existing minimap channel override");
+}
+
+static void TestGoblinJournalEngagedCandidatePromotesSameCropKilledCompanion()
+{
+    string repoRoot = FindRepositoryRootForTests();
+    string evidenceSource = File.ReadAllText(Path.Combine(repoRoot, "frmMain.GoblinEvidence.cs"));
+    string detectionMethod = ExtractMethodBody(evidenceSource, "private GoblinEvidenceDetectionResult PortDetectBestGoblinEvidenceTemplate");
+    string promotionMethod = ExtractMethodBody(evidenceSource, "private bool PortTryPromoteJournalEngagedToKilledCompanion");
+
+    AssertTrue(detectionMethod.Contains("PortTryPromoteJournalEngagedToKilledCompanion", StringComparison.Ordinal), "journal candidate selection should try a same-crop killed-line promotion before building the candidate");
+    AssertTrue(detectionMethod.IndexOf("PortTryPromoteJournalEngagedToKilledCompanion", StringComparison.Ordinal) < detectionMethod.IndexOf("PortTryValidateGoblinJournalNameMatch", StringComparison.Ordinal), "same-crop killed promotion should run before final name validation and candidate notes are built");
+    AssertTrue(promotionMethod.Contains("bestTemplate.Kind != GoblinEvidenceTemplateKind.JournalEngaged", StringComparison.Ordinal), "promotion should only start from Engaged journal candidates");
+    AssertTrue(promotionMethod.Contains("companion.Template.Kind == GoblinEvidenceTemplateKind.JournalKilled", StringComparison.Ordinal), "promotion should only promote to Killed journal templates");
+    AssertTrue(promotionMethod.Contains("GoblinTypeNormalizer.Normalize(companion.Template.GoblinType).Equals(engagedGoblinType", StringComparison.Ordinal), "promotion should require the killed companion to be the same goblin type");
+    AssertTrue(promotionMethod.Contains("companion.Match.Confidence >= companion.Template.Threshold", StringComparison.Ordinal), "promotion should require the killed companion to meet its normal threshold");
+    AssertTrue(promotionMethod.Contains("PortJournalEvidenceAppearsInActiveFeed(companion.Match)", StringComparison.Ordinal), "promotion should ignore history rows outside the active journal feed");
+    AssertTrue(promotionMethod.Contains("companion.Match.MatchPoint.Y >= engagedMatch.MatchPoint.Y", StringComparison.Ordinal), "promotion should only accept the killed row at or below the engaged row");
+    AssertTrue(promotionMethod.Contains("PortJournalEvidenceLineBucket(companion.Match.MatchPoint) - engagedBucket <= 2", StringComparison.Ordinal), "promotion should require the killed companion to be near the engaged row");
+    AssertTrue(promotionMethod.Contains("PortTryValidateGoblinJournalNameMatch", StringComparison.Ordinal), "promotion should keep journal name validation before accepting the killed companion");
+    AssertTrue(promotionMethod.Contains("GoblinEvidenceJournalEngagedPromotedToKilledCompanion", StringComparison.Ordinal), "promotion should log an explicit diagnostic when the same-crop killed line wins");
+    AssertTrue(promotionMethod.Contains("GoblinEvidenceJournalKilledCompanionRejected", StringComparison.Ordinal), "failed companion validation should be logged for future package reviews");
+    AssertTrue(evidenceSource.Contains("CompanionPromotion=JournalEngagedToKilled", StringComparison.Ordinal), "promoted candidates should carry companion-promotion metadata into evidence signatures and logs");
+    AssertTrue(detectionMethod.Contains("Kind={bestTemplate.Kind}", StringComparison.Ordinal), "promoted candidates should carry the final Killed kind instead of the original Engaged kind");
 }
 
 static void TestGoblinAutomaticCountReliabilityRequiresKilledOrMinimapConfirmation()
@@ -8897,4 +9330,39 @@ static void AssertSequenceEqual<T>(IEnumerable<T> expected, IEnumerable<T> actua
             throw new InvalidOperationException($"{message}: index={index}; expected={expectedItems[index]}; actual={actualItems[index]}");
         }
     }
+}
+
+sealed record AutoCountMatrixExpectation(
+    string StepName,
+    bool? Counted,
+    string Decision,
+    string Reason,
+    string Source,
+    string GoblinType,
+    string Area,
+    string FreshnessBucket);
+
+sealed record AutoCountMatrixStepResult(
+    AutoCountMatrixExpectation Expectation,
+    GoblinReplayFixtureStepResult? Actual,
+    bool Passed,
+    string Mismatch);
+
+sealed record AutoCountMatrixScenarioResult(
+    string ScenarioPath,
+    string ScenarioName,
+    bool Passed,
+    IReadOnlyList<AutoCountMatrixStepResult> Steps,
+    IReadOnlyList<string> Errors);
+
+sealed record AutoCountMatrixRunResult(
+    string MatrixRoot,
+    string TemplateDirectory,
+    string CurrentLocationDirectory,
+    IReadOnlyList<AutoCountMatrixScenarioResult> Scenarios,
+    IReadOnlyList<string> Errors)
+{
+    public bool Passed => Errors.Count == 0 &&
+        Scenarios.Count > 0 &&
+        Scenarios.All(scenario => scenario.Passed);
 }

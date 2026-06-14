@@ -12,6 +12,7 @@ Use `Scripts\Create Debug Package.bat` to create the supported review ZIP. Usefu
 - `debug-package-manifest.txt`
 - `goblin-tracker-summary.txt`
 - `goblin-tracker-review.html`
+- `goblin-auto-count-triage.md` and `goblin-auto-count-triage.json`
 - latest logs, route summaries, session metadata, screenshots, and structured JSONL events
 - `Debug\ReplayLogs\*.jsonl` when inventory replay metadata was recorded
 - `ReviewEvidence\manifest.json`, `ReviewEvidence\issue.md`, and selected reviewed video frames/crops when review evidence parameters were supplied
@@ -51,6 +52,9 @@ The VS Debug in-game Goblin overlay is also passive. It is a click-through, no-a
 - Inventory Replay classifier loaders remain available for curated image evidence, but live Debug Mode inventory scans should record structured JSONL under `Debug\ReplayLogs` instead of writing automatic replay screenshot folders.
 - Replay must not run during startup, VS Debug startup, scanner execution, route workflows, package creation, form close, or automated live testing.
 - Log-only replay validates recorded policy/workflow decisions. Image-recognition replay requires curated frames/crops from `ReviewEvidence`; logs alone cannot validate pixel classifier changes. Replay still does not validate real-time scanner timing, sound playback, mouse click-through, or Diablo focus behavior.
+- Auto-count triage reports are generated during debug package analysis. They group accepted counts, suppressions, pending evidence, stale Journal rows, duplicate/area-limit/blocked-area suppressions, area-resolution changes, and latency traces from whichever package sources exist.
+- Use `Scripts\draft-auto-count-scenario.ps1 -DebugPackagePath <zip-or-folder> -Timestamp <hh:mm:ss> -ReviewNotes <text>` to create a review-only scenario draft under `Debug\AutoCountScenarioDrafts`. The draft helper must not modify production policy or committed test fixtures; promote scenarios manually only after the assertion is understood.
+- Use the explicit test-harness command `dotnet run --project .\Tests\GoblinFarmer.Tests\GoblinFarmer.Tests.csproj -p:UseSharedCompilation=false -- --goblin-auto-count-matrix` to run the curated AutoCount Matrix. It is policy replay only and must not be invoked by startup, scanners, route workflows, package creation, or VS Debug form startup.
 
 ## Salvage Diagnostics
 

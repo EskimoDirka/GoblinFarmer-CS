@@ -1,0 +1,7 @@
+Scenario=Stinging Winds two-count policy
+Step=Stinging first Gelatinous|Scan|Area=Stinging Winds|Minimap=Gelatinous Sire Minimap.png|AdvanceSeconds=1
+# MatrixStep=Stinging first Gelatinous|Counted=true|Decision=Count|Reason=Eligible|Source=MinimapCandidate|GoblinType=Gelatinous Sire|Area=Stinging Winds|FreshnessBucket=Fresh
+Step=Stinging second Blood Thief|Scan|Area=Stinging Winds|Minimap=Blood Thief Minimap.png|AdvanceSeconds=12
+# MatrixStep=Stinging second Blood Thief|Counted=true|Decision=Count|Reason=Eligible|Source=MinimapCandidate|GoblinType=Blood Thief|Area=Stinging Winds|FreshnessBucket=Fresh
+Step=Stinging third Treasure|Scan|Area=Stinging Winds|Minimap=Treasure Goblin Minimap.png|AdvanceSeconds=12
+# MatrixStep=Stinging third Treasure|Counted=false|Decision=Duplicate|Reason=AreaLimitReached|Source=MinimapCandidate|GoblinType=Treasure Goblin|Area=Stinging Winds|FreshnessBucket=AreaLimit

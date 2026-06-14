@@ -17,7 +17,13 @@ $script:DgaTrackerMarkers = @(
     "ObservationScanSkipped",
     "GoblinEvidenceCandidateCheck",
     "GoblinEvidenceScanResult",
-    "GoblinRecognitionCaptureSaved"
+    "GoblinRecognitionCaptureSaved",
+    "GoblinEvidenceCandidateSelection",
+    "GoblinLatencyTrace",
+    "GoblinOverlayDetectedAreaUpdated",
+    "GoblinOverlayUpdated",
+    "GoblinEvidenceJournalEngagedPromotedToKilledCompanion",
+    "GoblinEvidenceJournalKilledCompanionRejected"
 )
 
 function Format-DgaByteSize {
@@ -458,6 +464,290 @@ function New-DgaDebugPackageAnalysisContent {
     return $lines
 }
 
+function Get-DgaAutoCountTriageRows {
+    param([string]$Root)
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($row in @(Get-DgaTrackerTimelineRows $Root)) {
+        $rows.Add($row)
+    }
+
+    $known = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($row in $rows) {
+        [void]$known.Add("$($row.File):$($row.Line)")
+    }
+
+    foreach ($log in Get-DgaAllLogs $Root) {
+        $lineNumber = 0
+        foreach ($line in Get-Content -LiteralPath $log.FullName -ErrorAction SilentlyContinue) {
+            $lineNumber++
+            $relative = Get-DgaPackageRelativePath $Root $log.FullName
+            if ($known.Contains("${relative}:$lineNumber")) {
+                continue
+            }
+
+            if ($line.IndexOf("GoblinLatencyTrace", [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                $line.IndexOf("GoblinEvidenceCandidateSelection", [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                $line.IndexOf("Area resolved", [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                $line.IndexOf("routeRawArea=", [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                $line.IndexOf("currentArea=", [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                continue
+            }
+
+            $fields = Convert-DgaLogFields $line
+            $event = if ($line.IndexOf("GoblinLatencyTrace", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                "GoblinLatencyTrace"
+            }
+            elseif ($line.IndexOf("GoblinEvidenceCandidateSelection", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                "GoblinEvidenceCandidateSelection"
+            }
+            elseif ($line.IndexOf("Area resolved", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                $line.IndexOf("routeRawArea=", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                "AreaResolutionContext"
+            }
+            else {
+                "GoblinTrackerContext"
+            }
+
+            $rows.Add([pscustomobject]@{
+                Timestamp = Get-DgaLogTimestamp $line
+                Event = $event
+                Source = Get-DgaField $fields @("source", "observationSource")
+                GoblinType = Get-DgaField $fields @("goblinType", "type", "lastObservationType")
+                Area = Get-DgaField $fields @("areaKey", "area", "resolvedArea", "currentArea", "routeRawArea", "acceptedArea")
+                Decision = Get-DgaField $fields @("decision", "wouldCount", "accepted", "counted")
+                Reason = Get-DgaField $fields @("reason", "blockReason", "duplicateReason")
+                Evidence = Get-DgaField $fields @("evidenceHash", "evidenceId", "correlationId", "bundleId", "signature")
+                Details = $line.Trim()
+                File = $relative
+                Line = $lineNumber
+            })
+        }
+    }
+
+    return $rows
+}
+
+function Test-DgaRowMatchesAny {
+    param(
+        [object]$Row,
+        [string[]]$Patterns
+    )
+
+    $text = "$($Row.Event) $($Row.Decision) $($Row.Reason) $($Row.Details)"
+    foreach ($pattern in $Patterns) {
+        if ($text.IndexOf($pattern, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-DgaMaxNumericField {
+    param(
+        [string]$Text,
+        [string[]]$FieldNames
+    )
+
+    $max = 0.0
+    foreach ($fieldName in $FieldNames) {
+        foreach ($match in [regex]::Matches($Text, "$([regex]::Escape($fieldName))=(?<value>[0-9]+(?:\.[0-9]+)?)", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            $value = 0.0
+            if ([double]::TryParse($match.Groups["value"].Value, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
+                if ($value -gt $max) {
+                    $max = $value
+                }
+            }
+        }
+    }
+
+    return $max
+}
+
+function New-DgaTriageReviewTarget {
+    param(
+        [object]$Row,
+        [string]$Category,
+        [string]$Reason
+    )
+
+    [pscustomobject]@{
+        Category = $Category
+        Reason = $Reason
+        Timestamp = $Row.Timestamp
+        Event = $Row.Event
+        Source = $Row.Source
+        GoblinType = $Row.GoblinType
+        Area = $Row.Area
+        Decision = $Row.Decision
+        DecisionReason = $Row.Reason
+        Log = "$($Row.File):$($Row.Line)"
+        Details = $Row.Details
+    }
+}
+
+function New-DgaAutoCountTriageData {
+    param([string]$Root)
+
+    $rows = @(Get-DgaAutoCountTriageRows $Root)
+    $allFiles = @(Get-DgaFiles $Root)
+    $eventFiles = @(Get-DgaFiles $Root "Debug\GoblinEvidence" | Where-Object { $_.Name.Equals("GoblinTrackerEvents.jsonl", [System.StringComparison]::OrdinalIgnoreCase) })
+    $decisionBundles = @(Get-DgaFiles $Root "Debug\GoblinEvidence\DecisionBundles" | Where-Object { $_.Name.Equals("decision-trace.txt", [System.StringComparison]::OrdinalIgnoreCase) })
+    $reviewEvidenceFiles = @(Get-DgaFiles $Root "ReviewEvidence")
+    $reviewFrames = @($reviewEvidenceFiles | Where-Object { $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
+    $journalCrops = @($allFiles | Where-Object { $_.Name.IndexOf("Journal", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
+    $minimapCrops = @($allFiles | Where-Object { $_.Name.IndexOf("Minimap", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.Extension -match '^\.(png|jpg|jpeg|bmp)$' })
+
+    $accepted = @($rows | Where-Object { $_.Event -eq "GoblinAutoCountAccepted" -or $_.Event -eq "GoblinCountAccepted" })
+    $suppressed = @($rows | Where-Object { $_.Event -eq "GoblinAutoCountSuppressed" -or $_.Event -eq "GoblinCountSuppressed" })
+    $pending = @($rows | Where-Object { Test-DgaRowMatchesAny $_ @("JournalPending", "PendingKilled", "PendingMinimap") })
+    $stale = @($rows | Where-Object { Test-DgaRowMatchesAny $_ @("Stale", "Carryover", "HistoryRow") })
+    $duplicate = @($rows | Where-Object { Test-DgaRowMatchesAny $_ @("Duplicate", "AlreadyAutoCounted", "EvidenceAlreadyAutoCounted", "EncounterAlreadyAutoCounted") })
+    $areaLimit = @($rows | Where-Object { Test-DgaRowMatchesAny $_ @("AreaLimitReached") })
+    $blocked = @($rows | Where-Object { Test-DgaRowMatchesAny $_ @("BlockedArea") })
+    $areaResolution = @($rows | Where-Object { Test-DgaRowMatchesAny $_ @("Area resolved", "routeRawArea=", "currentArea=", "acceptedArea=", "displayLocation=", "GoblinOverlayDetectedAreaUpdated") })
+    $delayed = @($rows | Where-Object {
+        $_.Event -eq "GoblinLatencyTrace" -and
+        (Get-DgaMaxNumericField $_.Details @("elapsedMs", "queueAgeMs", "countToDisplayMs", "detectedToDisplayMs", "ageMs")) -ge 1000
+    })
+
+    $targets = New-Object System.Collections.Generic.List[object]
+    foreach ($row in $suppressed) {
+        $confidence = Get-DgaMaxNumericField $row.Details @("evidenceConfidence", "confidence", "bestConfidence")
+        if ($confidence -ge 0.85) {
+            $targets.Add((New-DgaTriageReviewTarget $row "HighConfidenceSuppressedEvidence" "Suppressed evidence confidence >= 0.85"))
+        }
+
+        $isJournalRow = Test-DgaRowMatchesAny $row @("Journal")
+        $isStaleOrCrossAreaRow = Test-DgaRowMatchesAny $row @("Stale", "EncounterAlreadyAutoCounted", "AreaChanged", "CrossArea", "HistoryRow")
+        if ($isJournalRow -and $isStaleOrCrossAreaRow) {
+            $targets.Add((New-DgaTriageReviewTarget $row "CrossAreaJournalSuppression" "Journal suppression with stale/cross-area/duplicate shape"))
+        }
+
+        $isEmptyOrShiftedBucket = Test-DgaRowMatchesAny $row @("emptyBucket", "empty-line", "LineBucket=0", "bucket=0", "shifted", "HistoryRow")
+        if ($isEmptyOrShiftedBucket) {
+            $targets.Add((New-DgaTriageReviewTarget $row "EmptyOrShiftedLineBucket" "Suppression references an empty, shifted, or history Journal row bucket"))
+        }
+    }
+
+    foreach ($row in $rows) {
+        $isTwoCountAreaDecision = Test-DgaRowMatchesAny $row @("Pandemonium Fortress", "Stinging Winds", "areaLimit=2", "AreaLimitReached", "PfMultiCount")
+        if ($isTwoCountAreaDecision) {
+            $targets.Add((New-DgaTriageReviewTarget $row "TwoCountAreaDecision" "PF1/PF2/Stinging Winds count-limit or duplicate decision"))
+        }
+
+        $hasBlockedAreaContext = Test-DgaRowMatchesAny $row @("BlockedArea", "Ancient Waterway", "New Tristram", "Caldeum Bazaar", "Flooded Causeway")
+        if ($hasBlockedAreaContext) {
+            $targets.Add((New-DgaTriageReviewTarget $row "BlockedAreaContext" "Blocked/current-area context present"))
+        }
+
+        $isAcceptedRow = $row.Event -eq "GoblinAutoCountAccepted" -or $row.Event -eq "GoblinCountAccepted"
+        $hasStaleAgeContext = Test-DgaRowMatchesAny $row @("Stale", "old", "evidenceAgeSeconds=4", "evidenceAgeSeconds=5", "evidenceAgeSeconds=6", "evidenceAgeSeconds=7", "evidenceAgeSeconds=8", "evidenceAgeSeconds=9")
+        $hasAcceptedCurrentAreaContext = Test-DgaRowMatchesAny $row @("acceptedArea=", "currentAreaAtAcceptance=")
+        if ($isAcceptedRow -and ($hasStaleAgeContext -or $hasAcceptedCurrentAreaContext)) {
+            $targets.Add((New-DgaTriageReviewTarget $row "AcceptedCountAreaOrAgeReview" "Accepted count includes stale/age/current-area context worth checking"))
+        }
+
+        $isMinimapRow = Test-DgaRowMatchesAny $row @("Minimap")
+        $isAutoCountedDuplicateRow = Test-DgaRowMatchesAny $row @("EncounterAlreadyAutoCounted", "EvidenceAlreadyAutoCounted")
+        $hasAreaFields = Test-DgaRowMatchesAny $row @("currentArea", "areaKey", "acceptedArea")
+        if ($isMinimapRow -and $isAutoCountedDuplicateRow -and $hasAreaFields) {
+            $targets.Add((New-DgaTriageReviewTarget $row "SameTypeCrossAreaMinimapCollision" "Minimap duplicate suppression may need same-area/cross-area review"))
+        }
+    }
+
+    foreach ($row in $delayed) {
+        $targets.Add((New-DgaTriageReviewTarget $row "DelayedNotificationOrAcceptance" "Latency trace exceeded 1000 ms"))
+    }
+
+    $targetRows = @($targets | Sort-Object Timestamp, Category -Unique | Select-Object -First 160)
+    [pscustomobject]@{
+        Generated = (Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")
+        Root = $Root
+        SourceAvailability = [pscustomobject]@{
+            Logs = @(Get-DgaAllLogs $Root).Count
+            GoblinTrackerEventsJsonl = $eventFiles.Count
+            DecisionBundles = $decisionBundles.Count
+            ReviewEvidenceFiles = $reviewEvidenceFiles.Count
+            ReviewEvidenceFrames = $reviewFrames.Count
+            JournalCrops = $journalCrops.Count
+            MinimapCrops = $minimapCrops.Count
+        }
+        Groups = [pscustomobject]@{
+            AcceptedCounts = $accepted.Count
+            SuppressedCandidates = $suppressed.Count
+            PendingEvidence = $pending.Count
+            StaleJournalRows = $stale.Count
+            DuplicateSuppressions = $duplicate.Count
+            AreaLimitSuppressions = $areaLimit.Count
+            BlockedAreaSuppressions = $blocked.Count
+            AreaResolutionChanges = $areaResolution.Count
+            DelayedCountToNotificationPaths = $delayed.Count
+        }
+        ReviewTargets = $targetRows
+        LiveOnly = @(
+            "Scanner timing and frame arrival order",
+            "Diablo focus/input state",
+            "Notification rendering and sound playback",
+            "OBS/overlay UI behavior",
+            "Missing-frame or no-crop image recognition issues"
+        )
+        PackageSizePolicy = [pscustomobject]@{
+            Included = "goblin-auto-count-triage.md and goblin-auto-count-triage.json"
+            Excluded = "Full videos, bulk source image folders, legacy replay image folders"
+            Notes = "Triage reports are text/JSON only; package size summary reports their byte contribution after ZIP creation."
+        }
+    }
+}
+
+function New-DgaAutoCountTriageMarkdownContent {
+    param([object]$Data)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# Goblin Auto-Count Triage")
+    $lines.Add("")
+    $lines.Add("Generated: $($Data.Generated)")
+    $lines.Add("Root: $($Data.Root)")
+    $lines.Add("")
+    $lines.Add("## Source Availability")
+    foreach ($property in $Data.SourceAvailability.PSObject.Properties) {
+        $lines.Add("- $($property.Name): $($property.Value)")
+    }
+
+    $lines.Add("")
+    $lines.Add("## Event Groups")
+    foreach ($property in $Data.Groups.PSObject.Properties) {
+        $lines.Add("- $($property.Name): $($property.Value)")
+    }
+
+    $lines.Add("")
+    $lines.Add("## Likely Review Targets")
+    if (@($Data.ReviewTargets).Count -eq 0) {
+        $lines.Add("- none")
+    }
+    else {
+        $lines.Add("| Category | Time | Event | Goblin | Area | Decision | Reason | Log | Why |")
+        $lines.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+        foreach ($target in @($Data.ReviewTargets | Select-Object -First 80)) {
+            $lines.Add("| $(Convert-DgaMarkdownCell $target.Category) | $(Convert-DgaMarkdownCell $target.Timestamp) | $(Convert-DgaMarkdownCell $target.Event) | $(Convert-DgaMarkdownCell $target.GoblinType) | $(Convert-DgaMarkdownCell $target.Area) | $(Convert-DgaMarkdownCell $target.Decision) | $(Convert-DgaMarkdownCell $target.DecisionReason) | $(Convert-DgaMarkdownCell $target.Log) | $(Convert-DgaMarkdownCell $target.Reason) |")
+        }
+    }
+
+    $lines.Add("")
+    $lines.Add("## Live-Only")
+    foreach ($item in $Data.LiveOnly) {
+        $lines.Add("- $item")
+    }
+
+    $lines.Add("")
+    $lines.Add("## Package Size Policy")
+    $lines.Add("- Included: $($Data.PackageSizePolicy.Included)")
+    $lines.Add("- Excluded: $($Data.PackageSizePolicy.Excluded)")
+    $lines.Add("- Notes: $($Data.PackageSizePolicy.Notes)")
+    return $lines
+}
+
 function Write-DgaAnalysisFiles {
     param(
         [string]$Root,
@@ -471,15 +761,22 @@ function Write-DgaAnalysisFiles {
     $analysisPath = Join-Path $OutputDirectory "debug-package-analysis.txt"
     $timelinePath = Join-Path $OutputDirectory "goblin-tracker-timeline.md"
     $healthPath = Join-Path $OutputDirectory "goblin-evidence-health.txt"
+    $triageMarkdownPath = Join-Path $OutputDirectory "goblin-auto-count-triage.md"
+    $triageJsonPath = Join-Path $OutputDirectory "goblin-auto-count-triage.json"
 
     New-DgaDebugPackageAnalysisContent -Root $Root | Out-File -FilePath $analysisPath -Encoding utf8
     New-DgaGoblinTrackerTimelineContent -Root $Root | Out-File -FilePath $timelinePath -Encoding utf8
     New-DgaGoblinEvidenceHealthContent -Root $Root | Out-File -FilePath $healthPath -Encoding utf8
+    $triageData = New-DgaAutoCountTriageData -Root $Root
+    New-DgaAutoCountTriageMarkdownContent -Data $triageData | Out-File -FilePath $triageMarkdownPath -Encoding utf8
+    $triageData | ConvertTo-Json -Depth 8 | Out-File -FilePath $triageJsonPath -Encoding utf8
 
     return [pscustomobject]@{
         AnalysisPath = $analysisPath
         TimelinePath = $timelinePath
         HealthPath = $healthPath
+        AutoCountTriageMarkdownPath = $triageMarkdownPath
+        AutoCountTriageJsonPath = $triageJsonPath
     }
 }
 

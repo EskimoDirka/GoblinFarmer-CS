@@ -1,0 +1,5 @@
+Scenario=Cathedral stale Journal row
+Step=Leorics fresh killed|Scan|Area=Leoric's Passage|Journal=Blood Thief Killed Journal.png|JournalLineBucket=11|AdvanceSeconds=1
+# MatrixStep=Leorics fresh killed|Counted=true|Decision=Count|Reason=Eligible|Source=JournalCandidate|GoblinType=Blood Thief|Area=Leoric's Passage|FreshnessBucket=Fresh
+Step=Cathedral stale killed row|Scan|Area=Cathedral Level 2|Journal=Blood Thief Killed Journal.png|JournalLineBucket=11|AdvanceSeconds=46
+# MatrixStep=Cathedral stale killed row|Counted=false|Decision=Stale|Reason=StaleEvidence|Source=JournalCandidate|GoblinType=Blood Thief|Area=Cathedral Level 2|FreshnessBucket=Stale
